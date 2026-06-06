@@ -1,0 +1,14 @@
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+
+# Build artifacts
+DerivedData/
+build/
+
+# Swift Package Manager
+.build/
+
+# CocoaPods
+Pods/
+
