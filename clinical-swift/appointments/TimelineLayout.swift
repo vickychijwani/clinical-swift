@@ -2,6 +2,7 @@
 /// Must remain independent of SwiftUI
 
 import Foundation
+import CoreGraphics
 
 struct TimelineMetrics {
     /// Height of 1 hour in pixels
@@ -23,25 +24,32 @@ struct TimelineMetrics {
     var pixelsPerMinute: CGFloat {
         hourHeight / 60
     }
-}
 
-struct AppointmentLayoutInfo: Identifiable {
-    let id: UUID
-    let appointment: Appointment
-    let rect: CGRect
+    var contentLeadingInset: CGFloat {
+        timeColumnWidth + horizontalMargin + 4
+    }
+
+    func contentWidth(availableWidth: CGFloat) -> CGFloat {
+        availableWidth
+            - timeColumnWidth
+            - horizontalMargin * 2
+    }
 }
 
 struct TimelineLayoutEngine {
     let metrics: TimelineMetrics
     let availableWidth: CGFloat
+    let timelineStartTime: TimeOfDay
 
     func layout(
         appointments: [Appointment]
     ) -> [AppointmentLayoutInfo] {
         return appointments.map { appt in
             let rect = CGRect(
-                origin: CGPoint(x: cardX, y: cardY(for: appt)),
-                size: CGSize(width: cardWidth, height: cardHeight(for: appt))
+                x: cardX,
+                y: cardY(for: appt),
+                width: cardWidth,
+                height: cardHeight(for: appt)
             )
             return AppointmentLayoutInfo(
                 id: appt.id,
@@ -52,10 +60,7 @@ struct TimelineLayoutEngine {
     }
 
     private var cardWidth: CGFloat {
-        availableWidth
-            - metrics.timeColumnWidth
-            // 2x to account for inset on either side
-            - metrics.horizontalMargin * 2
+        metrics.contentWidth(availableWidth: availableWidth)
     }
 
     private func cardHeight(for appt: Appointment) -> CGFloat {
@@ -65,14 +70,18 @@ struct TimelineLayoutEngine {
     }
 
     private var cardX: CGFloat {
-        return metrics.timeColumnWidth + metrics.horizontalMargin
-            // Further inset by 4px on left side - can we get rid of this magic constant?
-            + 4
+        return metrics.contentLeadingInset
     }
 
     private func cardY(for appt: Appointment) -> CGFloat {
-        let minutesFromStart = appt.startTime.minutes(since: Bitehaus.startTime)
+        let minutesFromStart = appt.startTime.minutes(since: timelineStartTime)
         return CGFloat(minutesFromStart) * metrics.pixelsPerMinute
             + metrics.verticalMargin
     }
+}
+
+struct AppointmentLayoutInfo: Identifiable {
+    let id: UUID
+    let appointment: Appointment
+    let rect: CGRect
 }
