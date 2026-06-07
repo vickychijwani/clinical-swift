@@ -1,0 +1,25 @@
+# Timeline Architecture
+
+This document captures the deliberate constraints an agent is likely to break if it edits the timeline without context.
+
+## Invariants
+
+- A clinic break is a structural discontinuity, not compressed time inside one global coordinate system.
+- Timeline segments are continuous. Inside a segment, `y` position must remain simple minutes-from-segment-start math.
+- `TimelineLayoutEngine` must stay break-agnostic. It should not know about break blocks, collapsed heights, hidden hour labels, or discontinuity rules.
+- Hour markers and appointment cards in a segment must use the same start and end boundaries.
+- `TimelineBreakView` is presentational only. It should render the compact break row, not influence appointment layout.
+- Use `TimeOfDay` for clinic-level schedule boundaries such as opening, closing, and break times. Use `Date` for appointment instances on a specific day.
+
+## Do Not Reintroduce
+
+- Global helpers like `compressedY(for:)`; they make every timeline feature depend on break-specific coordinate rules.
+- `collapsedAmount` or total-height correction logic in `Timeline`; height should fall out of stacked segment heights plus the fixed break row.
+- Break-aware appointment layout inside `TimelineLayoutEngine`; that engine is deliberately reusable for any continuous segment.
+- Hour-grid filtering to hide labels that fall inside a break; segment boundaries should prevent those labels from being generated.
+- Treating the break as a fake appointment; it has different semantics, interaction, accessibility, and validation rules.
+
+## Edge Cases
+
+- Appointments overlapping the break are invalid schedule data for now. Handle them before segment layout; do not silently clip, split, or compress them inside `TimelineSegment`.
+- If the product later needs multiple breaks or arbitrary unavailable ranges, introduce a dedicated time-scale abstraction, such as `TimelineScale`, that owns coordinate mapping in one place.

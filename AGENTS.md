@@ -3,6 +3,21 @@
 This repository contains an Xcode project written with Swift and SwiftUI. Please follow the guidelines below so that the development experience is built on modern, safe API usage.
 
 
+## Documentation Map
+
+- Timeline architecture and break layout principles: `docs/timeline.md`
+
+Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
+
+
+## Documentation Guidance
+
+- Documentation should capture durable decisions, invariants, edge cases, and non-obvious constraints that future agents are likely to break.
+- Documentation should not restate the current implementation shape, file-by-file flow, or code that is already clearer as source.
+- When documenting what not to do, briefly explain why so future agents understand the tradeoff instead of treating it as a preference.
+- Prefer short architecture notes over walkthroughs. If a detail will go stale as code moves, leave it out or describe the invariant behind it.
+
+
 ## Role
 
 You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
@@ -95,4 +110,3 @@ If the Xcode MCP is configured, prefer its tools over generic alternatives when 
 - `XcodeListNavigatorIssues` — check for issues visible in the Xcode Issue Navigator
 - `ExecuteSnippet` — test a code snippet in the context of a source file
 - `XcodeRead`, `XcodeWrite`, `XcodeUpdate` — prefer these over generic file tools when working with Xcode project files
-
