@@ -6,6 +6,10 @@ struct Timeline: View {
     let endTime: TimeOfDay
     let breakBlock: BreakBlock
 
+    /// Properties for rendering the "Now" marker line.
+    let showsNowMarker: Bool
+    var previewNowMarker: Date? = nil
+
     static let metrics = TimelineMetrics(
         hourHeight: 72,
         timeColumnWidth: 40,
@@ -15,13 +19,26 @@ struct Timeline: View {
     )
 
     var body: some View {
+        if let previewNowMarker {
+            timelineContent(now: previewNowMarker)
+        } else if showsNowMarker {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                timelineContent(now: context.date)
+            }
+        } else {
+            timelineContent(now: nil)
+        }
+    }
+
+    private func timelineContent(now: Date?) -> some View {
         ScrollView {
             VStack(spacing: 0) {
                 TimelineSegment(
                     timelineStartTime: startTime,
                     timelineEndTime: breakBlock.startTime,
                     appointments: appointmentsBeforeBreak,
-                    metrics: Timeline.metrics
+                    metrics: Timeline.metrics,
+                    now: now
                 )
 
                 TimelineBreakView(
@@ -33,7 +50,8 @@ struct Timeline: View {
                     timelineStartTime: breakBlock.endTime,
                     timelineEndTime: endTime,
                     appointments: appointmentsAfterBreak,
-                    metrics: Timeline.metrics
+                    metrics: Timeline.metrics,
+                    now: now
                 )
             }
             .padding(.top, Timeline.metrics.topPadding)
@@ -88,6 +106,8 @@ let sampleAppointments: [Appointment] = [
         appointments: sampleAppointments,
         startTime: Bitehaus.startTime,
         endTime: Bitehaus.closingTime,
-        breakBlock: Bitehaus.breakBlock
+        breakBlock: Bitehaus.breakBlock,
+        showsNowMarker: true,
+        previewNowMarker: Date.now.setTime(9, 30)
     )
 }

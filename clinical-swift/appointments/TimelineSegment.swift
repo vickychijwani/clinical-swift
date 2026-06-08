@@ -5,6 +5,7 @@ struct TimelineSegment: View {
     let timelineEndTime: TimeOfDay
     let appointments: [Appointment]
     let metrics: TimelineMetrics
+    let now: Date?
 
     var body: some View {
         GeometryReader { geo in
@@ -17,8 +18,10 @@ struct TimelineSegment: View {
             let layouts = engine.layout(appointments: appointments)
 
             ZStack(alignment: .topLeading) {
+                /// Hour labels and marker lines
                 hourGrid(availableWidth: geo.size.width)
 
+                /// Appointments
                 ForEach(layouts) { layout in
                     AppointmentCard(appt: layout.appointment)
                         .frame(
@@ -26,6 +29,15 @@ struct TimelineSegment: View {
                             height: layout.rect.height
                         )
                         .position(x: layout.rect.midX, y: layout.rect.midY)
+                }
+
+                /// Now marker overlays appointment cards
+                if let nowY {
+                    NowMarkerView(
+                        metrics: metrics,
+                        availableWidth: geo.size.width
+                    )
+                    .position(x: geo.size.width / 2, y: nowY)
                 }
             }
         }
@@ -68,6 +80,20 @@ struct TimelineSegment: View {
             return []
         }
         return Array(timelineStartTime.hour...timelineEndTime.hour)
+    }
+
+    private var nowY: CGFloat? {
+        guard let now else {
+            return nil
+        }
+
+        let nowTime = TimeOfDay(date: now)
+        guard timelineStartTime <= nowTime && nowTime < timelineEndTime else {
+            return nil
+        }
+
+        return CGFloat(nowTime.minutes(since: timelineStartTime))
+            * metrics.pixelsPerMinute
     }
 
     private func hourY(for hour: Int) -> CGFloat {
