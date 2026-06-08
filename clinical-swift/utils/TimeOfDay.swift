@@ -30,9 +30,7 @@ struct TimeOfDay: Comparable, Equatable {
     }
 
     func minutes(since timeOfDay: TimeOfDay) -> Int {
-        return Int(
-            self.on(date: .now).timeIntervalSince(timeOfDay.on(date: .now))
-        ) / 60
+        totalMinutes - timeOfDay.totalMinutes
     }
 
     var today: Date {
@@ -41,6 +39,10 @@ struct TimeOfDay: Comparable, Equatable {
 
     func on(date: Date) -> Date {
         date.setTime(hour, minute)
+    }
+
+    private var totalMinutes: Int {
+        hour * 60 + minute
     }
 }
 

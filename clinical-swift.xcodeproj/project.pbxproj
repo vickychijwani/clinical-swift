@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		79438C432FD2D07100C0E6EF /* clinical-swift.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "clinical-swift.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8BE2A0172FE0000000000005 /* clinical-swiftTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "clinical-swiftTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +17,22 @@
 			path = "clinical-swift";
 			sourceTree = "<group>";
 		};
+		8BE2A0102FE0000000000005 /* clinical-swiftTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "clinical-swiftTests";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		79438C402FD2D07100C0E6EF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8BE2A0132FE0000000000005 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +46,7 @@
 			isa = PBXGroup;
 			children = (
 				79438C452FD2D07100C0E6EF /* clinical-swift */,
+				8BE2A0102FE0000000000005 /* clinical-swiftTests */,
 				79438C442FD2D07100C0E6EF /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +55,7 @@
 			isa = PBXGroup;
 			children = (
 				79438C432FD2D07100C0E6EF /* clinical-swift.app */,
+				8BE2A0172FE0000000000005 /* clinical-swiftTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,7 +85,40 @@
 			productReference = 79438C432FD2D07100C0E6EF /* clinical-swift.app */;
 			productType = "com.apple.product-type.application";
 		};
+		8BE2A0182FE0000000000005 /* clinical-swiftTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8BE2A0192FE0000000000005 /* Build configuration list for PBXNativeTarget "clinical-swiftTests" */;
+			buildPhases = (
+				8BE2A0122FE0000000000005 /* Sources */,
+				8BE2A0132FE0000000000005 /* Frameworks */,
+				8BE2A0142FE0000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8BE2A0162FE0000000000005 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8BE2A0102FE0000000000005 /* clinical-swiftTests */,
+			);
+			name = "clinical-swiftTests";
+			packageProductDependencies = (
+			);
+			productName = "clinical-swiftTests";
+			productReference = 8BE2A0172FE0000000000005 /* clinical-swiftTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		8BE2A0152FE0000000000005 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 79438C3B2FD2D07100C0E6EF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 79438C422FD2D07100C0E6EF;
+			remoteInfo = "clinical-swift";
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		79438C3B2FD2D07100C0E6EF /* Project object */ = {
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					79438C422FD2D07100C0E6EF = {
 						CreatedOnToolsVersion = 26.4.1;
+					};
+					8BE2A0182FE0000000000005 = {
+						CreatedOnToolsVersion = 26.4.1;
+						TestTargetID = 79438C422FD2D07100C0E6EF;
 					};
 				};
 			};
@@ -100,12 +152,20 @@
 			projectRoot = "";
 			targets = (
 				79438C422FD2D07100C0E6EF /* clinical-swift */,
+				8BE2A0182FE0000000000005 /* clinical-swiftTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		79438C412FD2D07100C0E6EF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8BE2A0142FE0000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +182,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8BE2A0122FE0000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8BE2A0162FE0000000000005 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 79438C422FD2D07100C0E6EF /* clinical-swift */;
+			targetProxy = 8BE2A0152FE0000000000005 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		79438C4E2FD2D07300C0E6EF /* Debug */ = {
@@ -310,6 +385,60 @@
 			};
 			name = Release;
 		};
+		8BE2A01A2FE0000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WM7GP7FBL7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "in.bitehaus.clinical-swiftTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/clinical-swift.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/clinical-swift";
+			};
+			name = Debug;
+		};
+		8BE2A01B2FE0000000000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WM7GP7FBL7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "in.bitehaus.clinical-swiftTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/clinical-swift.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/clinical-swift";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -327,6 +456,15 @@
 			buildConfigurations = (
 				79438C512FD2D07300C0E6EF /* Debug */,
 				79438C522FD2D07300C0E6EF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8BE2A0192FE0000000000005 /* Build configuration list for PBXNativeTarget "clinical-swiftTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8BE2A01A2FE0000000000005 /* Debug */,
+				8BE2A01B2FE0000000000005 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
