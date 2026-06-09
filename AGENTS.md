@@ -6,6 +6,7 @@ This repository contains an Xcode project written with Swift and SwiftUI. Please
 ## Documentation Map
 
 - Timeline architecture and break layout principles: `docs/timeline.md`
+- Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 

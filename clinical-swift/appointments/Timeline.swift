@@ -56,7 +56,6 @@ struct Timeline: View {
             }
             .padding(.top, Timeline.metrics.topPadding)
         }
-        .background(Color("AppBackground"))
     }
 
     private var appointmentsBeforeBreak: [Appointment] {
@@ -110,4 +109,5 @@ let sampleAppointments: [Appointment] = [
         showsNowMarker: true,
         previewNowMarker: Date.now.setTime(9, 30)
     )
+    .background(Color("AppBackground"))
 }
