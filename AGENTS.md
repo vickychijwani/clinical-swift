@@ -7,6 +7,7 @@ This repository contains an Xcode project written with Swift and SwiftUI. Please
 
 - Timeline architecture and break layout principles: `docs/timeline.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
+- Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 
@@ -87,6 +88,7 @@ If SwiftData is configured to use CloudKit:
 
 - Use a consistent project structure, with folder layout determined by app features.
 - Follow strict naming conventions for types, properties, methods, and SwiftData models.
+- For frequently used domain types and fields, prefer short, unambiguous names over verbose expansions, such as `phone`, `dob`, and `Gender`.
 - Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
 - Write unit tests for core application logic.
 - Only write UI tests if unit tests are not possible.
