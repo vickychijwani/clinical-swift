@@ -11,11 +11,11 @@ struct Timeline: View {
     var previewNowMarker: Date? = nil
 
     static let metrics = TimelineMetrics(
-        hourHeight: 72,
+        hourHeight: 60,
         timeColumnWidth: 40,
-        topPadding: 20,
-        horizontalMargin: 12,
-        verticalMargin: 1
+        verticalPadding: 8,
+        horizontalCardMargin: 12,
+        verticalCardMargin: 1
     )
 
     var body: some View {
@@ -31,31 +31,29 @@ struct Timeline: View {
     }
 
     private func timelineContent(now: Date?) -> some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                TimelineSegment(
-                    timelineStartTime: startTime,
-                    timelineEndTime: breakBlock.startTime,
-                    appointments: appointmentsBeforeBreak,
-                    metrics: Timeline.metrics,
-                    now: now
-                )
+        VStack(spacing: 0) {
+            TimelineSegment(
+                timelineStartTime: startTime,
+                timelineEndTime: breakBlock.startTime,
+                appointments: appointmentsBeforeBreak,
+                metrics: Timeline.metrics,
+                now: now
+            )
 
-                TimelineBreakView(
-                    block: breakBlock,
-                    metrics: Timeline.metrics
-                )
+            TimelineBreakView(
+                block: breakBlock,
+                metrics: Timeline.metrics
+            )
 
-                TimelineSegment(
-                    timelineStartTime: breakBlock.endTime,
-                    timelineEndTime: endTime,
-                    appointments: appointmentsAfterBreak,
-                    metrics: Timeline.metrics,
-                    now: now
-                )
-            }
-            .padding(.top, Timeline.metrics.topPadding)
+            TimelineSegment(
+                timelineStartTime: breakBlock.endTime,
+                timelineEndTime: endTime,
+                appointments: appointmentsAfterBreak,
+                metrics: Timeline.metrics,
+                now: now
+            )
         }
+        .padding(.vertical, Timeline.metrics.verticalPadding)
     }
 
     private var appointmentsBeforeBreak: [Appointment] {

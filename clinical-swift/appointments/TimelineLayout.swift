@@ -12,13 +12,13 @@ struct TimelineMetrics {
     let timeColumnWidth: CGFloat
 
     /// Padding above timeline
-    let topPadding: CGFloat
+    let verticalPadding: CGFloat
 
     /// Margin left/right of appointment card, relative to hour marker lines
-    let horizontalMargin: CGFloat
+    let horizontalCardMargin: CGFloat
 
     /// Margin above/below an appointment card, to separate edges clearly from hour markers
-    let verticalMargin: CGFloat
+    let verticalCardMargin: CGFloat
 
     /// Number of vertical pixels representing 1 minute
     var pixelsPerMinute: CGFloat {
@@ -26,13 +26,13 @@ struct TimelineMetrics {
     }
 
     var contentLeadingInset: CGFloat {
-        timeColumnWidth + horizontalMargin + 4
+        timeColumnWidth + horizontalCardMargin + 4
     }
 
     func contentWidth(availableWidth: CGFloat) -> CGFloat {
         availableWidth
             - timeColumnWidth
-            - horizontalMargin * 2
+            - horizontalCardMargin * 2
     }
 }
 
@@ -66,7 +66,7 @@ struct TimelineLayoutEngine {
     private func cardHeight(for appt: Appointment) -> CGFloat {
         return CGFloat(appt.durationMinutes) * metrics.pixelsPerMinute
             // 2x to account for top and bottom clearance both
-            - metrics.verticalMargin * 2
+            - metrics.verticalCardMargin * 2
     }
 
     private var cardX: CGFloat {
@@ -76,7 +76,7 @@ struct TimelineLayoutEngine {
     private func cardY(for appt: Appointment) -> CGFloat {
         let minutesFromStart = appt.startTime.minutes(since: timelineStartTime)
         return CGFloat(minutesFromStart) * metrics.pixelsPerMinute
-            + metrics.verticalMargin
+            + metrics.verticalCardMargin
     }
 }
 

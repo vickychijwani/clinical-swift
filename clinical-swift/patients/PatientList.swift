@@ -6,6 +6,8 @@ struct PatientList: View {
     let calendar: Calendar
     let locale: Locale
 
+    @Binding var searchText: String
+
     var body: some View {
         List {
             ForEach(sections) { section in
@@ -25,17 +27,18 @@ struct PatientList: View {
                 .sectionIndexLabel(section.id)
             }
         }
+        .searchable(text: $searchText)
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
     }
 }
 
 #Preview {
-    PatientList(
-        sections: PatientSection.sections(from: samplePatients),
-        referenceDate: .now,
-        calendar: .autoupdatingCurrent,
-        locale: .autoupdatingCurrent
-    )
-    .background(Color("AppBackground"))
+//    PatientList(
+//        sections: PatientSection.sections(from: samplePatients),
+//        referenceDate: .now,
+//        calendar: .autoupdatingCurrent,
+//        locale: .autoupdatingCurrent
+//    )
+//    .background(Color("AppBackground"))
 }

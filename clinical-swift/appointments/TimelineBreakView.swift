@@ -4,7 +4,7 @@ struct TimelineBreakView: View {
     let block: BreakBlock
     let metrics: TimelineMetrics
 
-    static let height: CGFloat = 44
+    static let height: CGFloat = 32
 
     var body: some View {
         GeometryReader { geo in
@@ -45,11 +45,24 @@ struct DiagonalStripePattern: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
 
-        for offset in stride(from: -rect.height, through: rect.width, by: 14) {
-            path.move(to: CGPoint(x: offset, y: rect.maxY))
-            path.addLine(to: CGPoint(x: offset + rect.height, y: rect.minY))
+        for offset in stride(from: -rect.height, through: rect.width, by: 16) {
+            path.move(to: CGPoint(x: offset, y: rect.maxY + 2))
+            path.addLine(to: CGPoint(x: offset + rect.height, y: rect.minY - 2))
         }
 
         return path
     }
+}
+
+#Preview {
+    TimelineBreakView(
+        block: Bitehaus.breakBlock,
+        metrics: TimelineMetrics(
+            hourHeight: 0,
+            timeColumnWidth: 0,
+            verticalPadding: 0,
+            horizontalCardMargin: 0,
+            verticalCardMargin: 0
+        )
+    )
 }

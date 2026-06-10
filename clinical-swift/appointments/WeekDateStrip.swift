@@ -47,7 +47,7 @@ struct WeekDateStrip: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $visiblePage)
         .scrollIndicators(.hidden)
-        .frame(height: 88)
+        .frame(height: 64)
         .onAppear(perform: normalizeSelection)
         .onChange(of: visiblePage) { _, newPage in
             guard let newPage else {
@@ -180,7 +180,7 @@ private struct DateStripCell: View {
                     .bold()
             }
             .foregroundStyle(foregroundStyle)
-            .frame(minWidth: 44, minHeight: 64)
+            .frame(minWidth: 44, minHeight: 56)
             .background {
                 if isSelected {
                     ZStack {

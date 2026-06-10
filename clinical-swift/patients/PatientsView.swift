@@ -9,22 +9,25 @@ struct PatientsView: View {
     @State private var searchText = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            PatientSearchField(text: $searchText)
-                .padding()
-
-            PatientList(
-                sections: PatientSection.sections(
-                    from: patients,
-                    searchText: searchText,
-                    locale: locale
-                ),
-                referenceDate: referenceDate,
-                calendar: calendar,
+        PatientList(
+            sections: PatientSection.sections(
+                from: patients,
+                searchText: searchText,
                 locale: locale
-            )
-        }
+            ),
+            referenceDate: referenceDate,
+            calendar: calendar,
+            locale: locale,
+            searchText: $searchText
+        )
         .background(Color("AppBackground"))
+        .navigationTitle("Patients")
+        .toolbarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Add", systemImage: "plus") {}
+            }
+        }
     }
 }
 

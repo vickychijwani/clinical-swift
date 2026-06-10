@@ -53,7 +53,7 @@ struct TimelineSegment: View {
                     .fill(.gray.opacity(0.15))
                     .frame(height: 1)
                     .position(
-                        x: metrics.horizontalMargin
+                        x: metrics.horizontalCardMargin
                             + metrics.timeColumnWidth
                             + availableWidth / 2,
                         y: y
