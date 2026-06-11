@@ -3,8 +3,8 @@ import Testing
 @testable import clinical_swift
 
 struct PatientSectionTests {
-    @Test func groupsUnknownPatientsUnderHashBeforeAlphabeticalSections() throws {
-        let patients = try [
+    @Test func groupsUnknownPatientsUnderHashBeforeAlphabeticalSections() {
+        let patients = [
             patient(name: "Dev Malhotra"),
             unknownPatient(createdDate: date(2026, 5, 28, hour: 17)),
             patient(name: "Aarav Mehta"),
@@ -21,8 +21,8 @@ struct PatientSectionTests {
         #expect(sections[1].patients.map(\.name) == ["Aarav Mehta", "Anjali Desai"])
     }
 
-    @Test func omitsEmptySections() throws {
-        let patients = try [
+    @Test func omitsEmptySections() {
+        let patients = [
             patient(name: "Aarav Mehta"),
             patient(name: "Dev Malhotra"),
         ]
@@ -32,8 +32,8 @@ struct PatientSectionTests {
         #expect(sections.map(\.id) == ["A", "D"])
     }
 
-    @Test func searchMatchesRealNamesOnly() throws {
-        let patients = try [
+    @Test func searchMatchesRealNamesOnly() {
+        let patients = [
             unknownPatient(createdDate: date(2026, 5, 28)),
             patient(name: "Unknown Roy"),
             patient(name: "Aarav Mehta"),
@@ -52,8 +52,8 @@ struct PatientSectionTests {
         #expect(aaravSearch.flatMap(\.patients).map(\.name) == ["Aarav Mehta"])
     }
 
-    @Test func searchCanRemoveUnknownSection() throws {
-        let patients = try [
+    @Test func searchCanRemoveUnknownSection() {
+        let patients = [
             unknownPatient(createdDate: date(2026, 5, 28)),
             patient(name: "Aarav Mehta"),
         ]
@@ -66,8 +66,8 @@ struct PatientSectionTests {
         #expect(sections.map(\.id) == ["A"])
     }
 
-    @Test func searchMatchesPrefixesOfNameWordsOnly() throws {
-        let patients = try [
+    @Test func searchMatchesPrefixesOfNameWordsOnly() {
+        let patients = [
             patient(name: "Aarav Mehta"),
             patient(name: "Ishaan Puri"),
         ]
@@ -80,8 +80,8 @@ struct PatientSectionTests {
         #expect(sections.flatMap(\.patients).map(\.name) == ["Aarav Mehta"])
     }
 
-    @Test func searchMatchesWordPrefixesInAnyOrder() throws {
-        let patients = try [
+    @Test func searchMatchesWordPrefixesInAnyOrder() {
+        let patients = [
             patient(name: "Aarav Mehta"),
             patient(name: "Mehta Aarav"),
             patient(name: "Mehul Arora"),
@@ -98,12 +98,12 @@ struct PatientSectionTests {
         ])
     }
 
-    private func patient(name: String) throws -> Patient {
-        try Patient(name: name)
+    private func patient(name: String) -> Patient {
+        Patient(name: name)
     }
 
-    private func unknownPatient(createdDate: Date) throws -> Patient {
-        try Patient(
+    private func unknownPatient(createdDate: Date) -> Patient {
+        Patient(
             name: nil,
             phone: "+91 98201 44532",
             createdDate: createdDate
@@ -115,9 +115,9 @@ struct PatientSectionTests {
         _ month: Int,
         _ day: Int,
         hour: Int = 0
-    ) throws -> Date {
+    ) -> Date {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
-        return try #require(calendar.date(year, month, day, hour: hour))
+        calendar.timeZone = #require(TimeZone(secondsFromGMT: 0))
+        return #require(calendar.date(year, month, day, hour: hour))
     }
 }

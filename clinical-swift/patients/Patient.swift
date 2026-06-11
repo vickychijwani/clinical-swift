@@ -23,13 +23,9 @@ struct Patient: Identifiable, Hashable, Sendable {
         gender: Gender? = nil,
         nextAppointmentDate: Date? = nil,
         createdDate: Date = .now
-    ) throws {
+    ) {
         let normalizedName = name?.nilIfBlank
         let normalizedPhone = phone?.nilIfBlank
-
-        guard normalizedName != nil || normalizedPhone != nil else {
-            throw ValidationError.missingNameAndPhone
-        }
 
         self.id = id
         self.name = normalizedName
@@ -46,6 +42,14 @@ struct Patient: Identifiable, Hashable, Sendable {
 
     var isUnknown: Bool {
         name == nil
+    }
+
+    func validate() throws {
+        let normalizedName = name?.nilIfBlank
+        let normalizedPhone = phone?.nilIfBlank
+        guard normalizedName != nil || normalizedPhone != nil else {
+            throw ValidationError.missingNameAndPhone
+        }
     }
 
     func age(on referenceDate: Date = .now, calendar: Calendar = .autoupdatingCurrent) -> Int? {

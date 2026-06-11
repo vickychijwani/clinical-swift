@@ -3,23 +3,26 @@ import Testing
 @testable import clinical_swift
 
 struct PatientTests {
-    @Test func requiresNameOrPhone() throws {
-        _ = try Patient(name: "Aarav Mehta")
-        _ = try Patient(name: nil, phone: "+91 98201 44532")
+    @Test func requiresNameOrPhoneOnValidate() {
+        _ = Patient(name: "Aarav Mehta")
+        _ = Patient(name: nil, phone: "+91 98201 44532")
+        _ = Patient(name: "   ", phone: nil)
+        _ = Patient(name: nil, phone: "   ")
+        _ = Patient(name: nil, phone: nil)
 
         #expect(throws: Patient.ValidationError.missingNameAndPhone) {
-            try Patient(name: "   ", phone: nil)
+            Patient(name: "   ", phone: nil).validate()
         }
         #expect(throws: Patient.ValidationError.missingNameAndPhone) {
-            try Patient(name: nil, phone: "   ")
+            Patient(name: nil, phone: "   ").validate()
         }
         #expect(throws: Patient.ValidationError.missingNameAndPhone) {
-            try Patient(name: nil, phone: nil)
+            Patient(name: nil, phone: nil).validate()
         }
     }
 
-    @Test func trimsProvidedNameAndPhone() throws {
-        let patient = try Patient(
+    @Test func trimsProvidedNameAndPhone() {
+        let patient = Patient(
             name: "  Aarav Mehta  ",
             phone: "  +91 98201 44532  "
         )
@@ -28,8 +31,8 @@ struct PatientTests {
         #expect(patient.phone == "+91 98201 44532")
     }
 
-    @Test func displayNameFallsBackForUnknownPatients() throws {
-        let patient = try Patient(
+    @Test func displayNameFallsBackForUnknownPatients() {
+        let patient = Patient(
             name: nil,
             phone: "+91 98201 44532"
         )
@@ -38,22 +41,22 @@ struct PatientTests {
         #expect(patient.isUnknown)
     }
 
-    @Test func derivesAgeFromDateOfBirth() throws {
-        let calendar = try fixedCalendar()
-        let referenceDate = try #require(calendar.date(2026, 6, 10))
-        let birthdayToday = try #require(calendar.date(1990, 6, 10))
-        let birthdayTomorrow = try #require(calendar.date(1990, 6, 11))
-        let futureDateOfBirth = try #require(calendar.date(2027, 6, 10))
+    @Test func derivesAgeFromDateOfBirth() {
+        let calendar = fixedCalendar()
+        let referenceDate = #require(calendar.date(2026, 6, 10))
+        let birthdayToday = #require(calendar.date(1990, 6, 10))
+        let birthdayTomorrow = #require(calendar.date(1990, 6, 11))
+        let futureDateOfBirth = #require(calendar.date(2027, 6, 10))
 
-        let turnsThirtySix = try Patient(
+        let turnsThirtySix = Patient(
             name: "Patient One",
             dob: birthdayToday
         )
-        let stillThirtyFive = try Patient(
+        let stillThirtyFive = Patient(
             name: "Patient Two",
             dob: birthdayTomorrow
         )
-        let futurePatient = try Patient(
+        let futurePatient = Patient(
             name: "Patient Three",
             dob: futureDateOfBirth
         )
@@ -63,10 +66,10 @@ struct PatientTests {
         #expect(futurePatient.age(on: referenceDate, calendar: calendar) == nil)
     }
 
-    private func fixedCalendar() throws -> Calendar {
+    private func fixedCalendar() -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "en_US_POSIX")
-        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        calendar.timeZone = #require(TimeZone(secondsFromGMT: 0))
         return calendar
     }
 }
