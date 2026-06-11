@@ -22,7 +22,7 @@ struct PatientsView: View {
         )
         .background(Color("AppBackground"))
         .navigationTitle("Patients")
-        .toolbarTitleDisplayMode(.large)
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Add", systemImage: "plus") {}

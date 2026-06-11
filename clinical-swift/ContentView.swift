@@ -1,22 +1,28 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var router = Router()
     @State private var selectedDate = Date.now.startOfDay()
 
     var body: some View {
-        TabView {
-            Tab("Schedule", systemImage: "calendar") {
-                NavigationStack {
-                    ScheduleView(selectedDate: $selectedDate)
-                }
+        TabView(selection: $router.selectedTab) {
+            NavigationStack(path: $router.schedulePath) {
+                ScheduleView(selectedDate: $selectedDate)
             }
+            .tabItem {
+                Label("Schedule", systemImage: "calendar")
+            }
+            .tag(AppTab.schedule)
 
-            Tab("Patients", systemImage: "person.2") {
-                NavigationStack {
-                    PatientsView(patients: samplePatients)
-                }
+            NavigationStack(path: $router.patientsPath) {
+                PatientsView(patients: samplePatients)
             }
+            .tabItem {
+                Label("Patients", systemImage: "person.2")
+            }
+            .tag(AppTab.patients)
         }
+        .environment(router)
     }
 }
 
