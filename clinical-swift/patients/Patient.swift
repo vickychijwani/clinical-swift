@@ -66,10 +66,3 @@ struct Patient: Identifiable, Hashable, Sendable {
         return years
     }
 }
-
-private extension String {
-    var nilIfBlank: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-}

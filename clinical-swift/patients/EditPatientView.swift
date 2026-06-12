@@ -45,6 +45,16 @@ struct EditPatientView: View {
 
             ToolbarItem(placement: .confirmationAction) {
                 Button {
+                    let patient = Patient(
+                        id: UUID(),
+                        name: name?.nilIfBlank,
+                        phone: phone?.nilIfBlank,
+                        dob: dob,
+                        gender: gender
+                    )
+                    do {
+                        //patient.validate()
+                    }
                     print("Save patient")
                 } label: {
                     Label("Done", systemImage: "checkmark")
