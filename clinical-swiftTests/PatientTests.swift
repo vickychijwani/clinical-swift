@@ -11,13 +11,13 @@ struct PatientTests {
         _ = Patient(name: nil, phone: nil)
 
         #expect(throws: Patient.ValidationError.missingNameAndPhone) {
-            Patient(name: "   ", phone: nil).validate()
+            try Patient(name: "   ", phone: nil).validate()
         }
         #expect(throws: Patient.ValidationError.missingNameAndPhone) {
-            Patient(name: nil, phone: "   ").validate()
+            try Patient(name: nil, phone: "   ").validate()
         }
         #expect(throws: Patient.ValidationError.missingNameAndPhone) {
-            Patient(name: nil, phone: nil).validate()
+            try Patient(name: nil, phone: nil).validate()
         }
     }
 
@@ -41,12 +41,12 @@ struct PatientTests {
         #expect(patient.isUnknown)
     }
 
-    @Test func derivesAgeFromDateOfBirth() {
+    @Test func derivesAgeFromDateOfBirth() throws {
         let calendar = fixedCalendar()
-        let referenceDate = #require(calendar.date(2026, 6, 10))
-        let birthdayToday = #require(calendar.date(1990, 6, 10))
-        let birthdayTomorrow = #require(calendar.date(1990, 6, 11))
-        let futureDateOfBirth = #require(calendar.date(2027, 6, 10))
+        let referenceDate = try #require(calendar.date(2026, 6, 10))
+        let birthdayToday = try #require(calendar.date(1990, 6, 10))
+        let birthdayTomorrow = try #require(calendar.date(1990, 6, 11))
+        let futureDateOfBirth = try #require(calendar.date(2027, 6, 10))
 
         let turnsThirtySix = Patient(
             name: "Patient One",
@@ -69,7 +69,7 @@ struct PatientTests {
     private func fixedCalendar() -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "en_US_POSIX")
-        calendar.timeZone = #require(TimeZone(secondsFromGMT: 0))
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
         return calendar
     }
 }

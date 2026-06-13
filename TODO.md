@@ -21,7 +21,7 @@
 - [ ] Widget
 - [ ] Shortcut to create appointment
 - [ ] Block off time ranges (e.g., travelling, holiday, etc) OR sync to Calendar
-- [ ] Add local + cloud logging for release builds
+- [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
 
 Nice to haves:

@@ -1,10 +1,14 @@
 import SwiftUI
 
 struct PatientRow: View {
-    let patient: Patient
+    let item: PatientListItem
     let referenceDate: Date
     let calendar: Calendar
     let locale: Locale
+
+    private var patient: Patient {
+        item.patient
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -27,7 +31,7 @@ struct PatientRow: View {
 
     private var metadata: PatientMetadata {
         PatientMetadata.metadata(
-            for: patient,
+            for: item,
             referenceDate: referenceDate,
             calendar: calendar,
             locale: locale
@@ -37,7 +41,7 @@ struct PatientRow: View {
 
 #Preview(traits: .sizeThatFitsLayout) {
     PatientRow(
-        patient: samplePatients[0],
+        item: samplePatientListItems[0],
         referenceDate: .now,
         calendar: .autoupdatingCurrent,
         locale: .autoupdatingCurrent

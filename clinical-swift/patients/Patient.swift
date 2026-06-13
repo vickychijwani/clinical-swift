@@ -1,6 +1,6 @@
 import Foundation
 
-struct Patient: Identifiable, Hashable, Sendable {
+nonisolated struct Patient: Identifiable, Hashable, Sendable {
     static let unknownDisplayName = "Unknown Patient"
 
     let id: UUID
@@ -8,7 +8,6 @@ struct Patient: Identifiable, Hashable, Sendable {
     let phone: String?
     let dob: Date?
     let gender: Gender?
-    let nextAppointmentDate: Date?
     let createdDate: Date
 
     enum ValidationError: Error, Equatable {
@@ -21,7 +20,6 @@ struct Patient: Identifiable, Hashable, Sendable {
         phone: String? = nil,
         dob: Date? = nil,
         gender: Gender? = nil,
-        nextAppointmentDate: Date? = nil,
         createdDate: Date = .now
     ) {
         let normalizedName = name?.nilIfBlank
@@ -32,7 +30,6 @@ struct Patient: Identifiable, Hashable, Sendable {
         self.phone = normalizedPhone
         self.dob = dob
         self.gender = gender
-        self.nextAppointmentDate = nextAppointmentDate
         self.createdDate = createdDate
     }
 

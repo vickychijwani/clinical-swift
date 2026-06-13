@@ -4,20 +4,20 @@ struct PatientSection: Identifiable, Hashable {
     static let unknownID = "#"
 
     let id: String
-    let patients: [Patient]
+    let items: [PatientListItem]
 
     static func sections(
-        from patients: [Patient],
+        from items: [PatientListItem],
         searchText: String = "",
         locale: Locale = .autoupdatingCurrent
     ) -> [PatientSection] {
         let queryWords = words(in: searchText)
-        let filteredPatients = patients.filter { patient in
+        let filteredItems = items.filter { item in
             guard !queryWords.isEmpty else {
                 return true
             }
 
-            guard let name = patient.name else {
+            guard let name = item.patient.name else {
                 return false
             }
 
@@ -28,20 +28,20 @@ struct PatientSection: Identifiable, Hashable {
             )
         }
 
-        let groupedPatients = Dictionary(grouping: filteredPatients) { patient in
-            sectionID(for: patient, locale: locale)
+        let groupedItems = Dictionary(grouping: filteredItems) { item in
+            sectionID(for: item.patient, locale: locale)
         }
 
-        return groupedPatients.keys
+        return groupedItems.keys
             .sorted(by: sectionIDSort)
             .compactMap { sectionID in
-                guard let patients = groupedPatients[sectionID], !patients.isEmpty else {
+                guard let items = groupedItems[sectionID], !items.isEmpty else {
                     return nil
                 }
 
                 return PatientSection(
                     id: sectionID,
-                    patients: sortedPatients(patients)
+                    items: sortedItems(items)
                 )
             }
     }
@@ -97,11 +97,11 @@ struct PatientSection: Identifiable, Hashable {
         return lhs.localizedStandardCompare(rhs) == .orderedAscending
     }
 
-    private static func sortedPatients(_ patients: [Patient]) -> [Patient] {
-        patients.sorted { lhs, rhs in
-            switch (lhs.name, rhs.name) {
+    private static func sortedItems(_ items: [PatientListItem]) -> [PatientListItem] {
+        items.sorted { lhs, rhs in
+            switch (lhs.patient.name, rhs.patient.name) {
             case (nil, nil):
-                return lhs.createdDate < rhs.createdDate
+                return lhs.patient.createdDate < rhs.patient.createdDate
             case (nil, _):
                 return true
             case (_, nil):

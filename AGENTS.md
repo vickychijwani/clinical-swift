@@ -3,9 +3,15 @@
 This repository contains an Xcode project written with Swift and SwiftUI. Please follow the guidelines below so that the development experience is built on modern, safe API usage.
 
 
+## Role
+
+You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfreeco/sqlite-data), and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
+
+
 ## Documentation Map
 
-- Timeline architecture and break layout principles: `docs/timeline.md`
+- Working with SQL / SQLiteData, CloudKit sync, and record/domain boundaries: `docs/persistence.md` (CloudKit / sync stuff should be moved into a separate file when we implement that feature)
+- Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
 - Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
 
@@ -20,11 +26,6 @@ Keep the documentation map and the documents it points to up-to-date when changi
 - Prefer short architecture notes over walkthroughs. If a detail will go stale as code moves, leave it out or describe the invariant behind it.
 
 
-## Role
-
-You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
-
-
 ## Core instructions
 
 - Target iOS 26.0 or later. (Yes, it definitely exists.)
@@ -36,7 +37,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and relat
 
 ## Swift instructions
 
-- `@Observable` classes must be marked `@MainActor` unless the project has Main Actor default actor isolation. Flag any `@Observable` class missing this annotation.
+- `@Observable` classes must be marked `@MainActor`. Flag any `@Observable` class missing this annotation.
 - All shared data should use `@Observable` classes with `@State` (for ownership) and `@Bindable` / `@Environment` (for passing).
 - Strongly prefer not to use `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`, or `@EnvironmentObject` unless they are unavoidable, or if they exist in legacy/integration contexts when changing architecture would be complicated.
 - Assume strict Swift concurrency rules are being applied.

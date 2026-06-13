@@ -5,8 +5,9 @@ This document captures the deliberate constraints an agent is likely to break if
 ## Invariants
 
 - A patient is valid only when at least one of name or phone number is present.
-- Patients without a name display as `Unknown Patient`, but that fallback is presentation-only.
+- Patients without a name display as `Unknown Patient`, but that fallback is presentation-only. Do not store it as a fake name.
 - Age is derived from date of birth at render/test time. Do not store age as independent patient state because it drifts every birthday.
+- Next appointment metadata is list/read-model data, not intrinsic patient state. Keep it off `Patient` so appointment changes remain the only source of truth.
 
 ## Do Not Reintroduce
 

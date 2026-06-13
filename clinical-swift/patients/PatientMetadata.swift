@@ -12,11 +12,12 @@ struct PatientMetadata: Equatable {
     }
 
     static func metadata(
-        for patient: Patient,
+        for item: PatientListItem,
         referenceDate: Date = .now,
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent
     ) -> PatientMetadata {
+        let patient = item.patient
         var parts: [String] = []
         var demographics: [String] = []
 
@@ -36,7 +37,7 @@ struct PatientMetadata: Equatable {
             parts.append(phone)
         }
 
-        if let nextAppointmentDate = patient.nextAppointmentDate {
+        if let nextAppointmentDate = item.nextAppointmentDate {
             parts.append("Next \(formattedAppointmentDate(nextAppointmentDate, locale: locale))")
         } else if patient.isUnknown {
             parts.append("Created \(formattedCreatedDate(patient.createdDate, locale: locale))")

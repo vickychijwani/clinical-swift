@@ -29,7 +29,7 @@ struct PhoneField: View {
         .sheet(isPresented: $showingContacts) {
             ContactPhonePicker { selectedPhone in
                 phone = selectedPhone
-                showingContacts = false
+                // No need to set showingContacts to false, dismissal is automatic
             }
         }
     }

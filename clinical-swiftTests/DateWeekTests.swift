@@ -4,24 +4,24 @@ import Testing
 @testable import clinical_swift
 
 struct DateWeekTests {
-    @Test func weekStartFollowsCalendarFirstWeekday() {
+    @Test func weekStartFollowsCalendarFirstWeekday() throws {
         let sundayCalendar = fixedCalendar(firstWeekday: 1)
-        let date = #require(sundayCalendar.date(2026, 6, 10, hour: 12))
-        let sundayWeekStart = #require(sundayCalendar.date(2026, 6, 7))
+        let date = try #require(sundayCalendar.date(2026, 6, 10, hour: 12))
+        let sundayWeekStart = try #require(sundayCalendar.date(2026, 6, 7))
 
         #expect(date.startOfWeek(using: sundayCalendar) == sundayWeekStart)
 
         var mondayCalendar = fixedCalendar(firstWeekday: 2)
         mondayCalendar.minimumDaysInFirstWeek =
             sundayCalendar.minimumDaysInFirstWeek
-        let mondayWeekStart = #require(mondayCalendar.date(2026, 6, 8))
+        let mondayWeekStart = try #require(mondayCalendar.date(2026, 6, 8))
 
         #expect(date.startOfWeek(using: mondayCalendar) == mondayWeekStart)
     }
 
-    @Test func weekDatesContainSevenUniqueCalendarDays() {
+    @Test func weekDatesContainSevenUniqueCalendarDays() throws {
         let calendar = fixedCalendar(firstWeekday: 1)
-        let date = #require(calendar.date(2026, 6, 10, hour: 12))
+        let date = try #require(calendar.date(2026, 6, 10, hour: 12))
         let weekDates = date.weekDates(using: calendar)
         let dayComponents = Set(
             weekDates.map {
@@ -33,9 +33,9 @@ struct DateWeekTests {
         #expect(dayComponents.count == 7)
     }
 
-    @Test func addingWeeksPreservesWeekday() {
+    @Test func addingWeeksPreservesWeekday() throws {
         let calendar = fixedCalendar(firstWeekday: 1)
-        let date = #require(calendar.date(2026, 6, 10, hour: 12))
+        let date = try #require(calendar.date(2026, 6, 10, hour: 12))
         let nextWeek = date.date(byAddingWeeks: 1, using: calendar)
 
         #expect(
@@ -48,7 +48,7 @@ struct DateWeekTests {
     private func fixedCalendar(firstWeekday: Int) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "en_US_POSIX")
-        calendar.timeZone = #require(TimeZone(secondsFromGMT: 0))
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
         calendar.firstWeekday = firstWeekday
         return calendar
     }

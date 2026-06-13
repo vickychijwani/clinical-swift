@@ -20,11 +20,11 @@ struct TimeOfDayTests {
         #expect(TimeOfDay(0, 0).minutes(since: TimeOfDay(23, 59)) == -1_439)
     }
 
-    @Test func extractsHourAndMinuteWithExplicitCalendar() {
+    @Test func extractsHourAndMinuteWithExplicitCalendar() throws {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = #require(TimeZone(secondsFromGMT: 0))
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
 
-        let date = #require(calendar.date(
+        let date = try #require(calendar.date(
             from: DateComponents(
                 year: 2026,
                 month: 6,

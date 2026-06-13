@@ -12,9 +12,9 @@ struct PatientList: View {
         List {
             ForEach(sections) { section in
                 Section {
-                    ForEach(section.patients) { patient in
+                    ForEach(section.items) { item in
                         PatientRow(
-                            patient: patient,
+                            item: item,
                             referenceDate: referenceDate,
                             calendar: calendar,
                             locale: locale
@@ -35,7 +35,7 @@ struct PatientList: View {
 
 #Preview {
 //    PatientList(
-//        sections: PatientSection.sections(from: samplePatients),
+//        sections: PatientSection.sections(from: samplePatientListItems),
 //        referenceDate: .now,
 //        calendar: .autoupdatingCurrent,
 //        locale: .autoupdatingCurrent

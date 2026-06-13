@@ -1,3 +1,4 @@
+import SQLiteData
 import SwiftUI
 
 struct ContentView: View {
@@ -6,26 +7,25 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
-            NavigationStack(path: $router.schedulePath) {
-                ScheduleView(selectedDate: $selectedDate)
+            Tab("Schedule", systemImage: "calendar", value: AppTab.schedule) {
+                NavigationStack(path: $router.schedulePath) {
+                    ScheduleView(selectedDate: $selectedDate)
+                }
             }
-            .tabItem {
-                Label("Schedule", systemImage: "calendar")
-            }
-            .tag(AppTab.schedule)
 
-            NavigationStack(path: $router.patientsPath) {
-                PatientsView(patients: samplePatients)
+            Tab("Patients", systemImage: "person.2", value: AppTab.patients) {
+                NavigationStack(path: $router.patientsPath) {
+                    PatientsView()
+                }
             }
-            .tabItem {
-                Label("Patients", systemImage: "person.2")
-            }
-            .tag(AppTab.patients)
         }
         .environment(router)
     }
 }
 
 #Preview {
+    let _ = try! prepareDependencies {
+        $0.defaultDatabase = try appDatabase(seedSamples: true)
+    }
     ContentView()
 }

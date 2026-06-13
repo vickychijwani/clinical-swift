@@ -1,6 +1,6 @@
 import Foundation
 
-enum Gender: Hashable, Sendable {
+nonisolated enum Gender: Hashable, Sendable {
     case female
     case male
     case other(String)

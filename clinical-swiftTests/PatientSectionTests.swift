@@ -4,7 +4,7 @@ import Testing
 
 struct PatientSectionTests {
     @Test func groupsUnknownPatientsUnderHashBeforeAlphabeticalSections() {
-        let patients = [
+        let items = [
             patient(name: "Dev Malhotra"),
             unknownPatient(createdDate: date(2026, 5, 28, hour: 17)),
             patient(name: "Aarav Mehta"),
@@ -12,54 +12,54 @@ struct PatientSectionTests {
         ]
 
         let sections = PatientSection.sections(
-            from: patients,
+            from: items,
             locale: Locale(identifier: "en_US_POSIX")
         )
 
         #expect(sections.map(\.id) == ["#", "A", "D"])
-        #expect(sections[0].patients.first?.displayName == "Unknown Patient")
-        #expect(sections[1].patients.map(\.name) == ["Aarav Mehta", "Anjali Desai"])
+        #expect(sections[0].items.first?.patient.displayName == "Unknown Patient")
+        #expect(sections[1].items.map(\.patient.name) == ["Aarav Mehta", "Anjali Desai"])
     }
 
     @Test func omitsEmptySections() {
-        let patients = [
+        let items = [
             patient(name: "Aarav Mehta"),
             patient(name: "Dev Malhotra"),
         ]
 
-        let sections = PatientSection.sections(from: patients)
+        let sections = PatientSection.sections(from: items)
 
         #expect(sections.map(\.id) == ["A", "D"])
     }
 
     @Test func searchMatchesRealNamesOnly() {
-        let patients = [
+        let items = [
             unknownPatient(createdDate: date(2026, 5, 28)),
             patient(name: "Unknown Roy"),
             patient(name: "Aarav Mehta"),
         ]
 
         let unknownSearch = PatientSection.sections(
-            from: patients,
+            from: items,
             searchText: "Unknown"
         )
         let aaravSearch = PatientSection.sections(
-            from: patients,
+            from: items,
             searchText: "aarav"
         )
 
-        #expect(unknownSearch.flatMap(\.patients).map(\.name) == ["Unknown Roy"])
-        #expect(aaravSearch.flatMap(\.patients).map(\.name) == ["Aarav Mehta"])
+        #expect(unknownSearch.flatMap(\.items).map(\.patient.name) == ["Unknown Roy"])
+        #expect(aaravSearch.flatMap(\.items).map(\.patient.name) == ["Aarav Mehta"])
     }
 
     @Test func searchCanRemoveUnknownSection() {
-        let patients = [
+        let items = [
             unknownPatient(createdDate: date(2026, 5, 28)),
             patient(name: "Aarav Mehta"),
         ]
 
         let sections = PatientSection.sections(
-            from: patients,
+            from: items,
             searchText: "Aarav"
         )
 
@@ -67,46 +67,49 @@ struct PatientSectionTests {
     }
 
     @Test func searchMatchesPrefixesOfNameWordsOnly() {
-        let patients = [
+        let items = [
             patient(name: "Aarav Mehta"),
             patient(name: "Ishaan Puri"),
         ]
 
         let sections = PatientSection.sections(
-            from: patients,
+            from: items,
             searchText: "aa"
         )
 
-        #expect(sections.flatMap(\.patients).map(\.name) == ["Aarav Mehta"])
+        #expect(sections.flatMap(\.items).map(\.patient.name) == ["Aarav Mehta"])
     }
 
     @Test func searchMatchesWordPrefixesInAnyOrder() {
-        let patients = [
+        let items = [
             patient(name: "Aarav Mehta"),
             patient(name: "Mehta Aarav"),
             patient(name: "Mehul Arora"),
         ]
 
         let sections = PatientSection.sections(
-            from: patients,
+            from: items,
             searchText: "me aa"
         )
 
-        #expect(sections.flatMap(\.patients).map(\.name) == [
+        #expect(sections.flatMap(\.items).map(\.patient.name) == [
             "Aarav Mehta",
             "Mehta Aarav",
         ])
     }
 
-    private func patient(name: String) -> Patient {
-        Patient(name: name)
+    private func patient(name: String) -> PatientListItem {
+        PatientListItem(patient: Patient(name: name), nextAppointmentDate: nil)
     }
 
-    private func unknownPatient(createdDate: Date) -> Patient {
-        Patient(
-            name: nil,
-            phone: "+91 98201 44532",
-            createdDate: createdDate
+    private func unknownPatient(createdDate: Date) -> PatientListItem {
+        PatientListItem(
+            patient: Patient(
+                name: nil,
+                phone: "+91 98201 44532",
+                createdDate: createdDate
+            ),
+            nextAppointmentDate: nil
         )
     }
 
@@ -117,7 +120,7 @@ struct PatientSectionTests {
         hour: Int = 0
     ) -> Date {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = #require(TimeZone(secondsFromGMT: 0))
-        return #require(calendar.date(year, month, day, hour: hour))
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+        return calendar.date(year, month, day, hour: hour) ?? Date(timeIntervalSinceReferenceDate: 0)
     }
 }
