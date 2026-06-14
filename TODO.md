@@ -3,7 +3,7 @@
 
 ## M1: Replace Shortcuts + Calendar setup
 - [x] Schedule of appointments
-  - [x] Handle appointment overlap (e.g., 2 doctors)
+  - [x] Handle appointment overlap (e.g., 2 doctors or incorrect appt duration)
 - [x] Patients list
 - [ ] New patient
 - [ ] View patient

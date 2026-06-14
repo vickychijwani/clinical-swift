@@ -61,7 +61,6 @@ Keep the documentation map and the documents it points to up-to-date when changi
 - Never use `Task.sleep(nanoseconds:)`; always use `Task.sleep(for:)` instead.
 - Never use `UIScreen.main.bounds` to read the size of the available space.
 - Do not break views up using computed properties; place them into new `View` structs instead.
-- Do not force specific font sizes; prefer using Dynamic Type instead.
 - Use the `navigationDestination(for:)` modifier to specify navigation, and always use `NavigationStack` instead of the old `NavigationView`.
 - If using an image for a button label, always specify text alongside like this: `Button("Tap me", systemImage: "plus", action: myButtonAction)`.
 - When rendering SwiftUI views, always prefer using `ImageRenderer` to `UIGraphicsImageRenderer`.

@@ -9,6 +9,8 @@ This document captures the deliberate constraints an agent is likely to break if
 - `TimelineLayoutEngine` must stay break-agnostic. It should not know about break blocks, collapsed heights, hidden hour labels, or discontinuity rules.
 - Hour markers and appointment cards in a segment must use the same start and end boundaries.
 - `TimelineBreakView` is presentational only. It should render the compact break row, not influence appointment layout.
+- Appointment overlap layout is segment-local and break-agnostic. Up to three simultaneous appointments may split the segment content width, but vertical position must still come from simple minutes-from-segment-start math.
+- Appointment time text must remain visible in narrow overlap columns. Patient names may clip at the trailing card edge because the time is the non-negotiable scheduling cue.
 - The now marker is presentation-only and must not affect appointment layout, hit testing, scrolling, or accessibility focus.
 - The now marker should update approximately once per minute. Minute-level accuracy is enough for this scale and avoids unnecessary redraws or timer work.
 - Use `TimeOfDay` for clinic-level schedule boundaries such as opening, closing, and break times. Use `Date` for appointment instances on a specific day.

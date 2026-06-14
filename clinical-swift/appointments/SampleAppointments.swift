@@ -8,6 +8,24 @@ let sampleAppointments: [Appointment] = [
         status: .scheduled
     ),
     .init(
+        patientName: "Priya Narayanan",
+        startTime: Date.now.setTime(10, 0),
+        durationMinutes: 45,
+        status: .scheduled
+    ),
+    .init(
+        patientName: "Kabir Malhotra",
+        startTime: Date.now.setTime(10, 0),
+        durationMinutes: 45,
+        status: .scheduled
+    ),
+    .init(
+        patientName: "Meera Subramanian",
+        startTime: Date.now.setTime(10, 15),
+        durationMinutes: 30,
+        status: .scheduled
+    ),
+    .init(
         patientName: "Ubaid Khan",
         startTime: Date.now.setTime(12, 0),
         durationMinutes: 15,

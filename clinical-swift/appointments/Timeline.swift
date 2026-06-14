@@ -15,7 +15,8 @@ struct Timeline: View {
         timeColumnWidth: 40,
         verticalPadding: 8,
         horizontalCardMargin: 12,
-        verticalCardMargin: 1
+        verticalCardMargin: 1,
+        overlapColumnSpacing: 2
     )
 
     var body: some View {

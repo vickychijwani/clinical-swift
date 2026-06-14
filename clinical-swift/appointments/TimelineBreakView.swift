@@ -62,7 +62,8 @@ struct DiagonalStripePattern: Shape {
             timeColumnWidth: 0,
             verticalPadding: 0,
             horizontalCardMargin: 0,
-            verticalCardMargin: 0
+            verticalCardMargin: 0,
+            overlapColumnSpacing: 0
         )
     )
 }

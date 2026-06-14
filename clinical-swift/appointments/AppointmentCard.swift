@@ -4,6 +4,26 @@ struct AppointmentCard: View {
     let appt: Appointment
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.white)
+
+            cardContent
+                .padding(.horizontal, 8)
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity,
+                    alignment: .topLeading
+                )
+                .clipped()
+
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.gray.opacity(0.15))
+        }
+        .clipShape(.rect(cornerRadius: 8))
+    }
+
+    private var cardContent: some View {
         ViewThatFits(in: .vertical) {
             // Preferred: vertical layout when there's enough height
             VStack(alignment: .leading, spacing: 4) {
@@ -11,10 +31,9 @@ struct AppointmentCard: View {
                 Color.clear.frame(height: 8)
                 Text(timeText)
                     .styleAppointmentTime()
-                Text(appt.patientName)
-                    .styleBodyBold()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
+                    .layoutPriority(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                patientNameText
                 // Fill the rest of the space provided by the layout engine
                 Spacer(minLength: 0)
             }
@@ -26,31 +45,28 @@ struct AppointmentCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(timeText)
                         .styleAppointmentTime()
-                    Text(appt.patientName)
-                        .styleBodyBold()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                        .truncationMode(.tail)
+                        .layoutPriority(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    patientNameText
                 }
                 Spacer(minLength: 0)
             }
         }
-        .padding(.horizontal, 8)
-        .frame(
-            maxWidth: .infinity,
-            maxHeight: .infinity,
-            alignment: .topLeading
-        )
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(.gray.opacity(0.15))
-        )
     }
 
     var timeText: String {
         return "\(appt.startTime.formatted(.dateTime.hour().minute()))"
+    }
+
+    private var patientNameText: some View {
+        ZStack(alignment: .leading) {
+            Text(appt.patientName)
+                .styleBodyBold()
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
     }
 }
 

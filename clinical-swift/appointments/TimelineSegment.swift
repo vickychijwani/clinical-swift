@@ -26,7 +26,13 @@ struct TimelineSegment: View {
                     AppointmentCard(appt: layout.appointment)
                         .frame(
                             width: layout.rect.width,
-                            height: layout.rect.height
+                            height: layout.rect.height,
+                            alignment: .topLeading
+                        )
+                        .clipShape(.rect(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(.gray.opacity(0.15))
                         )
                         .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
