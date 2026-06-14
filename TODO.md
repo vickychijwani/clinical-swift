@@ -10,6 +10,7 @@
 - [ ] Edit patient
 - [ ] New appointment
   - [ ] Quick-add new patient from new appointment page
+  - [ ] Share recent call to open new appointment page for patient associated with that phone number
 - [ ] View appointment
 - [ ] Edit appointment
 - [ ] Delete appointment

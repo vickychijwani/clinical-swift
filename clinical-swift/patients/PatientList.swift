@@ -7,6 +7,7 @@ struct PatientList: View {
     let locale: Locale
 
     @Binding var searchText: String
+    @Binding var viewingPatient: PatientListItem?
 
     var body: some View {
         List {
@@ -20,6 +21,9 @@ struct PatientList: View {
                             locale: locale
                         )
                         .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+                        .onTapGesture {
+                            viewingPatient = item
+                        }
                     }
                 } header: {
                     Text(section.id)
@@ -39,7 +43,8 @@ struct PatientList: View {
         referenceDate: .now,
         calendar: .autoupdatingCurrent,
         locale: .autoupdatingCurrent,
-        searchText: .constant("")
+        searchText: .constant(""),
+        viewingPatient: .constant(nil)
     )
     .background(Color("AppBackground"))
 }

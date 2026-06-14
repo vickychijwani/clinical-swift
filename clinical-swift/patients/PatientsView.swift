@@ -10,6 +10,7 @@ struct PatientsView: View {
     private var patientRows: [PatientListRow]
     @State private var searchText = ""
     @State private var isAddingPatient = false
+    @State private var viewingPatient: PatientListItem? = nil
 
     var body: some View {
         PatientList(
@@ -21,7 +22,8 @@ struct PatientsView: View {
             referenceDate: referenceDate,
             calendar: calendar,
             locale: locale,
-            searchText: $searchText
+            searchText: $searchText,
+            viewingPatient: $viewingPatient
         )
         .background(Color("AppBackground"))
         .navigationTitle("Patients")
@@ -39,6 +41,11 @@ struct PatientsView: View {
                     .background(Color("AppBackground"))
             }
             .presentationDetents([.medium])
+        }
+        .sheet(item: $viewingPatient) { item in
+            NavigationStack {
+                Text("Patient \(item.patient.name)")
+            }.presentationDetents([.medium])
         }
     }
 
