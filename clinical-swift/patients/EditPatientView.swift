@@ -11,32 +11,19 @@ struct EditPatientView: View {
     @State var gender: Gender?
     @State private var isSaving = false
     @State private var saveErrorMessage: String?
+    @State private var isPickingDOB = false
+    @State private var draftDOB = Date()
 
     var body: some View {
         Form {
             TextField("Name", text: $name.replacingNil())
                 .textContentType(.name)
                 .autocorrectionDisabled()
-
             PhoneField("Phone number", phone: $phone.replacingNil())
 
-            DatePicker("Date of birth",
-                       selection: $dob.replacingNil(),
-                       in: ...Date(),
-                       displayedComponents: .date)
+            dobField("Date of birth", selection: $dob)
 
-            LabeledContent("Gender") {
-                Picker("Gender", selection: $gender) {
-                    Text("M")
-                        .tag(Gender.male as Gender?)
-                    Text("F")
-                        .tag(Gender.female as Gender?)
-                    Text("Other")
-                        .tag(Gender.other as Gender?)
-                }
-                .pickerStyle(.segmented)
-                .fixedSize(horizontal: true, vertical: false)
-            }
+            genderField("Gender", selection: $gender)
         }
         .scrollContentBackground(.hidden)
         .navigationTitle("Edit Patient")
@@ -61,6 +48,36 @@ struct EditPatientView: View {
                 .disabled(isSaving)
             }
         }
+        .sheet(isPresented: $isPickingDOB) {
+            NavigationStack {
+                DatePicker(
+                    "Date of birth",
+                    selection: $draftDOB,
+                    in: ...Date(),
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .padding()
+                .navigationTitle("Date of birth")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            isPickingDOB = false
+                        }
+                    }
+
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            dob = draftDOB
+                            isPickingDOB = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.height(250)])
+        }
         .alert(
             "Unable to save patient",
             isPresented: Binding(
@@ -73,6 +90,39 @@ struct EditPatientView: View {
             }
         } message: {
             Text(saveErrorMessage ?? "")
+        }
+    }
+
+    fileprivate func dobField(_ title: String, selection: Binding<Date?>) -> some View {
+        Button {
+            draftDOB = selection.wrappedValue ?? Date()
+            isPickingDOB = true
+        } label: {
+            HStack {
+                Text(title)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Text(selection.wrappedValue?.formatted(.dateTime.day().month().year()) ?? "Add")
+                    .foregroundStyle(selection.wrappedValue == nil ? .secondary : .primary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    fileprivate func genderField(_ title: String, selection: Binding<Gender?>) -> some View {
+        LabeledContent(title) {
+            Picker(title, selection: selection) {
+                Text("M")
+                    .tag(Gender.male as Gender?)
+                Text("F")
+                    .tag(Gender.female as Gender?)
+                Text("Other")
+                    .tag(Gender.other as Gender?)
+            }
+            .pickerStyle(.segmented)
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 

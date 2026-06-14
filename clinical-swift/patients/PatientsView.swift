@@ -38,6 +38,7 @@ struct PatientsView: View {
                 EditPatientView()
                     .background(Color("AppBackground"))
             }
+            .presentationDetents([.medium])
         }
     }
 
