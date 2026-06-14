@@ -170,7 +170,7 @@ private struct DateStripCell: View {
         Button {
             selectDate(date)
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: 0) {
                 Text(weekdayText)
                     .font(.caption)
                     .bold()

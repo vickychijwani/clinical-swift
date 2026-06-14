@@ -5,7 +5,7 @@
 - [x] Schedule of appointments
   - [x] Handle appointment overlap (e.g., 2 doctors or incorrect appt duration)
 - [x] Patients list
-- [ ] New patient
+- [x] New patient
 - [ ] View patient
 - [ ] Edit patient
 - [ ] New appointment
@@ -20,6 +20,7 @@
   - [ ] Make sure SMS is sent from Bitehaus number, not personal
 - [ ] Widget
 - [ ] Shortcut to create appointment
+- [ ] Calendar sync for CarPlay - but remove Calendar widget from home screen to ensure app adoption
 - [ ] Block off time ranges (e.g., travelling, holiday, etc) OR sync to Calendar
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
