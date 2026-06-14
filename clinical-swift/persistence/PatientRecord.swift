@@ -56,14 +56,16 @@ extension Patient {
 }
 
 extension Gender {
-    nonisolated init(storageValue: String) {
+    nonisolated init?(storageValue: String) {
         switch storageValue {
         case Self.female.storageValue:
             self = .female
         case Self.male.storageValue:
             self = .male
+        case Self.other.storageValue:
+            self = .other
         default:
-            self = .other(storageValue)
+            return nil
         }
     }
 
@@ -73,8 +75,8 @@ extension Gender {
             "female"
         case .male:
             "male"
-        case .other(let value):
-            value
+        case .other:
+            "other"
         }
     }
 }

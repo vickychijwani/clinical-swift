@@ -3,7 +3,7 @@ import Foundation
 nonisolated enum Gender: Hashable, Sendable {
     case female
     case male
-    case other(String)
+    case other
 
     var displayName: String {
         switch self {
@@ -11,8 +11,8 @@ nonisolated enum Gender: Hashable, Sendable {
             "F"
         case .male:
             "M"
-        case .other(let value):
-            value
+        case .other:
+            "Other"
         }
     }
 }

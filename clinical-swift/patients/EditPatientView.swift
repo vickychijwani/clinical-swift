@@ -25,13 +25,17 @@ struct EditPatientView: View {
                        in: ...Date(),
                        displayedComponents: .date)
 
-            Picker("Gender", selection: $gender) {
-                Text("Not specified")
-                    .tag(nil as Gender?)
-                Text(Gender.male.displayName)
-                    .tag(Gender.male)
-                Text(Gender.female.displayName)
-                    .tag(Gender.female)
+            LabeledContent("Gender") {
+                Picker("Gender", selection: $gender) {
+                    Text("M")
+                        .tag(Gender.male as Gender?)
+                    Text("F")
+                        .tag(Gender.female as Gender?)
+                    Text("Other")
+                        .tag(Gender.other as Gender?)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize(horizontal: true, vertical: false)
             }
         }
         .scrollContentBackground(.hidden)

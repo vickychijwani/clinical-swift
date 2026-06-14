@@ -13,7 +13,7 @@ struct PersistenceTests {
             name: "   ",
             phone: "  +91 98201 44532  ",
             dob: createdAt,
-            gender: .other("nonbinary"),
+            gender: .other,
             createdDate: createdAt
         )
 
@@ -22,14 +22,22 @@ struct PersistenceTests {
 
         #expect(record.name == nil)
         #expect(record.phone == "+91 98201 44532")
-        #expect(record.gender == "nonbinary")
+        #expect(record.gender == "other")
         #expect(record.createdAt == createdAt)
         #expect(record.updatedAt == updatedAt)
         #expect(mappedPatient.id == id)
         #expect(mappedPatient.name == nil)
         #expect(mappedPatient.phone == "+91 98201 44532")
-        #expect(mappedPatient.gender == .other("nonbinary"))
+        #expect(mappedPatient.gender == .other)
         #expect(mappedPatient.createdDate == createdAt)
+    }
+
+    @Test func genderStorageMappingIsStable() {
+        #expect(Gender.female.storageValue == "female")
+        #expect(Gender.male.storageValue == "male")
+        #expect(Gender.other.storageValue == "other")
+        #expect(Gender(storageValue: "other") == .other)
+        #expect(Gender(storageValue: "unexpected") == nil)
     }
 
     @Test func appointmentStatusStorageMappingIsDeterministic() {

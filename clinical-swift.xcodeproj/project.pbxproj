@@ -205,7 +205,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				8BE2A01F2FE0000000000005 /* XCRemoteSwiftPackageReference "sqlite-data" */,
-				8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */,
 				8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
 				8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */,
 				8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */,
@@ -548,7 +548,7 @@
 				minimumVersion = 1.0.0;
 			};
 		};
-		8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+		8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift";
 			requirement = {
@@ -625,22 +625,86 @@
 			package = 8BE2A01F2FE0000000000005 /* XCRemoteSwiftPackageReference "sqlite-data" */;
 			productName = SQLiteData;
 		};
-		8BE2A0292FE0000000000005 /* GRDB */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB.swift" */; productName = GRDB; };
-		8BE2A02A2FE0000000000005 /* ConcurrencyExtras */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */; productName = ConcurrencyExtras; };
-		8BE2A02B2FE0000000000005 /* Dependencies */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */; productName = Dependencies; };
-		8BE2A02C2FE0000000000005 /* IssueReporting */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */; productName = IssueReporting; };
-		8BE2A02D2FE0000000000005 /* OrderedCollections */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */; productName = OrderedCollections; };
-		8BE2A02E2FE0000000000005 /* Perception */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */; productName = Perception; };
-		8BE2A02F2FE0000000000005 /* Sharing */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */; productName = Sharing; };
-		8BE2A0302FE0000000000005 /* StructuredQueriesSQLite */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */; productName = StructuredQueriesSQLite; };
-		8BE2A0312FE0000000000005 /* GRDB */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB.swift" */; productName = GRDB; };
-		8BE2A0322FE0000000000005 /* ConcurrencyExtras */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */; productName = ConcurrencyExtras; };
-		8BE2A0332FE0000000000005 /* Dependencies */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */; productName = Dependencies; };
-		8BE2A0342FE0000000000005 /* IssueReporting */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */; productName = IssueReporting; };
-		8BE2A0352FE0000000000005 /* OrderedCollections */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */; productName = OrderedCollections; };
-		8BE2A0362FE0000000000005 /* Perception */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */; productName = Perception; };
-		8BE2A0372FE0000000000005 /* Sharing */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */; productName = Sharing; };
-		8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */ = {isa = XCSwiftPackageProductDependency; package = 8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */; productName = StructuredQueriesSQLite; };
+		8BE2A0292FE0000000000005 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+		8BE2A02A2FE0000000000005 /* ConcurrencyExtras */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */;
+			productName = ConcurrencyExtras;
+		};
+		8BE2A02B2FE0000000000005 /* Dependencies */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = Dependencies;
+		};
+		8BE2A02C2FE0000000000005 /* IssueReporting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */;
+			productName = IssueReporting;
+		};
+		8BE2A02D2FE0000000000005 /* OrderedCollections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = OrderedCollections;
+		};
+		8BE2A02E2FE0000000000005 /* Perception */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */;
+			productName = Perception;
+		};
+		8BE2A02F2FE0000000000005 /* Sharing */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */;
+			productName = Sharing;
+		};
+		8BE2A0302FE0000000000005 /* StructuredQueriesSQLite */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
+			productName = StructuredQueriesSQLite;
+		};
+		8BE2A0312FE0000000000005 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+		8BE2A0322FE0000000000005 /* ConcurrencyExtras */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */;
+			productName = ConcurrencyExtras;
+		};
+		8BE2A0332FE0000000000005 /* Dependencies */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = Dependencies;
+		};
+		8BE2A0342FE0000000000005 /* IssueReporting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */;
+			productName = IssueReporting;
+		};
+		8BE2A0352FE0000000000005 /* OrderedCollections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = OrderedCollections;
+		};
+		8BE2A0362FE0000000000005 /* Perception */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */;
+			productName = Perception;
+		};
+		8BE2A0372FE0000000000005 /* Sharing */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */;
+			productName = Sharing;
+		};
+		8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
+			productName = StructuredQueriesSQLite;
+		};
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 79438C3B2FD2D07100C0E6EF /* Project object */;

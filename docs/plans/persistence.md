@@ -59,7 +59,7 @@ SQLiteData integration points: `@Table`, `@FetchAll`, `prepareDependencies`, `de
 - Add mapping tests:
   - blank patient name/phone normalization survives `Patient -> PatientRecord -> Patient`
   - `Patient.init(_ record:)` maps stored fields correctly
-  - `Gender.other` and appointment statuses round-trip through storage strings
+  - `Gender.other` and appointment statuses use stable storage strings
 - Add database tests:
   - migrations create both tables
   - inserting a patient and appointments returns the correct derived `nextAppointmentDate`
