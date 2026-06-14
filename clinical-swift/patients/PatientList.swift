@@ -19,10 +19,10 @@ struct PatientList: View {
                             calendar: calendar,
                             locale: locale
                         )
+                        .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
                     }
                 } header: {
                     Text(section.id)
-                        .font(.title3.bold())
                 }
                 .sectionIndexLabel(section.id)
             }
@@ -34,11 +34,12 @@ struct PatientList: View {
 }
 
 #Preview {
-//    PatientList(
-//        sections: PatientSection.sections(from: samplePatientListItems),
-//        referenceDate: .now,
-//        calendar: .autoupdatingCurrent,
-//        locale: .autoupdatingCurrent
-//    )
-//    .background(Color("AppBackground"))
+    PatientList(
+        sections: PatientSection.sections(from: samplePatientListItems),
+        referenceDate: .now,
+        calendar: .autoupdatingCurrent,
+        locale: .autoupdatingCurrent,
+        searchText: .constant("")
+    )
+    .background(Color("AppBackground"))
 }

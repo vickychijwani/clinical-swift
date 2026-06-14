@@ -16,13 +16,12 @@ struct PatientRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(patient.displayName)
-                    .font(.headline)
+                    .styleBodyBold()
                     .lineLimit(1)
 
                 if let subtitle = metadata.subtitle {
                     Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .styleCaption()
                         .lineLimit(2)
                 }
             }

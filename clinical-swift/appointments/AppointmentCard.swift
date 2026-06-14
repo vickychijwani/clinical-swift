@@ -10,9 +10,9 @@ struct AppointmentCard: View {
                 // Fixed top padding (clearance from card edge)
                 Color.clear.frame(height: 8)
                 Text(timeText)
-                    .font(.caption.monospacedDigit())
+                    .styleAppointmentTime()
                 Text(appt.patientName)
-                    .font(.system(size: 14, weight: .medium))
+                    .styleBodyBold()
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                 // Fill the rest of the space provided by the layout engine
@@ -25,9 +25,9 @@ struct AppointmentCard: View {
                 Spacer(minLength: 0)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(timeText)
-                        .font(.caption.monospacedDigit())
+                        .styleAppointmentTime()
                     Text(appt.patientName)
-                        .font(.system(size: 14, weight: .medium))
+                        .styleBodyBold()
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
                         .truncationMode(.tail)

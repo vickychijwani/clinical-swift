@@ -5,10 +5,10 @@ struct PatientAvatar: View {
 
     var body: some View {
         Text(initials)
-            .font(.headline)
+            .font(.headline.pointSize(13))
             .bold()
             .foregroundStyle(.green)
-            .frame(width: 48, height: 48)
+            .frame(width: 34, height: 34)
             .background(.green.opacity(0.16))
             .clipShape(.circle)
             .accessibilityHidden(true)
