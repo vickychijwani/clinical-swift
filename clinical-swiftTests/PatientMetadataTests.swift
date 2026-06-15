@@ -6,7 +6,6 @@ import Testing
 struct PatientMetadataTests {
     @Test func buildsNamedPatientMetadataWithoutCreatedDateFallback() throws {
         let calendar = fixedCalendar()
-        let referenceDate = try #require(calendar.date(2026, 6, 10))
         let dob = try #require(calendar.date(1990, 6, 10))
         let createdDate = try #require(calendar.date(2026, 5, 28))
         let patient = Patient(
@@ -17,19 +16,16 @@ struct PatientMetadataTests {
         )
 
         let metadata = PatientMetadata.metadata(
-            for: PatientListItem(patient: patient, nextAppointmentDate: nil),
-            referenceDate: referenceDate,
-            calendar: calendar,
-            locale: Locale(identifier: "en_US_POSIX")
+            for: PatientListItem(patient: patient, nextAppointmentDate: nil)
         )
+        let expectedAge = try #require(patient.age())
 
-        #expect(metadata.parts == ["36y/M"])
-        #expect(metadata.subtitle == "36y/M")
+        #expect(metadata.parts == ["\(expectedAge)y/M"])
+        #expect(metadata.subtitle == "\(expectedAge)y/M")
     }
 
     @Test func unknownPatientUsesCreatedDateWhenNextAppointmentIsMissing() throws {
         let calendar = fixedCalendar()
-        let referenceDate = try #require(calendar.date(2026, 6, 10))
         let dob = try #require(calendar.date(1990, 6, 10))
         let createdDate = try #require(calendar.date(2026, 5, 28))
         let patient = Patient(
@@ -41,21 +37,18 @@ struct PatientMetadataTests {
         )
 
         let metadata = PatientMetadata.metadata(
-            for: PatientListItem(patient: patient, nextAppointmentDate: nil),
-            referenceDate: referenceDate,
-            calendar: calendar,
-            locale: Locale(identifier: "en_US_POSIX")
+            for: PatientListItem(patient: patient, nextAppointmentDate: nil)
         )
+        let expectedAge = try #require(patient.age())
 
         #expect(metadata.parts.count == 3)
-        #expect(metadata.parts[0] == "36y/F")
+        #expect(metadata.parts[0] == "\(expectedAge)y/F")
         #expect(metadata.parts[1] == "+91 98201 44532")
         #expect(metadata.parts[2].hasPrefix("Created"))
     }
 
     @Test func nextAppointmentTakesPriorityOverUnknownCreatedDate() throws {
         let calendar = fixedCalendar()
-        let referenceDate = try #require(calendar.date(2026, 6, 10))
         let nextAppointment = try #require(calendar.date(2026, 6, 11, hour: 18))
         let createdDate = try #require(calendar.date(2026, 5, 28))
         let patient = Patient(
@@ -65,10 +58,7 @@ struct PatientMetadataTests {
         )
 
         let metadata = PatientMetadata.metadata(
-            for: PatientListItem(patient: patient, nextAppointmentDate: nextAppointment),
-            referenceDate: referenceDate,
-            calendar: calendar,
-            locale: Locale(identifier: "en_US_POSIX")
+            for: PatientListItem(patient: patient, nextAppointmentDate: nextAppointment)
         )
 
         #expect(metadata.parts.count == 2)

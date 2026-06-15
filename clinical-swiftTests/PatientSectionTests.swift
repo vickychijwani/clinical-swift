@@ -12,8 +12,7 @@ struct PatientSectionTests {
         ]
 
         let sections = PatientSection.sections(
-            from: items,
-            locale: Locale(identifier: "en_US_POSIX")
+            from: items
         )
 
         #expect(sections.map(\.id) == ["#", "A", "D"])

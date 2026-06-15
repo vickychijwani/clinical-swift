@@ -4,8 +4,13 @@
 ## M1: Replace Shortcuts + Calendar setup
 - [x] Schedule of appointments
   - [x] Handle appointment overlap (e.g., 2 doctors or incorrect appt duration)
+  - [ ] Swipe to navigate day-wise
+  - [ ] Jump to date?
+  - [ ] Add “today”, “yesterday”, “tomorrow” + day in header
 - [x] Patients list
 - [x] New patient
+  - [ ] Pick contact first - autofill patient name
+  - [ ] Or share contact to create Patient
 - [ ] View patient
 - [ ] Edit patient
 - [ ] New appointment
@@ -16,12 +21,13 @@
 - [ ] Delete appointment
 - [ ] Send SMS + WhatsApp Biz message + auto-copy to clipboard
   - [ ] Allow editing of message
+  - [ ] Allow changing contact/number when sending msg (sometimes number changes temporarily or permanently - shouldn’t require Patient record update)
   - [ ] Don't put patient's name OR add honorific before name
   - [ ] Also send location if first appt
   - [ ] Make sure SMS is sent from Bitehaus number, not personal
 - [ ] Widget
 - [ ] Shortcut to create appointment
-- [ ] Calendar sync for CarPlay - but remove Calendar widget from home screen to ensure app adoption
+- [ ] Calendar sync for CarPlay + my visibility - but remove Calendar widget from home screen to ensure app adoption
 - [ ] Block off time ranges (e.g., travelling, holiday, etc) OR sync to Calendar
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!

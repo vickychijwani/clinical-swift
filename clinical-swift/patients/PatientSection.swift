@@ -8,9 +8,9 @@ struct PatientSection: Identifiable, Hashable {
 
     static func sections(
         from items: [PatientListItem],
-        searchText: String = "",
-        locale: Locale = .autoupdatingCurrent
+        searchText: String = ""
     ) -> [PatientSection] {
+        let locale = Locale.autoupdatingCurrent
         let queryWords = words(in: searchText)
         let filteredItems = items.filter { item in
             guard !queryWords.isEmpty else {

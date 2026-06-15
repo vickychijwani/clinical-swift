@@ -2,10 +2,6 @@ import SQLiteData
 import SwiftUI
 
 struct PatientsView: View {
-    var referenceDate: Date = .now
-    var calendar: Calendar = .autoupdatingCurrent
-    var locale: Locale = .autoupdatingCurrent
-
     @FetchAll(patientListRowsQuery(), animation: .default)
     private var patientRows: [PatientListRow]
     @State private var searchText = ""
@@ -16,12 +12,8 @@ struct PatientsView: View {
         PatientList(
             sections: PatientSection.sections(
                 from: patientListItems,
-                searchText: searchText,
-                locale: locale
+                searchText: searchText
             ),
-            referenceDate: referenceDate,
-            calendar: calendar,
-            locale: locale,
             searchText: $searchText,
             viewingPatient: $viewingPatient
         )
@@ -43,9 +35,15 @@ struct PatientsView: View {
             .presentationDetents([.medium])
         }
         .sheet(item: $viewingPatient) { item in
+            let patientDetails = PatientDetails(
+                patient: item.patient,
+                nextAppointmentDate: item.nextAppointmentDate
+            )
             NavigationStack {
-                Text("Patient \(item.patient.name)")
-            }.presentationDetents([.medium])
+                ViewPatientView(details: patientDetails)
+                    .background(Color("AppBackground"))
+            }
+            .presentationDetents([.medium])
         }
     }
 
@@ -59,8 +57,6 @@ struct PatientsView: View {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
     NavigationStack {
-        PatientsView(
-            referenceDate: Date.now
-        )
+        PatientsView()
     }
 }

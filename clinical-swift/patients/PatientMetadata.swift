@@ -1,3 +1,4 @@
+import Dependencies
 import Foundation
 
 struct PatientMetadata: Equatable {
@@ -11,17 +12,12 @@ struct PatientMetadata: Equatable {
         return parts.joined(separator: " · ")
     }
 
-    static func metadata(
-        for item: PatientListItem,
-        referenceDate: Date = .now,
-        calendar: Calendar = .autoupdatingCurrent,
-        locale: Locale = .autoupdatingCurrent
-    ) -> PatientMetadata {
+    static func metadata(for item: PatientListItem) -> PatientMetadata {
         let patient = item.patient
         var parts: [String] = []
         var demographics: [String] = []
 
-        if let age = patient.age(on: referenceDate, calendar: calendar) {
+        if let age = patient.age(on: .now, calendar: .autoupdatingCurrent) {
             demographics.append("\(age)y")
         }
 
@@ -37,16 +33,23 @@ struct PatientMetadata: Equatable {
             parts.append(phone)
         }
 
+        let locale: Locale = .autoupdatingCurrent
         if let nextAppointmentDate = item.nextAppointmentDate {
-            parts.append("Next \(formattedAppointmentDate(nextAppointmentDate, locale: locale))")
+            parts.append(
+                "Next \(formattedAppointmentDate(nextAppointmentDate, locale: locale))"
+            )
         } else if patient.isUnknown {
-            parts.append("Created \(formattedCreatedDate(patient.createdDate, locale: locale))")
+            parts.append(
+                "Created \(formattedCreatedDate(patient.createdDate, locale: locale))"
+            )
         }
 
         return PatientMetadata(parts: parts)
     }
 
-    private static func formattedAppointmentDate(_ date: Date, locale: Locale) -> String {
+    private static func formattedAppointmentDate(_ date: Date, locale: Locale)
+        -> String
+    {
         date.formatted(
             .dateTime
                 .weekday(.abbreviated)
@@ -56,7 +59,9 @@ struct PatientMetadata: Equatable {
         )
     }
 
-    private static func formattedCreatedDate(_ date: Date, locale: Locale) -> String {
+    private static func formattedCreatedDate(_ date: Date, locale: Locale)
+        -> String
+    {
         date.formatted(
             .dateTime
                 .day()

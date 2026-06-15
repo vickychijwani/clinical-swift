@@ -1,10 +1,11 @@
+import Dependencies
 import SwiftUI
 
 struct PatientRow: View {
     let item: PatientListItem
-    let referenceDate: Date
-    let calendar: Calendar
-    let locale: Locale
+    @ObservationIgnored @Dependency(\.date.now) var referenceDate: Date
+    @ObservationIgnored @Dependency(\.calendar) var calendar: Calendar
+    @ObservationIgnored @Dependency(\.locale) var locale: Locale
 
     private var patient: Patient {
         item.patient
@@ -19,31 +20,18 @@ struct PatientRow: View {
                     .styleBodyBold()
                     .lineLimit(1)
 
-                if let subtitle = metadata.subtitle {
-                    Text(subtitle)
-                        .styleCaption()
-                        .lineLimit(2)
-                }
+                if let subtitle = PatientMetadata.metadata(for: item)
+                    .subtitle {
+                        Text(subtitle)
+                            .styleCaption()
+                            .lineLimit(2)
+                    }
             }
         }
-    }
-
-    private var metadata: PatientMetadata {
-        PatientMetadata.metadata(
-            for: item,
-            referenceDate: referenceDate,
-            calendar: calendar,
-            locale: locale
-        )
     }
 }
 
 #Preview(traits: .sizeThatFitsLayout) {
-    PatientRow(
-        item: samplePatientListItems[0],
-        referenceDate: .now,
-        calendar: .autoupdatingCurrent,
-        locale: .autoupdatingCurrent
-    )
+    PatientRow(item: samplePatientListItems[0])
     .padding(8)
 }
