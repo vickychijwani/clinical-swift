@@ -1,7 +1,8 @@
 import SwiftUI
-import UIKit
 
 struct ViewPatientView: View {
+    @Environment(\.openURL) private var openURL
+
     let details: PatientDetails
 
     var body: some View {
@@ -47,46 +48,49 @@ struct ViewPatientView: View {
         )
     }
 
-    var phoneNumber: String? {
-        details.patient.phone
-    }
+    private var normalizedPhoneNumber: String? {
+        guard let phoneNumber = details.patient.phone else { return nil }
 
-    var telURL: URL? {
-        guard let phoneNumber else { return nil }
-
-        let allowedCharacters = CharacterSet(charactersIn: "+0123456789")
-        let sanitizedPhoneNumber = phoneNumber
+        let trimmedPhoneNumber = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        let startsWithPlus = trimmedPhoneNumber.starts(with: "+")
+        let allowedDigits = CharacterSet(charactersIn: "0123456789")
+        let digits = trimmedPhoneNumber
             .unicodeScalars
-            .filter { allowedCharacters.contains($0) }
+            .filter { allowedDigits.contains($0) }
             .map(String.init)
             .joined()
 
-        guard !sanitizedPhoneNumber.isEmpty else { return nil }
+        guard !digits.isEmpty else { return nil }
 
-        return URL(string: "tel://\(sanitizedPhoneNumber)")
+        if startsWithPlus {
+            return "+\(digits)"
+        }
+
+        return "+91\(digits)"
     }
 
-    var whatsappURL: URL? {
-        guard let phoneNumber else { return nil }
-
-        let sanitizedPhoneNumber = phoneNumber
-            .filter(\.isNumber)
-
-        guard !sanitizedPhoneNumber.isEmpty else { return nil }
-
-        return URL(string: "https://wa.me/\(sanitizedPhoneNumber)")
+    private var whatsappPhoneNumber: String? {
+        normalizedPhoneNumber?.filter(\.isNumber)
     }
 
-    func callPatient() {
+    private var telURL: URL? {
+        guard let normalizedPhoneNumber else { return nil }
+        return URL(string: "tel://\(normalizedPhoneNumber)")
+    }
+
+    private var whatsappURL: URL? {
+        guard let whatsappPhoneNumber else { return nil }
+        return URL(string: "https://wa.me/\(whatsappPhoneNumber)")
+    }
+
+    private func callPatient() {
         guard let telURL else { return }
-
-        UIApplication.shared.open(telURL)
+        openURL(telURL)
     }
 
-    func openWhatsAppChat() {
+    private func openWhatsAppChat() {
         guard let whatsappURL else { return }
-
-        UIApplication.shared.open(whatsappURL)
+        openURL(whatsappURL)
     }
 }
 
