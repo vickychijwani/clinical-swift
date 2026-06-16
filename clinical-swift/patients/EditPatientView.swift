@@ -5,135 +5,40 @@ struct EditPatientView: View {
     @Environment(\.dismiss) private var dismiss
     @Dependency(\.defaultDatabase) private var database
 
-    @State var name: String?
-    @State var phone: String?
-    @State var dob: Date?
-    @State var gender: Gender?
+    private let originalDraft: PatientDraft
+
+    @State private var draft: PatientDraft
     @State private var isSaving = false
     @State private var saveErrorMessage: String?
-    @State private var isPickingDOB = false
-    @State private var draftDOB = Date()
+
+    init(patient: Patient? = nil) {
+        let draft = PatientDraft(patient: patient)
+        self.originalDraft = draft.normalized
+        self._draft = State(initialValue: draft)
+    }
 
     var body: some View {
-        Form {
-            TextField("Name", text: $name.replacingNil())
-                .textContentType(.name)
-                .autocorrectionDisabled()
-            PhoneField("Phone number", phone: $phone.replacingNil())
-
-            dobField("Date of birth", selection: $dob)
-
-            genderField("Gender", selection: $gender)
-        }
-        .scrollContentBackground(.hidden)
-        .navigationTitle("Edit Patient")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    dismiss()
-                } label: {
-                    Label("Done", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                }
-            }
-
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    savePatient()
-                } label: {
-                    Label("Done", systemImage: "checkmark")
-                        .labelStyle(.iconOnly)
-                }
-                .disabled(isSaving)
-            }
-        }
-        .sheet(isPresented: $isPickingDOB) {
-            NavigationStack {
-                DatePicker(
-                    "Date of birth",
-                    selection: $draftDOB,
-                    in: ...Date(),
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.wheel)
-                .labelsHidden()
-                .padding()
-                .navigationTitle("Date of birth")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") {
-                            isPickingDOB = false
-                        }
-                    }
-
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            dob = draftDOB
-                            isPickingDOB = false
-                        }
-                    }
-                }
-            }
-            .presentationDetents([.height(250)])
-        }
-        .alert(
-            "Unable to save patient",
-            isPresented: Binding(
-                get: { saveErrorMessage != nil },
-                set: { if !$0 { saveErrorMessage = nil } }
+        ConfirmingFormSheet(
+            hasUnsavedChanges: hasUnsavedChanges,
+            title: "Discard unsaved changes?",
+            message: "Your patient details have not been saved."
+        ) { guardedDismiss in
+            EditPatientForm(
+                draft: $draft,
+                isSaving: isSaving,
+                saveErrorMessage: $saveErrorMessage,
+                guardedDismiss: guardedDismiss,
+                savePatient: savePatient
             )
-        ) {
-            Button("OK", role: .cancel) {
-                saveErrorMessage = nil
-            }
-        } message: {
-            Text(saveErrorMessage ?? "")
         }
     }
 
-    fileprivate func dobField(_ title: String, selection: Binding<Date?>) -> some View {
-        Button {
-            draftDOB = selection.wrappedValue ?? Date()
-            isPickingDOB = true
-        } label: {
-            HStack {
-                Text(title)
-                    .foregroundStyle(.primary)
-
-                Spacer()
-
-                Text(selection.wrappedValue?.formatted(.dateTime.day().month().year()) ?? "Add")
-                    .foregroundStyle(selection.wrappedValue == nil ? .secondary : .primary)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    fileprivate func genderField(_ title: String, selection: Binding<Gender?>) -> some View {
-        LabeledContent(title) {
-            Picker(title, selection: selection) {
-                Text("M")
-                    .tag(Gender.male as Gender?)
-                Text("F")
-                    .tag(Gender.female as Gender?)
-                Text("Other")
-                    .tag(Gender.other as Gender?)
-            }
-            .pickerStyle(.segmented)
-            .fixedSize(horizontal: true, vertical: false)
-        }
+    private var hasUnsavedChanges: Bool {
+        draft.normalized != originalDraft
     }
 
     private func savePatient() {
-        let patient = Patient(
-            id: UUID(),
-            name: name?.nilIfBlank,
-            phone: phone?.nilIfBlank,
-            dob: dob,
-            gender: gender
-        )
+        let patient = draft.makePatient()
 
         do {
             try patient.validate()
@@ -157,6 +62,170 @@ struct EditPatientView: View {
                 saveErrorMessage = "The patient could not be saved."
             }
             isSaving = false
+        }
+    }
+}
+
+private struct EditPatientForm: View {
+    @Binding var draft: PatientDraft
+    @Binding var saveErrorMessage: String?
+    let isSaving: Bool
+    let guardedDismiss: FormSheetDismissAction
+    let savePatient: () -> Void
+
+    @State private var isPickingDOB = false
+    @State private var draftDOB = Date()
+
+    init(
+        draft: Binding<PatientDraft>,
+        isSaving: Bool,
+        saveErrorMessage: Binding<String?>,
+        guardedDismiss: FormSheetDismissAction,
+        savePatient: @escaping () -> Void
+    ) {
+        self._draft = draft
+        self.isSaving = isSaving
+        self._saveErrorMessage = saveErrorMessage
+        self.guardedDismiss = guardedDismiss
+        self.savePatient = savePatient
+    }
+
+    var body: some View {
+        Form {
+            TextField("Name", text: $draft.name.replacingNil())
+                .textContentType(.name)
+                .autocorrectionDisabled()
+            PhoneField("Phone number", phone: $draft.phone.replacingNil())
+
+            PatientDOBField(
+                title: "Date of birth",
+                selection: $draft.dob,
+                isPickingDOB: $isPickingDOB,
+                draftDOB: $draftDOB
+            )
+
+            PatientGenderField(title: "Gender", selection: $draft.gender)
+        }
+        .scrollContentBackground(.hidden)
+        .navigationTitle("Edit Patient")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    guardedDismiss()
+                } label: {
+                    Label("Cancel", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                }
+            }
+
+            ToolbarItem(placement: .confirmationAction) {
+                Button {
+                    savePatient()
+                } label: {
+                    Label("Done", systemImage: "checkmark")
+                        .labelStyle(.iconOnly)
+                }
+                .disabled(isSaving)
+            }
+        }
+        .sheet(isPresented: $isPickingDOB) {
+            PatientDOBPicker(dob: $draft.dob, draftDOB: $draftDOB, isPresented: $isPickingDOB)
+        }
+        .alert(
+            "Unable to save patient",
+            isPresented: Binding(
+                get: { saveErrorMessage != nil },
+                set: { if !$0 { saveErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                saveErrorMessage = nil
+            }
+        } message: {
+            Text(saveErrorMessage ?? "")
+        }
+    }
+}
+
+private struct PatientDOBField: View {
+    let title: String
+    @Binding var selection: Date?
+    @Binding var isPickingDOB: Bool
+    @Binding var draftDOB: Date
+
+    var body: some View {
+        Button {
+            draftDOB = selection ?? Date()
+            isPickingDOB = true
+        } label: {
+            HStack {
+                Text(title)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Text(selection?.formatted(.dateTime.day().month().year()) ?? "Add")
+                    .foregroundStyle(selection == nil ? .secondary : .primary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct PatientDOBPicker: View {
+    @Binding var dob: Date?
+    @Binding var draftDOB: Date
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        NavigationStack {
+            DatePicker(
+                "Date of birth",
+                selection: $draftDOB,
+                in: ...Date(),
+                displayedComponents: .date
+            )
+            .datePickerStyle(.wheel)
+            .labelsHidden()
+            .padding()
+            .navigationTitle("Date of birth")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dob = draftDOB
+                        isPresented = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.height(250)])
+    }
+}
+
+private struct PatientGenderField: View {
+    let title: String
+    @Binding var selection: Gender?
+
+    var body: some View {
+        LabeledContent(title) {
+            Picker(title, selection: $selection) {
+                Text("M")
+                    .tag(Gender.male as Gender?)
+                Text("F")
+                    .tag(Gender.female as Gender?)
+                Text("Other")
+                    .tag(Gender.other as Gender?)
+            }
+            .pickerStyle(.segmented)
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 }

@@ -32,7 +32,6 @@ struct PatientsView: View {
                 EditPatientView()
                     .background(Color("AppBackground"))
             }
-            .presentationDetents([.medium])
         }
         .sheet(item: $viewingPatient) { item in
             let patientDetails = PatientDetails(
