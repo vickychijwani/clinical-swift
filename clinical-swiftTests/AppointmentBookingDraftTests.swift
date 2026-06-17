@@ -105,8 +105,8 @@ struct AppointmentBookingDraftTests {
         return calendar
     }
 
-    private func patientItem() -> PatientListItem {
-        PatientListItem(
+    private func patientItem() -> PatientDetails {
+        PatientDetails(
             patient: Patient(name: "Aarav Mehta"),
             nextAppointmentDate: nil
         )

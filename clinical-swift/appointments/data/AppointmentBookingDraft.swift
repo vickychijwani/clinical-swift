@@ -6,13 +6,13 @@ nonisolated struct AppointmentBookingDraft: Equatable, Sendable {
 
     @Dependency(\.calendar) private var calendar
 
-    var selectedPatient: PatientListItem?
+    var selectedPatient: PatientDetails?
     var selectedDate: Date
     var startTime: Date
     var durationMinutes: Int
 
     init(
-        selectedPatient: PatientListItem? = nil,
+        selectedPatient: PatientDetails? = nil,
         selectedDate: Date,
         startTime: Date? = nil,
         durationMinutes: Int = 30

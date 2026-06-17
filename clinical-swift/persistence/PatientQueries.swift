@@ -12,8 +12,8 @@ nonisolated struct PatientListRow: Identifiable, Sendable {
     let createdAt: Date
     let updatedAt: Date
 
-    var item: PatientListItem {
-        PatientListItem(
+    var item: PatientDetails {
+        PatientDetails(
             patient: Patient(record),
             nextAppointmentDate: nextAppointmentDate
         )

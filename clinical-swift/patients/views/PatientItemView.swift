@@ -1,8 +1,8 @@
 import Dependencies
 import SwiftUI
 
-struct PatientRow: View {
-    let item: PatientListItem
+struct PatientItemView: View {
+    let item: PatientDetails
     @ObservationIgnored @Dependency(\.date.now) var referenceDate: Date
     @ObservationIgnored @Dependency(\.calendar) var calendar: Calendar
     @ObservationIgnored @Dependency(\.locale) var locale: Locale
@@ -20,7 +20,7 @@ struct PatientRow: View {
                     .styleBodyBold()
                     .lineLimit(1)
 
-                if let subtitle = PatientMetadata.metadata(for: item)
+                if let subtitle = PatientItemViewMetadata.metadata(for: item)
                     .subtitle {
                         Text(subtitle)
                             .styleCaption()
@@ -32,6 +32,6 @@ struct PatientRow: View {
 }
 
 #Preview(traits: .sizeThatFitsLayout) {
-    PatientRow(item: samplePatientListItems[0])
+    PatientItemView(item: samplePatientDetails[0])
     .padding(8)
 }

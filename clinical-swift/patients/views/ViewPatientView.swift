@@ -7,7 +7,7 @@ struct ViewPatientView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            PatientRow(item: patientListItem)
+            PatientItemView(item: details)
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(Color.white)
@@ -39,13 +39,6 @@ struct ViewPatientView: View {
         .padding(16)
         .navigationTitle("Patient Details")
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    var patientListItem: PatientListItem {
-        PatientListItem(
-            patient: details.patient,
-            nextAppointmentDate: details.nextAppointmentDate
-        )
     }
 
     private var normalizedPhoneNumber: String? {
@@ -109,9 +102,9 @@ struct ViewPatientView: View {
                     nextAppointmentDate: nil
                 )
             )
-        ) { details in
+        ) { item in
             NavigationStack {
-                ViewPatientView(details: details)
+                ViewPatientView(details: item)
                     .background(Color("AppBackground"))
             }
             .presentationDetents([.medium, .large])

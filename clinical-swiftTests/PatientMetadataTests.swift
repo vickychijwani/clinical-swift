@@ -3,8 +3,8 @@ import Testing
 
 @testable import clinical_swift
 
-struct PatientMetadataTests {
-    @Test func buildsNamedPatientMetadataWithoutCreatedDateFallback() throws {
+struct PatientItemViewMetadataTests {
+    @Test func buildsNamedPatientItemViewMetadataWithoutCreatedDateFallback() throws {
         let calendar = fixedCalendar()
         let dob = try #require(calendar.date(1990, 6, 10))
         let createdDate = try #require(calendar.date(2026, 5, 28))
@@ -15,8 +15,8 @@ struct PatientMetadataTests {
             createdDate: createdDate
         )
 
-        let metadata = PatientMetadata.metadata(
-            for: PatientListItem(patient: patient, nextAppointmentDate: nil)
+        let metadata = PatientItemViewMetadata.metadata(
+            for: PatientDetails(patient: patient, nextAppointmentDate: nil)
         )
         let expectedAge = try #require(patient.age())
 
@@ -36,8 +36,8 @@ struct PatientMetadataTests {
             createdDate: createdDate
         )
 
-        let metadata = PatientMetadata.metadata(
-            for: PatientListItem(patient: patient, nextAppointmentDate: nil)
+        let metadata = PatientItemViewMetadata.metadata(
+            for: PatientDetails(patient: patient, nextAppointmentDate: nil)
         )
         let expectedAge = try #require(patient.age())
 
@@ -57,8 +57,8 @@ struct PatientMetadataTests {
             createdDate: createdDate
         )
 
-        let metadata = PatientMetadata.metadata(
-            for: PatientListItem(patient: patient, nextAppointmentDate: nextAppointment)
+        let metadata = PatientItemViewMetadata.metadata(
+            for: PatientDetails(patient: patient, nextAppointmentDate: nextAppointment)
         )
 
         #expect(metadata.parts.count == 2)

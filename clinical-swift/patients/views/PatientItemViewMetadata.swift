@@ -1,7 +1,7 @@
 import Dependencies
 import Foundation
 
-struct PatientMetadata: Equatable {
+struct PatientItemViewMetadata: Equatable {
     let parts: [String]
 
     var subtitle: String? {
@@ -12,7 +12,7 @@ struct PatientMetadata: Equatable {
         return parts.joined(separator: " · ")
     }
 
-    static func metadata(for item: PatientListItem) -> PatientMetadata {
+    static func metadata(for item: PatientDetails) -> PatientItemViewMetadata {
         let patient = item.patient
         var parts: [String] = []
         var demographics: [String] = []
@@ -44,7 +44,7 @@ struct PatientMetadata: Equatable {
             )
         }
 
-        return PatientMetadata(parts: parts)
+        return PatientItemViewMetadata(parts: parts)
     }
 
     private static func formattedAppointmentDate(_ date: Date, locale: Locale)

@@ -59,8 +59,8 @@ let samplePatients: [Patient] = [
     ),
 ]
 
-let samplePatientListItems: [PatientListItem] = samplePatients.enumerated().map { offset, patient in
-    PatientListItem(
+let samplePatientDetails: [PatientDetails] = samplePatients.enumerated().map { offset, patient in
+    PatientDetails(
         patient: patient,
         nextAppointmentDate: sampleNextAppointmentDate(forPatientAt: offset)
     )

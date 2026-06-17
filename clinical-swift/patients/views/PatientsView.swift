@@ -6,12 +6,12 @@ struct PatientsView: View {
     private var patientRows: [PatientListRow]
     @State private var searchText = ""
     @State private var isAddingPatient = false
-    @State private var viewingPatient: PatientListItem? = nil
+    @State private var viewingPatient: PatientDetails? = nil
 
     var body: some View {
         PatientList(
             sections: PatientSection.sections(
-                from: patientListItems,
+                from: patientDetailsList,
                 searchText: searchText
             ),
             searchText: $searchText,
@@ -34,19 +34,15 @@ struct PatientsView: View {
             }
         }
         .sheet(item: $viewingPatient) { item in
-            let patientDetails = PatientDetails(
-                patient: item.patient,
-                nextAppointmentDate: item.nextAppointmentDate
-            )
             NavigationStack {
-                ViewPatientView(details: patientDetails)
+                ViewPatientView(details: item)
                     .background(Color("AppBackground"))
             }
             .presentationDetents([.medium])
         }
     }
 
-    private var patientListItems: [PatientListItem] {
+    private var patientDetailsList: [PatientDetails] {
         patientRows.map(\.item)
     }
 }

@@ -167,7 +167,7 @@ struct PersistenceTests {
             name: "Aarav Mehta",
             createdDate: selectedDate
         )
-        let patientItem = PatientListItem(
+        let patientItem = PatientDetails(
             patient: patient,
             nextAppointmentDate: nil
         )

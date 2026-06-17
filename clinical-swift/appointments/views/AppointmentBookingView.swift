@@ -90,7 +90,7 @@ private struct AppointmentBookingForm: View {
     @Binding var saveErrorMessage: String?
 
     let isSaving: Bool
-    let patientItems: [PatientListItem]
+    let patientItems: [PatientDetails]
     let guardedDismiss: FormSheetDismissAction
     let saveAppointment: () -> Void
 
@@ -175,7 +175,7 @@ private struct AppointmentBookingForm: View {
         )
     }
 
-    private var filteredPatientItems: [PatientListItem] {
+    private var filteredPatientItems: [PatientDetails] {
         guard let query = searchText.nilIfBlank else {
             return patientItems
         }
@@ -205,15 +205,15 @@ private struct AppointmentBookingSection<Content: View>: View {
 }
 
 private struct AppointmentBookingPatientSection: View {
-    @Binding var selectedPatient: PatientListItem?
+    @Binding var selectedPatient: PatientDetails?
     @Binding var searchText: String
-    let patientItems: [PatientListItem]
+    let patientItems: [PatientDetails]
 
     var body: some View {
         AppointmentBookingSection(title: "Patient") {
             if let selectedPatient {
                 HStack(spacing: 12) {
-                    PatientRow(item: selectedPatient)
+                    PatientItemView(item: selectedPatient)
 
                     Spacer()
 
@@ -260,7 +260,7 @@ private struct AppointmentBookingPatientSection: View {
                                 selectedPatient = item
                                 searchText = ""
                             } label: {
-                                PatientRow(item: item)
+                                PatientItemView(item: item)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding()
                             }

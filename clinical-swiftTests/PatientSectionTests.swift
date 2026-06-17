@@ -97,12 +97,12 @@ struct PatientSectionTests {
         ])
     }
 
-    private func patient(name: String) -> PatientListItem {
-        PatientListItem(patient: Patient(name: name), nextAppointmentDate: nil)
+    private func patient(name: String) -> PatientDetails {
+        PatientDetails(patient: Patient(name: name), nextAppointmentDate: nil)
     }
 
-    private func unknownPatient(createdDate: Date) -> PatientListItem {
-        PatientListItem(
+    private func unknownPatient(createdDate: Date) -> PatientDetails {
+        PatientDetails(
             patient: Patient(
                 name: nil,
                 phone: "+91 98201 44532",

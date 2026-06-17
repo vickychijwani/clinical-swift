@@ -4,10 +4,10 @@ struct PatientSection: Identifiable, Hashable {
     static let unknownID = "#"
 
     let id: String
-    let items: [PatientListItem]
+    let items: [PatientDetails]
 
     static func sections(
-        from items: [PatientListItem],
+        from items: [PatientDetails],
         searchText: String = ""
     ) -> [PatientSection] {
         let locale = Locale.autoupdatingCurrent
@@ -97,7 +97,7 @@ struct PatientSection: Identifiable, Hashable {
         return lhs.localizedStandardCompare(rhs) == .orderedAscending
     }
 
-    private static func sortedItems(_ items: [PatientListItem]) -> [PatientListItem] {
+    private static func sortedItems(_ items: [PatientDetails]) -> [PatientDetails] {
         items.sorted { lhs, rhs in
             switch (lhs.patient.name, rhs.patient.name) {
             case (nil, nil):
