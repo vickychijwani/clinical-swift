@@ -1,6 +1,6 @@
 import Foundation
 
-struct Bitehaus {
+nonisolated struct Bitehaus {
     static let startTime = TimeOfDay.init(9, 0)
     static let closingTime = TimeOfDay.init(21, 0)
     static let doctor = "Dr. Monica Mulchandani"

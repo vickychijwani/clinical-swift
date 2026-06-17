@@ -5,6 +5,7 @@ struct WeekDateStrip: View {
 
     let today: Date
     let calendar: Calendar
+    let displayMode: WeekDateStripDisplayMode
 
     @State private var visibleWeekStart: Date
     @State private var visiblePage: WeekPageOffset? = .current
@@ -14,11 +15,13 @@ struct WeekDateStrip: View {
     init(
         selectedDate: Binding<Date>,
         today: Date = .now,
-        calendar: Calendar = .autoupdatingCurrent
+        calendar: Calendar = .autoupdatingCurrent,
+        displayMode: WeekDateStripDisplayMode = .schedule
     ) {
         self._selectedDate = selectedDate
         self.today = today.startOfDay(using: calendar)
         self.calendar = calendar
+        self.displayMode = displayMode
         self._visibleWeekStart = State(
             initialValue: selectedDate.wrappedValue.startOfWeek(using: calendar)
         )
@@ -36,6 +39,7 @@ struct WeekDateStrip: View {
                         selectedDate: selectedDate,
                         today: today,
                         calendar: calendar,
+                        displayMode: displayMode,
                         selectDate: selectDate
                     )
                     .containerRelativeFrame(.horizontal)
@@ -47,7 +51,7 @@ struct WeekDateStrip: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $visiblePage)
         .scrollIndicators(.hidden)
-        .frame(height: 64)
+        .frame(height: displayMode.stripHeight)
         .onAppear(perform: normalizeSelection)
         .onChange(of: visiblePage) { _, newPage in
             guard let newPage else {
@@ -120,6 +124,26 @@ struct WeekDateStrip: View {
     }
 }
 
+struct WeekDateStripDisplayMode: Equatable, Sendable {
+    static let schedule = WeekDateStripDisplayMode(
+        stripHeight: 64,
+        cellMinHeight: 56,
+        cornerRadius: 16,
+        cellSpacing: 0
+    )
+    static let sheet = WeekDateStripDisplayMode(
+        stripHeight: 86,
+        cellMinHeight: 72,
+        cornerRadius: 18,
+        cellSpacing: 2
+    )
+
+    let stripHeight: CGFloat
+    let cellMinHeight: CGFloat
+    let cornerRadius: CGFloat
+    let cellSpacing: CGFloat
+}
+
 private enum WeekPageOffset: Int, CaseIterable, Identifiable {
     case previous = -1
     case current = 0
@@ -139,6 +163,7 @@ private struct WeekDatePage: View {
     let selectedDate: Date
     let today: Date
     let calendar: Calendar
+    let displayMode: WeekDateStripDisplayMode
     let selectDate: (Date) -> Void
 
     var body: some View {
@@ -151,6 +176,7 @@ private struct WeekDatePage: View {
                         inSameDayAs: selectedDate
                     ),
                     isToday: calendar.isDate(date, inSameDayAs: today),
+                    displayMode: displayMode,
                     selectDate: selectDate
                 )
                 .frame(maxWidth: .infinity)
@@ -164,32 +190,64 @@ private struct DateStripCell: View {
     let date: Date
     let isSelected: Bool
     let isToday: Bool
+    let displayMode: WeekDateStripDisplayMode
     let selectDate: (Date) -> Void
 
     var body: some View {
         Button {
             selectDate(date)
         } label: {
-            VStack(spacing: 0) {
-                Text(weekdayText)
-                    .font(.caption)
-                    .bold()
+            VStack(spacing: displayMode.cellSpacing) {
+                if displayMode == .schedule {
+                    Text(weekdayText)
+                        .font(.caption)
+                        .bold()
 
-                Text(dayText)
-                    .font(.title3)
-                    .bold()
+                    Text(dayText)
+                        .font(.title3)
+                        .bold()
+                } else {
+                    Text(shortWeekdayText)
+                        .font(.caption)
+                        .bold()
+
+                    Text(dayText)
+                        .font(.title2)
+                        .bold()
+
+                    Text(monthText)
+                        .font(.caption)
+                        .bold()
+                }
             }
             .foregroundStyle(foregroundStyle)
-            .frame(minWidth: 44, minHeight: 56)
+            .frame(minWidth: 44, minHeight: displayMode.cellMinHeight)
             .background {
-                if isSelected {
+                if isSelected && displayMode == .schedule {
                     ZStack {
                         Color("AppBackground")
                         Color.primary.opacity(0.06)
                     }
+                } else if displayMode == .sheet {
+                    RoundedRectangle(
+                        cornerRadius: displayMode.cornerRadius,
+                        style: .continuous
+                    )
+                    .fill(sheetBackgroundStyle)
                 }
             }
-            .clipShape(.rect(cornerRadius: 16, style: .continuous))
+            .overlay {
+                if displayMode == .sheet {
+                    RoundedRectangle(
+                        cornerRadius: displayMode.cornerRadius,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        isSelected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.06)
+                    )
+                }
+            }
+            .clipShape(.rect(cornerRadius: displayMode.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -207,12 +265,28 @@ private struct DateStripCell: View {
         }
     }
 
+    private var sheetBackgroundStyle: AnyShapeStyle {
+        if isSelected {
+            AnyShapeStyle(Color.accentColor.opacity(0.2))
+        } else {
+            AnyShapeStyle(.background)
+        }
+    }
+
     private var weekdayText: String {
         date.formatted(.dateTime.weekday(.narrow))
     }
 
+    private var shortWeekdayText: String {
+        date.formatted(.dateTime.weekday(.abbreviated)).uppercased()
+    }
+
     private var dayText: String {
         date.formatted(.dateTime.day())
+    }
+
+    private var monthText: String {
+        date.formatted(.dateTime.month(.abbreviated)).uppercased()
     }
 
     private var accessibilityLabel: String {

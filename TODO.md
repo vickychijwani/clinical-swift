@@ -32,6 +32,9 @@
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
 
+Bugs:
+- [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
+
 Nice to haves:
 - [ ] Drag-n-drop to reschedule appointments
 - [ ] Quick-tag patients for follow-up, or interested in implants/etc from appointment view

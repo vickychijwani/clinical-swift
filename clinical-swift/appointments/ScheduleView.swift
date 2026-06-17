@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ScheduleView: View {
     @Binding var selectedDate: Date
+    @State private var isBookingAppointment = false
 
     @FetchAll(scheduleAppointmentsQuery(selectedDate: .now), animation: .default)
     private var appointmentRows: [ScheduleAppointmentRow]
@@ -40,7 +41,17 @@ struct ScheduleView: View {
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Add", systemImage: "plus") {}
+                Button("Add", systemImage: "plus") {
+                    isBookingAppointment = true
+                }
+            }
+        }
+        .sheet(isPresented: $isBookingAppointment) {
+            NavigationStack {
+                AppointmentBookingView(selectedDate: selectedDate) { bookedDate in
+                    selectedDate = bookedDate.startOfDay()
+                    refreshAppointments(for: bookedDate)
+                }
             }
         }
         .task(id: selectedDate) {
@@ -53,6 +64,15 @@ struct ScheduleView: View {
 
     private var appointments: [Appointment] {
         appointmentRows.compactMap(\.appointment)
+    }
+
+    private func refreshAppointments(for date: Date) {
+        Task {
+            _ = try? await $appointmentRows.load(
+                scheduleAppointmentsQuery(selectedDate: date),
+                animation: .default
+            )
+        }
     }
 }
 

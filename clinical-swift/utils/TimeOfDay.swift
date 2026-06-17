@@ -10,7 +10,7 @@ extension Date {
     }
 }
 
-struct TimeOfDay: Comparable, Equatable {
+nonisolated struct TimeOfDay: Comparable, Equatable {
     let hour: Int
     let minute: Int
 
@@ -19,7 +19,7 @@ struct TimeOfDay: Comparable, Equatable {
         self.minute = minute
     }
 
-    init(date: Date, calendar: Calendar = .current) {
+    init(date: Date, calendar: Calendar = .autoupdatingCurrent) {
         let components = calendar.dateComponents([.hour, .minute], from: date)
         hour = components.hour ?? 0
         minute = components.minute ?? 0
@@ -37,11 +37,11 @@ struct TimeOfDay: Comparable, Equatable {
         on(date: .now)
     }
 
-    func on(date: Date) -> Date {
-        date.setTime(hour, minute)
+    func on(date: Date, using calendar: Calendar = .autoupdatingCurrent) -> Date {
+        date.setTime(hour, minute, using: calendar)
     }
 
-    private var totalMinutes: Int {
+    var totalMinutes: Int {
         hour * 60 + minute
     }
 }
