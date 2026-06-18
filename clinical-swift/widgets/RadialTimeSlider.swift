@@ -17,8 +17,8 @@ struct RadialTimeSlider: View {
     @State private var feedbackTrigger = 0
 
     private let pointsPerStep = 10.0
-    private let degreesPerStep = 3.0
-    private let visibleDegrees = 58.0
+    private let degreesPerStep = 2.0
+    private let visibleDegrees = 40.0
 
     init(
         selection: Binding<TimeOfDay>,
@@ -45,10 +45,9 @@ struct RadialTimeSlider: View {
                 Text(statusLabel)
                     .styleCaption()
             }
-            .padding(.bottom)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 180)
+        .frame(height: 80)
         .padding()
         .background(.background)
         .clipShape(.rect(cornerRadius: 18))
@@ -60,8 +59,8 @@ struct RadialTimeSlider: View {
     private var tickBand: some View {
         Canvas { context, size in
             let selectedIndex = scale.index(for: selection)
-            let center = CGPoint(x: size.width / 2, y: size.height * 0.92)
-            let radius = min(size.width * 0.44, size.height * 0.78)
+            let center = CGPoint(x: size.width / 2, y: size.height * 3.2)
+            let radius = size.width * 0.75
             let visibleTickCount = Int(visibleDegrees / degreesPerStep) + 1
             let lowerIndex = max(0, selectedIndex - visibleTickCount)
             let upperIndex = min(scale.maximumIndex, selectedIndex + visibleTickCount)
