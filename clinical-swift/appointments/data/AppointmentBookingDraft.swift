@@ -1,7 +1,7 @@
 import Dependencies
 import Foundation
 
-nonisolated struct AppointmentBookingDraft: Equatable, Sendable {
+struct AppointmentBookingDraft: Equatable, Sendable {
     static let durationOptions = [15, 30, 45, 60, 90, 120]
 
     @Dependency(\.calendar) private var calendar

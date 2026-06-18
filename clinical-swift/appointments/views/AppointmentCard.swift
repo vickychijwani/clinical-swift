@@ -26,27 +26,32 @@ struct AppointmentCard: View {
     private var cardContent: some View {
         ViewThatFits(in: .vertical) {
             // Preferred: vertical layout when there's enough height
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 // Fixed top padding (clearance from card edge)
-                Color.clear.frame(height: 8)
-                Text(timeText)
-                    .styleAppointmentTime()
-                    .layoutPriority(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                Color.clear.frame(height: 4)
+                timeText
                 patientNameText
                 // Fill the rest of the space provided by the layout engine
                 Spacer(minLength: 0)
             }
+
+            // Fallback vertical layout with slightly less spacing
+            VStack(alignment: .leading) {
+                // Fill the rest of the space provided by the layout engine
+                Spacer(minLength: 0)
+                timeText
+                patientNameText
+                // Fill the rest of the space provided by the layout engine
+                Spacer(minLength: 0)
+            }
+            .padding(0)
 
             // Fallback: horizontal layout when vertical doesn't fit
             VStack {
                 // Spacers above and below - center HStack vertically
                 Spacer(minLength: 0)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(timeText)
-                        .styleAppointmentTime()
-                        .layoutPriority(1)
-                        .fixedSize(horizontal: true, vertical: false)
+                    timeText
                     patientNameText
                 }
                 Spacer(minLength: 0)
@@ -54,8 +59,11 @@ struct AppointmentCard: View {
         }
     }
 
-    var timeText: String {
-        return "\(appt.startTime.formatted(.dateTime.hour().minute()))"
+    private var timeText: some View {
+        Text("\(appt.startTime.formatted(.dateTime.hour().minute()))")
+            .styleAppointmentTime()
+            .layoutPriority(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private var patientNameText: some View {
@@ -64,6 +72,7 @@ struct AppointmentCard: View {
                 .styleBodyBold()
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+                .minimumScaleFactor(0.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipped()
