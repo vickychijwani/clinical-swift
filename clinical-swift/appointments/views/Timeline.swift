@@ -67,8 +67,8 @@ struct Timeline: View {
     }
 }
 
-#Preview {
-    Timeline(
+func sampleTimeline() -> some View {
+    return Timeline(
         appointments: sampleAppointments,
         startTime: Bitehaus.startTime,
         endTime: Bitehaus.closingTime,
@@ -77,4 +77,8 @@ struct Timeline: View {
         previewNowMarker: Date.now.setTime(9, 30)
     )
     .background(Color("AppBackground"))
+}
+
+#Preview {
+    sampleTimeline()
 }
