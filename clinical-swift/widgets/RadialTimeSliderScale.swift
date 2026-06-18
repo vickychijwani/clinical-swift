@@ -33,11 +33,14 @@ nonisolated struct RadialTimeSliderScale {
         time(at: index).minute == 0
     }
 
-    func stepOffset(
-        forTranslation translation: Double,
+    func fractionalIndex(
+        forContentOffset contentOffset: Double,
         pointsPerStep: Double
-    ) -> Int {
+    ) -> Double {
         guard pointsPerStep > 0 else { return 0 }
-        return Int((-translation / pointsPerStep).rounded())
+        return min(
+            max(contentOffset / pointsPerStep, 0),
+            Double(maximumIndex)
+        )
     }
 }

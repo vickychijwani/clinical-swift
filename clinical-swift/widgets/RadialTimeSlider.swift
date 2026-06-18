@@ -12,11 +12,12 @@ struct RadialTimeSlider: View {
     private let scale: RadialTimeSliderScale
     private let status: Status
 
-    @State private var dragStartIndex: Int?
-    @State private var visualStepOffset = 0.0
+    @State private var scrollPosition: ScrollPosition
+    @State private var centeredIndex: Double
+    @State private var scrollerWidth: CGFloat = 0
     @State private var feedbackTrigger = 0
 
-    private let pointsPerStep = 10.0
+    private let pointsPerStep: CGFloat = 10
     private let degreesPerStep = 2.0
     private let visibleDegrees = 40.0
 
@@ -26,12 +27,19 @@ struct RadialTimeSlider: View {
         stepMinutes: Int,
         status: Status
     ) {
-        self._selection = selection
-        self.scale = RadialTimeSliderScale(
+        let scale = RadialTimeSliderScale(
             range: range,
             stepMinutes: stepMinutes
         )
+        let selectedIndex = scale.index(for: selection.wrappedValue)
+
+        self._selection = selection
+        self.scale = scale
         self.status = status
+        self._scrollPosition = State(
+            initialValue: ScrollPosition(id: selectedIndex, anchor: .center)
+        )
+        self._centeredIndex = State(initialValue: Double(selectedIndex))
     }
 
     var body: some View {
@@ -45,29 +53,36 @@ struct RadialTimeSlider: View {
                 Text(statusLabel)
                     .styleCaption()
             }
+
+            momentumScroller
         }
         .frame(maxWidth: .infinity)
         .frame(height: 80)
         .padding()
         .background(.background)
         .clipShape(.rect(cornerRadius: 18))
-        .contentShape(.rect)
-        .simultaneousGesture(scrubGesture)
         .sensoryFeedback(.selection, trigger: feedbackTrigger)
+        .onChange(of: selection) { _, newSelection in
+            let newIndex = scale.index(for: newSelection)
+            guard abs(centeredIndex - Double(newIndex)) > 0.5 else { return }
+            scrollPosition.scrollTo(id: newIndex, anchor: .center)
+        }
     }
 
     private var tickBand: some View {
         Canvas { context, size in
-            let selectedIndex = scale.index(for: selection)
             let center = CGPoint(x: size.width / 2, y: size.height * 3.2)
             let radius = size.width * 0.75
             let visibleTickCount = Int(visibleDegrees / degreesPerStep) + 1
-            let lowerIndex = max(0, selectedIndex - visibleTickCount)
-            let upperIndex = min(scale.maximumIndex, selectedIndex + visibleTickCount)
+            let lowerIndex = max(0, Int(centeredIndex.rounded(.down)) - visibleTickCount)
+            let upperIndex = min(
+                scale.maximumIndex,
+                Int(centeredIndex.rounded(.up)) + visibleTickCount
+            )
 
             if lowerIndex <= upperIndex {
                 for index in lowerIndex...upperIndex {
-                    let relativeIndex = Double(index - selectedIndex) + visualStepOffset
+                    let relativeIndex = Double(index) - centeredIndex
                     let angleOffset = relativeIndex * degreesPerStep
                     guard abs(angleOffset) <= visibleDegrees else { continue }
 
@@ -89,44 +104,39 @@ struct RadialTimeSlider: View {
         }
     }
 
-    private var scrubGesture: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else {
-                    return
+    private var momentumScroller: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 0) {
+                Color.clear
+                    .frame(width: scrollerSideInset)
+
+                LazyHStack(spacing: 0) {
+                    ForEach(0...scale.maximumIndex, id: \.self) { index in
+                        Color.clear
+                            .frame(width: pointsPerStep)
+                            .id(index)
+                    }
                 }
+                .scrollTargetLayout()
 
-                let startIndex = dragStartIndex ?? scale.index(for: selection)
-                if dragStartIndex == nil {
-                    dragStartIndex = startIndex
-                }
-
-                let rawStepOffset = -Double(value.translation.width) / pointsPerStep
-                let rawIndex = Double(startIndex) + rawStepOffset
-                let nextIndex = min(
-                    max(Int(rawIndex.rounded()), 0),
-                    scale.maximumIndex
-                )
-                let nextSelection = scale.time(at: nextIndex)
-
-                if selection != nextSelection {
-                    selection = nextSelection
-                    feedbackTrigger += 1
-                }
-
-                let residualOffset = Double(value.translation.width) / pointsPerStep
-                    + Double(nextIndex - startIndex)
-                visualStepOffset = rubberBandedOffset(
-                    residualOffset,
-                    rawIndex: rawIndex
-                )
+                Color.clear
+                    .frame(width: scrollerSideInset)
             }
-            .onEnded { _ in
-                dragStartIndex = nil
-                withAnimation(.snappy) {
-                    visualStepOffset = 0
-                }
-            }
+        }
+        .scrollIndicators(.hidden)
+        .scrollPosition($scrollPosition, anchor: .center)
+        .scrollTargetBehavior(.viewAligned(limitBehavior: .never))
+        .contentShape(.rect)
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.containerSize.width
+        } action: { _, newWidth in
+            scrollerWidth = newWidth
+        }
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentOffset.x
+        } action: { _, newOffset in
+            updateSelection(forContentOffset: newOffset)
+        }
     }
 
     private var statusLabel: String {
@@ -135,17 +145,21 @@ struct RadialTimeSlider: View {
             : status.standardLabel
     }
 
-    private func rubberBandedOffset(
-        _ offset: Double,
-        rawIndex: Double
-    ) -> Double {
-        guard rawIndex < 0 || rawIndex > Double(scale.maximumIndex) else {
-            return offset
-        }
+    private var scrollerSideInset: CGFloat {
+        max((scrollerWidth - pointsPerStep) / 2, 0)
+    }
 
-        return offset.sign == .minus
-            ? -log1p(abs(offset))
-            : log1p(abs(offset))
+    private func updateSelection(forContentOffset contentOffset: CGFloat) {
+        let newCenteredIndex = scale.fractionalIndex(
+            forContentOffset: Double(contentOffset),
+            pointsPerStep: Double(pointsPerStep)
+        )
+        centeredIndex = newCenteredIndex
+
+        let newSelection = scale.time(at: Int(newCenteredIndex.rounded()))
+        guard selection != newSelection else { return }
+        selection = newSelection
+        feedbackTrigger += 1
     }
 
     private func drawTick(

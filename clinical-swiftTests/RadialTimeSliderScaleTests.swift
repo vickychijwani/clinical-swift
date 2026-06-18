@@ -30,8 +30,12 @@ struct RadialTimeSliderScaleTests {
         #expect(!scale.isMajorTick(at: 13))
     }
 
-    @Test func draggingLeftAdvancesAndDraggingRightRewinds() {
-        #expect(scale.stepOffset(forTranslation: -20, pointsPerStep: 10) == 2)
-        #expect(scale.stepOffset(forTranslation: 20, pointsPerStep: 10) == -2)
+    @Test func mapsNativeScrollOffsetToFractionalIndex() {
+        #expect(scale.fractionalIndex(forContentOffset: 25, pointsPerStep: 10) == 2.5)
+    }
+
+    @Test func clampsNativeScrollOffsetAtEndpoints() {
+        #expect(scale.fractionalIndex(forContentOffset: -20, pointsPerStep: 10) == 0)
+        #expect(scale.fractionalIndex(forContentOffset: 1_500, pointsPerStep: 10) == 138)
     }
 }
