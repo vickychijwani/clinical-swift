@@ -26,8 +26,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         self.selectedDate = normalizedDate
         self.startTime = normalizedStartTime(
             startTime ?? Bitehaus.startTime.on(date: normalizedDate, using: calendar),
-            selectedDate: normalizedDate,
-            durationMinutes: durationMinutes
+            selectedDate: normalizedDate
         )
     }
 
@@ -47,30 +46,27 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         )
     }
 
+    var startTimeOfDay: TimeOfDay {
+        TimeOfDay(date: startTime, calendar: calendar)
+    }
+
     mutating func selectDate(_ date: Date) {
         selectedDate = date.startOfDay(using: calendar)
         startTime = normalizedStartTime(
             startTime,
-            selectedDate: selectedDate,
-            durationMinutes: durationMinutes
+            selectedDate: selectedDate
         )
     }
 
-    mutating func selectStartTime(_ date: Date) {
+    mutating func selectStartTime(_ time: TimeOfDay) {
         startTime = normalizedStartTime(
-            date,
-            selectedDate: selectedDate,
-            durationMinutes: durationMinutes
+            time.on(date: selectedDate, using: calendar),
+            selectedDate: selectedDate
         )
     }
 
     mutating func selectDuration(_ durationMinutes: Int) {
         self.durationMinutes = durationMinutes
-        startTime = normalizedStartTime(
-            startTime,
-            selectedDate: selectedDate,
-            durationMinutes: durationMinutes
-        )
     }
 
     func validate() throws {
@@ -79,14 +75,13 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         }
 
         let opening = Bitehaus.startTime.on(date: selectedDate, using: calendar)
-        let closing = Bitehaus.closingTime.on(date: selectedDate, using: calendar)
+        let latestStart = Bitehaus.latestAppointmentStartTime.on(
+            date: selectedDate,
+            using: calendar
+        )
         guard startTime >= opening,
-              let endTime = calendar.date(
-                byAdding: .minute,
-                value: durationMinutes,
-                to: startTime
-              ),
-              endTime <= closing else {
+              startTime <= latestStart,
+              durationMinutes > 0 else {
             throw AppointmentBookingValidationError.invalidTime
         }
     }
@@ -113,17 +108,15 @@ struct AppointmentBookingDraft: Equatable, Sendable {
 
     func normalizedStartTime(
         _ proposedTime: Date,
-        selectedDate: Date,
-        durationMinutes: Int
+        selectedDate: Date
     ) -> Date {
         let proposedMinutes = TimeOfDay(date: proposedTime, calendar: calendar).totalMinutes
         let openingMinutes = Bitehaus.startTime.totalMinutes
-        let maxStartMinutes = Bitehaus.closingTime.totalMinutes - durationMinutes
-        let clampedMinutes = if maxStartMinutes >= openingMinutes {
-            min(max(proposedMinutes, openingMinutes), maxStartMinutes)
-        } else {
-            openingMinutes
-        }
+        let latestStartMinutes = Bitehaus.latestAppointmentStartTime.totalMinutes
+        let clampedMinutes = min(
+            max(proposedMinutes, openingMinutes),
+            latestStartMinutes
+        )
 
         return TimeOfDay(
             clampedMinutes / 60,

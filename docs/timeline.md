@@ -14,6 +14,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - The now marker is presentation-only and must not affect appointment layout, hit testing, scrolling, or accessibility focus.
 - The now marker should update approximately once per minute. Minute-level accuracy is enough for this scale and avoids unnecessary redraws or timer work.
 - Use `TimeOfDay` for clinic-level schedule boundaries such as opening, closing, and break times. Use `Date` for appointment instances on a specific day.
+- Booking time selection is continuous across the clinic break. Break starts stay selectable but appear advisory; this must not weaken the display timeline's structural-break model.
 
 ## Do Not Reintroduce
 
@@ -25,5 +26,5 @@ This document captures the deliberate constraints an agent is likely to break if
 
 ## Edge Cases
 
-- Appointments overlapping the break are invalid schedule data for now. Handle them before segment layout; do not silently clip, split, or compress them inside `TimelineSegment`.
+- Appointments overlapping the break may be created as exceptional bookings. The display timeline must keep them out of segment layout until that flow explicitly supports rendering them; do not silently clip, split, or compress them inside `TimelineSegment`.
 - If the product later needs multiple breaks or arbitrary unavailable ranges, introduce a dedicated time-scale abstraction, such as `TimelineScale`, that owns coordinate mapping in one place.

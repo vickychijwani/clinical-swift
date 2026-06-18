@@ -45,7 +45,7 @@ struct AppointmentBookingDraftTests {
         #expect(components.minute == 0)
     }
 
-    @Test func startTimeClampsSoDurationEndsByClosing() throws {
+    @Test func startTimeClampsToFixedLatestStartIndependentOfDuration() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
         let proposedTime = try Date("2026-04-21T20:30:00Z", strategy: .iso8601)
@@ -62,8 +62,8 @@ struct AppointmentBookingDraftTests {
         }
 
         let components = calendar.dateComponents([.hour, .minute], from: normalizedTime)
-        #expect(components.hour == 19)
-        #expect(components.minute == 0)
+        #expect(components.hour == 20)
+        #expect(components.minute == 30)
     }
 
     @Test func validationRequiresPatient() throws {
@@ -81,7 +81,7 @@ struct AppointmentBookingDraftTests {
         }
     }
 
-    @Test func validationRejectsDurationThatCannotFitClinicHours() throws {
+    @Test func validationAllowsPositiveDurationToExtendPastClosing() throws {
         let calendar = gregorianCalendar
         let patient = patientItem()
         try withDependencies {
@@ -93,7 +93,44 @@ struct AppointmentBookingDraftTests {
                 durationMinutes: 800
             )
 
+            #expect(throws: Never.self) {
+                try draft.validate()
+            }
+        }
+    }
+
+    @Test func validationRejectsNonPositiveDuration() throws {
+        let calendar = gregorianCalendar
+        let patient = patientItem()
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let draft = AppointmentBookingDraft(
+                selectedPatient: patient,
+                selectedDate: try Date("2026-04-21T00:00:00Z", strategy: .iso8601),
+                durationMinutes: 0
+            )
+
             #expect(throws: AppointmentBookingValidationError.invalidTime) {
+                try draft.validate()
+            }
+        }
+    }
+
+    @Test func validationAllowsStartInsideClinicBreak() throws {
+        let calendar = gregorianCalendar
+        let patient = patientItem()
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+            let draft = AppointmentBookingDraft(
+                selectedPatient: patient,
+                selectedDate: selectedDate,
+                startTime: selectedDate.setTime(14, 0, using: calendar)
+            )
+
+            #expect(throws: Never.self) {
                 try draft.validate()
             }
         }

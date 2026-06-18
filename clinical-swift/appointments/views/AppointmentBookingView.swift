@@ -105,7 +105,7 @@ private struct AppointmentBookingForm: View {
 
                 AppointmentBookingDateSection(selectedDate: selectedDateBinding)
 
-                AppointmentBookingTimeSection(startTime: $draft.startTime)
+                AppointmentBookingTimeSection(startTime: startTimeBinding)
 
                 AppointmentBookingDurationSection(
                     durationMinutes: durationBinding
@@ -136,16 +136,6 @@ private struct AppointmentBookingForm: View {
                 .disabled(isSaving)
             }
         }
-        .onChange(of: draft.startTime) { _, newValue in
-            let normalized = draft.normalizedStartTime(
-                newValue,
-                selectedDate: draft.selectedDate,
-                durationMinutes: draft.durationMinutes
-            )
-            if draft.startTime != normalized {
-                draft.startTime = normalized
-            }
-        }
         .alert(
             "Unable to save appointment",
             isPresented: Binding(
@@ -172,6 +162,13 @@ private struct AppointmentBookingForm: View {
         Binding(
             get: { draft.durationMinutes },
             set: { draft.selectDuration($0) }
+        )
+    }
+
+    private var startTimeBinding: Binding<TimeOfDay> {
+        Binding(
+            get: { draft.startTimeOfDay },
+            set: { draft.selectStartTime($0) }
         )
     }
 
@@ -291,16 +288,20 @@ private struct AppointmentBookingDateSection: View {
 }
 
 private struct AppointmentBookingTimeSection: View {
-    @Binding var startTime: Date
+    @Binding var startTime: TimeOfDay
 
     var body: some View {
         AppointmentBookingSection(title: "Start Time") {
-            DatePicker(
-                "Start time",
+            RadialTimeSlider(
                 selection: $startTime,
-                displayedComponents: .hourAndMinute
+                in: Bitehaus.startTime...Bitehaus.latestAppointmentStartTime,
+                stepMinutes: 5,
+                status: .init(
+                    standardLabel: "Available",
+                    advisoryLabel: Bitehaus.breakBlock.title,
+                    advisoryRange: Bitehaus.breakBlock.startTime..<Bitehaus.breakBlock.endTime
+                )
             )
-            .datePickerStyle(.compact)
         }
     }
 }
