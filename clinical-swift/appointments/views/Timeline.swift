@@ -23,6 +23,7 @@ struct Timeline: View {
         if let previewNowMarker {
             timelineContent(now: previewNowMarker)
         } else if showsNowMarker {
+            // Update every 1 minute.
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 timelineContent(now: context.date)
             }

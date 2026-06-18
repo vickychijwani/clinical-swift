@@ -2,6 +2,8 @@ import SQLiteData
 import SwiftUI
 
 struct ScheduleView: View {
+    @Dependency(\.calendar) private var calendar
+
     @Binding var selectedDate: Date
     @State private var isBookingAppointment = false
 
@@ -26,7 +28,7 @@ struct ScheduleView: View {
                     startTime: Bitehaus.startTime,
                     endTime: Bitehaus.closingTime,
                     breakBlock: Bitehaus.breakBlock,
-                    showsNowMarker: false
+                    showsNowMarker: calendar.isDateInToday(selectedDate)
                 )
             }
         }
@@ -77,8 +79,10 @@ struct ScheduleView: View {
 }
 
 #Preview {
+    @Previewable @State var selectedDate: Date = .now
+
     let _ = try! prepareDependencies {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
-    ScheduleView(selectedDate: .constant(.now))
+    ScheduleView(selectedDate: $selectedDate)
 }
