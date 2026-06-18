@@ -14,6 +14,10 @@
 - [ ] View patient
 - [ ] Edit patient
 - [ ] New appointment
+  - [ ] Show schedule above for maximum context
+  - [ ] Date selection synchronize with schedule
+  - [ ] Pre-fill next available slot 
+  - [ ] Show draft appt preview embedded in timeline
   - [ ] Quick-add new patient from new appointment page
   - [ ] Share recent call to open new appointment page for patient associated with that phone number
 - [ ] View appointment
@@ -37,6 +41,7 @@ Bugs:
 
 Nice to haves:
 - [ ] Drag-n-drop to reschedule appointments
+- [ ] Appointment booking: Order patients by most recent appt first (most common usecase: scheduling a follow-up)
 - [ ] Quick-tag patients for follow-up, or interested in implants/etc from appointment view
 - [ ] Offer phone number selection if picked contact has multiple numbers
 - [ ] Pre-fill appt time with next available slot (consider clinic opening times + booked slots + unbookable slots)

@@ -37,6 +37,7 @@ Keep the documentation map and the documents it points to up-to-date when changi
 
 ## Swift instructions
 
+- Add "// TODO:" comments where something is left incomplete/for future
 - `@Observable` classes must be marked `@MainActor`. Flag any `@Observable` class missing this annotation.
 - All shared data should use `@Observable` classes with `@State` (for ownership) and `@Bindable` / `@Environment` (for passing).
 - Strongly prefer not to use `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`, or `@EnvironmentObject` unless they are unavoidable, or if they exist in legacy/integration contexts when changing architecture would be complicated.
@@ -49,6 +50,8 @@ Keep the documentation map and the documents it points to up-to-date when changi
 - Filtering text based on user-input must be done using `localizedStandardContains()` as opposed to `contains()`.
 - Avoid force unwraps and force `try` unless it is unrecoverable.
 - Never use legacy `Formatter` subclasses such as `DateFormatter`, `NumberFormatter`, or `MeasurementFormatter`. Always use the modern `FormatStyle` API instead. For example, to format a date, use `myDate.formatted(date: .abbreviated, time: .shortened)`. To parse a date from a string, use `Date(inputString, strategy: .iso8601)`. For numbers, use `myNumber.formatted(.number)` or custom format styles.
+- Use `@Dependency` for registered ambient values such as `Calendar` and `Locale`. Override them with `withDependencies` in tests rather than threading them through initializers and methods solely for testability.
+- Before adding date/time helpers or manual component arithmetic, search existing domain types and extensions. Prefer semantic APIs such as `TimeOfDay.totalMinutes` and `TimeOfDay.on(date:using:)`.
 
 ## SwiftUI instructions
 
@@ -74,6 +77,7 @@ Keep the documentation map and the documents it points to up-to-date when changi
 - Avoid `AnyView` unless it is absolutely required.
 - Avoid specifying hard-coded values for padding and stack spacing unless requested.
 - Avoid using UIKit colors in SwiftUI code.
+- When a view supports visual variants, model each variant as one cohesive configuration with its values colocated. Avoid separate switches or conditionals for every metric.
 
 
 ## SwiftData instructions
@@ -93,6 +97,8 @@ If SwiftData is configured to use CloudKit:
 - Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
 - Write unit tests for core application logic.
 - Only write UI tests if unit tests are not possible.
+- Prefer readable dates parsed with standard strategies, such as ISO-8601 strings, over custom `DateComponents` fixture builders.
+- Override registered dependencies with `withDependencies` so production APIs do not acquire test-only parameters.
 - Add code comments and documentation comments as needed.
 - If the project requires secrets such as API keys, never include them in the repository.
 - If the project uses Localizable.xcstrings, prefer to add user-facing strings using symbol keys (e.g. helloWorld) in the string catalog with `extractionState` set to "manual", accessing them via generated symbols such as  `Text(.helloWorld)`. Offer to translate new keys into all languages supported by the project.
