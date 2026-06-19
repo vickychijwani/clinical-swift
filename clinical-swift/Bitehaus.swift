@@ -1,15 +1,19 @@
 import Foundation
 
 nonisolated struct Bitehaus {
-    static let startTime = TimeOfDay.init(9, 0)
-    static let closingTime = TimeOfDay.init(21, 0)
+    static let opening = TimeOfDay.init(9, 0)
+    static let closing = TimeOfDay.init(21, 0)
     static let doctor = "Dr. Monica Mulchandani"
     static let clinicName = "Bitehaus Dental Clinic"
     static let clinicLocation = "https://maps.app.goo.gl/osLykQdZYhJiqBEJ6"
     static let openingMonth = DateComponents(year: 2023, month: 8)
-    static let breakBlock = BreakBlock.init(
-        startTime: .init(13, 0),
-        endTime: .init(16, 0),
+    static let `break` = BreakBlock.init(
+        start: .init(13, 0),
+        end: .init(16, 0),
         title: "Break"
     )
+
+    /// Derived properties, based on intrinsic properties above
+    static let firstHalf = Bitehaus.opening...Bitehaus.break.start
+    static let secondHalf = Bitehaus.break.end...Bitehaus.closing
 }

@@ -10,7 +10,11 @@ extension Date {
     }
 }
 
+typealias Minutes = Int
+
 nonisolated struct TimeOfDay: Comparable, Equatable {
+    static let midnight = TimeOfDay(0, 0)
+
     let hour: Int
     let minute: Int
 
@@ -29,7 +33,7 @@ nonisolated struct TimeOfDay: Comparable, Equatable {
         (lhs.hour, lhs.minute) < (rhs.hour, rhs.minute)
     }
 
-    func minutes(since timeOfDay: TimeOfDay) -> Int {
+    func minutes(since timeOfDay: TimeOfDay) -> Minutes {
         totalMinutes - timeOfDay.totalMinutes
     }
 
@@ -41,8 +45,20 @@ nonisolated struct TimeOfDay: Comparable, Equatable {
         date.setTime(hour, minute, using: calendar)
     }
 
-    var totalMinutes: Int {
+    var totalMinutes: Minutes {
         hour * 60 + minute
+    }
+}
+
+extension ClosedRange where Bound == TimeOfDay {
+    var minutes: Minutes {
+        upperBound.minutes(since: lowerBound)
+    }
+}
+
+extension Range where Bound == TimeOfDay {
+    var minutes: Minutes {
+        upperBound.minutes(since: lowerBound)
     }
 }
 

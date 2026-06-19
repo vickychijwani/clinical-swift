@@ -2,48 +2,55 @@ import SwiftUI
 
 struct ClippedTimeline<Content: View>: View {
     let timeline: Content
-    let centerOnTime: TimeOfDay
+    let center: TimeOfDay
     let clippedHeight: CGFloat = 240
 
-    init(at centerOnTime: TimeOfDay, @ViewBuilder timeline: () -> Content) {
+    init(at center: TimeOfDay, @ViewBuilder timeline: () -> Content) {
         self.timeline = timeline()
-        self.centerOnTime = centerOnTime
+        self.center = center
     }
 
     var body: some View {
-        let yOffset = min(
-            max(
-                yOffsetFor(centerOnTime) - clippedHeight / 2 + Timeline.metrics.hourHeight/2,
-                0
-            ),
-            (yOffsetFor(Bitehaus.closingTime) - clippedHeight + Timeline.metrics
-                .verticalPadding
-                * 2)
-        )
+        let yOffset = yOffsetForCenter.clamp(to: 0...yOffsetForClosingTime)
         ClippedView(height: clippedHeight, yOffset: yOffset) {
             timeline
         }
     }
 
-    func yOffsetFor(_ time: TimeOfDay) -> CGFloat {
+    private var yOffsetForCenter: CGFloat {
+        return
+            // Align `center` to top of clipped timeline
+            yOffsetFor(center)
+            // Move the `center` down to center of clipped timeline
+            - clippedHeight / 2
+            // Pull back up by 30 min assuming `center` is actually appt start time and
+            // appt duration is 1h. TODO: This should be computed by the caller using
+            // appt duration.
+            + Timeline.metrics.hourHeight / 2
+    }
+
+    private var yOffsetForClosingTime: CGFloat {
+        return
+            // Align `closing` to top of clipped timeline
+            yOffsetFor(Bitehaus.closing)
+            // Move Timeline up by 2x padding to align *bottom edge* of Timeline
+            // to top of clipped timeline
+            + Timeline.metrics.verticalPadding * 2
+            // Move it down by clipped height to align to bottom edge of clipped timeline
+            - clippedHeight
+    }
+
+    private func yOffsetFor(_ time: TimeOfDay) -> CGFloat {
         switch time {
-        case Bitehaus.startTime..<Bitehaus.breakBlock.startTime:
-            return Timeline.metrics.pixelsPerMinute
-                * CGFloat(time.minutes(since: Bitehaus.startTime))
-        case Bitehaus.breakBlock.startTime..<Bitehaus.breakBlock.endTime:
-            return Timeline.metrics.pixelsPerMinute
-                * CGFloat(
-                    Bitehaus.breakBlock.startTime.minutes(since: Bitehaus.startTime)
-                )
-        case Bitehaus.breakBlock.endTime...TimeOfDay(23, 59):
-            return Timeline.metrics.pixelsPerMinute
-                * CGFloat(
-                    Bitehaus.breakBlock.startTime.minutes(since: Bitehaus.startTime)
-                )
-                + TimelineBreakView.height + Timeline.metrics.pixelsPerMinute
-                * CGFloat(
-                    time.minutes(since: Bitehaus.breakBlock.endTime)
-                )
+        case .midnight..<Bitehaus.opening:
+            return 0
+        case Bitehaus.opening..<Bitehaus.break.start:
+            return (Bitehaus.opening...time).px
+        case Bitehaus.break.start..<Bitehaus.break.end:
+            return Bitehaus.firstHalf.px
+        case Bitehaus.break.end...TimeOfDay(23, 59):
+            return Bitehaus.firstHalf.px + TimelineBreakView.height
+                + (Bitehaus.break.end...time).px
         default:
             return 0
         }
@@ -100,6 +107,12 @@ struct ClippedTimeline<Content: View>: View {
 
 #Preview("8 pm") {
     ClippedTimeline(at: TimeOfDay(20, 0)) {
+        sampleTimeline()
+    }
+}
+
+#Preview("9 pm") {
+    ClippedTimeline(at: TimeOfDay(21, 0)) {
         sampleTimeline()
     }
 }

@@ -25,7 +25,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         let normalizedDate = selectedDate.startOfDay(using: calendar)
         self.selectedDate = normalizedDate
         self.startTime = normalizedStartTime(
-            startTime ?? Bitehaus.startTime.on(date: normalizedDate, using: calendar),
+            startTime ?? Bitehaus.opening.on(date: normalizedDate, using: calendar),
             selectedDate: normalizedDate,
             durationMinutes: durationMinutes
         )
@@ -78,8 +78,8 @@ struct AppointmentBookingDraft: Equatable, Sendable {
             throw AppointmentBookingValidationError.missingPatient
         }
 
-        let opening = Bitehaus.startTime.on(date: selectedDate, using: calendar)
-        let closing = Bitehaus.closingTime.on(date: selectedDate, using: calendar)
+        let opening = Bitehaus.opening.on(date: selectedDate, using: calendar)
+        let closing = Bitehaus.closing.on(date: selectedDate, using: calendar)
         guard startTime >= opening,
               let endTime = calendar.date(
                 byAdding: .minute,
@@ -117,8 +117,8 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         durationMinutes: Int
     ) -> Date {
         let proposedMinutes = TimeOfDay(date: proposedTime, calendar: calendar).totalMinutes
-        let openingMinutes = Bitehaus.startTime.totalMinutes
-        let maxStartMinutes = Bitehaus.closingTime.totalMinutes - durationMinutes
+        let openingMinutes = Bitehaus.opening.totalMinutes
+        let maxStartMinutes = Bitehaus.closing.totalMinutes - durationMinutes
         let clampedMinutes = if maxStartMinutes >= openingMinutes {
             min(max(proposedMinutes, openingMinutes), maxStartMinutes)
         } else {

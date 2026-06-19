@@ -16,8 +16,8 @@ struct TimeOfDayTests {
     }
 
     @Test func calculatesMinuteDistanceAtDayEdges() {
-        #expect(TimeOfDay(23, 59).minutes(since: TimeOfDay(0, 0)) == 1_439)
-        #expect(TimeOfDay(0, 0).minutes(since: TimeOfDay(23, 59)) == -1_439)
+        #expect(TimeOfDay(23, 59).minutes(since: .midnight) == 1_439)
+        #expect(TimeOfDay.midnight.minutes(since: TimeOfDay(23, 59)) == -1_439)
     }
 
     @Test func extractsHourAndMinuteWithExplicitCalendar() throws {

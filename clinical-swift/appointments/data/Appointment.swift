@@ -5,14 +5,14 @@ nonisolated struct Appointment: Identifiable, Sendable {
 
     let patientName: String
     let startTime: Date
-    let durationMinutes: Int
+    let durationMinutes: Minutes
     let status: Status
 
     init(
         id: UUID = UUID(),
         patientName: String,
         startTime: Date,
-        durationMinutes: Int,
+        durationMinutes: Minutes,
         status: Status
     ) {
         self.id = id

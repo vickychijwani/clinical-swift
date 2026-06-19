@@ -1,7 +1,7 @@
 import Foundation
 
 struct BreakBlock {
-    let startTime: TimeOfDay
-    let endTime: TimeOfDay
+    let start: TimeOfDay
+    let end: TimeOfDay
     let title: String
 }

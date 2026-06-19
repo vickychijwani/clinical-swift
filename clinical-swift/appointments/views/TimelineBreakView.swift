@@ -37,7 +37,7 @@ struct TimelineBreakView: View {
     }
 
     private var timeRange: String {
-        "\(block.startTime.formatted(.full)) – \(block.endTime.formatted(.full))"
+        "\(block.start.formatted(.full)) – \(block.end.formatted(.full))"
     }
 }
 
@@ -56,7 +56,7 @@ struct DiagonalStripePattern: Shape {
 
 #Preview {
     TimelineBreakView(
-        block: Bitehaus.breakBlock,
+        block: Bitehaus.break,
         metrics: TimelineMetrics(
             hourHeight: 0,
             timeColumnWidth: 0,

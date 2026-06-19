@@ -80,7 +80,7 @@ struct AppointmentCard: View {
 }
 
 /// Previews of various appointment durations
-func AppointmentCardPreview(durationMinutes: Int) -> some View {
+func AppointmentCardPreview(durationMinutes: Minutes) -> some View {
     VStack(alignment: .leading) {
         Text("\(durationMinutes) mins")
             .font(.title3)
@@ -90,7 +90,7 @@ func AppointmentCardPreview(durationMinutes: Int) -> some View {
             durationMinutes: durationMinutes,
             status: .scheduled
         ))
-        .frame(height: CGFloat(durationMinutes) * Timeline.metrics.pixelsPerMinute)
+        .frame(height: durationMinutes.px)
         Color.clear.frame(height: 8)
     }
     .padding(.horizontal, 16)

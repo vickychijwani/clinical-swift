@@ -25,9 +25,9 @@ struct ScheduleView: View {
 
                 Timeline(
                     appointments: appointments,
-                    startTime: Bitehaus.startTime,
-                    endTime: Bitehaus.closingTime,
-                    breakBlock: Bitehaus.breakBlock,
+                    startTime: Bitehaus.opening,
+                    endTime: Bitehaus.closing,
+                    breakBlock: Bitehaus.break,
                     showsNowMarker: calendar.isDateInToday(selectedDate)
                 )
             }

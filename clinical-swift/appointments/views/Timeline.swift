@@ -1,5 +1,5 @@
 import SwiftUI
-
+ 
 struct Timeline: View {
     let appointments: [Appointment]
     let startTime: TimeOfDay
@@ -36,7 +36,7 @@ struct Timeline: View {
         VStack(spacing: 0) {
             TimelineSegment(
                 timelineStartTime: startTime,
-                timelineEndTime: breakBlock.startTime,
+                timelineEndTime: breakBlock.start,
                 appointments: appointmentsBeforeBreak,
                 metrics: Timeline.metrics,
                 now: now
@@ -48,7 +48,7 @@ struct Timeline: View {
             )
 
             TimelineSegment(
-                timelineStartTime: breakBlock.endTime,
+                timelineStartTime: breakBlock.end,
                 timelineEndTime: endTime,
                 appointments: appointmentsAfterBreak,
                 metrics: Timeline.metrics,
@@ -59,20 +59,20 @@ struct Timeline: View {
     }
 
     private var appointmentsBeforeBreak: [Appointment] {
-        appointments.filter { $0.startTime.timeOfDay < breakBlock.startTime }
+        appointments.filter { $0.startTime.timeOfDay < breakBlock.start }
     }
 
     private var appointmentsAfterBreak: [Appointment] {
-        appointments.filter { $0.startTime.timeOfDay >= breakBlock.endTime }
+        appointments.filter { $0.startTime.timeOfDay >= breakBlock.end }
     }
 }
 
 func sampleTimeline() -> some View {
     return Timeline(
         appointments: sampleAppointments,
-        startTime: Bitehaus.startTime,
-        endTime: Bitehaus.closingTime,
-        breakBlock: Bitehaus.breakBlock,
+        startTime: Bitehaus.opening,
+        endTime: Bitehaus.closing,
+        breakBlock: Bitehaus.break,
         showsNowMarker: true,
         previewNowMarker: Date.now.setTime(9, 30)
     )

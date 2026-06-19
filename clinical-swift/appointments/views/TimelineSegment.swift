@@ -65,7 +65,7 @@ struct TimelineSegment: View {
                         y: y
                     )
 
-                Text(TimeOfDay.init(hour, 0).formatted(.hourOnly))
+                Text(TimeOfDay(hour, 0).formatted(.hourOnly))
                     .font(.caption)
                     .foregroundStyle(.gray)
                     .position(x: metrics.timeColumnWidth - 8, y: y)
@@ -74,8 +74,7 @@ struct TimelineSegment: View {
     }
 
     private var segmentHeight: CGFloat {
-        CGFloat(timelineEndTime.minutes(since: timelineStartTime))
-            * metrics.pixelsPerMinute
+        (timelineStartTime...timelineEndTime).px
     }
 
     private var hourMarkers: [Int] {
@@ -94,17 +93,14 @@ struct TimelineSegment: View {
         }
 
         let nowTime = TimeOfDay(date: now)
-        guard timelineStartTime <= nowTime && nowTime < timelineEndTime else {
+        guard (timelineStartTime..<timelineEndTime).contains(nowTime) else {
             return nil
         }
 
-        return CGFloat(nowTime.minutes(since: timelineStartTime))
-            * metrics.pixelsPerMinute
+        return (timelineStartTime...nowTime).px
     }
 
     private func hourY(for hour: Int) -> CGFloat {
-        let markerHour = TimeOfDay.init(hour, 0)
-        return CGFloat(markerHour.minutes(since: timelineStartTime))
-            * metrics.pixelsPerMinute
+        return (timelineStartTime...TimeOfDay(hour, 0)).px
     }
 }

@@ -1,8 +1,8 @@
 /// Layout Engine for Timeline view
 /// Must remain independent of SwiftUI
 
-import Foundation
 import CoreGraphics
+import Foundation
 
 struct TimelineMetrics {
     /// Height of 1 hour in pixels
@@ -37,6 +37,20 @@ struct TimelineMetrics {
             - timeColumnWidth
             - horizontalCardMargin * 2
     }
+}
+
+extension Minutes {
+    var px: CGFloat {
+        CGFloat(self) * Timeline.metrics.pixelsPerMinute
+    }
+}
+
+extension ClosedRange where Bound == TimeOfDay {
+    var px: CGFloat { self.minutes.px }
+}
+
+extension Range where Bound == TimeOfDay {
+    var px: CGFloat { self.minutes.px }
 }
 
 struct TimelineLayoutEngine {
@@ -90,7 +104,7 @@ struct TimelineLayoutEngine {
     }
 
     private func cardHeight(for appt: Appointment) -> CGFloat {
-        return CGFloat(appt.durationMinutes) * metrics.pixelsPerMinute
+        return appt.durationMinutes.px
             // 2x to account for top and bottom clearance both
             - metrics.verticalCardMargin * 2
     }
@@ -101,8 +115,7 @@ struct TimelineLayoutEngine {
     }
 
     private func cardY(for appt: Appointment) -> CGFloat {
-        let minutesFromStart = appt.startTime.minutes(since: timelineStartTime)
-        return CGFloat(minutesFromStart) * metrics.pixelsPerMinute
+        return (timelineStartTime...appt.startTime.timeOfDay).px
             + metrics.verticalCardMargin
     }
 
@@ -119,7 +132,8 @@ struct TimelineLayoutEngine {
             let endMinute = endMinute(for: appointment)
 
             if let groupEndMinute = currentGroupEndMinute,
-               startMinute >= groupEndMinute {
+                startMinute >= groupEndMinute
+            {
                 groups.append(currentGroup)
                 currentGroup = [appointment]
                 currentGroupEndMinute = endMinute
@@ -146,7 +160,9 @@ struct TimelineLayoutEngine {
             let endMinute = endMinute(for: appointment)
             let column: Int
 
-            if let reusableColumn = columnEndMinutes.firstIndex(where: { $0 <= startMinute }) {
+            if let reusableColumn = columnEndMinutes.firstIndex(where: {
+                $0 <= startMinute
+            }) {
                 column = reusableColumn
                 columnEndMinutes[reusableColumn] = endMinute
             } else if columnEndMinutes.count < Self.maximumOverlappingColumns {
