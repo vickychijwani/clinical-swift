@@ -3,13 +3,12 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var router = Router()
-    @State private var selectedDate = Date.now.startOfDay()
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
             Tab("Schedule", systemImage: "calendar", value: AppTab.schedule) {
                 NavigationStack(path: $router.schedulePath) {
-                    ScheduleView(selectedDate: $selectedDate)
+                    ScheduleView()
                 }
             }
 

@@ -146,7 +146,7 @@ struct PersistenceTests {
         }
 
         let rows = try database.read { db in
-            try scheduleAppointmentsQuery(selectedDate: selectedDate).fetchAll(db)
+            try querySchedule(selectedDate: selectedDate).fetchAll(db)
         }
         let appointment = try #require(rows.first?.appointment)
 
@@ -194,7 +194,7 @@ struct PersistenceTests {
         }
 
         let rows = try database.read { db in
-            try scheduleAppointmentsQuery(selectedDate: selectedDate).fetchAll(db)
+            try querySchedule(selectedDate: selectedDate).fetchAll(db)
         }
         let appointment = try #require(rows.first?.appointment)
 

@@ -5,8 +5,14 @@ struct AppointmentCard: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(.white)
+            switch appt.status {
+            case .draft:
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color("AccentColor").opacity(0.08).gradient)
+            default:
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.white)
+            }
 
             cardContent
                 .padding(.horizontal, 8)
@@ -17,8 +23,21 @@ struct AppointmentCard: View {
                 )
                 .clipped()
 
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(.gray.opacity(0.15))
+            switch appt.status {
+            case .draft:
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(
+                        Color("AccentColor").opacity(0.5),
+                        style: StrokeStyle(
+                            lineWidth: 3,
+                            lineCap: .round,
+                            dash: [5, 10]
+                        )
+                    )
+            default:
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.gray.opacity(0.15), lineWidth: 2)
+            }
         }
         .clipShape(.rect(cornerRadius: 8))
     }
@@ -80,16 +99,21 @@ struct AppointmentCard: View {
 }
 
 /// Previews of various appointment durations
-func AppointmentCardPreview(durationMinutes: Minutes) -> some View {
+func AppointmentCardPreview(
+    durationMinutes: Minutes,
+    status: Appointment.Status = .scheduled
+) -> some View {
     VStack(alignment: .leading) {
         Text("\(durationMinutes) mins")
             .font(.title3)
-        AppointmentCard(appt: .init(
-            patientName: "Patient Name",
-            startTime: Date.now.setTime(9, 0),
-            durationMinutes: durationMinutes,
-            status: .scheduled
-        ))
+        AppointmentCard(
+            appt: .init(
+                patientName: "Patient Name",
+                startTime: Date.now.setTime(9, 0),
+                durationMinutes: durationMinutes,
+                status: status
+            )
+        )
         .frame(height: durationMinutes.px)
         Color.clear.frame(height: 8)
     }
@@ -99,7 +123,7 @@ func AppointmentCardPreview(durationMinutes: Minutes) -> some View {
 
 #Preview(traits: .sizeThatFitsLayout) {
     AppointmentCardPreview(durationMinutes: 60)
-    AppointmentCardPreview(durationMinutes: 45)
+    AppointmentCardPreview(durationMinutes: 45, status: .draft)
     AppointmentCardPreview(durationMinutes: 40)
     AppointmentCardPreview(durationMinutes: 30)
     AppointmentCardPreview(durationMinutes: 20)

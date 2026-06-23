@@ -12,19 +12,21 @@ struct AppointmentBookingView: View {
     private let originalDraft: AppointmentBookingDraft
     private let onBooked: (Date) -> Void
 
-    @State private var draft: AppointmentBookingDraft
-    @State private var searchText = ""
-    @State private var isSaving = false
-    @State private var saveErrorMessage: String?
+    @State private var model: AppointmentBookingModel
 
     init(
+        selectedPatient: PatientDetails? = nil,
         selectedDate: Date,
         onBooked: @escaping (Date) -> Void
     ) {
-        let draft = AppointmentBookingDraft(selectedDate: selectedDate)
-        self.originalDraft = draft.normalized
-        self._draft = State(initialValue: draft)
+        let model = AppointmentBookingModel(
+            selectedDate: selectedDate,
+            selectedPatient: selectedPatient,
+            onBooked: onBooked
+        )
         self.onBooked = onBooked
+        self.model = model
+        self.originalDraft = model.draft.normalized
     }
 
     var body: some View {
@@ -35,10 +37,7 @@ struct AppointmentBookingView: View {
             primaryDetent: .large
         ) { guardedDismiss in
             AppointmentBookingForm(
-                draft: $draft,
-                searchText: $searchText,
-                saveErrorMessage: $saveErrorMessage,
-                isSaving: isSaving,
+                model: $model,
                 patientItems: patientRows.map(\.item),
                 guardedDismiss: guardedDismiss,
                 saveAppointment: saveAppointment
@@ -47,49 +46,23 @@ struct AppointmentBookingView: View {
     }
 
     private var hasUnsavedChanges: Bool {
-        draft.normalized != originalDraft
+        model.draft.normalized != originalDraft
     }
 
     private func saveAppointment() {
-        let now = Date()
-        let record: AppointmentRecord
-
-        do {
-            record = try draft.normalized.makeRecord(now: now)
-        } catch AppointmentBookingValidationError.missingPatient {
-            saveErrorMessage = "Select a patient."
-            return
-        } catch AppointmentBookingValidationError.invalidTime {
-            saveErrorMessage = "Choose a time within clinic hours."
-            return
-        } catch {
-            saveErrorMessage = "Check the appointment details and try again."
-            return
-        }
-
-        isSaving = true
-        Task {
-            do {
-                try await database.write { db in
-                    try AppointmentRecord.insert { record }
-                        .execute(db)
-                }
-                onBooked(draft.selectedDate)
-                dismiss()
-            } catch {
-                saveErrorMessage = "The appointment could not be saved."
-            }
-            isSaving = false
+        model.saveAppointment()
+        if model.saveErrorMessage == nil {
+            dismiss()
         }
     }
 }
 
 private struct AppointmentBookingForm: View {
-    @Binding var draft: AppointmentBookingDraft
-    @Binding var searchText: String
-    @Binding var saveErrorMessage: String?
+    @Dependency(\.calendar) private var calendar
+    private let draftUuid = UUID()
 
-    let isSaving: Bool
+    @Binding var model: AppointmentBookingModel
+
     let patientItems: [PatientDetails]
     let guardedDismiss: FormSheetDismissAction
     let saveAppointment: () -> Void
@@ -98,18 +71,20 @@ private struct AppointmentBookingForm: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 AppointmentBookingPatientSection(
-                    selectedPatient: $draft.selectedPatient,
-                    searchText: $searchText,
+                    selectedPatient: $model.draft.selectedPatient,
+                    searchText: $model.searchText,
                     patientItems: filteredPatientItems
                 )
 
                 AppointmentBookingDateSection(selectedDate: selectedDateBinding)
 
-                AppointmentBookingTimeSection(startTime: $draft.startTime)
+                AppointmentBookingTimeSection(startTime: $model.draft.startTime)
 
                 AppointmentBookingDurationSection(
                     durationMinutes: durationBinding
                 )
+
+                timelinePreview
             }
             .padding()
         }
@@ -133,56 +108,84 @@ private struct AppointmentBookingForm: View {
                     Label("Done", systemImage: "checkmark")
                         .labelStyle(.iconOnly)
                 }
-                .disabled(isSaving)
+                .disabled(model.isSaving)
             }
         }
-        .onChange(of: draft.startTime) { _, newValue in
-            let normalized = draft.normalizedStartTime(
+        .onChange(of: model.draft.startTime) { _, newValue in
+            let normalized = model.draft.normalizedStartTime(
                 newValue,
-                selectedDate: draft.selectedDate,
-                durationMinutes: draft.durationMinutes
+                selectedDate: model.draft.selectedDate,
+                durationMinutes: model.draft.durationMinutes
             )
-            if draft.startTime != normalized {
-                draft.startTime = normalized
+            if model.draft.startTime != normalized {
+                model.draft.startTime = normalized
             }
         }
         .alert(
             "Unable to save appointment",
             isPresented: Binding(
-                get: { saveErrorMessage != nil },
-                set: { if !$0 { saveErrorMessage = nil } }
+                get: { model.saveErrorMessage != nil },
+                set: { if !$0 { model.saveErrorMessage = nil } }
             )
         ) {
             Button("OK", role: .cancel) {
-                saveErrorMessage = nil
+                model.saveErrorMessage = nil
             }
         } message: {
-            Text(saveErrorMessage ?? "")
+            Text(model.saveErrorMessage ?? "")
         }
     }
 
     private var selectedDateBinding: Binding<Date> {
         Binding(
-            get: { draft.selectedDate },
-            set: { draft.selectDate($0) }
+            get: { model.selectedDate },
+            set: { model.selectedDate = $0 }
         )
     }
 
     private var durationBinding: Binding<Int> {
         Binding(
-            get: { draft.durationMinutes },
-            set: { draft.selectDuration($0) }
+            get: { model.draft.durationMinutes },
+            set: { model.draft.selectDuration($0) }
         )
     }
 
     private var filteredPatientItems: [PatientDetails] {
-        guard let query = searchText.nilIfBlank else {
+        guard let query = model.searchText.nilIfBlank else {
             return patientItems
         }
 
         return patientItems.filter { item in
             item.patient.name?.localizedStandardContains(query) == true
                 || item.patient.phone?.localizedStandardContains(query) == true
+        }
+    }
+
+    private var timelinePreview: some View {
+        let time =
+            $model.draft.startTime.wrappedValue.timeOfDay
+            + $model.draft.durationMinutes.wrappedValue / 2
+        return ClippedTimeline(at: time, height: 240) {
+            Timeline(
+                appointments: model.appointments + [
+                    Appointment(
+                        // Stable id for animations
+                        id: draftUuid,
+                        patientName: ($model.draft.selectedPatient).wrappedValue?.patient
+                            .displayName ?? "<Select a patient>",
+                        startTime: $model.draft.startTime.wrappedValue,
+                        durationMinutes: durationBinding.wrappedValue,
+                        status: .draft
+                    )
+                ],
+                startTime: Bitehaus.opening,
+                endTime: Bitehaus.closing,
+                breakBlock: Bitehaus.break,
+                showsNowMarker:
+                    calendar
+                    .isDateInToday(selectedDateBinding.wrappedValue)
+            )
+            .background(Color("AppBackground").opacity(0.3).blendMode(.screen))
         }
     }
 }
@@ -194,10 +197,7 @@ private struct AppointmentBookingSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption)
-                .bold()
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+                .styleSectionTitle()
 
             content
         }
@@ -226,7 +226,7 @@ private struct AppointmentBookingPatientSection: View {
                     .buttonStyle(.bordered)
                     .clipShape(.circle)
                 }
-                .padding()
+                .padding(10)
                 .background(.background)
                 .clipShape(.rect(cornerRadius: 18))
             } else {
@@ -250,7 +250,7 @@ private struct AppointmentBookingPatientSection: View {
                             .foregroundStyle(.secondary)
                         }
                     }
-                    .padding()
+                    .padding(10)
                     .background(.background)
                     .clipShape(.rect(cornerRadius: 18))
 
@@ -262,13 +262,14 @@ private struct AppointmentBookingPatientSection: View {
                             } label: {
                                 PatientItemView(item: item)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding()
+                                    .padding(10)
                             }
                             .buttonStyle(.plain)
 
                             if item.id != patientItems.last?.id {
                                 Divider()
-                                    .padding(.leading, 62)
+                                    .padding(.leading, 56)
+                                    .padding(.trailing, 24)
                             }
                         }
                     }
@@ -301,37 +302,39 @@ private struct AppointmentBookingTimeSection: View {
                 displayedComponents: .hourAndMinute
             )
             .datePickerStyle(.compact)
+            .labelsHidden()
         }
     }
 }
 
 private struct AppointmentBookingDurationSection: View {
-    @Binding var durationMinutes: Int
+    @Binding var durationMinutes: Minutes
 
     private let columns = [
-        GridItem(.adaptive(minimum: 88), spacing: 10)
+        GridItem(.adaptive(minimum: 50), spacing: 8)
     ]
 
     var body: some View {
         AppointmentBookingSection(title: "Duration") {
-            LazyVGrid(columns: columns, spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(AppointmentBookingDraft.durationOptions, id: \.self) { minutes in
                     Button {
                         durationMinutes = minutes
                     } label: {
                         Text(durationLabel(for: minutes))
-                            .font(.headline)
-                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .styleFormPicker()
+                            .frame(maxWidth: .infinity, minHeight: 34)
                     }
                     .buttonStyle(.bordered)
-                    .buttonBorderShape(.roundedRectangle(radius: 14))
+                    .controlSize(.small)
+                    .buttonBorderShape(.capsule)
                     .tint(durationMinutes == minutes ? .accentColor : .secondary)
                 }
             }
         }
     }
 
-    private func durationLabel(for minutes: Int) -> String {
+    private func durationLabel(for minutes: Minutes) -> String {
         switch minutes {
         case 60:
             "1h"
@@ -350,6 +353,12 @@ private struct AppointmentBookingDurationSection: View {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
     NavigationStack {
-        AppointmentBookingView(selectedDate: .now) { _ in }
+        AppointmentBookingView(
+            selectedPatient: PatientDetails(
+                patient: samplePatients.first(where: { $0.name != nil })!,
+                nextAppointmentDate: nil
+            ),
+            selectedDate: .now
+        ) { _ in }
     }
 }

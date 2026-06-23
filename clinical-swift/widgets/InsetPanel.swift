@@ -14,7 +14,7 @@ struct InsetPanel<Content: View>: View {
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.background)
+                    .fill(.clear)
                     .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 2)
                     .shadow(color: .white.opacity(0.6), radius: 4, x: 0, y: -1)
             }

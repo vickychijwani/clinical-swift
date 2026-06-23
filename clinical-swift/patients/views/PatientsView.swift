@@ -30,13 +30,11 @@ struct PatientsView: View {
         .sheet(isPresented: $isAddingPatient) {
             NavigationStack {
                 EditPatientView()
-                    .background(Color("AppBackground"))
             }
         }
         .sheet(item: $viewingPatient) { item in
             NavigationStack {
                 ViewPatientView(details: item)
-                    .background(Color("AppBackground"))
             }
             .presentationDetents([.medium])
         }

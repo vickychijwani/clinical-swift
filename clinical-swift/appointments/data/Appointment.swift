@@ -23,6 +23,7 @@ nonisolated struct Appointment: Identifiable, Sendable {
     }
 
     enum Status: String, Sendable {
+        case draft  // Never stored in DB; only for previews
         case scheduled
         case completed
         case cancelled

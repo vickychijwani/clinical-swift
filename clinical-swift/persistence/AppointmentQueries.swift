@@ -23,31 +23,23 @@ nonisolated struct ScheduleAppointmentRow: Identifiable, Sendable {
     }
 }
 
-nonisolated func scheduleAppointmentsQuery(selectedDate: Date) -> some Statement<ScheduleAppointmentRow> {
+nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleAppointmentRow> {
     let calendar = Calendar.autoupdatingCurrent
-    let startDate = selectedDate.startOfDay(using: calendar)
-    let endDate = calendar.date(byAdding: .day, value: 1, to: startDate) ?? startDate
-    return scheduleAppointmentsQuery(startDate: startDate, endDate: endDate)
-}
+    let startTime = selectedDate.startOfDay(using: calendar)
+    let endTime = calendar.date(byAdding: .day, value: 1, to: startTime) ?? startTime
 
-nonisolated func scheduleAppointmentsQuery(
-    startDate: Date,
-    endDate: Date
-) -> some Statement<ScheduleAppointmentRow> {
-    #sql(
-        """
-        SELECT
-          "appointments"."id",
-          "patients"."name" AS "patientName",
-          "appointments"."startTime",
-          "appointments"."durationMinutes",
-          "appointments"."status"
-        FROM "appointments"
-        INNER JOIN "patients"
-          ON "patients"."id" = "appointments"."patientID"
-        WHERE "appointments"."startTime" >= \(startDate)
-          AND "appointments"."startTime" < \(endDate)
-        ORDER BY "appointments"."startTime"
-        """
-    )
+    return AppointmentRecord
+        .where { $0.startTime >= startTime }
+        .where { $0.startTime < endTime }
+        .order { $0.startTime.asc() }
+        .join(PatientRecord.all) { $0.patientID.eq($1.id) }
+        .select { appt, patient in
+            ScheduleAppointmentRow.Columns(
+                id: appt.id,
+                patientName: patient.name,
+                startTime: appt.startTime,
+                durationMinutes: appt.durationMinutes,
+                status: appt.status
+            )
+        }
 }

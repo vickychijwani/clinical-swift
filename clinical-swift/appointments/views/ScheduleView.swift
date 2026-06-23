@@ -4,37 +4,30 @@ import SwiftUI
 struct ScheduleView: View {
     @Dependency(\.calendar) private var calendar
 
-    @Binding var selectedDate: Date
     @State private var isBookingAppointment = false
+    @State private var model: ScheduleModel
 
-    @FetchAll(scheduleAppointmentsQuery(selectedDate: .now), animation: .default)
-    private var appointmentRows: [ScheduleAppointmentRow]
-
-    init(selectedDate: Binding<Date>) {
-        self._selectedDate = selectedDate
-        self._appointmentRows = FetchAll(
-            scheduleAppointmentsQuery(selectedDate: selectedDate.wrappedValue),
-            animation: .default
-        )
+    init() {
+        model = ScheduleModel(selectedDate: Date.now)
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                WeekDateStrip(selectedDate: $selectedDate)
+                WeekDateStrip(selectedDate: $model.selectedDate)
 
                 Timeline(
-                    appointments: appointments,
+                    appointments: model.appointments,
                     startTime: Bitehaus.opening,
                     endTime: Bitehaus.closing,
                     breakBlock: Bitehaus.break,
-                    showsNowMarker: calendar.isDateInToday(selectedDate)
+                    showsNowMarker: calendar.isDateInToday(model.selectedDate)
                 )
             }
         }
         .background(Color("AppBackground"))
         .scrollBounceBehavior(.basedOnSize)
-        .navigationTitle(selectedDate.formatted(
+        .navigationTitle(model.selectedDate.formatted(
             .dateTime
                 .weekday()
                 .month()
@@ -50,39 +43,27 @@ struct ScheduleView: View {
         }
         .sheet(isPresented: $isBookingAppointment) {
             NavigationStack {
-                AppointmentBookingView(selectedDate: selectedDate) { bookedDate in
-                    selectedDate = bookedDate.startOfDay()
+                AppointmentBookingView(selectedDate: model.selectedDate) { bookedDate in
+                    model.selectedDate = bookedDate.startOfDay()
                     refreshAppointments(for: bookedDate)
                 }
             }
         }
-        .task(id: selectedDate) {
-            _ = try? await $appointmentRows.load(
-                scheduleAppointmentsQuery(selectedDate: selectedDate),
-                animation: .default
-            )
+        .task(id: model.selectedDate) {
+            _ = try? await model.load()
         }
-    }
-
-    private var appointments: [Appointment] {
-        appointmentRows.compactMap(\.appointment)
     }
 
     private func refreshAppointments(for date: Date) {
-        Task {
-            _ = try? await $appointmentRows.load(
-                scheduleAppointmentsQuery(selectedDate: date),
-                animation: .default
-            )
-        }
+        model.selectedDate = date
     }
 }
 
 #Preview {
-    @Previewable @State var selectedDate: Date = .now
-
     let _ = try! prepareDependencies {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
-    ScheduleView(selectedDate: $selectedDate)
+    NavigationStack {
+        ScheduleView()
+    }
 }

@@ -68,10 +68,16 @@ Nice to haves:
 - [ ] Photo(s) of bills for outgoing payments (note: there may be more than 1)
 - [ ] Auto-populate outgoing payment from bill photo
 
+## M2.1: iPad optimized
+- [ ] Clinic dashboard - appointments, patient records, and payments
+
 ## M3: Reduce dependency on paper forms in clinic
 - [ ] Add "Notes" in appointment view
 - [ ] Scan OPD form with camera, including notes
 - [ ] iPad app to view and edit patient records/notes in larger size
+
+## M3.1: Implant tracking
+- [ ] Bulk scan implant barcodes for long-term warranty - then allow noting position of each one in patient's mouth
 
 ## M4: Eliminate paper forms in clinic
 - [ ] [TBD] Patient check-in experience

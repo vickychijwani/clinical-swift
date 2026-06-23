@@ -37,6 +37,7 @@ struct ViewPatientView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(16)
+        .background(Color("AppBackground"))
         .navigationTitle("Patient Details")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -105,7 +106,6 @@ struct ViewPatientView: View {
         ) { item in
             NavigationStack {
                 ViewPatientView(details: item)
-                    .background(Color("AppBackground"))
             }
             .presentationDetents([.medium, .large])
         }

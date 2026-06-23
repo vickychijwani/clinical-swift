@@ -29,6 +29,17 @@ nonisolated struct TimeOfDay: Comparable, Equatable {
         minute = components.minute ?? 0
     }
 
+    static func + (lhs: TimeOfDay, rhs: Int) -> TimeOfDay {
+        let minutesPerDay = 24 * 60
+
+        let newTotalMinutes = (lhs.totalMinutes + rhs) % minutesPerDay
+        let normalizedMinutes = newTotalMinutes >= 0
+        ? newTotalMinutes
+        : newTotalMinutes + minutesPerDay
+
+        return TimeOfDay(normalizedMinutes / 60, normalizedMinutes % 60)
+    }
+
     static func < (lhs: TimeOfDay, rhs: TimeOfDay) -> Bool {
         (lhs.hour, lhs.minute) < (rhs.hour, rhs.minute)
     }

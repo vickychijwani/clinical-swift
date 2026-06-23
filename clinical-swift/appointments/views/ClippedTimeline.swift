@@ -3,11 +3,12 @@ import SwiftUI
 struct ClippedTimeline<Content: View>: View {
     let timeline: Content
     let center: TimeOfDay
-    let clippedHeight: CGFloat = 240
+    let clippedHeight: CGFloat
 
-    init(at center: TimeOfDay, @ViewBuilder timeline: () -> Content) {
+    init(at center: TimeOfDay, height: CGFloat = 240, @ViewBuilder timeline: () -> Content) {
         self.timeline = timeline()
         self.center = center
+        self.clippedHeight = height
     }
 
     var body: some View {
@@ -15,6 +16,7 @@ struct ClippedTimeline<Content: View>: View {
         ClippedView(height: clippedHeight, yOffset: yOffset) {
             timeline
         }
+        .animation(.easeInOut(duration: 0.2), value: yOffset)
     }
 
     private var yOffsetForCenter: CGFloat {
@@ -23,10 +25,6 @@ struct ClippedTimeline<Content: View>: View {
             yOffsetFor(center)
             // Move the `center` down to center of clipped timeline
             - clippedHeight / 2
-            // Pull back up by 30 min assuming `center` is actually appt start time and
-            // appt duration is 1h. TODO: This should be computed by the caller using
-            // appt duration.
-            + Timeline.metrics.hourHeight / 2
     }
 
     private var yOffsetForClosingTime: CGFloat {

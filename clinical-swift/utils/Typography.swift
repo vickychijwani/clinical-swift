@@ -12,6 +12,22 @@ extension Text {
         )
     }
 
+    func styleSectionTitle() -> some View {
+        self.modifier(
+            AppTextStyleModifier(
+                font: .caption.bold(),
+                style: .secondary,
+                textCase: .uppercase
+            )
+        )
+    }
+
+    func styleFormPicker() -> some View {
+        self.modifier(
+            AppTextStyleModifier(font: .system(size: 16, weight: .regular))
+        )
+    }
+
     func styleBodyBold() -> some View {
         self.modifier(
             AppTextStyleModifier(font: .system(size: 14, weight: .semibold))
@@ -36,26 +52,32 @@ struct AppTextStyleModifier: ViewModifier {
     /// Letter spacing.
     var tracking: Double? = nil
 
+    var textCase: Text.Case? = nil
+
     init(
         font: Font,
         color: Color? = nil,
-        tracking: Double? = nil
+        tracking: Double? = nil,
+        textCase: Text.Case? = nil
     ) {
         self.font = font
         self.color = color
         self.style = nil
         self.tracking = tracking
+        self.textCase = textCase
     }
 
     init<Style: ShapeStyle>(
         font: Font,
         style: Style,
-        tracking: Double? = nil
+        tracking: Double? = nil,
+        textCase: Text.Case? = nil
     ) {
         self.font = font
         self.color = nil
         self.style = AnyShapeStyle(style)
         self.tracking = tracking
+        self.textCase = textCase
     }
 
     private var resolvedStyle: AnyShapeStyle {
@@ -73,5 +95,6 @@ struct AppTextStyleModifier: ViewModifier {
             .font(font)
             .foregroundStyle(resolvedStyle)
             .tracking(tracking ?? 0)
+            .textCase(textCase)
     }
 }

@@ -127,18 +127,21 @@ struct WeekDateStrip: View {
 struct WeekDateStripDisplayMode: Equatable, Sendable {
     static let schedule = WeekDateStripDisplayMode(
         stripHeight: 64,
+        stripHzPadding: 8,
         cellMinHeight: 56,
         cornerRadius: 16,
         cellSpacing: 0
     )
     static let sheet = WeekDateStripDisplayMode(
         stripHeight: 86,
-        cellMinHeight: 72,
+        stripHzPadding: 0,
+        cellMinHeight: 80,
         cornerRadius: 18,
         cellSpacing: 2
     )
 
     let stripHeight: CGFloat
+    let stripHzPadding: CGFloat
     let cellMinHeight: CGFloat
     let cornerRadius: CGFloat
     let cellSpacing: CGFloat
@@ -167,7 +170,7 @@ private struct WeekDatePage: View {
     let selectDate: (Date) -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             ForEach(weekStart.weekDates(using: calendar), id: \.self) { date in
                 DateStripCell(
                     date: date,
@@ -182,7 +185,7 @@ private struct WeekDatePage: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, displayMode.stripHzPadding)
     }
 }
 
@@ -212,7 +215,7 @@ private struct DateStripCell: View {
                         .bold()
 
                     Text(dayText)
-                        .font(.title2)
+                        .font(.title3)
                         .bold()
 
                     Text(monthText)
@@ -223,28 +226,11 @@ private struct DateStripCell: View {
             .foregroundStyle(foregroundStyle)
             .frame(minWidth: 44, minHeight: displayMode.cellMinHeight)
             .background {
-                if isSelected && displayMode == .schedule {
+                if isSelected {
                     ZStack {
                         Color("AppBackground")
                         Color.primary.opacity(0.06)
                     }
-                } else if displayMode == .sheet {
-                    RoundedRectangle(
-                        cornerRadius: displayMode.cornerRadius,
-                        style: .continuous
-                    )
-                    .fill(sheetBackgroundStyle)
-                }
-            }
-            .overlay {
-                if displayMode == .sheet {
-                    RoundedRectangle(
-                        cornerRadius: displayMode.cornerRadius,
-                        style: .continuous
-                    )
-                    .strokeBorder(
-                        isSelected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.06)
-                    )
                 }
             }
             .clipShape(.rect(cornerRadius: displayMode.cornerRadius, style: .continuous))
@@ -300,9 +286,16 @@ private struct DateStripCell: View {
     }
 }
 
-#Preview(traits: .sizeThatFitsLayout) {
+#Preview("displayMode: schedule", traits: .sizeThatFitsLayout) {
     @Previewable @State var selectedDate = Date.now.startOfDay()
 
-    WeekDateStrip(selectedDate: $selectedDate, today: .now)
+    WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .schedule)
+        .background(Color("AppBackground"))
+}
+
+#Preview("displayMode: sheet", traits: .sizeThatFitsLayout) {
+    @Previewable @State var selectedDate = Date.now.startOfDay()
+
+    WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .sheet)
         .background(Color("AppBackground"))
 }

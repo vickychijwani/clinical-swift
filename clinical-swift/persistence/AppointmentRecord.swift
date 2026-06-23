@@ -36,6 +36,9 @@ extension Appointment.Status {
     }
 
     nonisolated var storageValue: String {
-        rawValue
+        guard self != Appointment.Status.draft else {
+            return ""
+        }
+        return rawValue
     }
 }

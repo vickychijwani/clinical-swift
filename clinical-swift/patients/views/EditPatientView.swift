@@ -31,6 +31,7 @@ struct EditPatientView: View {
                 savePatient: savePatient
             )
         }
+        .background(Color("AppBackground"))
     }
 
     private var hasUnsavedChanges: Bool {
@@ -236,6 +237,5 @@ private struct PatientGenderField: View {
     }
     NavigationStack {
         EditPatientView()
-            .background(Color("AppBackground"))
     }
 }
