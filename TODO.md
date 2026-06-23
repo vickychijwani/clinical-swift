@@ -57,6 +57,7 @@ Nice to haves:
 - [ ] History of payments - new tab
 - [ ] Record incoming from appt view
 - [ ] Record incoming/outgoing from payments tab
+- [ ] Record ad-hoc incoming (radiographic fee, Dr. Chaitra, etc)
 - [ ] Chart of cash flow per month
 - [ ] Chart of new and repeat patients per month
 
