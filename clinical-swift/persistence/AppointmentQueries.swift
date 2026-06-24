@@ -5,7 +5,7 @@ import SQLiteData
 nonisolated struct ScheduleAppointmentRow: Identifiable, Sendable {
     let id: UUID
     let patientName: String?
-    let startTime: Date
+    let start: Date
     let durationMinutes: Int
     let status: String
 
@@ -16,7 +16,7 @@ nonisolated struct ScheduleAppointmentRow: Identifiable, Sendable {
         return Appointment(
             id: id,
             patientName: patientName ?? Patient.unknownDisplayName,
-            startTime: startTime,
+            start: start,
             durationMinutes: durationMinutes,
             status: status
         )
@@ -25,19 +25,19 @@ nonisolated struct ScheduleAppointmentRow: Identifiable, Sendable {
 
 nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleAppointmentRow> {
     let calendar = Calendar.autoupdatingCurrent
-    let startTime = selectedDate.startOfDay(using: calendar)
-    let endTime = calendar.date(byAdding: .day, value: 1, to: startTime) ?? startTime
+    let start = selectedDate.startOfDay(using: calendar)
+    let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
 
     return AppointmentRecord
-        .where { $0.startTime >= startTime }
-        .where { $0.startTime < endTime }
-        .order { $0.startTime.asc() }
+        .where { $0.start >= start }
+        .where { $0.start < end }
+        .order { $0.start.asc() }
         .join(PatientRecord.all) { $0.patientID.eq($1.id) }
         .select { appt, patient in
             ScheduleAppointmentRow.Columns(
                 id: appt.id,
                 patientName: patient.name,
-                startTime: appt.startTime,
+                start: appt.start,
                 durationMinutes: appt.durationMinutes,
                 status: appt.status
             )

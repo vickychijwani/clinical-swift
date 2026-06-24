@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct TimelineSegment: View {
-    let timelineStartTime: TimeOfDay
-    let timelineEndTime: TimeOfDay
+    let start: TimeOfDay
+    let end: TimeOfDay
     let appointments: [Appointment]
     let metrics: TimelineMetrics
     let now: Date?
@@ -12,7 +12,7 @@ struct TimelineSegment: View {
             let engine = TimelineLayoutEngine(
                 metrics: metrics,
                 availableWidth: geo.size.width,
-                timelineStartTime: timelineStartTime
+                start: start
             )
 
             let layouts = engine.layout(appointments: appointments)
@@ -74,17 +74,17 @@ struct TimelineSegment: View {
     }
 
     private var segmentHeight: CGFloat {
-        (timelineStartTime...timelineEndTime).px
+        (start...end).px
     }
 
     private var hourMarkers: [Int] {
-        guard timelineStartTime.minute == 0 else {
+        guard start.minute == 0 else {
             return []
         }
-        guard timelineStartTime < timelineEndTime else {
+        guard start < end else {
             return []
         }
-        return Array(timelineStartTime.hour...timelineEndTime.hour)
+        return Array(start.hour...end.hour)
     }
 
     private var nowY: CGFloat? {
@@ -93,14 +93,14 @@ struct TimelineSegment: View {
         }
 
         let nowTime = TimeOfDay(date: now)
-        guard (timelineStartTime..<timelineEndTime).contains(nowTime) else {
+        guard (start..<end).contains(nowTime) else {
             return nil
         }
 
-        return (timelineStartTime...nowTime).px
+        return (start...nowTime).px
     }
 
     private func hourY(for hour: Int) -> CGFloat {
-        return (timelineStartTime...TimeOfDay(hour, 0)).px
+        return (start...TimeOfDay(hour, 0)).px
     }
 }

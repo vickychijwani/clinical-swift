@@ -79,7 +79,7 @@ struct AppointmentCard: View {
     }
 
     private var timeText: some View {
-        Text("\(appt.startTime.formatted(.dateTime.hour().minute()))")
+        Text("\(appt.start.formatted(.dateTime.hour().minute()))")
             .styleAppointmentTime()
             .layoutPriority(1)
             .fixedSize(horizontal: true, vertical: false)
@@ -109,7 +109,7 @@ func AppointmentCardPreview(
         AppointmentCard(
             appt: .init(
                 patientName: "Patient Name",
-                startTime: Date.now.setTime(9, 0),
+                start: Date.now.setTime(9, 0),
                 durationMinutes: durationMinutes,
                 status: status
             )

@@ -1,23 +1,30 @@
+import Dependencies
 import Foundation
 
 nonisolated struct Appointment: Identifiable, Sendable {
+    @Dependency(\.calendar) private var calendar
+
     let id: UUID
 
     let patientName: String
-    let startTime: Date
+    let start: Date
     let durationMinutes: Minutes
     let status: Status
+
+    var end: Date {
+        calendar.date(byAdding: .minute, value: durationMinutes, to: start)!
+    }
 
     init(
         id: UUID = UUID(),
         patientName: String,
-        startTime: Date,
+        start: Date,
         durationMinutes: Minutes,
         status: Status
     ) {
         self.id = id
         self.patientName = patientName
-        self.startTime = startTime
+        self.start = start
         self.durationMinutes = durationMinutes
         self.status = status
     }

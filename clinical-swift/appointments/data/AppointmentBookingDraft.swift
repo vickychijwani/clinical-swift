@@ -8,24 +8,24 @@ struct AppointmentBookingDraft: Equatable, Sendable {
 
     var selectedPatient: PatientDetails?
     var selectedDate: Date
-    var startTime: Date
+    var start: Date
     var durationMinutes: Int
 
     init(
         selectedPatient: PatientDetails? = nil,
         selectedDate: Date,
-        startTime: Date? = nil,
+        start: Date? = nil,
         durationMinutes: Int = 30
     ) {
         self.selectedPatient = selectedPatient
         self.selectedDate = selectedDate
-        self.startTime = startTime ?? selectedDate
+        self.start = start ?? selectedDate
         self.durationMinutes = durationMinutes
 
         let normalizedDate = selectedDate.startOfDay(using: calendar)
         self.selectedDate = normalizedDate
-        self.startTime = normalizedStartTime(
-            startTime ?? Bitehaus.opening.on(date: normalizedDate, using: calendar),
+        self.start = normalizedStart(
+            start ?? Bitehaus.opening.on(date: normalizedDate, using: calendar),
             selectedDate: normalizedDate,
             durationMinutes: durationMinutes
         )
@@ -34,7 +34,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
     static func == (lhs: AppointmentBookingDraft, rhs: AppointmentBookingDraft) -> Bool {
         lhs.selectedPatient == rhs.selectedPatient
             && lhs.selectedDate == rhs.selectedDate
-            && lhs.startTime == rhs.startTime
+            && lhs.start == rhs.start
             && lhs.durationMinutes == rhs.durationMinutes
     }
 
@@ -42,22 +42,22 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         AppointmentBookingDraft(
             selectedPatient: selectedPatient,
             selectedDate: selectedDate,
-            startTime: startTime,
+            start: start,
             durationMinutes: durationMinutes
         )
     }
 
     mutating func selectDate(_ date: Date) {
         selectedDate = date.startOfDay(using: calendar)
-        startTime = normalizedStartTime(
-            startTime,
+        start = normalizedStart(
+            start,
             selectedDate: selectedDate,
             durationMinutes: durationMinutes
         )
     }
 
-    mutating func selectStartTime(_ date: Date) {
-        startTime = normalizedStartTime(
+    mutating func selectStart(_ date: Date) {
+        start = normalizedStart(
             date,
             selectedDate: selectedDate,
             durationMinutes: durationMinutes
@@ -66,8 +66,8 @@ struct AppointmentBookingDraft: Equatable, Sendable {
 
     mutating func selectDuration(_ durationMinutes: Int) {
         self.durationMinutes = durationMinutes
-        startTime = normalizedStartTime(
-            startTime,
+        start = normalizedStart(
+            start,
             selectedDate: selectedDate,
             durationMinutes: durationMinutes
         )
@@ -80,13 +80,13 @@ struct AppointmentBookingDraft: Equatable, Sendable {
 
         let opening = Bitehaus.opening.on(date: selectedDate, using: calendar)
         let closing = Bitehaus.closing.on(date: selectedDate, using: calendar)
-        guard startTime >= opening,
-              let endTime = calendar.date(
+        guard start >= opening,
+              let end = calendar.date(
                 byAdding: .minute,
                 value: durationMinutes,
-                to: startTime
+                to: start
               ),
-              endTime <= closing else {
+              end <= closing else {
             throw AppointmentBookingValidationError.invalidTime
         }
     }
@@ -103,7 +103,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         return AppointmentRecord(
             id: id,
             patientID: selectedPatient.patient.id,
-            startTime: startTime,
+            start: start,
             durationMinutes: durationMinutes,
             status: Appointment.Status.scheduled.storageValue,
             createdAt: now,
@@ -111,7 +111,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         )
     }
 
-    func normalizedStartTime(
+    func normalizedStart(
         _ proposedTime: Date,
         selectedDate: Date,
         durationMinutes: Int

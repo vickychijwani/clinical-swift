@@ -63,7 +63,7 @@ func migrateDatabase(_ database: any DatabaseWriter) throws {
             CREATE TABLE "appointments" (
               "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
               "patientID" TEXT NOT NULL REFERENCES "patients"("id") ON DELETE CASCADE,
-              "startTime" TEXT NOT NULL,
+              "start" TEXT NOT NULL,
               "durationMinutes" INTEGER NOT NULL,
               "status" TEXT NOT NULL,
               "createdAt" TEXT NOT NULL,
@@ -85,8 +85,8 @@ func migrateDatabase(_ database: any DatabaseWriter) throws {
 
         try #sql(
             """
-            CREATE INDEX IF NOT EXISTS "idx_appointments_startTime"
-            ON "appointments"("startTime")
+            CREATE INDEX IF NOT EXISTS "idx_appointments_start"
+            ON "appointments"("start")
             """
         )
         .execute(db)
@@ -114,7 +114,7 @@ extension DatabaseWriter {
             where !patients.contains(where: { $0.name == appointment.patientName }) {
                 patients.append(Patient(
                     name: appointment.patientName,
-                    createdDate: appointment.startTime
+                    createdDate: appointment.start
                 ))
             }
 
@@ -137,11 +137,11 @@ extension DatabaseWriter {
                     AppointmentRecord(
                         id: appointment.id,
                         patientID: patientID,
-                        startTime: appointment.startTime,
+                        start: appointment.start,
                         durationMinutes: appointment.durationMinutes,
                         status: appointment.status.storageValue,
-                        createdAt: appointment.startTime,
-                        updatedAt: appointment.startTime
+                        createdAt: appointment.start,
+                        updatedAt: appointment.start
                     )
                 }
                 .execute(db)

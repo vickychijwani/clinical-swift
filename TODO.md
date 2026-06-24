@@ -13,11 +13,10 @@
   - [ ] Or share contact to create Patient
 - [ ] View patient
 - [ ] Edit patient
-- [ ] New appointment
-  - [ ] Show schedule above for maximum context
-  - [ ] Date selection synchronize with schedule
+- [x] New appointment
+  - [x] Show preview in schedule for maximum context
+  - [x] Date selection synchronize with schedule
   - [ ] Pre-fill next available slot 
-  - [ ] Show draft appt preview embedded in timeline
   - [ ] Quick-add new patient from new appointment page
   - [ ] Share recent call to open new appointment page for patient associated with that phone number
 - [ ] View appointment

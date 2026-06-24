@@ -1,9 +1,9 @@
 import SwiftUI
- 
+
 struct Timeline: View {
     let appointments: [Appointment]
-    let startTime: TimeOfDay
-    let endTime: TimeOfDay
+    let start: TimeOfDay
+    let end: TimeOfDay
     let breakBlock: BreakBlock
 
     /// Properties for rendering the "Now" marker line.
@@ -35,8 +35,8 @@ struct Timeline: View {
     private func timelineContent(now: Date?) -> some View {
         VStack(spacing: 0) {
             TimelineSegment(
-                timelineStartTime: startTime,
-                timelineEndTime: breakBlock.start,
+                start: start,
+                end: breakBlock.start,
                 appointments: appointmentsBeforeBreak,
                 metrics: Timeline.metrics,
                 now: now
@@ -48,8 +48,8 @@ struct Timeline: View {
             )
 
             TimelineSegment(
-                timelineStartTime: breakBlock.end,
-                timelineEndTime: endTime,
+                start: breakBlock.end,
+                end: end,
                 appointments: appointmentsAfterBreak,
                 metrics: Timeline.metrics,
                 now: now
@@ -59,19 +59,19 @@ struct Timeline: View {
     }
 
     private var appointmentsBeforeBreak: [Appointment] {
-        appointments.filter { $0.startTime.timeOfDay < breakBlock.start }
+        appointments.filter { $0.start.timeOfDay < breakBlock.start }
     }
 
     private var appointmentsAfterBreak: [Appointment] {
-        appointments.filter { $0.startTime.timeOfDay >= breakBlock.end }
+        appointments.filter { $0.start.timeOfDay >= breakBlock.end }
     }
 }
 
 func sampleTimeline() -> some View {
     return Timeline(
         appointments: sampleAppointments,
-        startTime: Bitehaus.opening,
-        endTime: Bitehaus.closing,
+        start: Bitehaus.opening,
+        end: Bitehaus.closing,
         breakBlock: Bitehaus.break,
         showsNowMarker: true,
         previewNowMarker: Date.now.setTime(9, 30)

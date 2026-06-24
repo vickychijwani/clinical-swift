@@ -5,7 +5,7 @@ import SQLiteData
 nonisolated struct AppointmentRecord: Identifiable, Sendable {
     let id: UUID
     var patientID: PatientRecord.ID
-    var startTime: Date
+    var start: Date
     var durationMinutes: Int
     var status: String
     var createdAt: Date
@@ -14,7 +14,7 @@ nonisolated struct AppointmentRecord: Identifiable, Sendable {
     init(
         id: UUID,
         patientID: PatientRecord.ID,
-        startTime: Date,
+        start: Date,
         durationMinutes: Int,
         status: String,
         createdAt: Date,
@@ -22,7 +22,7 @@ nonisolated struct AppointmentRecord: Identifiable, Sendable {
     ) {
         self.id = id
         self.patientID = patientID
-        self.startTime = startTime
+        self.start = start
         self.durationMinutes = durationMinutes
         self.status = status
         self.createdAt = createdAt

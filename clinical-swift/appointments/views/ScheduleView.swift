@@ -18,8 +18,8 @@ struct ScheduleView: View {
 
                 Timeline(
                     appointments: model.appointments,
-                    startTime: Bitehaus.opening,
-                    endTime: Bitehaus.closing,
+                    start: Bitehaus.opening,
+                    end: Bitehaus.closing,
                     breakBlock: Bitehaus.break,
                     showsNowMarker: calendar.isDateInToday(model.selectedDate)
                 )

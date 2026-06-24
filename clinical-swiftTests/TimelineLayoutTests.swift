@@ -127,7 +127,7 @@ struct TimelineLayoutTests {
         TimelineLayoutEngine(
             metrics: metrics,
             availableWidth: availableWidth,
-            timelineStartTime: TimeOfDay(9, 0)
+            start: TimeOfDay(9, 0)
         )
     }
 
@@ -144,7 +144,7 @@ struct TimelineLayoutTests {
         Appointment(
             id: id,
             patientName: "Patient",
-            startTime: Date(timeIntervalSinceReferenceDate: 804_600_000)
+            start: Date(timeIntervalSinceReferenceDate: 804_600_000)
                 .setTime(startHour, startMinute),
             durationMinutes: duration,
             status: .scheduled

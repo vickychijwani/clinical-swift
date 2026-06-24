@@ -4,7 +4,7 @@ import Testing
 @testable import clinical_swift
 
 struct AppointmentBookingDraftTests {
-    @Test func startTimePreservesSelectedMinuteAndDropsSeconds() throws {
+    @Test func startPreservesSelectedMinuteAndDropsSeconds() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
         let proposedTime = try Date("2026-04-21T10:03:42Z", strategy: .iso8601)
@@ -14,9 +14,9 @@ struct AppointmentBookingDraftTests {
         } operation: {
             AppointmentBookingDraft(
                 selectedDate: selectedDate,
-                startTime: proposedTime
+                start: proposedTime
             )
-            .startTime
+            .start
         }
 
         let components = calendar.dateComponents([.hour, .minute, .second], from: normalizedTime)
@@ -25,7 +25,7 @@ struct AppointmentBookingDraftTests {
         #expect(components.second == 0)
     }
 
-    @Test func startTimeClampsToClinicOpening() throws {
+    @Test func startClampsToClinicOpening() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
         let proposedTime = try Date("2026-04-21T08:55:00Z", strategy: .iso8601)
@@ -35,9 +35,9 @@ struct AppointmentBookingDraftTests {
         } operation: {
             AppointmentBookingDraft(
                 selectedDate: selectedDate,
-                startTime: proposedTime
+                start: proposedTime
             )
-            .startTime
+            .start
         }
 
         let components = calendar.dateComponents([.hour, .minute], from: normalizedTime)
@@ -45,7 +45,7 @@ struct AppointmentBookingDraftTests {
         #expect(components.minute == 0)
     }
 
-    @Test func startTimeClampsSoDurationEndsByClosing() throws {
+    @Test func startClampsSoDurationEndsByClosing() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
         let proposedTime = try Date("2026-04-21T20:30:00Z", strategy: .iso8601)
@@ -55,10 +55,10 @@ struct AppointmentBookingDraftTests {
         } operation: {
             AppointmentBookingDraft(
                 selectedDate: selectedDate,
-                startTime: proposedTime,
+                start: proposedTime,
                 durationMinutes: 120
             )
-            .startTime
+            .start
         }
 
         let components = calendar.dateComponents([.hour, .minute], from: normalizedTime)

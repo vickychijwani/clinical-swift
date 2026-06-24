@@ -78,7 +78,7 @@ private struct AppointmentBookingForm: View {
 
                 AppointmentBookingDateSection(selectedDate: selectedDateBinding)
 
-                AppointmentBookingTimeSection(startTime: $model.draft.startTime)
+                AppointmentBookingTimeSection(start: $model.draft.start)
 
                 AppointmentBookingDurationSection(
                     durationMinutes: durationBinding
@@ -111,14 +111,14 @@ private struct AppointmentBookingForm: View {
                 .disabled(model.isSaving)
             }
         }
-        .onChange(of: model.draft.startTime) { _, newValue in
-            let normalized = model.draft.normalizedStartTime(
+        .onChange(of: model.draft.start) { _, newValue in
+            let normalized = model.draft.normalizedStart(
                 newValue,
                 selectedDate: model.draft.selectedDate,
                 durationMinutes: model.draft.durationMinutes
             )
-            if model.draft.startTime != normalized {
-                model.draft.startTime = normalized
+            if model.draft.start != normalized {
+                model.draft.start = normalized
             }
         }
         .alert(
@@ -163,7 +163,7 @@ private struct AppointmentBookingForm: View {
 
     private var timelinePreview: some View {
         let time =
-            $model.draft.startTime.wrappedValue.timeOfDay
+            $model.draft.start.wrappedValue.timeOfDay
             + $model.draft.durationMinutes.wrappedValue / 2
         return ClippedTimeline(at: time, height: 240) {
             Timeline(
@@ -173,13 +173,13 @@ private struct AppointmentBookingForm: View {
                         id: draftUuid,
                         patientName: ($model.draft.selectedPatient).wrappedValue?.patient
                             .displayName ?? "<Select a patient>",
-                        startTime: $model.draft.startTime.wrappedValue,
+                        start: $model.draft.start.wrappedValue,
                         durationMinutes: durationBinding.wrappedValue,
                         status: .draft
                     )
                 ],
-                startTime: Bitehaus.opening,
-                endTime: Bitehaus.closing,
+                start: Bitehaus.opening,
+                end: Bitehaus.closing,
                 breakBlock: Bitehaus.break,
                 showsNowMarker:
                     calendar
@@ -292,13 +292,13 @@ private struct AppointmentBookingDateSection: View {
 }
 
 private struct AppointmentBookingTimeSection: View {
-    @Binding var startTime: Date
+    @Binding var start: Date
 
     var body: some View {
         AppointmentBookingSection(title: "Start Time") {
             DatePicker(
                 "Start time",
-                selection: $startTime,
+                selection: $start,
                 displayedComponents: .hourAndMinute
             )
             .datePickerStyle(.compact)

@@ -87,16 +87,16 @@ struct PersistenceTests {
             }
             .execute(db)
 
-            for startTime in [past, later, next] {
+            for start in [past, later, next] {
                 try AppointmentRecord.insert {
                     AppointmentRecord(
                         id: UUID(),
                         patientID: patientID,
-                        startTime: startTime,
+                        start: start,
                         durationMinutes: 30,
                         status: Appointment.Status.scheduled.storageValue,
-                        createdAt: startTime,
-                        updatedAt: startTime
+                        createdAt: start,
+                        updatedAt: start
                     )
                 }
                 .execute(db)
@@ -135,7 +135,7 @@ struct PersistenceTests {
                 AppointmentRecord(
                     id: UUID(),
                     patientID: patientID,
-                    startTime: appointmentTime,
+                    start: appointmentTime,
                     durationMinutes: 45,
                     status: Appointment.Status.completed.storageValue,
                     createdAt: appointmentTime,
@@ -152,7 +152,7 @@ struct PersistenceTests {
 
         #expect(rows.count == 1)
         #expect(appointment.patientName == "Anjali Desai")
-        #expect(appointment.startTime == appointmentTime)
+        #expect(appointment.start == appointmentTime)
         #expect(appointment.durationMinutes == 45)
         #expect(appointment.status == .completed)
     }
@@ -179,7 +179,7 @@ struct PersistenceTests {
             let draft = AppointmentBookingDraft(
                 selectedPatient: patientItem,
                 selectedDate: selectedDate,
-                startTime: selectedDate.setTime(10, 30, using: calendar),
+                start: selectedDate.setTime(10, 30, using: calendar),
                 durationMinutes: 45
             )
             return try draft.makeRecord(id: appointmentID, now: now)
@@ -201,7 +201,7 @@ struct PersistenceTests {
         #expect(rows.count == 1)
         #expect(appointment.id == appointmentID)
         #expect(appointment.patientName == "Aarav Mehta")
-        #expect(appointment.startTime == selectedDate.setTime(10, 30, using: calendar))
+        #expect(appointment.start == selectedDate.setTime(10, 30, using: calendar))
         #expect(appointment.durationMinutes == 45)
         #expect(appointment.status == .scheduled)
     }
@@ -229,7 +229,7 @@ struct PersistenceTests {
                 AppointmentRecord(
                     id: UUID(),
                     patientID: patientID,
-                    startTime: now,
+                    start: now,
                     durationMinutes: 30,
                     status: Appointment.Status.scheduled.storageValue,
                     createdAt: now,

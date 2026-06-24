@@ -56,7 +56,7 @@ extension Range where Bound == TimeOfDay {
 struct TimelineLayoutEngine {
     let metrics: TimelineMetrics
     let availableWidth: CGFloat
-    let timelineStartTime: TimeOfDay
+    let start: TimeOfDay
 
     func layout(
         appointments: [Appointment]
@@ -115,7 +115,7 @@ struct TimelineLayoutEngine {
     }
 
     private func cardY(for appt: Appointment) -> CGFloat {
-        return (timelineStartTime...appt.startTime.timeOfDay).px
+        return (start...appt.start.timeOfDay).px
             + metrics.verticalCardMargin
     }
 
@@ -200,7 +200,7 @@ struct TimelineLayoutEngine {
     }
 
     private func startMinute(for appointment: Appointment) -> Int {
-        appointment.startTime.minutes(since: timelineStartTime)
+        appointment.start.minutes(since: start)
     }
 
     private func endMinute(for appointment: Appointment) -> Int {

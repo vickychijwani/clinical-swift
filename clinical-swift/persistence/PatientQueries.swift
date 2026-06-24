@@ -41,13 +41,13 @@ nonisolated func patientListRowsQuery(now: Date = .now) -> some Statement<Patien
           "patients"."phone",
           "patients"."dob",
           "patients"."gender",
-          min("appointments"."startTime") AS "nextAppointmentDate",
+          min("appointments"."start") AS "nextAppointmentDate",
           "patients"."createdAt",
           "patients"."updatedAt"
         FROM "patients"
         LEFT JOIN "appointments"
           ON "appointments"."patientID" = "patients"."id"
-          AND "appointments"."startTime" >= \(now)
+          AND "appointments"."start" >= \(now)
         GROUP BY "patients"."id"
         ORDER BY
           "patients"."name" IS NULL,
