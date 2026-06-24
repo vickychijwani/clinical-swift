@@ -33,8 +33,7 @@ import SQLiteData
     }
 
     var appointments: [Appointment] {
-        print(appointmentRows)
-        return appointmentRows.compactMap(\.appointment)
+        appointmentRows.compactMap(\.appointment)
     }
 
     func load() async throws {

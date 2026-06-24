@@ -6,7 +6,7 @@ struct AppointmentBookingView: View {
     @Environment(\.dismiss) private var dismiss
     @Dependency(\.defaultDatabase) private var database
 
-    @FetchAll(patientListRowsQuery(), animation: .default)
+    @FetchAll(patientListRowsQuery())
     private var patientRows: [PatientListRow]
 
     private let originalDraft: AppointmentBookingDraft
@@ -259,15 +259,10 @@ private struct AppointmentBookingPatientSection: View {
 
                     LazyVStack(spacing: 0) {
                         ForEach(patientItems) { item in
-                            Button {
+                            AppointmentBookingPatientRow(item: item) {
                                 selectedPatient = item
                                 searchText = ""
-                            } label: {
-                                PatientItemView(item: item)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(10)
                             }
-                            .buttonStyle(.plain)
 
                             if item.id != patientItems.last?.id {
                                 Divider()
@@ -281,6 +276,21 @@ private struct AppointmentBookingPatientSection: View {
                 }
             }
         }
+    }
+}
+
+private struct AppointmentBookingPatientRow: View {
+    let item: PatientDetails
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            PatientItemView(item: item)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
     }
 }
 
