@@ -121,6 +121,9 @@ private struct AppointmentBookingForm: View {
                 model.draft.start = normalized
             }
         }
+        .task {
+            await model.loadAndPrefillFirstAvailableSlot()
+        }
         .alert(
             "Unable to save appointment",
             isPresented: Binding(
@@ -146,7 +149,7 @@ private struct AppointmentBookingForm: View {
     private var durationBinding: Binding<Int> {
         Binding(
             get: { model.draft.durationMinutes },
-            set: { model.draft.selectDuration($0) }
+            set: { model.selectDuration($0) }
         )
     }
 

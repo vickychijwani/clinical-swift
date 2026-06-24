@@ -17,6 +17,7 @@ struct ClippedTimeline<Content: View>: View {
             timeline
         }
         .animation(.easeInOut(duration: 0.2), value: yOffset)
+        .allowsHitTesting(false)
     }
 
     private var yOffsetForCenter: CGFloat {

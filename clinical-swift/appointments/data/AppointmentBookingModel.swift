@@ -1,7 +1,7 @@
 import Foundation
 import SQLiteData
 
-@Observable class AppointmentBookingModel {
+@MainActor @Observable class AppointmentBookingModel {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @FetchAll(ScheduleAppointmentRow.none) var appointmentRows
@@ -9,7 +9,7 @@ import SQLiteData
     var selectedDate: Date {
         didSet {
             draft.selectDate(selectedDate)
-            Task { try? await load() }
+            prefillFirstAvailableSlotAfterLoadingAppointments()
         }
     }
 
@@ -19,9 +19,11 @@ import SQLiteData
     var saveErrorMessage: String?
     var onBooked: (Date) -> Void
 
-    init(selectedDate: Date,
-         selectedPatient: PatientDetails? = nil,
-         onBooked: @escaping (Date) -> Void) {
+    init(
+        selectedDate: Date,
+        selectedPatient: PatientDetails? = nil,
+        onBooked: @escaping (Date) -> Void
+    ) {
         self.selectedDate = selectedDate
         self.draft = AppointmentBookingDraft(
             selectedPatient: selectedPatient,
@@ -36,7 +38,24 @@ import SQLiteData
     }
 
     func load() async throws {
-        try await $appointmentRows.load(querySchedule(selectedDate: selectedDate))
+        try await loadAppointments(for: selectedDate)
+    }
+
+    func loadAndPrefillFirstAvailableSlot() async {
+        let searchDate = draft.selectedDate
+        let durationMinutes = draft.durationMinutes
+        let currentStart = draft.start
+        try? await loadAppointments(for: searchDate)
+        prefillFirstAvailableSlot(
+            searchDate: searchDate,
+            durationMinutes: durationMinutes,
+            replacingStart: currentStart
+        )
+    }
+
+    func selectDuration(_ durationMinutes: Int) {
+        draft.selectDuration(durationMinutes)
+        prefillFirstAvailableSlotAfterLoadingAppointments()
     }
 
     func saveAppointment() {
@@ -70,5 +89,113 @@ import SQLiteData
             }
             isSaving = false
         }
+    }
+
+    private func loadAppointments(for selectedDate: Date) async throws {
+        try await $appointmentRows.load(querySchedule(selectedDate: selectedDate))
+    }
+
+    private func prefillFirstAvailableSlotAfterLoadingAppointments() {
+        let searchDate = draft.selectedDate
+        let durationMinutes = draft.durationMinutes
+        let currentStart = draft.start
+        Task {
+            try? await loadAppointments(for: searchDate)
+            prefillFirstAvailableSlot(
+                searchDate: searchDate,
+                durationMinutes: durationMinutes,
+                replacingStart: currentStart
+            )
+        }
+    }
+
+    private func prefillFirstAvailableSlot(
+        searchDate: Date,
+        durationMinutes: Int,
+        replacingStart currentStart: Date?
+    ) {
+        guard draft.selectedDate == searchDate,
+              draft.durationMinutes == durationMinutes,
+              currentStart == nil || draft.start == currentStart,
+              let slot = firstAvailableSlot(
+                searchDate: searchDate,
+                neededDurationMinutes: durationMinutes
+              ) else {
+            return
+        }
+
+        draft.start = slot
+    }
+
+    private func firstAvailableSlot(
+        searchDate: Date,
+        neededDurationMinutes: Int
+    ) -> Date? {
+        var busyIntervals: [(start: Date, end: Date)] = appointments.map {
+            ($0.start, $0.end)
+        }
+        busyIntervals.sort { $0.start < $1.start }
+
+        let firstShiftSlot = firstAvailableSlot(
+            from: Bitehaus.preferredFirstShiftStart.on(date: searchDate, using: calendar),
+            to: Bitehaus.break.start.on(date: searchDate, using: calendar),
+            neededDurationMinutes: neededDurationMinutes,
+            busyIntervals: busyIntervals
+        )
+        if let firstShiftSlot {
+            return firstShiftSlot
+        }
+
+        return firstAvailableSlot(
+            from: Bitehaus.preferredSecondShiftStart.on(date: searchDate, using: calendar),
+            to: Bitehaus.closing.on(date: searchDate, using: calendar),
+            neededDurationMinutes: neededDurationMinutes,
+            busyIntervals: busyIntervals
+        )
+    }
+
+    private func firstAvailableSlot(
+        from earliestAllowedStart: Date,
+        to latestAllowedEnd: Date,
+        neededDurationMinutes: Int,
+        busyIntervals: [(start: Date, end: Date)]
+    ) -> Date? {
+        guard let latestAllowedStart = latestAllowedEnd.addMinutes(-neededDurationMinutes, using: calendar),
+              earliestAllowedStart <= latestAllowedStart else {
+            return nil
+        }
+
+        // Key Invariant: `candidate` is the earliest time that has not yet been ruled out
+        var candidate = earliestAllowedStart
+
+        for interval in busyIntervals {
+            if candidate > latestAllowedStart {
+                return nil
+            }
+
+            if interval.start >= latestAllowedEnd {
+                break
+            }
+
+            // Ignore busy intervals that end before the candidate time
+            if interval.end <= candidate {
+                continue
+            }
+
+            guard let candidateEnd = candidate.addMinutes(neededDurationMinutes, using: calendar) else {
+                return nil
+            }
+
+            // Gap found before the next busy interval
+            if candidateEnd <= interval.start {
+                return candidate
+            }
+
+            // Move candidate to the end of this busy interval
+            candidate = max(candidate, interval.end)
+        }
+
+        // Check after the final busy interval
+        return candidate <= latestAllowedStart ? candidate : nil
     }
 }

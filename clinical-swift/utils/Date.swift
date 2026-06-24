@@ -21,6 +21,10 @@ extension Date {
         calendar.date(byAdding: .weekOfYear, value: weeks, to: self)?.startOfDay(using: calendar) ?? startOfDay(using: calendar)
     }
 
+    nonisolated func addMinutes(_ minutes: Int, using calendar: Calendar = .autoupdatingCurrent) -> Date? {
+        calendar.date(byAdding: .minute, value: minutes, to: self)
+    }
+
     nonisolated func setTime(_ hour: Int, _ minute: Int, using calendar: Calendar = .autoupdatingCurrent) -> Date {
         calendar.date(
             bySettingHour: hour,
