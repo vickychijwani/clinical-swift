@@ -67,13 +67,16 @@ private struct AppointmentBookingForm: View {
     let guardedDismiss: FormSheetDismissAction
     let saveAppointment: () -> Void
 
+    @FocusState private var patientSearchIsFocused: Bool
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 AppointmentBookingPatientSection(
                     selectedPatient: $model.draft.selectedPatient,
                     searchText: $model.searchText,
-                    patientItems: filteredPatientItems
+                    patientItems: filteredPatientItems,
+                    searchIsFocused: $patientSearchIsFocused
                 )
 
                 AppointmentBookingDateSection(selectedDate: selectedDateBinding)
@@ -122,6 +125,7 @@ private struct AppointmentBookingForm: View {
             }
         }
         .task {
+            patientSearchIsFocused = model.draft.selectedPatient == nil
             await model.loadAndPrefillFirstAvailableSlot()
         }
         .alert(
@@ -211,6 +215,7 @@ private struct AppointmentBookingPatientSection: View {
     @Binding var selectedPatient: PatientDetails?
     @Binding var searchText: String
     let patientItems: [PatientDetails]
+    let searchIsFocused: FocusState<Bool>.Binding
 
     var body: some View {
         AppointmentBookingSection(title: "Patient") {
@@ -222,6 +227,7 @@ private struct AppointmentBookingPatientSection: View {
 
                     Button {
                         self.selectedPatient = nil
+                        searchIsFocused.wrappedValue = true
                     } label: {
                         Label("Clear patient", systemImage: "xmark")
                             .labelStyle(.iconOnly)
@@ -244,6 +250,7 @@ private struct AppointmentBookingPatientSection: View {
                         )
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
+                        .focused(searchIsFocused)
 
                         if !searchText.isEmpty {
                             Button("Clear", systemImage: "xmark.circle.fill") {
