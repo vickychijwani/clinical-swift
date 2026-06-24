@@ -163,8 +163,7 @@ private struct AppointmentBookingForm: View {
         }
 
         return patientItems.filter { item in
-            item.patient.name?.localizedStandardContains(query) == true
-                || item.patient.phone?.localizedStandardContains(query) == true
+            PatientNameSearch.matches(item.patient.name, searchText: query)
         }
     }
 
@@ -245,7 +244,7 @@ private struct AppointmentBookingPatientSection: View {
                             .foregroundStyle(.secondary)
 
                         TextField(
-                            "Search patient by name or phone",
+                            "Search patient by name",
                             text: $searchText
                         )
                         .textInputAutocapitalization(.words)

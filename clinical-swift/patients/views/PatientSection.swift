@@ -11,19 +11,10 @@ struct PatientSection: Identifiable, Hashable {
         searchText: String = ""
     ) -> [PatientSection] {
         let locale = Locale.autoupdatingCurrent
-        let queryWords = words(in: searchText)
         let filteredItems = items.filter { item in
-            guard !queryWords.isEmpty else {
-                return true
-            }
-
-            guard let name = item.patient.name else {
-                return false
-            }
-
-            return nameMatchesSearch(
-                name,
-                queryWords: queryWords,
+            PatientNameSearch.matches(
+                item.patient.name,
+                searchText: searchText,
                 locale: locale
             )
         }
@@ -44,31 +35,6 @@ struct PatientSection: Identifiable, Hashable {
                     items: sortedItems(items)
                 )
             }
-    }
-
-    private static func nameMatchesSearch(
-        _ name: String,
-        queryWords: [String],
-        locale: Locale
-    ) -> Bool {
-        let nameWords = words(in: name)
-
-        return queryWords.allSatisfy { queryWord in
-            nameWords.contains { nameWord in
-                nameWord.range(
-                    of: queryWord,
-                    options: [.anchored, .caseInsensitive, .diacriticInsensitive],
-                    locale: locale
-                ) != nil
-            }
-        }
-    }
-
-    private static func words(in text: String) -> [String] {
-        text.split { character in
-            !character.isLetter && !character.isNumber
-        }
-        .map(String.init)
     }
 
     private static func sectionID(for patient: Patient, locale: Locale) -> String {
