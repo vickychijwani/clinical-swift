@@ -53,8 +53,12 @@ import SQLiteData
     }
 
     func selectDuration(_ durationMinutes: Int) {
+        let selectedStart = draft.start
         draft.selectDuration(durationMinutes)
-        prefillFirstAvailableSlotAfterLoadingAppointments()
+        prefillFirstAvailableSlotAfterLoadingAppointments(
+            replacingStart: draft.start,
+            preservingStartIfAvailable: selectedStart
+        )
     }
 
     func saveAppointment() {
@@ -108,16 +112,50 @@ import SQLiteData
         }
     }
 
+    private func prefillFirstAvailableSlotAfterLoadingAppointments(
+        replacingStart expectedStart: Date,
+        preservingStartIfAvailable startToPreserve: Date
+    ) {
+        let searchDate = draft.selectedDate
+        let durationMinutes = draft.durationMinutes
+        Task {
+            try? await loadAppointments(for: searchDate)
+            prefillFirstAvailableSlot(
+                searchDate: searchDate,
+                durationMinutes: durationMinutes,
+                replacingStart: expectedStart,
+                preservingStartIfAvailable: startToPreserve
+            )
+        }
+    }
+
     private func prefillFirstAvailableSlot(
         searchDate: Date,
         durationMinutes: Int,
-        replacingStart currentStart: Date?
+        replacingStart currentStart: Date?,
+        preservingStartIfAvailable startToPreserve: Date? = nil
     ) {
         guard draft.selectedDate == searchDate,
             draft.durationMinutes == durationMinutes,
-            currentStart == nil || draft.start == currentStart,
-            let slot = firstAvailableSlot(
-                searchDate: searchDate,
+            currentStart == nil || draft.start == currentStart
+        else {
+            return
+        }
+
+        let availability = AppointmentAvailability(
+            searchDate: searchDate,
+            appointments: appointments,
+            calendar: calendar
+        )
+
+        if let startToPreserve,
+            availability.canFit(start: startToPreserve, durationMinutes: durationMinutes)
+        {
+            return
+        }
+
+        guard
+            let slot = availability.firstAvailableSlot(
                 neededDurationMinutes: durationMinutes
             )
         else {
@@ -125,81 +163,5 @@ import SQLiteData
         }
 
         draft.start = slot
-    }
-
-    private func firstAvailableSlot(
-        searchDate: Date,
-        neededDurationMinutes: Int
-    ) -> Date? {
-        var busyIntervals: [(start: Date, end: Date)] = appointments.map {
-            ($0.start, $0.end)
-        }
-        busyIntervals.sort { $0.start < $1.start }
-
-        let firstShiftSlot = firstAvailableSlot(
-            from: Bitehaus.preferredFirstShiftStart.on(date: searchDate, using: calendar),
-            to: Bitehaus.break.start.on(date: searchDate, using: calendar),
-            neededDurationMinutes: neededDurationMinutes,
-            busyIntervals: busyIntervals
-        )
-        if let firstShiftSlot {
-            return firstShiftSlot
-        }
-
-        return firstAvailableSlot(
-            from: Bitehaus.preferredSecondShiftStart.on(date: searchDate, using: calendar),
-            to: Bitehaus.closing.on(date: searchDate, using: calendar),
-            neededDurationMinutes: neededDurationMinutes,
-            busyIntervals: busyIntervals
-        )
-    }
-
-    private func firstAvailableSlot(
-        from earliestAllowedStart: Date,
-        to latestAllowedEnd: Date,
-        neededDurationMinutes: Int,
-        busyIntervals: [(start: Date, end: Date)]
-    ) -> Date? {
-        guard
-            let latestAllowedStart = latestAllowedEnd.addMinutes(
-                -neededDurationMinutes, using: calendar),
-            earliestAllowedStart <= latestAllowedStart
-        else {
-            return nil
-        }
-
-        // Key Invariant: `candidate` is the earliest time that has not yet been ruled out
-        var candidate = earliestAllowedStart
-
-        for interval in busyIntervals {
-            if candidate > latestAllowedStart {
-                return nil
-            }
-
-            if interval.start >= latestAllowedEnd {
-                break
-            }
-
-            // Ignore busy intervals that end before the candidate time
-            if interval.end <= candidate {
-                continue
-            }
-
-            guard let candidateEnd = candidate.addMinutes(neededDurationMinutes, using: calendar)
-            else {
-                return nil
-            }
-
-            // Gap found before the next busy interval
-            if candidateEnd <= interval.start {
-                return candidate
-            }
-
-            // Move candidate to the end of this busy interval
-            candidate = max(candidate, interval.end)
-        }
-
-        // Check after the final busy interval
-        return candidate <= latestAllowedStart ? candidate : nil
     }
 }
