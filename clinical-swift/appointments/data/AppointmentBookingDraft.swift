@@ -81,12 +81,13 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         let opening = Bitehaus.opening.on(date: selectedDate, using: calendar)
         let closing = Bitehaus.closing.on(date: selectedDate, using: calendar)
         guard start >= opening,
-              let end = calendar.date(
+            let end = calendar.date(
                 byAdding: .minute,
                 value: durationMinutes,
                 to: start
-              ),
-              end <= closing else {
+            ),
+            end <= closing
+        else {
             throw AppointmentBookingValidationError.invalidTime
         }
     }
@@ -119,11 +120,12 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         let proposedMinutes = TimeOfDay(date: proposedTime, calendar: calendar).totalMinutes
         let openingMinutes = Bitehaus.opening.totalMinutes
         let maxStartMinutes = Bitehaus.closing.totalMinutes - durationMinutes
-        let clampedMinutes = if maxStartMinutes >= openingMinutes {
-            min(max(proposedMinutes, openingMinutes), maxStartMinutes)
-        } else {
-            openingMinutes
-        }
+        let clampedMinutes =
+            if maxStartMinutes >= openingMinutes {
+                min(max(proposedMinutes, openingMinutes), maxStartMinutes)
+            } else {
+                openingMinutes
+            }
 
         return TimeOfDay(
             clampedMinutes / 60,

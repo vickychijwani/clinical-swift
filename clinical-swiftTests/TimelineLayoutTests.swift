@@ -20,7 +20,7 @@ struct TimelineLayoutTests {
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
         let layouts = engine.layout(appointments: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
-            appointment(id: secondID, startHour: 9, startMinute: 30, duration: 30)
+            appointment(id: secondID, startHour: 9, startMinute: 30, duration: 30),
         ])
 
         let first = try layout(for: firstID, in: layouts)
@@ -37,7 +37,7 @@ struct TimelineLayoutTests {
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
         let layouts = engine.layout(appointments: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
-            appointment(id: secondID, startHour: 9, startMinute: 0, duration: 30)
+            appointment(id: secondID, startHour: 9, startMinute: 0, duration: 30),
         ])
 
         let first = try layout(for: firstID, in: layouts)
@@ -45,7 +45,9 @@ struct TimelineLayoutTests {
         let columnWidth = (contentWidth - metrics.overlapColumnSpacing) / 2
 
         #expect(first.rect.minX == metrics.contentLeadingInset)
-        #expect(second.rect.minX == metrics.contentLeadingInset + columnWidth + metrics.overlapColumnSpacing)
+        #expect(
+            second.rect.minX == metrics.contentLeadingInset + columnWidth
+                + metrics.overlapColumnSpacing)
         #expect(first.rect.width == columnWidth)
         #expect(second.rect.width == columnWidth)
     }
@@ -57,7 +59,7 @@ struct TimelineLayoutTests {
         let layouts = engine.layout(appointments: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
             appointment(id: secondID, startHour: 9, startMinute: 0, duration: 30),
-            appointment(id: thirdID, startHour: 9, startMinute: 0, duration: 30)
+            appointment(id: thirdID, startHour: 9, startMinute: 0, duration: 30),
         ])
 
         let first = try layout(for: firstID, in: layouts)
@@ -66,8 +68,12 @@ struct TimelineLayoutTests {
         let columnWidth = (contentWidth - metrics.overlapColumnSpacing * 2) / 3
 
         #expect(first.rect.minX == metrics.contentLeadingInset)
-        #expect(second.rect.minX == metrics.contentLeadingInset + columnWidth + metrics.overlapColumnSpacing)
-        #expect(third.rect.minX == metrics.contentLeadingInset + (columnWidth + metrics.overlapColumnSpacing) * 2)
+        #expect(
+            second.rect.minX == metrics.contentLeadingInset + columnWidth
+                + metrics.overlapColumnSpacing)
+        #expect(
+            third.rect.minX == metrics.contentLeadingInset
+                + (columnWidth + metrics.overlapColumnSpacing) * 2)
         #expect(first.rect.width == columnWidth)
         #expect(second.rect.width == columnWidth)
         #expect(third.rect.width == columnWidth)
@@ -80,7 +86,7 @@ struct TimelineLayoutTests {
         let layouts = engine.layout(appointments: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
             appointment(id: secondID, startHour: 9, startMinute: 15, duration: 30),
-            appointment(id: thirdID, startHour: 9, startMinute: 30, duration: 30)
+            appointment(id: thirdID, startHour: 9, startMinute: 30, duration: 30),
         ])
 
         let first = try layout(for: firstID, in: layouts)
@@ -89,7 +95,9 @@ struct TimelineLayoutTests {
         let columnWidth = (contentWidth - metrics.overlapColumnSpacing) / 2
 
         #expect(first.rect.minX == metrics.contentLeadingInset)
-        #expect(second.rect.minX == metrics.contentLeadingInset + columnWidth + metrics.overlapColumnSpacing)
+        #expect(
+            second.rect.minX == metrics.contentLeadingInset + columnWidth
+                + metrics.overlapColumnSpacing)
         #expect(third.rect.minX == first.rect.minX)
         #expect(first.rect.width == columnWidth)
         #expect(second.rect.width == columnWidth)
@@ -101,7 +109,7 @@ struct TimelineLayoutTests {
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
         let layouts = engine.layout(appointments: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
-            appointment(id: secondID, startHour: 9, startMinute: 30, duration: 30)
+            appointment(id: secondID, startHour: 9, startMinute: 30, duration: 30),
         ])
 
         let first = try layout(for: firstID, in: layouts)

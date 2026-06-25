@@ -33,9 +33,10 @@ nonisolated struct TimeOfDay: Comparable, Equatable {
         let minutesPerDay = 24 * 60
 
         let newTotalMinutes = (lhs.totalMinutes + rhs) % minutesPerDay
-        let normalizedMinutes = newTotalMinutes >= 0
-        ? newTotalMinutes
-        : newTotalMinutes + minutesPerDay
+        let normalizedMinutes =
+            newTotalMinutes >= 0
+            ? newTotalMinutes
+            : newTotalMinutes + minutesPerDay
 
         return TimeOfDay(normalizedMinutes / 60, normalizedMinutes % 60)
     }

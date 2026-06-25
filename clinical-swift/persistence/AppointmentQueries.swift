@@ -28,7 +28,8 @@ nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleApp
     let start = selectedDate.startOfDay(using: calendar)
     let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
 
-    return AppointmentRecord
+    return
+        AppointmentRecord
         .where { $0.start >= start }
         .where { $0.start < end }
         .order { $0.start.asc() }

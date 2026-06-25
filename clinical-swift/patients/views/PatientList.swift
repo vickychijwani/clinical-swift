@@ -12,10 +12,12 @@ struct PatientList: View {
                 Section {
                     ForEach(section.items) { item in
                         PatientItemView(item: item)
-                        .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
-                        .onTapGesture {
-                            viewingPatient = item
-                        }
+                            .listRowInsets(
+                                EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+                            )
+                            .onTapGesture {
+                                viewingPatient = item
+                            }
                     }
                 } header: {
                     Text(section.id)

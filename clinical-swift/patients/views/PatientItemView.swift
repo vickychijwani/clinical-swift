@@ -21,11 +21,12 @@ struct PatientItemView: View {
                     .lineLimit(1)
 
                 if let subtitle = PatientItemViewMetadata.metadata(for: item)
-                    .subtitle {
-                        Text(subtitle)
-                            .styleCaption()
-                            .lineLimit(2)
-                    }
+                    .subtitle
+                {
+                    Text(subtitle)
+                        .styleCaption()
+                        .lineLimit(2)
+                }
             }
         }
     }
@@ -33,5 +34,5 @@ struct PatientItemView: View {
 
 #Preview(traits: .sizeThatFitsLayout) {
     PatientItemView(item: samplePatientDetails[0])
-    .padding(8)
+        .padding(8)
 }

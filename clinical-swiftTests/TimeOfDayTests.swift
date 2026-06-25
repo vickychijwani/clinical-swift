@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import clinical_swift
 
 struct TimeOfDayTests {
@@ -24,16 +25,17 @@ struct TimeOfDayTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
 
-        let date = try #require(calendar.date(
-            from: DateComponents(
-                year: 2026,
-                month: 6,
-                day: 8,
-                hour: 14,
-                minute: 45,
-                second: 30
-            )
-        ))
+        let date = try #require(
+            calendar.date(
+                from: DateComponents(
+                    year: 2026,
+                    month: 6,
+                    day: 8,
+                    hour: 14,
+                    minute: 45,
+                    second: 30
+                )
+            ))
 
         #expect(TimeOfDay(date: date, calendar: calendar) == TimeOfDay(14, 45))
     }

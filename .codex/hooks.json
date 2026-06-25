@@ -1,0 +1,9 @@
+{
+  "hooks": [
+    {
+      "event": "Stop",
+      "command": "git diff --name-only -- '*.swift' | xargs -r xcrun swift-format format --in-place"
+    }
+  ]
+}
+

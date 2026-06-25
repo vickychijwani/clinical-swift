@@ -114,12 +114,13 @@ import SQLiteData
         replacingStart currentStart: Date?
     ) {
         guard draft.selectedDate == searchDate,
-              draft.durationMinutes == durationMinutes,
-              currentStart == nil || draft.start == currentStart,
-              let slot = firstAvailableSlot(
+            draft.durationMinutes == durationMinutes,
+            currentStart == nil || draft.start == currentStart,
+            let slot = firstAvailableSlot(
                 searchDate: searchDate,
                 neededDurationMinutes: durationMinutes
-              ) else {
+            )
+        else {
             return
         }
 
@@ -159,8 +160,11 @@ import SQLiteData
         neededDurationMinutes: Int,
         busyIntervals: [(start: Date, end: Date)]
     ) -> Date? {
-        guard let latestAllowedStart = latestAllowedEnd.addMinutes(-neededDurationMinutes, using: calendar),
-              earliestAllowedStart <= latestAllowedStart else {
+        guard
+            let latestAllowedStart = latestAllowedEnd.addMinutes(
+                -neededDurationMinutes, using: calendar),
+            earliestAllowedStart <= latestAllowedStart
+        else {
             return nil
         }
 
@@ -181,7 +185,8 @@ import SQLiteData
                 continue
             }
 
-            guard let candidateEnd = candidate.addMinutes(neededDurationMinutes, using: calendar) else {
+            guard let candidateEnd = candidate.addMinutes(neededDurationMinutes, using: calendar)
+            else {
                 return nil
             }
 

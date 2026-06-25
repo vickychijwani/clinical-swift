@@ -1,5 +1,5 @@
-import SwiftUI
 import ContactsUI
+import SwiftUI
 
 struct ContactPhonePicker: UIViewControllerRepresentable {
     var onPick: (String) -> Void
@@ -13,12 +13,13 @@ struct ContactPhonePicker: UIViewControllerRepresentable {
         picker.predicateForEnablingContact = NSPredicate(format: "phoneNumbers.@count > 0")
         picker.predicateForSelectionOfContact = NSPredicate(value: false)
         picker.predicateForSelectionOfProperty =
-        NSPredicate(format: "key == %@", CNContactPhoneNumbersKey)
+            NSPredicate(format: "key == %@", CNContactPhoneNumbersKey)
 
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: CNContactPickerViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: CNContactPickerViewController, context: Context)
+    {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onPick: onPick)

@@ -1,7 +1,8 @@
-import Foundation
 import Dependencies
+import Foundation
 import SQLiteData
 import Testing
+
 @testable import clinical_swift
 
 struct PersistenceTests {
@@ -54,11 +55,11 @@ struct PersistenceTests {
             try Int.fetchOne(
                 db,
                 sql: """
-                SELECT count(*)
-                FROM "sqlite_master"
-                WHERE "type" = 'table'
-                  AND "name" IN ('patients', 'appointments')
-                """
+                    SELECT count(*)
+                    FROM "sqlite_master"
+                    WHERE "type" = 'table'
+                      AND "name" IN ('patients', 'appointments')
+                    """
             ) ?? 0
         }
 

@@ -1,6 +1,7 @@
 import Dependencies
 import Foundation
 import Testing
+
 @testable import clinical_swift
 
 struct AppointmentBookingDraftTests {

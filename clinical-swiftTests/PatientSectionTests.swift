@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import clinical_swift
 
 struct PatientSectionTests {
@@ -91,10 +92,11 @@ struct PatientSectionTests {
             searchText: "me aa"
         )
 
-        #expect(sections.flatMap(\.items).map(\.patient.name) == [
-            "Aarav Mehta",
-            "Mehta Aarav",
-        ])
+        #expect(
+            sections.flatMap(\.items).map(\.patient.name) == [
+                "Aarav Mehta",
+                "Mehta Aarav",
+            ])
     }
 
     private func patient(name: String) -> PatientDetails {
@@ -120,6 +122,7 @@ struct PatientSectionTests {
     ) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
-        return calendar.date(year, month, day, hour: hour) ?? Date(timeIntervalSinceReferenceDate: 0)
+        return calendar.date(year, month, day, hour: hour)
+            ?? Date(timeIntervalSinceReferenceDate: 0)
     }
 }

@@ -27,12 +27,14 @@ struct ScheduleView: View {
         }
         .background(Color("AppBackground"))
         .scrollBounceBehavior(.basedOnSize)
-        .navigationTitle(model.selectedDate.formatted(
-            .dateTime
-                .weekday()
-                .month()
-                .day()
-                .year()))
+        .navigationTitle(
+            model.selectedDate.formatted(
+                .dateTime
+                    .weekday()
+                    .month()
+                    .day()
+                    .year())
+        )
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
