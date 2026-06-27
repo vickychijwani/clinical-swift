@@ -23,11 +23,6 @@ struct TimelineMetrics {
     /// Horizontal spacing between appointments that overlap in time
     let overlapColumnSpacing: CGFloat
 
-    /// Number of vertical pixels representing 1 minute
-    var pixelsPerMinute: CGFloat {
-        hourHeight / 60
-    }
-
     var contentLeadingInset: CGFloat {
         timeColumnWidth + horizontalCardMargin + 4
     }
@@ -37,20 +32,37 @@ struct TimelineMetrics {
             - timeColumnWidth
             - horizontalCardMargin * 2
     }
-}
 
-extension Minutes {
-    var px: CGFloat {
-        CGFloat(self) * Timeline.metrics.pixelsPerMinute
+    /// Number of vertical pixels representing 1 minute
+    fileprivate var pixelsPerMinute: CGFloat {
+        hourHeight / 60
     }
 }
 
-extension ClosedRange where Bound == TimeOfDay {
-    var px: CGFloat { self.minutes.px }
-}
+struct TimelineScale {
+    let metrics: TimelineMetrics
+    let start: TimeOfDay
+    let end: TimeOfDay
+    let breakBlock: BreakBlock
+    let breakHeight: CGFloat
 
-extension Range where Bound == TimeOfDay {
-    var px: CGFloat { self.minutes.px }
+    /// Content coordinate excluding Timeline's outer vertical padding.
+    func yOffset(for proposedTime: TimeOfDay) -> CGFloat {
+        let time = min(max(proposedTime, start), end)
+        let firstSegmentHeight = breakBlock.start.minutes(since: start).px
+
+        if time < breakBlock.start {
+            return end.minutes(since: start).px
+        }
+
+        if time < breakBlock.end {
+            return firstSegmentHeight
+        }
+
+        return firstSegmentHeight
+            + breakHeight
+            + time.minutes(since: breakBlock.end).px
+    }
 }
 
 struct TimelineLayoutEngine {
@@ -219,4 +231,18 @@ struct AppointmentLayoutInfo: Identifiable {
 private struct AppointmentColumnAssignment {
     let appointment: Appointment
     let column: Int
+}
+
+extension Minutes {
+    var px: CGFloat {
+        CGFloat(self) * Timeline.metrics.pixelsPerMinute
+    }
+}
+
+extension ClosedRange where Bound == TimeOfDay {
+    var px: CGFloat { self.minutes.px }
+}
+
+extension Range where Bound == TimeOfDay {
+    var px: CGFloat { self.minutes.px }
 }

@@ -1,6 +1,12 @@
+import Dependencies
 import Foundation
 
 extension Date {
+    nonisolated func isSameDayAs(_ date: Date) -> Bool {
+        @Dependency(\.calendar) var calendar
+        return calendar.isDate(self, inSameDayAs: date)
+    }
+
     nonisolated func startOfDay(using calendar: Calendar = .autoupdatingCurrent) -> Date {
         calendar.startOfDay(for: self)
     }

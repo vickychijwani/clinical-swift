@@ -15,7 +15,7 @@ nonisolated struct AppointmentAvailability {
         self.calendar = calendar
     }
 
-    func canFit(start: Date, durationMinutes: Int) -> Bool {
+    func canPrefill(start: Date, durationMinutes: Int) -> Bool {
         guard let end = start.addMinutes(durationMinutes, using: calendar),
             fitsWithinWorkingSegment(start: start, end: end)
         else {

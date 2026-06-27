@@ -23,7 +23,7 @@ struct ClippedTimeline<Content: View>: View {
     private var yOffsetForCenter: CGFloat {
         return
             // Align `center` to top of clipped timeline
-            yOffsetFor(center)
+            Timeline.scheduleScale.yOffset(for: center)
             // Move the `center` down to center of clipped timeline
             - clippedHeight / 2
     }
@@ -31,28 +31,12 @@ struct ClippedTimeline<Content: View>: View {
     private var yOffsetForClosingTime: CGFloat {
         return
             // Align `closing` to top of clipped timeline
-            yOffsetFor(Bitehaus.closing)
+            Timeline.scheduleScale.yOffset(for: Bitehaus.closing)
             // Move Timeline up by 2x padding to align *bottom edge* of Timeline
             // to top of clipped timeline
             + Timeline.metrics.verticalPadding * 2
             // Move it down by clipped height to align to bottom edge of clipped timeline
             - clippedHeight
-    }
-
-    private func yOffsetFor(_ time: TimeOfDay) -> CGFloat {
-        switch time {
-        case .midnight..<Bitehaus.opening:
-            return 0
-        case Bitehaus.opening..<Bitehaus.break.start:
-            return (Bitehaus.opening...time).px
-        case Bitehaus.break.start..<Bitehaus.break.end:
-            return Bitehaus.firstHalf.px
-        case Bitehaus.break.end...TimeOfDay(23, 59):
-            return Bitehaus.firstHalf.px + TimelineBreakView.height
-                + (Bitehaus.break.end...time).px
-        default:
-            return 0
-        }
     }
 }
 

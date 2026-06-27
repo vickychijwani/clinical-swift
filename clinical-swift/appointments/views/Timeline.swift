@@ -9,6 +9,7 @@ struct Timeline: View {
     /// Properties for rendering the "Now" marker line.
     let showsNowMarker: Bool
     var previewNowMarker: Date? = nil
+    var appointmentInteractionsEnabled = true
 
     static let metrics = TimelineMetrics(
         hourHeight: 60,
@@ -17,6 +18,14 @@ struct Timeline: View {
         horizontalCardMargin: 12,
         verticalCardMargin: 0,
         overlapColumnSpacing: 0
+    )
+
+    static let scheduleScale = TimelineScale(
+        metrics: metrics,
+        start: Bitehaus.opening,
+        end: Bitehaus.closing,
+        breakBlock: Bitehaus.break,
+        breakHeight: TimelineBreakView.height
     )
 
     var body: some View {
@@ -39,7 +48,8 @@ struct Timeline: View {
                 end: breakBlock.start,
                 appointments: appointmentsBeforeBreak,
                 metrics: Timeline.metrics,
-                now: now
+                now: now,
+                appointmentInteractionsEnabled: appointmentInteractionsEnabled
             )
 
             TimelineBreakView(
@@ -52,7 +62,8 @@ struct Timeline: View {
                 end: end,
                 appointments: appointmentsAfterBreak,
                 metrics: Timeline.metrics,
-                now: now
+                now: now,
+                appointmentInteractionsEnabled: appointmentInteractionsEnabled
             )
         }
         .padding(.vertical, Timeline.metrics.verticalPadding)

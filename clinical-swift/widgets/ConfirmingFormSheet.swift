@@ -20,6 +20,7 @@ struct ConfirmingFormSheet<Content: View>: View {
     private let message: LocalizedStringKey
     private let primaryDetent: PresentationDetent
     private let dismissAttemptDetent: PresentationDetent
+    private let allowsInteractiveDismiss: Bool
     private let content: (FormSheetDismissAction) -> Content
 
     @State private var selectedDetent: PresentationDetent
@@ -31,6 +32,7 @@ struct ConfirmingFormSheet<Content: View>: View {
         message: LocalizedStringKey,
         primaryDetent: PresentationDetent = .medium,
         dismissAttemptDetent: PresentationDetent = .height(120),
+        allowsInteractiveDismiss: Bool = true,
         @ViewBuilder content: @escaping (FormSheetDismissAction) -> Content
     ) {
         self.hasUnsavedChanges = hasUnsavedChanges
@@ -38,6 +40,7 @@ struct ConfirmingFormSheet<Content: View>: View {
         self.message = message
         self.primaryDetent = primaryDetent
         self.dismissAttemptDetent = dismissAttemptDetent
+        self.allowsInteractiveDismiss = allowsInteractiveDismiss
         self.content = content
         self._selectedDetent = State(initialValue: primaryDetent)
     }
@@ -45,11 +48,15 @@ struct ConfirmingFormSheet<Content: View>: View {
     var body: some View {
         content(FormSheetDismissAction(attemptDismiss))
             .presentationDetents(presentationDetents, selection: $selectedDetent)
-            .interactiveDismissDisabled(hasUnsavedChanges)
+            .interactiveDismissDisabled(!allowsInteractiveDismiss || hasUnsavedChanges)
             .onChange(of: selectedDetent) { oldValue, newValue in
+                guard allowsInteractiveDismiss else { return }
                 guard newValue == dismissAttemptDetent else { return }
                 selectedDetent = oldValue
                 attemptDismiss()
+            }
+            .onChange(of: primaryDetent) {
+                selectedDetent = primaryDetent
             }
             .alert(title, isPresented: $isConfirmingDiscard) {
                 Button("Keep Editing", role: .cancel) {}
@@ -62,10 +69,14 @@ struct ConfirmingFormSheet<Content: View>: View {
     }
 
     private var presentationDetents: Set<PresentationDetent> {
+        guard allowsInteractiveDismiss else {
+            return [primaryDetent]
+        }
+
         if hasUnsavedChanges {
-            [primaryDetent, dismissAttemptDetent]
+            return [primaryDetent, dismissAttemptDetent]
         } else {
-            [primaryDetent]
+            return [primaryDetent]
         }
     }
 

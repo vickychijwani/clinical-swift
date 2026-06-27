@@ -6,6 +6,7 @@ struct TimelineSegment: View {
     let appointments: [Appointment]
     let metrics: TimelineMetrics
     let now: Date?
+    let appointmentInteractionsEnabled: Bool
 
     var body: some View {
         GeometryReader { geo in
@@ -24,6 +25,7 @@ struct TimelineSegment: View {
                 /// Appointments
                 ForEach(layouts) { layout in
                     AppointmentCard(appt: layout.appointment)
+                        .allowsHitTesting(appointmentInteractionsEnabled)
                         .frame(
                             width: layout.rect.width,
                             height: layout.rect.height,

@@ -1,10 +1,8 @@
 import Foundation
 import SQLiteData
 
-@Observable class ScheduleModel {
-    var selectedDate: Date {
-        didSet { Task { try? await load() } }
-    }
+@MainActor @Observable class ScheduleModel {
+    var selectedDate: Date
 
     @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @FetchAll(ScheduleAppointmentRow.none) var appointmentRows

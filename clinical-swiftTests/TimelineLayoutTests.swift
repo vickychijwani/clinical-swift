@@ -131,6 +131,18 @@ struct TimelineLayoutTests {
         #expect(layout.rect.height == 43)
     }
 
+    @Test func timelineScaleMapsTimeBeforeBreakWithinFirstSegment() {
+        #expect(scale.yOffset(for: TimeOfDay(10, 30)) == 90)
+    }
+
+    @Test func timelineScaleCollapsesTimeDuringBreakToFirstSegmentEnd() {
+        #expect(scale.yOffset(for: TimeOfDay(14, 30)) == 240)
+    }
+
+    @Test func timelineScaleIncludesBreakHeightAfterBreak() {
+        #expect(scale.yOffset(for: TimeOfDay(17, 30)) == 362)
+    }
+
     private var engine: TimelineLayoutEngine {
         TimelineLayoutEngine(
             metrics: metrics,
@@ -141,6 +153,20 @@ struct TimelineLayoutTests {
 
     private var contentWidth: CGFloat {
         metrics.contentWidth(availableWidth: availableWidth)
+    }
+
+    private var scale: TimelineScale {
+        TimelineScale(
+            metrics: metrics,
+            start: TimeOfDay(9, 0),
+            end: TimeOfDay(21, 0),
+            breakBlock: BreakBlock(
+                start: TimeOfDay(13, 0),
+                end: TimeOfDay(16, 0),
+                title: "Break"
+            ),
+            breakHeight: 32
+        )
     }
 
     private func appointment(

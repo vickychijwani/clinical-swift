@@ -12,6 +12,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfre
 
 - Working with SQL / SQLiteData, CloudKit sync, and record/domain boundaries: `docs/persistence.md` (CloudKit / sync stuff should be moved into a separate file when we implement that feature)
 - Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`
+- Appointment booking validation and scheduling principles: `docs/appointment-booking.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
 - Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
 

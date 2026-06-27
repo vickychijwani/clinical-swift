@@ -100,6 +100,27 @@ struct AppointmentBookingDraftTests {
         }
     }
 
+    @Test func validationAllowsAppointmentAcrossBreak() throws {
+        let calendar = gregorianCalendar
+        let patient = patientItem()
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let selectedDate = try Date(
+                "2026-04-21T00:00:00Z",
+                strategy: .iso8601
+            )
+            let draft = AppointmentBookingDraft(
+                selectedPatient: patient,
+                selectedDate: selectedDate,
+                start: selectedDate.setTime(12, 30, using: calendar),
+                durationMinutes: 60
+            )
+
+            try draft.validate()
+        }
+    }
+
     private var gregorianCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

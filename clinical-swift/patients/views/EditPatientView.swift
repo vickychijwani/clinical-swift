@@ -8,7 +8,6 @@ struct EditPatientView: View {
     private let originalDraft: PatientDraft
 
     @State private var draft: PatientDraft
-    @State private var isSaving = false
     @State private var saveErrorMessage: String?
 
     init(patient: Patient? = nil) {
@@ -25,7 +24,6 @@ struct EditPatientView: View {
         ) { guardedDismiss in
             EditPatientForm(
                 draft: $draft,
-                isSaving: isSaving,
                 saveErrorMessage: $saveErrorMessage,
                 guardedDismiss: guardedDismiss,
                 savePatient: savePatient
@@ -38,7 +36,7 @@ struct EditPatientView: View {
         draft.normalized != originalDraft
     }
 
-    private func savePatient() {
+    private func savePatient() async {
         let patient = draft.makePatient()
 
         do {
@@ -51,18 +49,14 @@ struct EditPatientView: View {
             return
         }
 
-        isSaving = true
-        Task {
-            do {
-                try await database.write { db in
-                    try PatientRecord.insert { PatientRecord(patient) }
-                        .execute(db)
-                }
-                dismiss()
-            } catch {
-                saveErrorMessage = "The patient could not be saved."
+        do {
+            try await database.write { db in
+                try PatientRecord.insert { PatientRecord(patient) }
+                    .execute(db)
             }
-            isSaving = false
+            dismiss()
+        } catch {
+            saveErrorMessage = "The patient could not be saved."
         }
     }
 }
@@ -70,22 +64,19 @@ struct EditPatientView: View {
 private struct EditPatientForm: View {
     @Binding var draft: PatientDraft
     @Binding var saveErrorMessage: String?
-    let isSaving: Bool
     let guardedDismiss: FormSheetDismissAction
-    let savePatient: () -> Void
+    let savePatient: @MainActor () async -> Void
 
     @State private var isPickingDOB = false
     @State private var draftDOB = Date()
 
     init(
         draft: Binding<PatientDraft>,
-        isSaving: Bool,
         saveErrorMessage: Binding<String?>,
         guardedDismiss: FormSheetDismissAction,
-        savePatient: @escaping () -> Void
+        savePatient: @escaping @MainActor () async -> Void
     ) {
         self._draft = draft
-        self.isSaving = isSaving
         self._saveErrorMessage = saveErrorMessage
         self.guardedDismiss = guardedDismiss
         self.savePatient = savePatient
@@ -121,13 +112,10 @@ private struct EditPatientForm: View {
             }
 
             ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    savePatient()
-                } label: {
-                    Label("Done", systemImage: "checkmark")
-                        .labelStyle(.iconOnly)
+                AsyncButton("Done", systemImage: "checkmark") {
+                    await savePatient()
                 }
-                .disabled(isSaving)
+                .labelStyle(.iconOnly)
             }
         }
         .sheet(isPresented: $isPickingDOB) {

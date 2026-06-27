@@ -14,7 +14,7 @@ struct AppointmentAvailabilityTests {
         )
 
         #expect(
-            availability.canFit(
+            availability.canPrefill(
                 start: selectedDate.setTime(9, 30, using: calendar),
                 durationMinutes: 30
             )
@@ -25,7 +25,7 @@ struct AppointmentAvailabilityTests {
         )
     }
 
-    @Test func manualStartDoesNotFitWhenDurationOverlapsExistingAppointment() throws {
+    @Test func overlappingStartIsNotUsedForPrefill() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
         let existingAppointment = Appointment(
@@ -41,14 +41,14 @@ struct AppointmentAvailabilityTests {
         )
 
         #expect(
-            !availability.canFit(
+            !availability.canPrefill(
                 start: selectedDate.setTime(11, 0, using: calendar),
                 durationMinutes: 45
             )
         )
     }
 
-    @Test func manualStartDoesNotFitAcrossBreak() throws {
+    @Test func breakCrossingStartIsNotUsedForPrefill() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
         let availability = AppointmentAvailability(
@@ -58,7 +58,7 @@ struct AppointmentAvailabilityTests {
         )
 
         #expect(
-            !availability.canFit(
+            !availability.canPrefill(
                 start: selectedDate.setTime(12, 30, using: calendar),
                 durationMinutes: 60
             )

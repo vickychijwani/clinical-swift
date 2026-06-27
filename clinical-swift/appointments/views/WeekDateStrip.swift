@@ -53,13 +53,13 @@ struct WeekDateStrip: View {
         .scrollIndicators(.hidden)
         .frame(height: displayMode.stripHeight)
         .onAppear(perform: normalizeSelection)
-        .onChange(of: visiblePage) { _, newPage in
-            guard let newPage else {
+        .onChange(of: visiblePage) {
+            guard let visiblePage else {
                 return
             }
 
             // Recenter only after scrolling stops; doing it mid-deceleration lets one fast swipe consume another week.
-            pendingPage = newPage == .current ? nil : newPage
+            pendingPage = visiblePage == .current ? nil : visiblePage
 
             if !isScrollActive {
                 commitPendingPage()
@@ -72,8 +72,8 @@ struct WeekDateStrip: View {
                 commitPendingPage()
             }
         }
-        .onChange(of: selectedDate) { _, newDate in
-            let normalizedDate = newDate.startOfDay(using: calendar)
+        .onChange(of: selectedDate) {
+            let normalizedDate = selectedDate.startOfDay(using: calendar)
 
             if selectedDate != normalizedDate {
                 selectedDate = normalizedDate
@@ -119,7 +119,7 @@ struct WeekDateStrip: View {
 
     private func isDateVisible(_ date: Date) -> Bool {
         visibleWeekStart.weekDates(using: calendar).contains { visibleDate in
-            calendar.isDate(visibleDate, inSameDayAs: date)
+            visibleDate.isSameDayAs(date)
         }
     }
 }
@@ -174,11 +174,8 @@ private struct WeekDatePage: View {
             ForEach(weekStart.weekDates(using: calendar), id: \.self) { date in
                 DateStripCell(
                     date: date,
-                    isSelected: calendar.isDate(
-                        date,
-                        inSameDayAs: selectedDate
-                    ),
-                    isToday: calendar.isDate(date, inSameDayAs: today),
+                    isSelected: date.isSameDayAs(selectedDate),
+                    isToday: date.isSameDayAs(today),
                     displayMode: displayMode,
                     selectDate: selectDate
                 )

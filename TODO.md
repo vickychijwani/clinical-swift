@@ -16,7 +16,7 @@
 - [x] New appointment
   - [x] Show preview in schedule for maximum context
   - [x] Date selection synchronize with schedule
-  - [ ] Pre-fill next available slot 
+  - [x] Pre-fill next available slot
   - [ ] Quick-add new patient from new appointment page
   - [ ] Share recent call to open new appointment page for patient associated with that phone number
 - [ ] View appointment

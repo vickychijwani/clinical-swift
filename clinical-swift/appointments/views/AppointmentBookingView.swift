@@ -2,31 +2,35 @@ import Dependencies
 import SQLiteData
 import SwiftUI
 
+enum AppointmentBookingSheetMetrics {
+    static let fallbackCompactDetentHeight: CGFloat = 320
+    static let minimumCompactDetentHeight: CGFloat = 220
+    static let nativeNavigationHeaderHeight: CGFloat = 64
+}
+
 struct AppointmentBookingView: View {
     @Environment(\.dismiss) private var dismiss
-    @Dependency(\.defaultDatabase) private var database
 
     @FetchAll(patientListRowsQuery())
     private var patientRows: [PatientListRow]
 
-    private let originalDraft: AppointmentBookingDraft
-    private let onBooked: (Date) -> Void
+    @Bindable var model: AppointmentBookingModel
+    @Binding var compactSheetHeight: CGFloat
 
-    @State private var model: AppointmentBookingModel
+    @State private var bookingStep: AppointmentBookingStep
 
-    init(
-        selectedPatient: PatientDetails? = nil,
-        selectedDate: Date,
-        onBooked: @escaping (Date) -> Void
-    ) {
-        let model = AppointmentBookingModel(
-            selectedDate: selectedDate,
-            selectedPatient: selectedPatient,
-            onBooked: onBooked
-        )
-        self.onBooked = onBooked
+    /// Preserve the original draft as @State so unsaved changes can always be detected.
+    /// This is not a simple property because it's initialized from the model; if the View is
+    /// recreated it would end up overwriting the property with an edited draft.
+    @State private var originalDraft: AppointmentBookingDraft
+
+    init(model: AppointmentBookingModel, compactSheetHeight: Binding<CGFloat>) {
         self.model = model
-        self.originalDraft = model.draft.normalized
+        self._compactSheetHeight = compactSheetHeight
+        self._originalDraft = State(initialValue: model.draft.normalized)
+        self._bookingStep = State(
+            initialValue: model.draft.selectedPatient == nil ? .selectPatient : .details
+        )
     }
 
     var body: some View {
@@ -34,119 +38,168 @@ struct AppointmentBookingView: View {
             hasUnsavedChanges: hasUnsavedChanges,
             title: "Discard unsaved appointment?",
             message: "Your appointment details have not been saved.",
-            primaryDetent: .large
+            primaryDetent: bookingStep.presentationDetent(compactHeight: compactSheetHeight),
+            allowsInteractiveDismiss: false
         ) { guardedDismiss in
             AppointmentBookingForm(
-                model: $model,
+                model: model,
+                step: $bookingStep,
+                compactSheetHeight: $compactSheetHeight,
                 patientItems: patientRows.map(\.item),
                 guardedDismiss: guardedDismiss,
                 saveAppointment: saveAppointment
             )
         }
+        .presentationBackground(Color("AppBackground"))
+        .presentationBackgroundInteraction(.enabled)
     }
 
     private var hasUnsavedChanges: Bool {
         model.draft.normalized != originalDraft
     }
 
-    private func saveAppointment() {
-        model.saveAppointment()
-        if model.saveErrorMessage == nil {
+    private func saveAppointment() async {
+        if await model.saveAppointment() {
             dismiss()
         }
     }
 }
 
+private enum AppointmentBookingStep: Equatable {
+    case selectPatient
+    case details
+
+    var title: String {
+        switch self {
+        case .selectPatient:
+            "Select Patient"
+        case .details:
+            "New Appointment"
+        }
+    }
+
+    func presentationDetent(compactHeight: CGFloat) -> PresentationDetent {
+        switch self {
+        case .selectPatient:
+            .large
+        case .details:
+            .height(compactHeight)
+        }
+    }
+}
+
 private struct AppointmentBookingForm: View {
-    @Dependency(\.calendar) private var calendar
-    private let draftUuid = UUID()
-
-    @Binding var model: AppointmentBookingModel
-
-    let patientItems: [PatientDetails]
-    let guardedDismiss: FormSheetDismissAction
-    let saveAppointment: () -> Void
+    @Bindable var model: AppointmentBookingModel
+    @Binding var step: AppointmentBookingStep
+    @Binding var compactSheetHeight: CGFloat
 
     @FocusState private var patientSearchIsFocused: Bool
 
+    let patientItems: [PatientDetails]
+    let guardedDismiss: FormSheetDismissAction
+    let saveAppointment: @MainActor () async -> Void
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                AppointmentBookingPatientSection(
-                    selectedPatient: $model.draft.selectedPatient,
+        content
+            .frame(maxWidth: .infinity, alignment: .top)
+            .background(Color("AppBackground"))
+            .navigationTitle(step.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color("AppBackground"), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if step == .details {
+                        Button("Select Patient", systemImage: "chevron.left") {
+                            selectPatientStep()
+                        }
+                    } else {
+                        Button {
+                            guardedDismiss()
+                        } label: {
+                            Label("Cancel", systemImage: "xmark")
+                                .labelStyle(.iconOnly)
+                        }
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    if step == .details {
+                        AsyncButton("Done", systemImage: "checkmark") {
+                            await saveAppointment()
+                        }
+                        .labelStyle(.iconOnly)
+                    }
+                }
+
+                ToolbarItem(placement: .subtitle) {
+                    if step == .details,
+                        let patient = model.draft.selectedPatient
+                    {
+                        Text("For \(patient.patient.displayName)")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height.rounded(.up)
+            } action: { newHeight in
+                updateCompactSheetHeight(newHeight)
+            }
+            .task {
+                patientSearchIsFocused = step == .selectPatient
+            }
+            .onChange(of: step) {
+                patientSearchIsFocused = step == .selectPatient
+            }
+            .alert(
+                "Unable to save appointment",
+                isPresented: Binding(
+                    get: { model.saveErrorMessage != nil },
+                    set: { if !$0 { model.saveErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    model.saveErrorMessage = nil
+                }
+            } message: {
+                Text(model.saveErrorMessage ?? "")
+            }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch step {
+        case .selectPatient:
+            ScrollView {
+                AppointmentBookingPatientSelectionStep(
                     searchText: $model.searchText,
                     patientItems: filteredPatientItems,
-                    searchIsFocused: $patientSearchIsFocused
+                    searchIsFocused: $patientSearchIsFocused,
+                    selectPatient: selectPatient
                 )
+                .padding()
+            }
 
-                AppointmentBookingDateSection(selectedDate: selectedDateBinding)
-
-                AppointmentBookingTimeSection(start: $model.draft.start)
+        case .details:
+            VStack(alignment: .leading, spacing: 18) {
+                AppointmentBookingTimeSection(start: startBinding)
 
                 AppointmentBookingDurationSection(
                     durationMinutes: durationBinding
                 )
-
-                timelinePreview
             }
-            .padding()
-        }
-        .background(Color("AppBackground"))
-        .navigationTitle("New Appointment")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    guardedDismiss()
-                } label: {
-                    Label("Cancel", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                }
-            }
-
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    saveAppointment()
-                } label: {
-                    Label("Done", systemImage: "checkmark")
-                        .labelStyle(.iconOnly)
-                }
-                .disabled(model.isSaving)
-            }
-        }
-        .onChange(of: model.draft.start) { _, newValue in
-            let normalized = model.draft.normalizedStart(
-                newValue,
-                selectedDate: model.draft.selectedDate,
-                durationMinutes: model.draft.durationMinutes
-            )
-            if model.draft.start != normalized {
-                model.draft.start = normalized
-            }
-        }
-        .task {
-            patientSearchIsFocused = model.draft.selectedPatient == nil
-            await model.loadAndPrefillFirstAvailableSlot()
-        }
-        .alert(
-            "Unable to save appointment",
-            isPresented: Binding(
-                get: { model.saveErrorMessage != nil },
-                set: { if !$0 { model.saveErrorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                model.saveErrorMessage = nil
-            }
-        } message: {
-            Text(model.saveErrorMessage ?? "")
+            .padding(.horizontal)
+            .padding(.top, 2)
+            .padding(.bottom)
         }
     }
 
-    private var selectedDateBinding: Binding<Date> {
+    private var startBinding: Binding<Date> {
         Binding(
-            get: { model.selectedDate },
-            set: { model.selectedDate = $0 }
+            get: { model.draft.start },
+            set: { model.selectStart($0) }
         )
     }
 
@@ -167,32 +220,32 @@ private struct AppointmentBookingForm: View {
         }
     }
 
-    private var timelinePreview: some View {
-        let time =
-            $model.draft.start.wrappedValue.timeOfDay
-            + $model.draft.durationMinutes.wrappedValue / 2
-        return ClippedTimeline(at: time, height: 240) {
-            Timeline(
-                appointments: model.appointments + [
-                    Appointment(
-                        // Stable id for animations
-                        id: draftUuid,
-                        patientName: ($model.draft.selectedPatient).wrappedValue?.patient
-                            .displayName ?? "<Select a patient>",
-                        start: $model.draft.start.wrappedValue,
-                        durationMinutes: durationBinding.wrappedValue,
-                        status: .draft
-                    )
-                ],
-                start: Bitehaus.opening,
-                end: Bitehaus.closing,
-                breakBlock: Bitehaus.break,
-                showsNowMarker:
-                    calendar
-                    .isDateInToday(selectedDateBinding.wrappedValue)
-            )
-            .background(Color("AppBackground").opacity(0.3).blendMode(.screen))
+    private func selectPatient(_ patient: PatientDetails) {
+        model.draft.selectedPatient = patient
+        model.searchText = ""
+        step = .details
+    }
+
+    private func selectPatientStep() {
+        step = .selectPatient
+        patientSearchIsFocused = true
+    }
+
+    private func updateCompactSheetHeight(_ measuredHeight: CGFloat) {
+        guard step == .details else {
+            return
         }
+
+        let height = max(
+            measuredHeight + AppointmentBookingSheetMetrics.nativeNavigationHeaderHeight,
+            AppointmentBookingSheetMetrics.minimumCompactDetentHeight
+        )
+
+        guard abs(height - compactSheetHeight) > 0.5 else {
+            return
+        }
+
+        compactSheetHeight = height
     }
 }
 
@@ -210,76 +263,54 @@ private struct AppointmentBookingSection<Content: View>: View {
     }
 }
 
-private struct AppointmentBookingPatientSection: View {
-    @Binding var selectedPatient: PatientDetails?
+private struct AppointmentBookingPatientSelectionStep: View {
     @Binding var searchText: String
     let patientItems: [PatientDetails]
     let searchIsFocused: FocusState<Bool>.Binding
+    let selectPatient: (PatientDetails) -> Void
 
     var body: some View {
         AppointmentBookingSection(title: "Patient") {
-            if let selectedPatient {
-                HStack(spacing: 12) {
-                    PatientItemView(item: selectedPatient)
+            VStack(spacing: 12) {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
 
-                    Spacer()
+                    TextField(
+                        "Search patient by name",
+                        text: $searchText
+                    )
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .focused(searchIsFocused)
 
-                    Button {
-                        self.selectedPatient = nil
-                        searchIsFocused.wrappedValue = true
-                    } label: {
-                        Label("Clear patient", systemImage: "xmark")
-                            .labelStyle(.iconOnly)
+                    if !searchText.isEmpty {
+                        Button("Clear", systemImage: "xmark.circle.fill") {
+                            searchText = ""
+                        }
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.bordered)
-                    .clipShape(.circle)
                 }
                 .padding(10)
                 .background(.background)
                 .clipShape(.rect(cornerRadius: 18))
-            } else {
-                VStack(spacing: 12) {
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.secondary)
 
-                        TextField(
-                            "Search patient by name",
-                            text: $searchText
-                        )
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .focused(searchIsFocused)
+                LazyVStack(spacing: 0) {
+                    ForEach(patientItems) { item in
+                        AppointmentBookingPatientRow(item: item) {
+                            selectPatient(item)
+                        }
 
-                        if !searchText.isEmpty {
-                            Button("Clear", systemImage: "xmark.circle.fill") {
-                                searchText = ""
-                            }
-                            .labelStyle(.iconOnly)
-                            .foregroundStyle(.secondary)
+                        if item.id != patientItems.last?.id {
+                            Divider()
+                                .padding(.leading, 56)
+                                .padding(.trailing, 24)
                         }
                     }
-                    .padding(10)
-                    .background(.background)
-                    .clipShape(.rect(cornerRadius: 18))
-
-                    LazyVStack(spacing: 0) {
-                        ForEach(patientItems) { item in
-                            AppointmentBookingPatientRow(item: item) {
-                                selectedPatient = item
-                                searchText = ""
-                            }
-
-                            if item.id != patientItems.last?.id {
-                                Divider()
-                                    .padding(.leading, 56)
-                                    .padding(.trailing, 24)
-                            }
-                        }
-                    }
-                    .background(.background)
-                    .clipShape(.rect(cornerRadius: 18))
                 }
+                .background(.background)
+                .clipShape(.rect(cornerRadius: 18))
             }
         }
     }
@@ -297,16 +328,6 @@ private struct AppointmentBookingPatientRow: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct AppointmentBookingDateSection: View {
-    @Binding var selectedDate: Date
-
-    var body: some View {
-        AppointmentBookingSection(title: "Date") {
-            WeekDateStrip(selectedDate: $selectedDate, displayMode: .sheet)
-        }
     }
 }
 
@@ -368,16 +389,24 @@ private struct AppointmentBookingDurationSection: View {
 }
 
 #Preview {
+    @Previewable @State var compactSheetHeight =
+        AppointmentBookingSheetMetrics.fallbackCompactDetentHeight
+
     let _ = try! prepareDependencies {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
+    let model = AppointmentBookingModel(
+        selectedDate: .now,
+        selectedPatient: PatientDetails(
+            patient: samplePatients.first(where: { $0.name != nil })!,
+            nextAppointmentDate: nil
+        )
+    ) { _ in }
+
     NavigationStack {
         AppointmentBookingView(
-            selectedPatient: PatientDetails(
-                patient: samplePatients.first(where: { $0.name != nil })!,
-                nextAppointmentDate: nil
-            ),
-            selectedDate: .now
-        ) { _ in }
+            model: model,
+            compactSheetHeight: $compactSheetHeight
+        )
     }
 }

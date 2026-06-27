@@ -30,7 +30,7 @@
   - start + duration does not exceed `Bitehaus.closingTime`
 - Insert an `AppointmentRecord` with selected patient ID, composed start date/time, selected duration, `.scheduled`, and current `createdAt` / `updatedAt`.
 - After save, dismiss, set `ScheduleView.selectedDate` to the booked date, and reload schedule appointments for that day.
-- Ignore break overlap and existing appointment conflicts for v1.
+- Break overlap and existing appointment conflicts are explicitly allowed.
 
 ## Test Plan
 - Unit-test booking draft time normalization: opening/closing clamps, and duration end-time validation.

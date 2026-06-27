@@ -1,22 +1,26 @@
 import Foundation
 import SQLiteData
 
-@MainActor @Observable class AppointmentBookingModel {
+@MainActor @Observable class AppointmentBookingModel: Identifiable {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.calendar) var calendar
-    @ObservationIgnored @FetchAll(ScheduleAppointmentRow.none) var appointmentRows
+
+    /// This id lets the parent SwiftUI View (e.g., a sheet) identify whether the same or different
+    /// item is being presented if the parent's item is re-assigned
+    let id = UUID()
+    private let draftAppointmentID = UUID()
 
     var selectedDate: Date {
         didSet {
             draft.selectDate(selectedDate)
-            prefillFirstAvailableSlotAfterLoadingAppointments()
         }
     }
 
     var draft: AppointmentBookingDraft
+    private(set) var appointments: [Appointment] = []
     var searchText = ""
-    var isSaving = false
     var saveErrorMessage: String?
+    var draftPreviewScrollRequest = 0
     var onBooked: (Date) -> Void
 
     init(
@@ -30,38 +34,62 @@ import SQLiteData
             selectedDate: selectedDate
         )
         self.onBooked = onBooked
+        self.selectedDate = draft.selectedDate
     }
 
-    var appointments: [Appointment] {
-        appointmentRows.compactMap(\.appointment)
-    }
-
-    func load() async throws {
-        try await loadAppointments(for: selectedDate)
-    }
-
-    func loadAndPrefillFirstAvailableSlot() async {
-        let searchDate = draft.selectedDate
-        let durationMinutes = draft.durationMinutes
-        let currentStart = draft.start
-        try? await loadAppointments(for: searchDate)
-        prefillFirstAvailableSlot(
-            searchDate: searchDate,
-            durationMinutes: durationMinutes,
-            replacingStart: currentStart
+    var draftAppointment: Appointment {
+        Appointment(
+            id: draftAppointmentID,
+            patientName: draft.selectedPatient?.patient.displayName ?? "<Select a patient>",
+            start: draft.start,
+            durationMinutes: draft.durationMinutes,
+            status: .draft
         )
+    }
+
+    func selectDate(_ selectedDate: Date) {
+        let normalizedDate = selectedDate.startOfDay(using: calendar)
+        // If the selected date hasn't changed, do nothing.
+        guard !normalizedDate.isSameDayAs(self.selectedDate) else {
+            return
+        }
+
+        appointments = []
+        self.selectedDate = normalizedDate
+    }
+
+    func selectStart(_ start: Date) {
+        let previousStart = draft.start
+        draft.selectStart(start)
+        requestDraftPreviewScrollIfNeeded(previousStart: previousStart)
     }
 
     func selectDuration(_ durationMinutes: Int) {
-        let selectedStart = draft.start
+        let previousStart = draft.start
         draft.selectDuration(durationMinutes)
-        prefillFirstAvailableSlotAfterLoadingAppointments(
-            replacingStart: draft.start,
-            preservingStartIfAvailable: selectedStart
-        )
+        prefillFirstAvailableSlot(preservingStartIfAvailable: draft.start)
+        requestDraftPreviewScrollIfNeeded(previousStart: previousStart)
     }
 
-    func saveAppointment() {
+    func updateAppointments(_ appointments: [Appointment], for selectedDate: Date) {
+        // Ignore a late async load after the user has already selected another day.
+        guard selectedDate.isSameDayAs(self.selectedDate) else {
+            return
+        }
+
+        let previousStart = draft.start
+        self.appointments = appointments
+        prefillFirstAvailableSlot(preservingStartIfAvailable: draft.start)
+        requestDraftPreviewScrollIfNeeded(previousStart: previousStart)
+    }
+
+    func prefillFirstAvailableSlot() {
+        let previousStart = draft.start
+        prefillFirstAvailableSlot(preservingStartIfAvailable: nil)
+        requestDraftPreviewScrollIfNeeded(previousStart: previousStart)
+    }
+
+    func saveAppointment() async -> Bool {
         let record: AppointmentRecord
 
         do {
@@ -70,98 +98,65 @@ import SQLiteData
             saveErrorMessage = nil
         } catch AppointmentBookingValidationError.missingPatient {
             saveErrorMessage = "Select a patient."
-            return
+            return false
         } catch AppointmentBookingValidationError.invalidTime {
             saveErrorMessage = "Choose a time within clinic hours."
-            return
+            return false
         } catch {
             saveErrorMessage = "Check the appointment details and try again."
-            return
+            return false
         }
 
-        isSaving = true
-        Task {
-            do {
-                try await database.write { db in
-                    try AppointmentRecord.insert { record }
-                        .execute(db)
-                }
-                onBooked(draft.selectedDate)
-            } catch {
-                saveErrorMessage = "The appointment could not be saved."
+        do {
+            try await database.write { db in
+                try AppointmentRecord.insert { record }
+                    .execute(db)
             }
-            isSaving = false
+            onBooked(record.start)
+            return true
+        } catch {
+            saveErrorMessage = "The appointment could not be saved."
+            return false
         }
     }
 
-    private func loadAppointments(for selectedDate: Date) async throws {
-        try await $appointmentRows.load(querySchedule(selectedDate: selectedDate))
-    }
-
-    private func prefillFirstAvailableSlotAfterLoadingAppointments() {
-        let searchDate = draft.selectedDate
-        let durationMinutes = draft.durationMinutes
-        let currentStart = draft.start
-        Task {
-            try? await loadAppointments(for: searchDate)
-            prefillFirstAvailableSlot(
-                searchDate: searchDate,
-                durationMinutes: durationMinutes,
-                replacingStart: currentStart
-            )
-        }
-    }
-
-    private func prefillFirstAvailableSlotAfterLoadingAppointments(
-        replacingStart expectedStart: Date,
-        preservingStartIfAvailable startToPreserve: Date
-    ) {
-        let searchDate = draft.selectedDate
-        let durationMinutes = draft.durationMinutes
-        Task {
-            try? await loadAppointments(for: searchDate)
-            prefillFirstAvailableSlot(
-                searchDate: searchDate,
-                durationMinutes: durationMinutes,
-                replacingStart: expectedStart,
-                preservingStartIfAvailable: startToPreserve
-            )
-        }
-    }
-
-    private func prefillFirstAvailableSlot(
-        searchDate: Date,
-        durationMinutes: Int,
-        replacingStart currentStart: Date?,
-        preservingStartIfAvailable startToPreserve: Date? = nil
-    ) {
-        guard draft.selectedDate == searchDate,
-            draft.durationMinutes == durationMinutes,
-            currentStart == nil || draft.start == currentStart
-        else {
-            return
-        }
-
-        let availability = AppointmentAvailability(
-            searchDate: searchDate,
+    private var availability: AppointmentAvailability {
+        AppointmentAvailability(
+            searchDate: draft.selectedDate,
             appointments: appointments,
             calendar: calendar
         )
+    }
 
+    private func prefillFirstAvailableSlot(
+        preservingStartIfAvailable startToPreserve: Date? = nil
+    ) {
         if let startToPreserve,
-            availability.canFit(start: startToPreserve, durationMinutes: durationMinutes)
+            availability.canPrefill(
+                start: startToPreserve,
+                durationMinutes: draft.durationMinutes
+            )
         {
             return
         }
 
         guard
             let slot = availability.firstAvailableSlot(
-                neededDurationMinutes: durationMinutes
+                neededDurationMinutes: draft.durationMinutes
             )
         else {
             return
         }
 
         draft.start = slot
+    }
+
+    /// This exists for reliably scrolling to preview the draft, if its slot has changed.
+    /// A counter is useful here because it represents repeated events. The value doesn't have
+    /// any domain meaning.
+    private func requestDraftPreviewScrollIfNeeded(previousStart: Date) {
+        if draft.start != previousStart {
+            draftPreviewScrollRequest += 1
+        }
     }
 }
