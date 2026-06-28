@@ -4,7 +4,12 @@ import SQLiteData
 @Selection
 nonisolated struct ScheduleAppointmentRow: Identifiable, Sendable {
     let id: UUID
+    let patientID: UUID
     let patientName: String?
+    let patientPhone: String?
+    let patientDOB: Date?
+    let patientGender: String?
+    let patientCreatedAt: Date
     let start: Date
     let durationMinutes: Int
     let status: String
@@ -19,6 +24,24 @@ nonisolated struct ScheduleAppointmentRow: Identifiable, Sendable {
             start: start,
             durationMinutes: durationMinutes,
             status: status
+        )
+    }
+
+    var details: AppointmentDetails? {
+        guard let appointment else {
+            return nil
+        }
+
+        return AppointmentDetails(
+            appointment: appointment,
+            patient: Patient(
+                id: patientID,
+                name: patientName,
+                phone: patientPhone,
+                dob: patientDOB,
+                gender: patientGender.flatMap(Gender.init(storageValue:)),
+                createdDate: patientCreatedAt
+            )
         )
     }
 }
@@ -37,7 +60,12 @@ nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleApp
         .select { appt, patient in
             ScheduleAppointmentRow.Columns(
                 id: appt.id,
+                patientID: patient.id,
                 patientName: patient.name,
+                patientPhone: patient.phone,
+                patientDOB: patient.dob,
+                patientGender: patient.gender,
+                patientCreatedAt: patient.createdAt,
                 start: appt.start,
                 durationMinutes: appt.durationMinutes,
                 status: appt.status

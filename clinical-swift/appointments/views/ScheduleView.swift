@@ -8,6 +8,7 @@ struct ScheduleView: View {
     /// This value controls booking sheet presentation, rendering of draft appointment in the
     /// timeline, whether appointment cards are interactable, and whether '+' button appears.
     @State private var bookingModel: AppointmentBookingModel?
+    @State private var selectedAppointment: AppointmentDetails?
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
@@ -30,7 +31,8 @@ struct ScheduleView: View {
                         end: Bitehaus.closing,
                         breakBlock: Bitehaus.break,
                         showsNowMarker: calendar.isDateInToday(scheduleModel.selectedDate),
-                        appointmentInteractionsEnabled: bookingModel == nil
+                        appointmentInteractionsEnabled: bookingModel == nil,
+                        onSelectAppointment: selectAppointment
                     )
 
                     Color.clear
@@ -65,6 +67,11 @@ struct ScheduleView: View {
                     model: bookingModel,
                     compactSheetHeight: $compactBookingSheetHeight
                 )
+            }
+        }
+        .sheet(item: $selectedAppointment) { details in
+            NavigationStack {
+                AppointmentDetailsSheet(details: details)
             }
         }
         // Update displayed appointments and re-calculate suggested slot for booking, if any
@@ -149,6 +156,10 @@ struct ScheduleView: View {
         }
 
         return scheduleModel.appointments + [bookingModel.draftAppointment]
+    }
+
+    private func selectAppointment(_ appointment: Appointment) {
+        selectedAppointment = scheduleModel.details(for: appointment)
     }
 
     private var bottomScrollClearance: CGFloat {

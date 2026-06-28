@@ -15,6 +15,10 @@ import SQLiteData
         appointmentRows.compactMap(\.appointment)
     }
 
+    func details(for appointment: Appointment) -> AppointmentDetails? {
+        appointmentRows.first(where: { $0.id == appointment.id })?.details
+    }
+
     func load() async throws {
         try await $appointmentRows.load(querySchedule(selectedDate: selectedDate))
     }

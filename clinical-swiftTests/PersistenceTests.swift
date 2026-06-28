@@ -117,14 +117,15 @@ struct PersistenceTests {
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
         let selectedDate = Date(timeIntervalSinceReferenceDate: 10_000).startOfDay()
         let appointmentTime = selectedDate.setTime(10, 30)
+        let dob = Date(timeIntervalSinceReferenceDate: -300_000_000)
 
         try database.write { db in
             try PatientRecord.insert {
                 PatientRecord(
                     id: patientID,
                     name: "Anjali Desai",
-                    phone: nil,
-                    dob: nil,
+                    phone: "+91 98209 46617",
+                    dob: dob,
                     gender: "female",
                     createdAt: selectedDate,
                     updatedAt: selectedDate
@@ -150,12 +151,17 @@ struct PersistenceTests {
             try querySchedule(selectedDate: selectedDate).fetchAll(db)
         }
         let appointment = try #require(rows.first?.appointment)
+        let details = try #require(rows.first?.details)
 
         #expect(rows.count == 1)
         #expect(appointment.patientName == "Anjali Desai")
         #expect(appointment.start == appointmentTime)
         #expect(appointment.durationMinutes == 45)
         #expect(appointment.status == .completed)
+        #expect(details.patient.id == patientID)
+        #expect(details.patient.phone == "+91 98209 46617")
+        #expect(details.patient.dob == dob)
+        #expect(details.patient.gender == .female)
     }
 
     @Test func bookingDraftRecordIsReturnedByScheduleQuery() throws {

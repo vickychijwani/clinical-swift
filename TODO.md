@@ -21,7 +21,7 @@
   - [ ] Share recent call to open new appointment page for patient associated with that phone number
 - [ ] View appointment
 - [ ] Edit appointment
-- [ ] Delete appointment
+- [ ] Cancel appointment - confirm cancellation and then hide it from view
 - [ ] Send SMS + WhatsApp Biz message + auto-copy to clipboard
   - [ ] Allow editing of message
   - [ ] Allow changing contact/number when sending msg (sometimes number changes temporarily or permanently - shouldn’t require Patient record update)
@@ -34,6 +34,10 @@
 - [ ] Block off time ranges (e.g., travelling, holiday, etc) OR sync to Calendar
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
+
+Refactors:
+- [ ] Remove TimelineSegment; use ScheduleScale for universal placement
+- [ ] Extract reusable "auto-height" sheet component from AppointmentBooking sheet
 
 Bugs:
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)

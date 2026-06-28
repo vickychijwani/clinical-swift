@@ -1,11 +1,7 @@
-import Dependencies
 import SwiftUI
 
 struct PatientItemView: View {
     let item: PatientDetails
-    @ObservationIgnored @Dependency(\.date.now) var referenceDate: Date
-    @ObservationIgnored @Dependency(\.calendar) var calendar: Calendar
-    @ObservationIgnored @Dependency(\.locale) var locale: Locale
 
     private var patient: Patient {
         item.patient

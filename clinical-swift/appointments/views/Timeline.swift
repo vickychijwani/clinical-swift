@@ -10,6 +10,7 @@ struct Timeline: View {
     let showsNowMarker: Bool
     var previewNowMarker: Date? = nil
     var appointmentInteractionsEnabled = true
+    var onSelectAppointment: (Appointment) -> Void = { _ in }
 
     static let metrics = TimelineMetrics(
         hourHeight: 60,
@@ -49,7 +50,8 @@ struct Timeline: View {
                 appointments: appointmentsBeforeBreak,
                 metrics: Timeline.metrics,
                 now: now,
-                appointmentInteractionsEnabled: appointmentInteractionsEnabled
+                appointmentInteractionsEnabled: appointmentInteractionsEnabled,
+                onSelectAppointment: onSelectAppointment
             )
 
             TimelineBreakView(
@@ -63,7 +65,8 @@ struct Timeline: View {
                 appointments: appointmentsAfterBreak,
                 metrics: Timeline.metrics,
                 now: now,
-                appointmentInteractionsEnabled: appointmentInteractionsEnabled
+                appointmentInteractionsEnabled: appointmentInteractionsEnabled,
+                onSelectAppointment: onSelectAppointment
             )
         }
         .padding(.vertical, Timeline.metrics.verticalPadding)

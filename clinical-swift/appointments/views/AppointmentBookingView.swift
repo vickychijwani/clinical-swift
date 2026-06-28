@@ -105,8 +105,6 @@ private struct AppointmentBookingForm: View {
             .background(Color("AppBackground"))
             .navigationTitle(step.title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color("AppBackground"), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if step == .details {

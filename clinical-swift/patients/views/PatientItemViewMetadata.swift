@@ -13,27 +13,25 @@ struct PatientItemViewMetadata: Equatable {
     }
 
     static func metadata(for item: PatientDetails) -> PatientItemViewMetadata {
+        @Dependency(\.date.now) var referenceDate
+        @Dependency(\.calendar) var calendar
+        @Dependency(\.locale) var locale
+
         let patient = item.patient
         var parts: [String] = []
-        var demographics: [String] = []
 
-        if let age = patient.age(on: .now, calendar: .autoupdatingCurrent) {
-            demographics.append("\(age)y")
-        }
-
-        if let gender = patient.gender {
-            demographics.append(gender.displayName)
-        }
-
-        if !demographics.isEmpty {
-            parts.append(demographics.joined(separator: "/"))
+        if let demographics = demographics(
+            for: patient,
+            referenceDate: referenceDate,
+            calendar: calendar
+        ) {
+            parts.append(demographics)
         }
 
         if patient.isUnknown, let phone = patient.phone {
             parts.append(phone)
         }
 
-        let locale: Locale = .autoupdatingCurrent
         if let nextAppointmentDate = item.nextAppointmentDate {
             parts.append(
                 "Next \(formattedAppointmentDate(nextAppointmentDate, locale: locale))"
@@ -45,6 +43,39 @@ struct PatientItemViewMetadata: Equatable {
         }
 
         return PatientItemViewMetadata(parts: parts)
+    }
+
+    static func demographics(for patient: Patient) -> String? {
+        @Dependency(\.date.now) var referenceDate
+        @Dependency(\.calendar) var calendar
+
+        return demographics(
+            for: patient,
+            referenceDate: referenceDate,
+            calendar: calendar
+        )
+    }
+
+    private static func demographics(
+        for patient: Patient,
+        referenceDate: Date,
+        calendar: Calendar
+    ) -> String? {
+        var parts: [String] = []
+
+        if let age = patient.age(on: referenceDate, calendar: calendar) {
+            parts.append("\(age)y")
+        }
+
+        if let gender = patient.gender {
+            parts.append(gender.displayName)
+        }
+
+        guard !parts.isEmpty else {
+            return nil
+        }
+
+        return parts.joined(separator: "/")
     }
 
     private static func formattedAppointmentDate(_ date: Date, locale: Locale)

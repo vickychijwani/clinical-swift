@@ -7,6 +7,7 @@ struct TimelineSegment: View {
     let metrics: TimelineMetrics
     let now: Date?
     let appointmentInteractionsEnabled: Bool
+    let onSelectAppointment: (Appointment) -> Void
 
     var body: some View {
         GeometryReader { geo in
@@ -24,19 +25,24 @@ struct TimelineSegment: View {
 
                 /// Appointments
                 ForEach(layouts) { layout in
-                    AppointmentCard(appt: layout.appointment)
-                        .allowsHitTesting(appointmentInteractionsEnabled)
-                        .frame(
-                            width: layout.rect.width,
-                            height: layout.rect.height,
-                            alignment: .topLeading
-                        )
-                        .clipShape(.rect(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(.gray.opacity(0.15))
-                        )
-                        .position(x: layout.rect.midX, y: layout.rect.midY)
+                    Button {
+                        onSelectAppointment(layout.appointment)
+                    } label: {
+                        AppointmentCard(appt: layout.appointment)
+                    }
+                    .buttonStyle(.plain)
+                    .allowsHitTesting(appointmentInteractionsEnabled)
+                    .frame(
+                        width: layout.rect.width,
+                        height: layout.rect.height,
+                        alignment: .topLeading
+                    )
+                    .clipShape(.rect(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(.gray.opacity(0.15))
+                    )
+                    .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
 
                 /// Now marker overlays appointment cards
