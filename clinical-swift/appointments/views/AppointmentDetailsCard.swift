@@ -2,62 +2,102 @@ import Dependencies
 import SwiftUI
 
 struct AppointmentDetailsCard: View {
-    @Dependency(\.locale) private var locale
-
     let appointment: Appointment
     let variant: Variant
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center) {
-                Image(systemName: "calendar")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 34, height: 34)
-                    .background(Color.secondary.opacity(0.1))
-                    .clipShape(.circle)
+        switch variant {
+        case .standard(let patient, let onSelectPatient):
+            VStack(alignment: .leading, spacing: 12) {
+                AppointmentDetailsSummary(appointment: appointment)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(formattedDate)
-                            .font(.subheadline)
-                            .bold()
-                            .foregroundStyle(.secondary)
+                Button {
+                    onSelectPatient()
+                } label: {
+                    HStack {
+                        PatientAvatar(patient: patient)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(patient.displayName)
+                                .font(.headline)
+                                .lineLimit(1)
+
+                            if let demographics = PatientItemViewMetadata.demographics(for: patient)
+                            {
+                                Text(demographics)
+                                    .styleCaption()
+                            }
+                        }
 
                         Spacer()
 
-                        Image(systemName: "circle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(statusColor)
+                        Image(systemName: "chevron.forward")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
-
-                    Text(formattedTimeRange)
-                        .font(.title3)
-                        .bold()
                 }
+                .buttonStyle(.plain)
             }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background)
+            .clipShape(.rect(cornerRadius: 18))
 
-            if let patient = variant.patient {
-                HStack {
-                    PatientAvatar(patient: patient)
+        case .patientTimeline(let onSelectAppointment):
+            Button {
+                onSelectAppointment()
+            } label: {
+                AppointmentDetailsSummary(appointment: appointment)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.background)
+                    .clipShape(.rect(cornerRadius: 18))
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(patient.displayName)
-                            .font(.headline)
-                            .lineLimit(1)
+    typealias Action = @MainActor @Sendable () -> Void
 
-                        if let demographics = PatientItemViewMetadata.demographics(for: patient) {
-                            Text(demographics)
-                                .styleCaption()
-                        }
-                    }
+    enum Variant: Sendable {
+        case standard(patient: Patient, onSelectPatient: Action)
+        case patientTimeline(onSelectAppointment: Action)
+    }
+}
+
+struct AppointmentDetailsSummary: View {
+    @Dependency(\.locale) private var locale
+
+    let appointment: Appointment
+
+    var body: some View {
+        HStack(alignment: .center) {
+            Image(systemName: "calendar")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 34, height: 34)
+                .background(Color.secondary.opacity(0.1))
+                .clipShape(.circle)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(formattedDate)
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Image(systemName: "circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(statusColor)
                 }
+
+                Text(formattedTimeRange)
+                    .font(.title3)
+                    .bold()
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background)
-        .clipShape(.rect(cornerRadius: 18))
     }
 
     private var formattedDate: String {
@@ -91,20 +131,6 @@ struct AppointmentDetailsCard: View {
             .secondary
         }
     }
-
-    enum Variant: Sendable {
-        case standard(patient: Patient)
-        case patientTimeline
-
-        fileprivate var patient: Patient? {
-            switch self {
-            case .standard(let patient):
-                patient
-            case .patientTimeline:
-                nil
-            }
-        }
-    }
 }
 
 #Preview("Standard") {
@@ -114,7 +140,10 @@ struct AppointmentDetailsCard: View {
     } operation: {
         AppointmentDetailsCard(
             appointment: AppointmentDetailsCard.previewAppointment,
-            variant: .standard(patient: AppointmentDetailsCard.previewPatient)
+            variant: .standard(
+                patient: AppointmentDetailsCard.previewPatient,
+                onSelectPatient: {}
+            )
         )
         .padding()
         .background(Color("AppBackground"))
@@ -128,7 +157,7 @@ struct AppointmentDetailsCard: View {
     } operation: {
         AppointmentDetailsCard(
             appointment: AppointmentDetailsCard.previewAppointment,
-            variant: .patientTimeline
+            variant: .patientTimeline(onSelectAppointment: {})
         )
         .padding()
         .background(Color("AppBackground"))

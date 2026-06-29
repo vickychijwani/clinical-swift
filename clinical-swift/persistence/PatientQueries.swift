@@ -56,3 +56,28 @@ nonisolated func patientListRowsQuery(now: Date = .now) -> some Statement<Patien
         """
     )
 }
+
+nonisolated func patientDetailsQuery(
+    id: Patient.ID,
+    now: Date = .now
+) -> some Statement<PatientListRow> {
+    #sql(
+        """
+        SELECT
+          "patients"."id",
+          "patients"."name",
+          "patients"."phone",
+          "patients"."dob",
+          "patients"."gender",
+          min("appointments"."start") AS "nextAppointmentDate",
+          "patients"."createdAt",
+          "patients"."updatedAt"
+        FROM "patients"
+        LEFT JOIN "appointments"
+          ON "appointments"."patientID" = "patients"."id"
+          AND "appointments"."start" >= \(now)
+        WHERE "patients"."id" = \(id)
+        GROUP BY "patients"."id"
+        """
+    )
+}

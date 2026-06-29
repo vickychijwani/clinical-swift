@@ -2,11 +2,12 @@ import SQLiteData
 import SwiftUI
 
 struct PatientsView: View {
+    @Environment(Router.self) private var router
+
     @FetchAll(patientListRowsQuery(), animation: .default)
     private var patientRows: [PatientListRow]
     @State private var searchText = ""
     @State private var isAddingPatient = false
-    @State private var viewingPatient: PatientDetails? = nil
 
     var body: some View {
         PatientList(
@@ -14,8 +15,10 @@ struct PatientsView: View {
                 from: patientDetailsList,
                 searchText: searchText
             ),
-            searchText: $searchText,
-            viewingPatient: $viewingPatient
+            onSelectPatient: { patientID in
+                router.presentDetails(.patient(patientID))
+            },
+            searchText: $searchText
         )
         .background(Color("AppBackground"))
         .navigationTitle("Patients")
@@ -31,12 +34,6 @@ struct PatientsView: View {
             NavigationStack {
                 EditPatientView()
             }
-        }
-        .sheet(item: $viewingPatient) { item in
-            NavigationStack {
-                ViewPatientView(details: item)
-            }
-            .presentationDetents([.medium])
         }
     }
 

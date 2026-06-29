@@ -18,6 +18,10 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(item: $router.detailsPresentation) { presentation in
+            DetailsFlowSheet(presentation: presentation)
+                .id(presentation.id)
+        }
         .environment(router)
     }
 }

@@ -72,3 +72,25 @@ nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleApp
             )
         }
 }
+
+nonisolated func appointmentDetailsQuery(
+    id: Appointment.ID
+) -> some Statement<ScheduleAppointmentRow> {
+    AppointmentRecord
+        .where { $0.id.eq(id) }
+        .join(PatientRecord.all) { $0.patientID.eq($1.id) }
+        .select { appt, patient in
+            ScheduleAppointmentRow.Columns(
+                id: appt.id,
+                patientID: patient.id,
+                patientName: patient.name,
+                patientPhone: patient.phone,
+                patientDOB: patient.dob,
+                patientGender: patient.gender,
+                patientCreatedAt: patient.createdAt,
+                start: appt.start,
+                durationMinutes: appt.durationMinutes,
+                status: appt.status
+            )
+        }
+}

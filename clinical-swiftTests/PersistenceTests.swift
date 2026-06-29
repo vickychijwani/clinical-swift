@@ -107,14 +107,19 @@ struct PersistenceTests {
         let rows = try database.read { db in
             try patientListRowsQuery(now: now).fetchAll(db)
         }
+        let detailsRow = try database.read { db in
+            try patientDetailsQuery(id: patientID, now: now).fetchOne(db)
+        }
 
         #expect(rows.map(\.item.nextAppointmentDate) == [next])
         #expect(rows.map(\.item.patient.name) == ["Aarav Mehta"])
+        #expect(detailsRow?.item == rows.first?.item)
     }
 
     @Test func scheduleRowsJoinAppointmentsToPatientDisplayNames() throws {
         let database = try testDatabase()
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
+        let appointmentID = UUID()
         let selectedDate = Date(timeIntervalSinceReferenceDate: 10_000).startOfDay()
         let appointmentTime = selectedDate.setTime(10, 30)
         let dob = Date(timeIntervalSinceReferenceDate: -300_000_000)
@@ -135,7 +140,7 @@ struct PersistenceTests {
 
             try AppointmentRecord.insert {
                 AppointmentRecord(
-                    id: UUID(),
+                    id: appointmentID,
                     patientID: patientID,
                     start: appointmentTime,
                     durationMinutes: 45,
@@ -150,8 +155,12 @@ struct PersistenceTests {
         let rows = try database.read { db in
             try querySchedule(selectedDate: selectedDate).fetchAll(db)
         }
+        let detailsRow = try database.read { db in
+            try appointmentDetailsQuery(id: appointmentID).fetchOne(db)
+        }
         let appointment = try #require(rows.first?.appointment)
         let details = try #require(rows.first?.details)
+        let currentDetails = try #require(detailsRow?.details)
 
         #expect(rows.count == 1)
         #expect(appointment.patientName == "Anjali Desai")
@@ -162,6 +171,9 @@ struct PersistenceTests {
         #expect(details.patient.phone == "+91 98209 46617")
         #expect(details.patient.dob == dob)
         #expect(details.patient.gender == .female)
+        #expect(currentDetails.appointment.id == appointmentID)
+        #expect(currentDetails.patient.id == patientID)
+        #expect(currentDetails.patient.name == "Anjali Desai")
     }
 
     @Test func bookingDraftRecordIsReturnedByScheduleQuery() throws {
@@ -216,6 +228,7 @@ struct PersistenceTests {
     @Test func deletingPatientCascadesAppointments() throws {
         let database = try testDatabase()
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000004"))
+        let appointmentID = UUID()
         let now = Date(timeIntervalSinceReferenceDate: 1_000)
 
         try database.write { db in
@@ -234,7 +247,7 @@ struct PersistenceTests {
 
             try AppointmentRecord.insert {
                 AppointmentRecord(
-                    id: UUID(),
+                    id: appointmentID,
                     patientID: patientID,
                     start: now,
                     durationMinutes: 30,
@@ -252,8 +265,16 @@ struct PersistenceTests {
         let appointmentCount = try database.read { db in
             try AppointmentRecord.count().fetchOne(db) ?? 0
         }
+        let deletedPatient = try database.read { db in
+            try patientDetailsQuery(id: patientID, now: now).fetchOne(db)
+        }
+        let deletedAppointment = try database.read { db in
+            try appointmentDetailsQuery(id: appointmentID).fetchOne(db)
+        }
 
         #expect(appointmentCount == 0)
+        #expect(deletedPatient == nil)
+        #expect(deletedAppointment == nil)
     }
 
     @Test func patientRecordInsertHonorsPatientValidationBoundary() throws {

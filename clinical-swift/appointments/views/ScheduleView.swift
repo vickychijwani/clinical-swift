@@ -3,12 +3,12 @@ import SwiftUI
 
 struct ScheduleView: View {
     @Dependency(\.calendar) private var calendar
+    @Environment(Router.self) private var router
 
     /// `nil` means normal schedule mode; non-nil means booking mode.
     /// This value controls booking sheet presentation, rendering of draft appointment in the
     /// timeline, whether appointment cards are interactable, and whether '+' button appears.
     @State private var bookingModel: AppointmentBookingModel?
-    @State private var selectedAppointment: AppointmentDetails?
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
@@ -65,11 +65,6 @@ struct ScheduleView: View {
                     model: bookingModel,
                     compactSheetHeight: $compactBookingSheetHeight
                 )
-            }
-        }
-        .sheet(item: $selectedAppointment) { details in
-            NavigationStack {
-                AppointmentDetailsSheet(details: details)
             }
         }
         // Update displayed appointments and re-calculate suggested slot for booking, if any
@@ -161,7 +156,7 @@ struct ScheduleView: View {
     }
 
     private func selectAppointment(_ appointment: Appointment) {
-        selectedAppointment = scheduleModel.details(for: appointment)
+        router.presentDetails(.appointment(appointment.id))
     }
 
     private var bottomScrollClearance: CGFloat {

@@ -5,7 +5,6 @@
 - [x] Schedule of appointments
   - [x] Handle appointment overlap (e.g., 2 doctors or incorrect appt duration)
   - [ ] Swipe to navigate day-wise
-  - [ ] Jump to date?
   - [ ] Add “today”, “yesterday”, “tomorrow” + day in header
 - [x] Patients list
 - [x] New patient
@@ -20,6 +19,7 @@
   - [ ] Quick-add new patient from new appointment page
   - [ ] Share recent call to open new appointment page for patient associated with that phone number
 - [ ] View appointment
+  - [x] Jump to patient - @docs/specs/sheet-navigation.md
 - [ ] Edit appointment
 - [ ] Cancel appointment - confirm cancellation and then hide it from view
 - [ ] Send SMS + WhatsApp Biz message + auto-copy to clipboard
@@ -48,6 +48,7 @@ Nice to haves:
 - [ ] Appointment booking: Order patients by most recent appt first (most common usecase: scheduling a follow-up)
 - [ ] Quick-tag patients for follow-up, or interested in implants/etc from appointment view
 - [ ] Offer phone number selection if picked contact has multiple numbers
+- [ ] Jump to date?
 - [ ] Pre-fill appt time with next available slot (consider clinic opening times + booked slots + unbookable slots)
 - [ ] Share phone number (without saving) to app, it will create contact (if shared contact doesn't have a name)
 - [ ] Add "Schedule appointment" button on patient details page - prefill patient when tapped

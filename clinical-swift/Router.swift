@@ -11,12 +11,42 @@ enum Route: Hashable {
     case appointment(_ id: UUID)
 }
 
-@Observable
+@MainActor @Observable
 final class Router {
     var selectedTab: AppTab = .schedule  // Home screen is Schedule tab
     var schedulePath: [Route] = []
     var patientsPath: [Route] = []
     var paymentsPath: [Route] = []
+    var detailsPresentation: DetailsPresentation?
+
+    func presentDetails(_ root: Route) {
+        detailsPresentation = DetailsPresentation(root: root)
+    }
+
+    func pushDetails(_ route: Route) {
+        guard detailsPresentation != nil else { return }
+        detailsPresentation?.path.append(route)
+    }
+
+    func updateDetailsPath(_ path: [Route], presentationID: DetailsPresentation.ID) {
+        guard detailsPresentation?.id == presentationID else { return }
+        detailsPresentation?.path = path
+    }
+
+    func dismissDetails() {
+        detailsPresentation = nil
+    }
+
+    func openExternalDetails(_ route: Route) {
+        selectedTab =
+            switch route {
+            case .patient:
+                .patients
+            case .appointment:
+                .schedule
+            }
+        presentDetails(route)
+    }
 
     func openPatient(_ id: UUID, in tab: AppTab?) {
         // This keyPath stuff is needed because returning schedulePath directly
