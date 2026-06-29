@@ -8,6 +8,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - Timeline segments are continuous. Inside a segment, `y` position must remain simple minutes-from-segment-start math.
 - `TimelineLayoutEngine` must stay break-agnostic. It should not know about break blocks, collapsed heights, hidden hour labels, or discontinuity rules.
 - `TimelineScale` owns presentation-level coordinates across the structural break for clipping and programmatic scrolling. Keep this mapping out of `TimelineLayoutEngine` so appointment layout remains segment-local.
+- `Bitehaus` is the single source of truth for opening, closing, and break boundaries. `Timeline` and `TimelineScale` must read those values directly so rendering and scrolling cannot drift onto different schedules.
 - Hour markers and appointment cards in a segment must use the same start and end boundaries.
 - `TimelineBreakView` is presentational only. It should render the compact break row, not influence appointment layout.
 - Appointment overlap layout is segment-local and break-agnostic. Up to three simultaneous appointments may split the segment content width, but vertical position must still come from simple minutes-from-segment-start math.

@@ -4,7 +4,6 @@ struct TimelineSegment: View {
     let start: TimeOfDay
     let end: TimeOfDay
     let appointments: [Appointment]
-    let metrics: TimelineMetrics
     let now: Date?
     let appointmentInteractionsEnabled: Bool
     let onSelectAppointment: (Appointment) -> Void
@@ -12,7 +11,6 @@ struct TimelineSegment: View {
     var body: some View {
         GeometryReader { geo in
             let engine = TimelineLayoutEngine(
-                metrics: metrics,
                 availableWidth: geo.size.width,
                 start: start
             )
@@ -47,11 +45,8 @@ struct TimelineSegment: View {
 
                 /// Now marker overlays appointment cards
                 if let nowY {
-                    NowMarkerView(
-                        metrics: metrics,
-                        availableWidth: geo.size.width
-                    )
-                    .position(x: geo.size.width / 2, y: nowY)
+                    NowMarkerView(availableWidth: geo.size.width)
+                        .position(x: geo.size.width / 2, y: nowY)
                 }
             }
         }
@@ -67,8 +62,8 @@ struct TimelineSegment: View {
                     .fill(.gray.opacity(0.15))
                     .frame(height: 1)
                     .position(
-                        x: metrics.horizontalCardMargin
-                            + metrics.timeColumnWidth
+                        x: Timeline.metrics.horizontalCardMargin
+                            + Timeline.metrics.timeColumnWidth
                             + availableWidth / 2,
                         y: y
                     )
@@ -76,7 +71,7 @@ struct TimelineSegment: View {
                 Text(TimeOfDay(hour, 0).formatted(.hourOnly))
                     .font(.caption)
                     .foregroundStyle(.gray)
-                    .position(x: metrics.timeColumnWidth - 8, y: y)
+                    .position(x: Timeline.metrics.timeColumnWidth - 8, y: y)
             }
         }
     }

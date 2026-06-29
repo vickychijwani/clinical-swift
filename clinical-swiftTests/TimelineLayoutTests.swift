@@ -5,14 +5,6 @@ import Testing
 @testable import clinical_swift
 
 struct TimelineLayoutTests {
-    private let metrics = TimelineMetrics(
-        hourHeight: 60,
-        timeColumnWidth: 40,
-        verticalPadding: 8,
-        horizontalCardMargin: 12,
-        verticalCardMargin: 1,
-        overlapColumnSpacing: 2
-    )
     private let availableWidth: CGFloat = 300
 
     @Test func nonOverlappingAppointmentsUseFullWidth() throws {
@@ -26,8 +18,8 @@ struct TimelineLayoutTests {
         let first = try layout(for: firstID, in: layouts)
         let second = try layout(for: secondID, in: layouts)
 
-        #expect(first.rect.minX == metrics.contentLeadingInset)
-        #expect(second.rect.minX == metrics.contentLeadingInset)
+        #expect(first.rect.minX == Timeline.metrics.contentLeadingInset)
+        #expect(second.rect.minX == Timeline.metrics.contentLeadingInset)
         #expect(first.rect.width == contentWidth)
         #expect(second.rect.width == contentWidth)
     }
@@ -42,12 +34,12 @@ struct TimelineLayoutTests {
 
         let first = try layout(for: firstID, in: layouts)
         let second = try layout(for: secondID, in: layouts)
-        let columnWidth = (contentWidth - metrics.overlapColumnSpacing) / 2
+        let columnWidth = (contentWidth - Timeline.metrics.overlapColumnSpacing) / 2
 
-        #expect(first.rect.minX == metrics.contentLeadingInset)
+        #expect(first.rect.minX == Timeline.metrics.contentLeadingInset)
         #expect(
-            second.rect.minX == metrics.contentLeadingInset + columnWidth
-                + metrics.overlapColumnSpacing)
+            second.rect.minX == Timeline.metrics.contentLeadingInset + columnWidth
+                + Timeline.metrics.overlapColumnSpacing)
         #expect(first.rect.width == columnWidth)
         #expect(second.rect.width == columnWidth)
     }
@@ -65,15 +57,15 @@ struct TimelineLayoutTests {
         let first = try layout(for: firstID, in: layouts)
         let second = try layout(for: secondID, in: layouts)
         let third = try layout(for: thirdID, in: layouts)
-        let columnWidth = (contentWidth - metrics.overlapColumnSpacing * 2) / 3
+        let columnWidth = (contentWidth - Timeline.metrics.overlapColumnSpacing * 2) / 3
 
-        #expect(first.rect.minX == metrics.contentLeadingInset)
+        #expect(first.rect.minX == Timeline.metrics.contentLeadingInset)
         #expect(
-            second.rect.minX == metrics.contentLeadingInset + columnWidth
-                + metrics.overlapColumnSpacing)
+            second.rect.minX == Timeline.metrics.contentLeadingInset + columnWidth
+                + Timeline.metrics.overlapColumnSpacing)
         #expect(
-            third.rect.minX == metrics.contentLeadingInset
-                + (columnWidth + metrics.overlapColumnSpacing) * 2)
+            third.rect.minX == Timeline.metrics.contentLeadingInset
+                + (columnWidth + Timeline.metrics.overlapColumnSpacing) * 2)
         #expect(first.rect.width == columnWidth)
         #expect(second.rect.width == columnWidth)
         #expect(third.rect.width == columnWidth)
@@ -92,12 +84,12 @@ struct TimelineLayoutTests {
         let first = try layout(for: firstID, in: layouts)
         let second = try layout(for: secondID, in: layouts)
         let third = try layout(for: thirdID, in: layouts)
-        let columnWidth = (contentWidth - metrics.overlapColumnSpacing) / 2
+        let columnWidth = (contentWidth - Timeline.metrics.overlapColumnSpacing) / 2
 
-        #expect(first.rect.minX == metrics.contentLeadingInset)
+        #expect(first.rect.minX == Timeline.metrics.contentLeadingInset)
         #expect(
-            second.rect.minX == metrics.contentLeadingInset + columnWidth
-                + metrics.overlapColumnSpacing)
+            second.rect.minX == Timeline.metrics.contentLeadingInset + columnWidth
+                + Timeline.metrics.overlapColumnSpacing)
         #expect(third.rect.minX == first.rect.minX)
         #expect(first.rect.width == columnWidth)
         #expect(second.rect.width == columnWidth)
@@ -127,8 +119,8 @@ struct TimelineLayoutTests {
 
         let layout = try layout(for: id, in: layouts)
 
-        #expect(layout.rect.minY == 31)
-        #expect(layout.rect.height == 43)
+        #expect(layout.rect.minY == 30)
+        #expect(layout.rect.height == 45)
     }
 
     @Test func timelineScaleMapsTimeBeforeBreakWithinFirstSegment() {
@@ -145,28 +137,17 @@ struct TimelineLayoutTests {
 
     private var engine: TimelineLayoutEngine {
         TimelineLayoutEngine(
-            metrics: metrics,
             availableWidth: availableWidth,
             start: TimeOfDay(9, 0)
         )
     }
 
     private var contentWidth: CGFloat {
-        metrics.contentWidth(availableWidth: availableWidth)
+        Timeline.metrics.contentWidth(availableWidth: availableWidth)
     }
 
     private var scale: TimelineScale {
-        TimelineScale(
-            metrics: metrics,
-            start: TimeOfDay(9, 0),
-            end: TimeOfDay(21, 0),
-            breakBlock: BreakBlock(
-                start: TimeOfDay(13, 0),
-                end: TimeOfDay(16, 0),
-                title: "Break"
-            ),
-            breakHeight: 32
-        )
+        Timeline.scheduleScale
     }
 
     private func appointment(

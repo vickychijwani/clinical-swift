@@ -40,33 +40,26 @@ struct TimelineMetrics {
 }
 
 struct TimelineScale {
-    let metrics: TimelineMetrics
-    let start: TimeOfDay
-    let end: TimeOfDay
-    let breakBlock: BreakBlock
-    let breakHeight: CGFloat
-
     /// Content coordinate excluding Timeline's outer vertical padding.
     func yOffset(for proposedTime: TimeOfDay) -> CGFloat {
-        let time = min(max(proposedTime, start), end)
-        let firstSegmentHeight = breakBlock.start.minutes(since: start).px
+        let time = min(max(proposedTime, Bitehaus.opening), Bitehaus.closing)
+        let firstSegmentHeight = Bitehaus.break.start.minutes(since: Bitehaus.opening).px
 
-        if time < breakBlock.start {
-            return end.minutes(since: start).px
+        if time < Bitehaus.break.start {
+            return time.minutes(since: Bitehaus.opening).px
         }
 
-        if time < breakBlock.end {
+        if time < Bitehaus.break.end {
             return firstSegmentHeight
         }
 
         return firstSegmentHeight
-            + breakHeight
-            + time.minutes(since: breakBlock.end).px
+            + TimelineBreakView.height
+            + time.minutes(since: Bitehaus.break.end).px
     }
 }
 
 struct TimelineLayoutEngine {
-    let metrics: TimelineMetrics
     let availableWidth: CGFloat
     let start: TimeOfDay
 
@@ -103,7 +96,7 @@ struct TimelineLayoutEngine {
     }
 
     private var cardWidth: CGFloat {
-        metrics.contentWidth(availableWidth: availableWidth)
+        Timeline.metrics.contentWidth(availableWidth: availableWidth)
     }
 
     private func cardWidth(columnCount: Int) -> CGFloat {
@@ -111,24 +104,24 @@ struct TimelineLayoutEngine {
             return cardWidth
         }
 
-        let spacing = metrics.overlapColumnSpacing * CGFloat(columnCount - 1)
+        let spacing = Timeline.metrics.overlapColumnSpacing * CGFloat(columnCount - 1)
         return max((cardWidth - spacing) / CGFloat(columnCount), 0)
     }
 
     private func cardHeight(for appt: Appointment) -> CGFloat {
         return appt.durationMinutes.px
             // 2x to account for top and bottom clearance both
-            - metrics.verticalCardMargin * 2
+            - Timeline.metrics.verticalCardMargin * 2
     }
 
     private func cardX(column: Int, columnWidth: CGFloat) -> CGFloat {
-        metrics.contentLeadingInset
-            + CGFloat(column) * (columnWidth + metrics.overlapColumnSpacing)
+        Timeline.metrics.contentLeadingInset
+            + CGFloat(column) * (columnWidth + Timeline.metrics.overlapColumnSpacing)
     }
 
     private func cardY(for appt: Appointment) -> CGFloat {
         return (start...appt.start.timeOfDay).px
-            + metrics.verticalCardMargin
+            + Timeline.metrics.verticalCardMargin
     }
 
     private func overlappingGroups(

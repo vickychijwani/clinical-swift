@@ -1,26 +1,23 @@
 import SwiftUI
 
 struct TimelineBreakView: View {
-    let block: BreakBlock
-    let metrics: TimelineMetrics
-
     static let height: CGFloat = 32
 
     var body: some View {
         GeometryReader { geo in
-            let width = metrics.contentWidth(availableWidth: geo.size.width)
+            let width = Timeline.metrics.contentWidth(availableWidth: geo.size.width)
 
             breakContent
                 .frame(width: width, height: Self.height)
                 .clipShape(.rect(cornerRadius: 6))
                 .position(
-                    x: metrics.contentLeadingInset + width / 2,
+                    x: Timeline.metrics.contentLeadingInset + width / 2,
                     y: Self.height / 2
                 )
         }
         .frame(height: Self.height)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(block.title), \(timeRange)")
+        .accessibilityLabel("\(Bitehaus.break.title), \(timeRange)")
     }
 
     private var breakContent: some View {
@@ -28,7 +25,7 @@ struct TimelineBreakView: View {
             DiagonalStripePattern()
                 .stroke(.gray.opacity(0.12), lineWidth: 6)
 
-            Text("• \(block.title.uppercased()) · \(timeRange) •")
+            Text("• \(Bitehaus.break.title.uppercased()) · \(timeRange) •")
                 .font(.caption)
                 .bold()
                 .foregroundStyle(.secondary)
@@ -37,7 +34,7 @@ struct TimelineBreakView: View {
     }
 
     private var timeRange: String {
-        "\(block.start.formatted(.full)) – \(block.end.formatted(.full))"
+        "\(Bitehaus.break.start.formatted(.full)) – \(Bitehaus.break.end.formatted(.full))"
     }
 }
 
@@ -55,15 +52,5 @@ struct DiagonalStripePattern: Shape {
 }
 
 #Preview {
-    TimelineBreakView(
-        block: Bitehaus.break,
-        metrics: TimelineMetrics(
-            hourHeight: 0,
-            timeColumnWidth: 0,
-            verticalPadding: 0,
-            horizontalCardMargin: 0,
-            verticalCardMargin: 0,
-            overlapColumnSpacing: 0
-        )
-    )
+    TimelineBreakView()
 }

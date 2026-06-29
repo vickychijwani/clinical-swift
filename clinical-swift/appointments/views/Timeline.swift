@@ -2,9 +2,6 @@ import SwiftUI
 
 struct Timeline: View {
     let appointments: [Appointment]
-    let start: TimeOfDay
-    let end: TimeOfDay
-    let breakBlock: BreakBlock
 
     /// Properties for rendering the "Now" marker line.
     let showsNowMarker: Bool
@@ -21,13 +18,7 @@ struct Timeline: View {
         overlapColumnSpacing: 0
     )
 
-    static let scheduleScale = TimelineScale(
-        metrics: metrics,
-        start: Bitehaus.opening,
-        end: Bitehaus.closing,
-        breakBlock: Bitehaus.break,
-        breakHeight: TimelineBreakView.height
-    )
+    static let scheduleScale = TimelineScale()
 
     var body: some View {
         if let previewNowMarker {
@@ -45,25 +36,20 @@ struct Timeline: View {
     private func timelineContent(now: Date?) -> some View {
         VStack(spacing: 0) {
             TimelineSegment(
-                start: start,
-                end: breakBlock.start,
+                start: Bitehaus.opening,
+                end: Bitehaus.break.start,
                 appointments: appointmentsBeforeBreak,
-                metrics: Timeline.metrics,
                 now: now,
                 appointmentInteractionsEnabled: appointmentInteractionsEnabled,
                 onSelectAppointment: onSelectAppointment
             )
 
-            TimelineBreakView(
-                block: breakBlock,
-                metrics: Timeline.metrics
-            )
+            TimelineBreakView()
 
             TimelineSegment(
-                start: breakBlock.end,
-                end: end,
+                start: Bitehaus.break.end,
+                end: Bitehaus.closing,
                 appointments: appointmentsAfterBreak,
-                metrics: Timeline.metrics,
                 now: now,
                 appointmentInteractionsEnabled: appointmentInteractionsEnabled,
                 onSelectAppointment: onSelectAppointment
@@ -73,20 +59,17 @@ struct Timeline: View {
     }
 
     private var appointmentsBeforeBreak: [Appointment] {
-        appointments.filter { $0.start.timeOfDay < breakBlock.start }
+        appointments.filter { $0.start.timeOfDay < Bitehaus.break.start }
     }
 
     private var appointmentsAfterBreak: [Appointment] {
-        appointments.filter { $0.start.timeOfDay >= breakBlock.end }
+        appointments.filter { $0.start.timeOfDay >= Bitehaus.break.end }
     }
 }
 
 func sampleTimeline() -> some View {
     return Timeline(
         appointments: sampleAppointments,
-        start: Bitehaus.opening,
-        end: Bitehaus.closing,
-        breakBlock: Bitehaus.break,
         showsNowMarker: true,
         previewNowMarker: Date.now.setTime(9, 30)
     )

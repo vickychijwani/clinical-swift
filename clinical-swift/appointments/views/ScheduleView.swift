@@ -27,9 +27,6 @@ struct ScheduleView: View {
                 VStack(spacing: 0) {
                     Timeline(
                         appointments: visibleAppointments,
-                        start: Bitehaus.opening,
-                        end: Bitehaus.closing,
-                        breakBlock: Bitehaus.break,
                         showsNowMarker: calendar.isDateInToday(scheduleModel.selectedDate),
                         appointmentInteractionsEnabled: bookingModel == nil,
                         onSelectAppointment: selectAppointment
