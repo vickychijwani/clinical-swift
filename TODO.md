@@ -36,14 +36,14 @@
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
 
 Refactors:
-- [ ] Remove TimelineSegment; use ScheduleScale for universal placement
+- [x] Remove TimelineSegment; use TimelineScale for universal placement
 - [ ] Extract reusable "auto-height" sheet component from AppointmentBooking sheet
 
 Bugs:
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
 
 Nice to haves:
-- [ ] Display appointments scheduled in break too
+- [x] Display appointments scheduled in break too
 - [ ] Drag-n-drop to reschedule appointments
 - [ ] Appointment booking: Order patients by most recent appt first (most common usecase: scheduling a follow-up)
 - [ ] Quick-tag patients for follow-up, or interested in implants/etc from appointment view

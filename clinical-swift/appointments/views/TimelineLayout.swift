@@ -23,6 +23,9 @@ struct TimelineMetrics {
     /// Horizontal spacing between appointments that overlap in time
     let overlapColumnSpacing: CGFloat
 
+    /// Height used to represent the clinic break when it is compact
+    let compactBreakHeight: CGFloat
+
     var contentLeadingInset: CGFloat {
         timeColumnWidth + horizontalCardMargin + 4
     }
@@ -40,28 +43,88 @@ struct TimelineMetrics {
 }
 
 struct TimelineScale {
+    enum BreakPresentation {
+        case compact
+        case expanded
+    }
+
+    let breakPresentation: BreakPresentation
+
+    init(appointments: [Appointment]) {
+        breakPresentation =
+            appointments.contains { appointment in
+                (Bitehaus.break.start..<Bitehaus.break.end).contains(
+                    appointment.start.timeOfDay
+                )
+            } ? .expanded : .compact
+    }
+
+    var isBreakExpanded: Bool {
+        breakPresentation == .expanded
+    }
+
+    var breakHeight: CGFloat {
+        switch breakPresentation {
+        case .compact:
+            Timeline.metrics.compactBreakHeight
+        case .expanded:
+            (Bitehaus.break.start..<Bitehaus.break.end).px
+        }
+    }
+
+    var totalHeight: CGFloat {
+        yOffset(for: Bitehaus.closing)
+    }
+
+    var hourMarkers: [TimeOfDay] {
+        (Bitehaus.opening.hour...Bitehaus.closing.hour)
+            .map { TimeOfDay($0, 0) }
+            .filter { time in
+                isBreakExpanded
+                    || time <= Bitehaus.break.start
+                    || time >= Bitehaus.break.end
+            }
+    }
+
     /// Content coordinate excluding Timeline's outer vertical padding.
     func yOffset(for proposedTime: TimeOfDay) -> CGFloat {
         let time = min(max(proposedTime, Bitehaus.opening), Bitehaus.closing)
         let firstSegmentHeight = Bitehaus.break.start.minutes(since: Bitehaus.opening).px
 
-        if time < Bitehaus.break.start {
+        if time <= Bitehaus.break.start {
             return time.minutes(since: Bitehaus.opening).px
         }
 
         if time < Bitehaus.break.end {
-            return firstSegmentHeight
+            let elapsedBreakMinutes = time.minutes(since: Bitehaus.break.start)
+            let breakDurationMinutes = Bitehaus.break.end.minutes(since: Bitehaus.break.start)
+            let breakProgress = CGFloat(elapsedBreakMinutes) / CGFloat(breakDurationMinutes)
+
+            return firstSegmentHeight + breakHeight * breakProgress
         }
 
         return firstSegmentHeight
-            + TimelineBreakView.height
+            + breakHeight
             + time.minutes(since: Bitehaus.break.end).px
+    }
+
+    func height(from start: TimeOfDay, to end: TimeOfDay) -> CGFloat {
+        max(yOffset(for: end) - yOffset(for: start), 0)
+    }
+
+    func showsTime(_ time: TimeOfDay) -> Bool {
+        guard (Bitehaus.opening..<Bitehaus.closing).contains(time) else {
+            return false
+        }
+
+        return isBreakExpanded
+            || !(Bitehaus.break.start..<Bitehaus.break.end).contains(time)
     }
 }
 
 struct TimelineLayoutEngine {
     let availableWidth: CGFloat
-    let start: TimeOfDay
+    let scale: TimelineScale
 
     func layout(
         appointments: [Appointment]
@@ -109,9 +172,15 @@ struct TimelineLayoutEngine {
     }
 
     private func cardHeight(for appt: Appointment) -> CGFloat {
-        return appt.durationMinutes.px
-            // 2x to account for top and bottom clearance both
-            - Timeline.metrics.verticalCardMargin * 2
+        max(
+            scale.height(
+                from: appt.start.timeOfDay,
+                to: appt.start.timeOfDay + appt.durationMinutes
+            )
+                // 2x to account for top and bottom clearance both
+                - Timeline.metrics.verticalCardMargin * 2,
+            0
+        )
     }
 
     private func cardX(column: Int, columnWidth: CGFloat) -> CGFloat {
@@ -120,7 +189,7 @@ struct TimelineLayoutEngine {
     }
 
     private func cardY(for appt: Appointment) -> CGFloat {
-        return (start...appt.start.timeOfDay).px
+        return scale.yOffset(for: appt.start.timeOfDay)
             + Timeline.metrics.verticalCardMargin
     }
 
@@ -205,7 +274,7 @@ struct TimelineLayoutEngine {
     }
 
     private func startMinute(for appointment: Appointment) -> Int {
-        appointment.start.minutes(since: start)
+        appointment.start.timeOfDay.minutes(since: Bitehaus.opening)
     }
 
     private func endMinute(for appointment: Appointment) -> Int {

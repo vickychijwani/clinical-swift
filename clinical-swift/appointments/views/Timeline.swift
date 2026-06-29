@@ -2,6 +2,7 @@ import SwiftUI
 
 struct Timeline: View {
     let appointments: [Appointment]
+    let scale: TimelineScale
 
     /// Properties for rendering the "Now" marker line.
     let showsNowMarker: Bool
@@ -15,10 +16,9 @@ struct Timeline: View {
         verticalPadding: 8,
         horizontalCardMargin: 12,
         verticalCardMargin: 0,
-        overlapColumnSpacing: 0
+        overlapColumnSpacing: 0,
+        compactBreakHeight: 32
     )
-
-    static let scheduleScale = TimelineScale()
 
     var body: some View {
         if let previewNowMarker {
@@ -34,42 +34,75 @@ struct Timeline: View {
     }
 
     private func timelineContent(now: Date?) -> some View {
-        VStack(spacing: 0) {
-            TimelineSegment(
-                start: Bitehaus.opening,
-                end: Bitehaus.break.start,
-                appointments: appointmentsBeforeBreak,
-                now: now,
-                appointmentInteractionsEnabled: appointmentInteractionsEnabled,
-                onSelectAppointment: onSelectAppointment
+        GeometryReader { geometry in
+            let engine = TimelineLayoutEngine(
+                availableWidth: geometry.size.width,
+                scale: scale
             )
+            let layouts = engine.layout(appointments: appointments)
 
-            TimelineBreakView()
+            ZStack(alignment: .topLeading) {
+                TimelineBreakView(
+                    scale: scale,
+                    availableWidth: geometry.size.width
+                )
 
-            TimelineSegment(
-                start: Bitehaus.break.end,
-                end: Bitehaus.closing,
-                appointments: appointmentsAfterBreak,
-                now: now,
-                appointmentInteractionsEnabled: appointmentInteractionsEnabled,
-                onSelectAppointment: onSelectAppointment
-            )
+                TimelineHourGrid(
+                    scale: scale,
+                    availableWidth: geometry.size.width
+                )
+
+                ForEach(layouts) { layout in
+                    Button {
+                        onSelectAppointment(layout.appointment)
+                    } label: {
+                        AppointmentCard(appt: layout.appointment)
+                    }
+                    .buttonStyle(.plain)
+                    .allowsHitTesting(appointmentInteractionsEnabled)
+                    .frame(
+                        width: layout.rect.width,
+                        height: layout.rect.height,
+                        alignment: .topLeading
+                    )
+                    .clipShape(.rect(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(.gray.opacity(0.15))
+                    )
+                    .position(x: layout.rect.midX, y: layout.rect.midY)
+                }
+
+                if let nowY = nowY(for: now) {
+                    NowMarkerView(availableWidth: geometry.size.width)
+                        .position(x: geometry.size.width / 2, y: nowY)
+                }
+            }
         }
+        .frame(height: scale.totalHeight)
         .padding(.vertical, Timeline.metrics.verticalPadding)
     }
 
-    private var appointmentsBeforeBreak: [Appointment] {
-        appointments.filter { $0.start.timeOfDay < Bitehaus.break.start }
-    }
+    private func nowY(for now: Date?) -> CGFloat? {
+        guard let now else {
+            return nil
+        }
 
-    private var appointmentsAfterBreak: [Appointment] {
-        appointments.filter { $0.start.timeOfDay >= Bitehaus.break.end }
+        let time = now.timeOfDay
+        guard scale.showsTime(time) else {
+            return nil
+        }
+
+        return scale.yOffset(for: time)
     }
 }
 
-func sampleTimeline() -> some View {
+func sampleTimeline(appointments: [Appointment] = sampleAppointments) -> some View {
+    let scale = TimelineScale(appointments: appointments)
+
     return Timeline(
-        appointments: sampleAppointments,
+        appointments: appointments,
+        scale: scale,
         showsNowMarker: true,
         previewNowMarker: Date.now.setTime(9, 30)
     )
@@ -78,4 +111,17 @@ func sampleTimeline() -> some View {
 
 #Preview {
     sampleTimeline()
+}
+
+#Preview("Expanded break") {
+    sampleTimeline(
+        appointments: sampleAppointments + [
+            Appointment(
+                patientName: "Draft appointment",
+                start: Date.now.setTime(14, 0),
+                durationMinutes: 45,
+                status: .draft
+            )
+        ]
+    )
 }

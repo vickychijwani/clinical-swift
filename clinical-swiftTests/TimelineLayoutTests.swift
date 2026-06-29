@@ -127,18 +127,145 @@ struct TimelineLayoutTests {
         #expect(scale.yOffset(for: TimeOfDay(10, 30)) == 90)
     }
 
-    @Test func timelineScaleCollapsesTimeDuringBreakToFirstSegmentEnd() {
-        #expect(scale.yOffset(for: TimeOfDay(14, 30)) == 240)
+    @Test func compactTimelineScaleProportionallyMapsTimeDuringBreak() {
+        #expect(scale.yOffset(for: TimeOfDay(14, 30)) == 256)
     }
 
     @Test func timelineScaleIncludesBreakHeightAfterBreak() {
         #expect(scale.yOffset(for: TimeOfDay(17, 30)) == 362)
     }
 
+    @Test func compactAndExpandedScalesHaveExpectedTotalHeight() {
+        let breakAppointment = appointment(
+            id: UUID(),
+            startHour: 14,
+            startMinute: 0,
+            duration: 30
+        )
+        let expandedScale = TimelineScale(appointments: [breakAppointment])
+
+        #expect(scale.totalHeight == 572)
+        #expect(expandedScale.totalHeight == 720)
+        #expect(expandedScale.yOffset(for: TimeOfDay(14, 30)) == 330)
+        #expect(expandedScale.yOffset(for: TimeOfDay(17, 30)) == 510)
+    }
+
+    @Test func appointmentStartWithinHalfOpenBreakRangeExpandsScale() {
+        let atBreakStart = appointment(
+            id: UUID(),
+            startHour: 13,
+            startMinute: 0,
+            duration: 30,
+            status: .draft
+        )
+        let duringBreak = appointment(
+            id: UUID(),
+            startHour: 14,
+            startMinute: 30,
+            duration: 30
+        )
+        let beforeBreak = appointment(
+            id: UUID(),
+            startHour: 12,
+            startMinute: 30,
+            duration: 60
+        )
+        let atBreakEnd = appointment(
+            id: UUID(),
+            startHour: 16,
+            startMinute: 0,
+            duration: 30
+        )
+
+        #expect(TimelineScale(appointments: [atBreakStart]).isBreakExpanded)
+        #expect(TimelineScale(appointments: [duringBreak]).isBreakExpanded)
+        #expect(!TimelineScale(appointments: [beforeBreak]).isBreakExpanded)
+        #expect(!TimelineScale(appointments: [atBreakEnd]).isBreakExpanded)
+    }
+
+    @Test func compactScaleCompressesAppointmentCrossingIntoBreak() throws {
+        let id = UUID()
+        let crossingAppointment = appointment(
+            id: id,
+            startHour: 12,
+            startMinute: 30,
+            duration: 60
+        )
+        let appointments = [crossingAppointment]
+        let layouts = engine(for: appointments).layout(appointments: appointments)
+        let layout = try layout(for: id, in: layouts)
+
+        #expect(layout.rect.minY == 210)
+        #expect(abs(layout.rect.height - 35.333_333) < 0.001)
+    }
+
+    @Test func expandedScalePlacesAppointmentWithinBreakAtFullScale() throws {
+        let id = UUID()
+        let breakAppointment = appointment(
+            id: id,
+            startHour: 14,
+            startMinute: 0,
+            duration: 45,
+            status: .draft
+        )
+        let appointments = [breakAppointment]
+        let layouts = engine(for: appointments).layout(appointments: appointments)
+        let layout = try layout(for: id, in: layouts)
+
+        #expect(layout.rect.minY == 300)
+        #expect(layout.rect.height == 45)
+    }
+
+    @Test func overlappingAppointmentsWithinBreakUseColumns() throws {
+        let firstID = UUID()
+        let secondID = UUID()
+        let appointments = [
+            appointment(id: firstID, startHour: 14, startMinute: 0, duration: 30),
+            appointment(id: secondID, startHour: 14, startMinute: 0, duration: 30),
+        ]
+        let layouts = engine(for: appointments).layout(appointments: appointments)
+
+        #expect(try layout(for: firstID, in: layouts).rect.width == contentWidth / 2)
+        #expect(try layout(for: secondID, in: layouts).rect.width == contentWidth / 2)
+    }
+
+    @Test func hourMarkersFollowBreakPresentation() {
+        let breakAppointment = appointment(
+            id: UUID(),
+            startHour: 14,
+            startMinute: 0,
+            duration: 30
+        )
+        let expandedScale = TimelineScale(appointments: [breakAppointment])
+
+        #expect(scale.hourMarkers.map(\.hour) == [9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21])
+        #expect(expandedScale.hourMarkers.map(\.hour) == Array(9...21))
+    }
+
+    @Test func nowTimeWithinBreakIsVisibleOnlyWhenExpanded() {
+        let breakAppointment = appointment(
+            id: UUID(),
+            startHour: 14,
+            startMinute: 0,
+            duration: 30
+        )
+        let expandedScale = TimelineScale(appointments: [breakAppointment])
+
+        #expect(!scale.showsTime(TimeOfDay(14, 30)))
+        #expect(expandedScale.showsTime(TimeOfDay(14, 30)))
+    }
+
     private var engine: TimelineLayoutEngine {
         TimelineLayoutEngine(
             availableWidth: availableWidth,
-            start: TimeOfDay(9, 0)
+            scale: scale
+        )
+    }
+
+    private func engine(for appointments: [Appointment]) -> TimelineLayoutEngine {
+        TimelineLayoutEngine(
+            availableWidth: availableWidth,
+            scale: TimelineScale(appointments: appointments)
         )
     }
 
@@ -147,14 +274,15 @@ struct TimelineLayoutTests {
     }
 
     private var scale: TimelineScale {
-        Timeline.scheduleScale
+        TimelineScale(appointments: [])
     }
 
     private func appointment(
         id: UUID,
         startHour: Int,
         startMinute: Int,
-        duration: Int
+        duration: Int,
+        status: Appointment.Status = .scheduled
     ) -> Appointment {
         Appointment(
             id: id,
@@ -162,7 +290,7 @@ struct TimelineLayoutTests {
             start: Date(timeIntervalSinceReferenceDate: 804_600_000)
                 .setTime(startHour, startMinute),
             durationMinutes: duration,
-            status: .scheduled
+            status: status
         )
     }
 

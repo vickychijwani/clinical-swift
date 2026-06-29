@@ -27,6 +27,7 @@ struct ScheduleView: View {
                 VStack(spacing: 0) {
                     Timeline(
                         appointments: visibleAppointments,
+                        scale: timelineScale,
                         showsNowMarker: calendar.isDateInToday(scheduleModel.selectedDate),
                         appointmentInteractionsEnabled: bookingModel == nil,
                         onSelectAppointment: selectAppointment
@@ -155,6 +156,10 @@ struct ScheduleView: View {
         return scheduleModel.appointments + [bookingModel.draftAppointment]
     }
 
+    private var timelineScale: TimelineScale {
+        TimelineScale(appointments: visibleAppointments)
+    }
+
     private func selectAppointment(_ appointment: Appointment) {
         selectedAppointment = scheduleModel.details(for: appointment)
     }
@@ -182,7 +187,7 @@ struct ScheduleView: View {
     }
 
     private func bookingScrollY(for start: Date) -> CGFloat {
-        Timeline.scheduleScale.yOffset(for: start.timeOfDay) - 80
+        timelineScale.yOffset(for: start.timeOfDay) - 80
     }
 }
 
