@@ -1,9 +1,16 @@
 {
-  "hooks": [
-    {
-      "event": "Stop",
-      "command": "git diff --name-only -- '*.swift' | xargs -r xcrun swift-format format --in-place"
-    }
-  ]
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git diff --name-only -- '*.swift' | xargs -r xcrun swift-format format --in-place",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
 }
 
