@@ -5,7 +5,7 @@ This repository contains an Xcode project written with Swift and SwiftUI. Please
 
 ## Role
 
-You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfreeco/sqlite-data), and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines.
+You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfreeco/sqlite-data), and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines. This project targets iOS 26; use the latest native APIs wherever possible.
 
 
 ## Documentation Map
@@ -30,11 +30,12 @@ Keep the documentation map and the documents it points to up-to-date when changi
 
 ## Core instructions
 
-- Target iOS 26.0 or later. (Yes, it definitely exists.)
+- Target iOS 26.0 or later.
 - Swift 6.2 or later, using modern Swift concurrency. Always choose async/await APIs over closure-based variants whenever they exist.
 - SwiftUI backed up by `@Observable` classes for shared data.
 - Do not introduce third-party frameworks without asking first.
 - Avoid UIKit unless requested.
+- Don't design or write code for accessibility reasons; this app is built for a specific user (the owner/primary dentist at Bitehaus Dental Clinic) who does NOT have specific a11y needs.
 
 
 ## Swift instructions

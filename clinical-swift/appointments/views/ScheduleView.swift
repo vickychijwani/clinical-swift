@@ -12,8 +12,6 @@ struct ScheduleView: View {
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
-    @State private var compactBookingSheetHeight =
-        AppointmentBookingSheetMetrics.fallbackCompactDetentHeight
 
     init() {
         scheduleModel = ScheduleModel(selectedDate: Date.now)
@@ -33,8 +31,17 @@ struct ScheduleView: View {
                         onSelectAppointment: selectAppointment
                     )
 
-                    Color.clear
-                        .frame(height: bottomScrollClearance)
+                    if bookingModel != nil {
+                        // If booking flow is activated, add a space half of the Timeline's height
+                        // to allow late appointments to be viewable by scrolling.
+                        Color.clear
+                            .containerRelativeFrame(
+                                .vertical,
+                                count: 2,
+                                span: 1,
+                                spacing: 0
+                            )
+                    }
                 }
             }
             .modifier(TimelineScrollModifier(scrollPosition: $scrollPosition))
@@ -60,12 +67,7 @@ struct ScheduleView: View {
             }
         }
         .sheet(item: $bookingModel) { bookingModel in
-            NavigationStack {
-                AppointmentBookingView(
-                    model: bookingModel,
-                    compactSheetHeight: $compactBookingSheetHeight
-                )
-            }
+            AppointmentBookingView(model: bookingModel)
         }
         // Update displayed appointments and re-calculate suggested slot for booking, if any
         .task(id: scheduleModel.selectedDate) {
@@ -157,10 +159,6 @@ struct ScheduleView: View {
 
     private func selectAppointment(_ appointment: Appointment) {
         router.presentDetails(.appointment(appointment.id))
-    }
-
-    private var bottomScrollClearance: CGFloat {
-        bookingModel == nil ? 0 : compactBookingSheetHeight
     }
 
     private func refreshAppointments(for date: Date) {

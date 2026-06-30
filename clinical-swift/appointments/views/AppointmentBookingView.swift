@@ -2,12 +2,6 @@ import Dependencies
 import SQLiteData
 import SwiftUI
 
-enum AppointmentBookingSheetMetrics {
-    static let fallbackCompactDetentHeight: CGFloat = 320
-    static let minimumCompactDetentHeight: CGFloat = 220
-    static let nativeNavigationHeaderHeight: CGFloat = 64
-}
-
 struct AppointmentBookingView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -15,7 +9,6 @@ struct AppointmentBookingView: View {
     private var patientRows: [PatientListRow]
 
     @Bindable var model: AppointmentBookingModel
-    @Binding var compactSheetHeight: CGFloat
 
     @State private var bookingStep: AppointmentBookingStep
 
@@ -24,9 +17,8 @@ struct AppointmentBookingView: View {
     /// recreated it would end up overwriting the property with an edited draft.
     @State private var originalDraft: AppointmentBookingDraft
 
-    init(model: AppointmentBookingModel, compactSheetHeight: Binding<CGFloat>) {
+    init(model: AppointmentBookingModel) {
         self.model = model
-        self._compactSheetHeight = compactSheetHeight
         self._originalDraft = State(initialValue: model.draft.normalized)
         self._bookingStep = State(
             initialValue: model.draft.selectedPatient == nil ? .selectPatient : .details
@@ -34,24 +26,28 @@ struct AppointmentBookingView: View {
     }
 
     var body: some View {
-        ConfirmingFormSheet(
-            hasUnsavedChanges: hasUnsavedChanges,
-            title: "Discard unsaved appointment?",
-            message: "Your appointment details have not been saved.",
-            primaryDetent: bookingStep.presentationDetent(compactHeight: compactSheetHeight),
-            allowsInteractiveDismiss: false
-        ) { guardedDismiss in
-            AppointmentBookingForm(
-                model: model,
-                step: $bookingStep,
-                compactSheetHeight: $compactSheetHeight,
-                patientItems: patientRows.map(\.item),
-                guardedDismiss: guardedDismiss,
-                saveAppointment: saveAppointment
-            )
+        NavigationStack {
+            ConfirmingFormSheet(
+                hasUnsavedChanges: hasUnsavedChanges,
+                title: "Discard unsaved appointment?",
+                message: "Your appointment details have not been saved.",
+                allowsInteractiveDismiss: false
+            ) { guardedDismiss in
+                AppointmentBookingForm(
+                    model: model,
+                    step: $bookingStep,
+                    patientItems: patientRows.map(\.item),
+                    guardedDismiss: guardedDismiss,
+                    saveAppointment: saveAppointment
+                )
+            }
         }
+        .modifier(FittedSheetModifier(fitsVertically: bookingStep == .details))
+        .presentationDragIndicator(.hidden)
         .presentationBackground(Color("AppBackground"))
-        .presentationBackgroundInteraction(.enabled)
+        .presentationBackgroundInteraction(
+            bookingStep == .details ? .enabled : .disabled
+        )
     }
 
     private var hasUnsavedChanges: Bool {
@@ -77,21 +73,11 @@ private enum AppointmentBookingStep: Equatable {
             "New Appointment"
         }
     }
-
-    func presentationDetent(compactHeight: CGFloat) -> PresentationDetent {
-        switch self {
-        case .selectPatient:
-            .large
-        case .details:
-            .height(compactHeight)
-        }
-    }
 }
 
 private struct AppointmentBookingForm: View {
     @Bindable var model: AppointmentBookingModel
     @Binding var step: AppointmentBookingStep
-    @Binding var compactSheetHeight: CGFloat
 
     @FocusState private var patientSearchIsFocused: Bool
 
@@ -101,7 +87,7 @@ private struct AppointmentBookingForm: View {
 
     var body: some View {
         content
-            .frame(maxWidth: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Color("AppBackground"))
             .navigationTitle(step.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -140,11 +126,6 @@ private struct AppointmentBookingForm: View {
                             .minimumScaleFactor(0.8)
                     }
                 }
-            }
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height.rounded(.up)
-            } action: { newHeight in
-                updateCompactSheetHeight(newHeight)
             }
             .task {
                 patientSearchIsFocused = step == .selectPatient
@@ -191,6 +172,7 @@ private struct AppointmentBookingForm: View {
             .padding(.horizontal)
             .padding(.top, 2)
             .padding(.bottom)
+            .fittedSheetContent()
         }
     }
 
@@ -226,24 +208,6 @@ private struct AppointmentBookingForm: View {
 
     private func selectPatientStep() {
         step = .selectPatient
-        patientSearchIsFocused = true
-    }
-
-    private func updateCompactSheetHeight(_ measuredHeight: CGFloat) {
-        guard step == .details else {
-            return
-        }
-
-        let height = max(
-            measuredHeight + AppointmentBookingSheetMetrics.nativeNavigationHeaderHeight,
-            AppointmentBookingSheetMetrics.minimumCompactDetentHeight
-        )
-
-        guard abs(height - compactSheetHeight) > 0.5 else {
-            return
-        }
-
-        compactSheetHeight = height
     }
 }
 
@@ -387,9 +351,6 @@ private struct AppointmentBookingDurationSection: View {
 }
 
 #Preview {
-    @Previewable @State var compactSheetHeight =
-        AppointmentBookingSheetMetrics.fallbackCompactDetentHeight
-
     let _ = try! prepareDependencies {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
@@ -401,10 +362,5 @@ private struct AppointmentBookingDurationSection: View {
         )
     ) { _ in }
 
-    NavigationStack {
-        AppointmentBookingView(
-            model: model,
-            compactSheetHeight: $compactSheetHeight
-        )
-    }
+    AppointmentBookingView(model: model)
 }

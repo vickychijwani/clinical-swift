@@ -29,6 +29,7 @@ struct EditPatientView: View {
                 savePatient: savePatient
             )
         }
+        .presentationDetents([.medium])
         .background(Color("AppBackground"))
     }
 
