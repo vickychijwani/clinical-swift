@@ -64,15 +64,6 @@ struct AppointmentBookingView: View {
 private enum AppointmentBookingStep: Equatable {
     case selectPatient
     case details
-
-    var title: String {
-        switch self {
-        case .selectPatient:
-            "Select Patient"
-        case .details:
-            "New Appointment"
-        }
-    }
 }
 
 private struct AppointmentBookingForm: View {
@@ -89,7 +80,7 @@ private struct AppointmentBookingForm: View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Color("AppBackground"))
-            .navigationTitle(step.title)
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -120,7 +111,7 @@ private struct AppointmentBookingForm: View {
                     if step == .details,
                         let patient = model.draft.selectedPatient
                     {
-                        Text("For \(patient.patient.displayName)")
+                        Text("For \(patient.displayName)")
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -183,6 +174,15 @@ private struct AppointmentBookingForm: View {
         )
     }
 
+    private var navigationTitle: String {
+        switch step {
+        case .selectPatient:
+            "Select Patient"
+        case .details:
+            model.purpose.title
+        }
+    }
+
     private var durationBinding: Binding<Int> {
         Binding(
             get: { model.draft.durationMinutes },
@@ -201,7 +201,7 @@ private struct AppointmentBookingForm: View {
     }
 
     private func selectPatient(_ patient: PatientDetails) {
-        model.draft.selectedPatient = patient
+        model.draft.selectedPatient = patient.patient
         model.searchText = ""
         step = .details
     }
@@ -356,10 +356,7 @@ private struct AppointmentBookingDurationSection: View {
     }
     let model = AppointmentBookingModel(
         selectedDate: .now,
-        selectedPatient: PatientDetails(
-            patient: samplePatients.first(where: { $0.name != nil })!,
-            nextAppointmentDate: nil
-        )
+        selectedPatient: samplePatients.first(where: { $0.name != nil })!
     ) { _ in }
 
     AppointmentBookingView(model: model)

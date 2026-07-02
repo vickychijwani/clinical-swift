@@ -18,6 +18,9 @@ final class Router {
     var patientsPath: [Route] = []
     var paymentsPath: [Route] = []
     var detailsPresentation: DetailsPresentation?
+    private(set) var appointmentEditRequest: AppointmentEditRequest?
+
+    private var pendingAppointmentEditRequest: AppointmentEditRequest?
 
     func presentDetails(_ root: Route) {
         detailsPresentation = DetailsPresentation(root: root)
@@ -35,6 +38,29 @@ final class Router {
 
     func dismissDetails() {
         detailsPresentation = nil
+    }
+
+    func requestAppointmentEdit(_ appointmentID: Appointment.ID) {
+        let request = AppointmentEditRequest(appointmentID: appointmentID)
+        selectedTab = .schedule
+
+        if detailsPresentation == nil {
+            appointmentEditRequest = request
+        } else {
+            pendingAppointmentEditRequest = request
+            dismissDetails()
+        }
+    }
+
+    func detailsDidDismiss() {
+        guard let pendingAppointmentEditRequest else { return }
+        self.pendingAppointmentEditRequest = nil
+        appointmentEditRequest = pendingAppointmentEditRequest
+    }
+
+    func consumeAppointmentEditRequest(_ requestID: AppointmentEditRequest.ID) {
+        guard appointmentEditRequest?.id == requestID else { return }
+        appointmentEditRequest = nil
     }
 
     func openExternalDetails(_ route: Route) {

@@ -84,7 +84,7 @@ struct AppointmentBookingDraftTests {
 
     @Test func validationRejectsDurationThatCannotFitClinicHours() throws {
         let calendar = gregorianCalendar
-        let patient = patientItem()
+        let patient = Patient(name: "Aarav Mehta")
         try withDependencies {
             $0.calendar = calendar
         } operation: {
@@ -102,7 +102,7 @@ struct AppointmentBookingDraftTests {
 
     @Test func validationAllowsAppointmentAcrossBreak() throws {
         let calendar = gregorianCalendar
-        let patient = patientItem()
+        let patient = Patient(name: "Aarav Mehta")
         try withDependencies {
             $0.calendar = calendar
         } operation: {
@@ -127,10 +127,4 @@ struct AppointmentBookingDraftTests {
         return calendar
     }
 
-    private func patientItem() -> PatientDetails {
-        PatientDetails(
-            patient: Patient(name: "Aarav Mehta"),
-            nextAppointmentDate: nil
-        )
-    }
 }

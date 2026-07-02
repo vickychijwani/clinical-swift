@@ -196,7 +196,7 @@ struct PersistenceTests {
             $0.calendar = calendar
         } operation: {
             let draft = AppointmentBookingDraft(
-                selectedPatient: patientItem,
+                selectedPatient: patientItem.patient,
                 selectedDate: selectedDate,
                 start: selectedDate.setTime(10, 30, using: calendar),
                 durationMinutes: 45

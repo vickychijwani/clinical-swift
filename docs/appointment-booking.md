@@ -11,6 +11,11 @@ This document captures the deliberate constraints an agent is likely to break wh
 - Patient selection uses a stable full-height sheet so search results and the keyboard do not resize it.
 - Appointment details fit the sheet to their content so the schedule remains visible. Only this step allows interaction with the schedule behind the sheet.
 - The booking sheet is not manually resizable or swipe-dismissible. Explicit toolbar actions keep step changes and discard confirmation intentional.
+- Creating and editing share one scheduling flow. Edit mode starts on appointment details because rescheduling is the common path, while Back still permits changing the patient.
+- Appointment editing is coordinated by the Schedule tab. Entry points from any tab dismiss their details flow before presenting the editor so sheets never compete for presentation.
+- While editing, render one draft preview and omit the persisted version of that appointment. Keeping both would duplicate the appointment and make availability suggestions treat it as its own conflict.
+- Opening an existing appointment for editing must preserve its saved time exactly. Automatic prefilling remains creation and subsequent date or duration change behavior, not edit initialization behavior.
+- Saving an edit updates the existing appointment identity and preserves its status and creation timestamp. After saving or cancelling, remain on the currently selected schedule date rather than reconstructing the originating navigation context.
 
 ## Do Not Reintroduce
 

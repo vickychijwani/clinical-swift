@@ -18,7 +18,10 @@ struct ContentView: View {
                 }
             }
         }
-        .sheet(item: $router.detailsPresentation) { presentation in
+        .sheet(
+            item: $router.detailsPresentation,
+            onDismiss: router.detailsDidDismiss
+        ) { presentation in
             DetailsFlowSheet(presentation: presentation)
                 .id(presentation.id)
         }

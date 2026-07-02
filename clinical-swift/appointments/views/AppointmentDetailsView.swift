@@ -2,6 +2,8 @@ import SQLiteData
 import SwiftUI
 
 struct AppointmentDetailsView: View {
+    @Environment(Router.self) private var router
+
     @FetchOne private var row: ScheduleAppointmentRow?
 
     let onSelectPatient: @MainActor @Sendable (Patient.ID) -> Void
@@ -40,6 +42,18 @@ struct AppointmentDetailsView: View {
         }
         .navigationTitle("Appointment")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let appointment = row?.appointment,
+                    appointment.status == .scheduled
+                {
+                    Button("Edit Appointment", systemImage: "pencil") {
+                        router.requestAppointmentEdit(appointment.id)
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
+        }
     }
 }
 
@@ -50,4 +64,5 @@ struct AppointmentDetailsView: View {
     NavigationStack {
         AppointmentDetailsView(id: sampleAppointments[0].id) { _ in }
     }
+    .environment(Router())
 }

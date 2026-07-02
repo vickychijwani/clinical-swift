@@ -80,4 +80,44 @@ struct RouterTests {
         #expect(router.detailsPresentation?.root == .appointment(appointmentID))
         #expect(router.detailsPresentation?.path == [])
     }
+
+    @Test func appointmentEditWaitsForDetailsDismissalAndPreservesTabPaths() {
+        let router = Router()
+        let appointmentID = UUID()
+        let schedulePath: [Route] = [.patient(UUID())]
+        let patientsPath: [Route] = [.appointment(UUID())]
+        router.selectedTab = .patients
+        router.schedulePath = schedulePath
+        router.patientsPath = patientsPath
+        router.presentDetails(.appointment(appointmentID))
+
+        router.requestAppointmentEdit(appointmentID)
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation == nil)
+        #expect(router.appointmentEditRequest == nil)
+        #expect(router.schedulePath == schedulePath)
+        #expect(router.patientsPath == patientsPath)
+
+        router.detailsDidDismiss()
+
+        #expect(router.appointmentEditRequest?.appointmentID == appointmentID)
+    }
+
+    @Test func appointmentEditRequestsAreUniquelyIdentifiedAndConsumedByIdentity() throws {
+        let router = Router()
+        let appointmentID = UUID()
+
+        router.requestAppointmentEdit(appointmentID)
+        let firstRequest = try #require(router.appointmentEditRequest)
+        router.consumeAppointmentEditRequest(UUID())
+        #expect(router.appointmentEditRequest == firstRequest)
+
+        router.consumeAppointmentEditRequest(firstRequest.id)
+        #expect(router.appointmentEditRequest == nil)
+
+        router.requestAppointmentEdit(appointmentID)
+        #expect(router.appointmentEditRequest?.appointmentID == appointmentID)
+        #expect(router.appointmentEditRequest?.id != firstRequest.id)
+    }
 }

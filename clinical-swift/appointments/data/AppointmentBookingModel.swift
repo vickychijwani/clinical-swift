@@ -4,11 +4,18 @@ import SQLiteData
 @MainActor @Observable class AppointmentBookingModel: Identifiable {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.calendar) var calendar
+    @ObservationIgnored @Dependency(\.date.now) private var now
 
     /// This id lets the parent SwiftUI View (e.g., a sheet) identify whether the same or different
     /// item is being presented if the parent's item is re-assigned
     let id = UUID()
-    private let draftAppointmentID = UUID()
+    let purpose: AppointmentBookingPurpose
+    private let draftAppointmentID: Appointment.ID
+
+    /// Prevent schedule reloads from moving an edited appointment just because its saved time
+    /// overlaps another appointment or crosses a preferred scheduling boundary. Changing the date
+    /// or duration enables normal automatic prefilling again.
+    private var automaticallyPrefills: Bool
 
     var selectedDate: Date {
         didSet {
@@ -21,26 +28,48 @@ import SQLiteData
     var searchText = ""
     var saveErrorMessage: String?
     var draftPreviewScrollRequest = 0
-    var onBooked: (Date) -> Void
+    var onSaved: (Date) -> Void
 
     init(
         selectedDate: Date,
-        selectedPatient: PatientDetails? = nil,
-        onBooked: @escaping (Date) -> Void
+        selectedPatient: Patient? = nil,
+        onSaved: @escaping (Date) -> Void
     ) {
+        self.purpose = .create
+        self.draftAppointmentID = UUID()
+        self.automaticallyPrefills = true
         self.selectedDate = selectedDate
         self.draft = AppointmentBookingDraft(
             selectedPatient: selectedPatient,
             selectedDate: selectedDate
         )
-        self.onBooked = onBooked
+        self.onSaved = onSaved
+        self.selectedDate = draft.selectedDate
+    }
+
+    init(
+        editing details: AppointmentDetails,
+        onSaved: @escaping (Date) -> Void
+    ) {
+        let appointment = details.appointment
+        self.purpose = .edit(appointment.id)
+        self.draftAppointmentID = appointment.id
+        self.automaticallyPrefills = false
+        self.selectedDate = appointment.start
+        self.draft = AppointmentBookingDraft(
+            selectedPatient: details.patient,
+            selectedDate: appointment.start,
+            start: appointment.start,
+            durationMinutes: appointment.durationMinutes
+        )
+        self.onSaved = onSaved
         self.selectedDate = draft.selectedDate
     }
 
     var draftAppointment: Appointment {
         Appointment(
             id: draftAppointmentID,
-            patientName: draft.selectedPatient?.patient.displayName ?? "<Select a patient>",
+            patientName: draft.selectedPatient?.displayName ?? "<Select a patient>",
             start: draft.start,
             durationMinutes: draft.durationMinutes,
             status: .draft
@@ -55,6 +84,7 @@ import SQLiteData
         }
 
         appointments = []
+        automaticallyPrefills = true
         self.selectedDate = normalizedDate
     }
 
@@ -67,6 +97,7 @@ import SQLiteData
     func selectDuration(_ durationMinutes: Int) {
         let previousStart = draft.start
         draft.selectDuration(durationMinutes)
+        automaticallyPrefills = true
         prefillFirstAvailableSlot(preservingStartIfAvailable: draft.start)
         requestDraftPreviewScrollIfNeeded(previousStart: previousStart)
     }
@@ -78,7 +109,15 @@ import SQLiteData
         }
 
         let previousStart = draft.start
-        self.appointments = appointments
+
+        // While editing, omit the persisted version of that appointment. Keeping both would
+        // render duplicates and make availability suggestions treat it as its own conflict.
+        self.appointments = appointments.filter { $0.id != purpose.editedAppointmentID }
+
+        if !automaticallyPrefills {
+            return
+        }
+
         prefillFirstAvailableSlot(preservingStartIfAvailable: draft.start)
         requestDraftPreviewScrollIfNeeded(previousStart: previousStart)
     }
@@ -90,10 +129,8 @@ import SQLiteData
     }
 
     func saveAppointment() async -> Bool {
-        let record: AppointmentRecord
-
         do {
-            record = try draft.normalized.makeRecord(now: .now)
+            try draft.normalized.validate()
             // Reset error message
             saveErrorMessage = nil
         } catch AppointmentBookingValidationError.missingPatient {
@@ -108,14 +145,56 @@ import SQLiteData
         }
 
         do {
-            try await database.write { db in
-                try AppointmentRecord.insert { record }
-                    .execute(db)
+            // Keep the callback tied to the value being saved, even if the draft changes while the
+            // database write suspends this method.
+            let savedDate = draft.start
+            switch purpose {
+            case .create:
+                let record = try draft.normalized.makeRecord(now: now)
+                try await database.write { db in
+                    try AppointmentRecord.insert { record }
+                        .execute(db)
+                }
+
+            case .edit(let appointmentID):
+                guard let patientID = draft.selectedPatient?.id else {
+                    throw AppointmentBookingValidationError.missingPatient
+                }
+                // Pass one immutable snapshot into the database closure instead of accessing the
+                // model's actor-isolated draft and clock from inside the write.
+                let start = draft.start
+                let durationMinutes = draft.durationMinutes
+                let updatedAt = now
+
+                try await database.write { db in
+                    // Ensure the stored appointment status hasn't changed while editing
+                    guard
+                        let record = try AppointmentRecord.find(appointmentID).fetchOne(db),
+                        record.status == Appointment.Status.scheduled.storageValue
+                    else {
+                        throw AppointmentEditingError.unavailable
+                    }
+
+                    try AppointmentRecord.find(appointmentID)
+                        .update {
+                            $0.patientID = patientID
+                            $0.start = start
+                            $0.durationMinutes = durationMinutes
+                            $0.updatedAt = updatedAt
+                        }
+                        .execute(db)
+                }
             }
-            onBooked(record.start)
+
+            onSaved(savedDate)
             return true
         } catch {
-            saveErrorMessage = "The appointment could not be saved."
+            saveErrorMessage =
+                if error is AppointmentEditingError {
+                    "This appointment can no longer be edited."
+                } else {
+                    "The appointment could not be saved."
+                }
             return false
         }
     }
@@ -159,4 +238,5 @@ import SQLiteData
             draftPreviewScrollRequest += 1
         }
     }
+
 }

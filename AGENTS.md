@@ -19,6 +19,8 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfre
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 
+Files under `docs/specs/` are immutable feature specifications. Do not edit them during
+implementation unless the user explicitly requests a specification change.
 
 ## Documentation Guidance
 

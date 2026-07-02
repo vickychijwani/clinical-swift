@@ -6,13 +6,13 @@ struct AppointmentBookingDraft: Equatable, Sendable {
 
     @Dependency(\.calendar) private var calendar
 
-    var selectedPatient: PatientDetails?
+    var selectedPatient: Patient?
     var selectedDate: Date
     var start: Date
     var durationMinutes: Int
 
     init(
-        selectedPatient: PatientDetails? = nil,
+        selectedPatient: Patient? = nil,
         selectedDate: Date,
         start: Date? = nil,
         durationMinutes: Int = 30
@@ -103,7 +103,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
 
         return AppointmentRecord(
             id: id,
-            patientID: selectedPatient.patient.id,
+            patientID: selectedPatient.id,
             start: start,
             durationMinutes: durationMinutes,
             status: Appointment.Status.scheduled.storageValue,
