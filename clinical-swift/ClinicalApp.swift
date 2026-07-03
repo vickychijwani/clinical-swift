@@ -11,7 +11,15 @@ struct ClinicalApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            #if DEBUG
+                if CommandLine.arguments.contains("--ui-testing-appointment-hitboxes") {
+                    AppointmentHitboxUITestView()
+                } else {
+                    ContentView()
+                }
+            #else
+                ContentView()
+            #endif
         }
     }
 }

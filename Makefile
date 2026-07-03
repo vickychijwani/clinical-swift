@@ -2,6 +2,8 @@ SHELL := /bin/bash
 
 PROJECT := clinical-swift.xcodeproj
 SCHEME := clinical-swift
+UNIT_TEST_TARGET := clinical-swiftTests
+UI_TEST_TARGET := clinical-swiftUITests
 CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
 BUNDLE_ID := in.bitehaus.clinical-swift
@@ -28,14 +30,15 @@ XCODEBUILD_FLAGS := -project "$(PROJECT)" \
 
 .DEFAULT_GOAL := build-and-run
 
-.PHONY: help diagnose prepare check-tools resolve-packages build test boot install run build-and-run uninstall clean
+.PHONY: help diagnose prepare check-tools resolve-packages build test ui-test boot install run build-and-run uninstall clean
 
 help:
 	@printf "%s\n" \
 		"Targets:" \
 		"  make                  Build, install, and run on $(SIMULATOR)" \
 		"  make build            Build the app" \
-		"  make test             Run tests" \
+		"  make test             Run unit tests" \
+		"  make ui-test          Run UI tests" \
 		"  make install          Build and install on $(SIMULATOR)" \
 		"  make run              Launch the installed app" \
 		"  make resolve-packages Resolve Swift package dependencies" \
@@ -82,8 +85,15 @@ test: check-tools prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
 		$(XCODEBUILD_FLAGS) \
-		test \
+		test -only-testing:$(UNIT_TEST_TARGET) \
 		2>&1 | tee "$(LOG_DIR)/test.log" | $(XCBEAUTIFY)
+
+ui-test: check-tools prepare
+	@set -o pipefail; \
+	$(XCODEBUILD_ENV) xcodebuild \
+		$(XCODEBUILD_FLAGS) \
+		test -only-testing:$(UI_TEST_TARGET) \
+		2>&1 | tee "$(LOG_DIR)/ui-test.log" | $(XCBEAUTIFY)
 
 boot: check-tools
 	@xcrun simctl boot "$(SIMULATOR)" >/dev/null 2>&1 || true

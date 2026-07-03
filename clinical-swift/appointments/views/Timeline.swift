@@ -65,6 +65,11 @@ struct Timeline: View {
                         height: layout.rect.height,
                         alignment: .topLeading
                     )
+                    // Clipped text can otherwise remain tappable beyond the card edge.
+                    // Regression test: testLongNameDoesNotStealTapFromRightAppointment()
+                    .contentShape(.rect(cornerRadius: 8))
+                    // Used by UI tests
+                    .accessibilityIdentifier("appointment-\(layout.appointment.id.uuidString)")
                     .clipShape(.rect(cornerRadius: 8))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)

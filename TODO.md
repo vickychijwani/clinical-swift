@@ -38,7 +38,7 @@
 
 Refactors:
 - [x] Remove TimelineSegment; use TimelineScale for universal placement
-- [ ] Extract reusable "auto-height" sheet component from AppointmentBooking sheet
+- [x] Extract reusable "auto-height" sheet component from AppointmentBooking sheet
 
 Bugs:
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)

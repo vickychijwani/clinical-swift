@@ -41,6 +41,17 @@
                ReferencedContainer = "container:clinical-swift.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A10000000000000000000008"
+               BuildableName = "clinical-swiftUITests.xctest"
+               BlueprintName = "clinical-swiftUITests"
+               ReferencedContainer = "container:clinical-swift.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
