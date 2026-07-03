@@ -33,9 +33,8 @@ struct ScheduleView: View {
                         onSelectAppointment: selectAppointment
                     )
 
-                    if bookingModel != nil {
-                        // If booking flow is activated, add a space half of the Timeline's height
-                        // to allow late appointments to be viewable by scrolling.
+                    if needsSheetClearance {
+                        // Leave room to scroll late appointments above an interactable sheet.
                         Color.clear
                             .containerRelativeFrame(
                                 .vertical,
@@ -232,6 +231,19 @@ struct ScheduleView: View {
 
     private var timelineScale: TimelineScale {
         TimelineScale(appointments: visibleAppointments)
+    }
+
+    private var needsSheetClearance: Bool {
+        bookingModel != nil || isShowingAppointmentDetails
+    }
+
+    private var isShowingAppointmentDetails: Bool {
+        guard let presentation = router.detailsPresentation else { return false }
+
+        if case .appointment = presentation.currentRoute {
+            return true
+        }
+        return false
     }
 
     private func selectAppointment(_ appointment: Appointment) {

@@ -1,9 +1,14 @@
 import Foundation
 
-struct DetailsPresentation: Identifiable, Hashable {
+@MainActor @Observable
+final class DetailsPresentation: Identifiable {
     let id: UUID
-    let root: Route
+    private(set) var root: Route
     var path: [Route]
+
+    var currentRoute: Route {
+        path.last ?? root
+    }
 
     init(
         id: UUID = UUID(),
@@ -13,5 +18,10 @@ struct DetailsPresentation: Identifiable, Hashable {
         self.id = id
         self.root = root
         self.path = path
+    }
+
+    func replaceRoot(with route: Route) {
+        root = route
+        path.removeAll()
     }
 }

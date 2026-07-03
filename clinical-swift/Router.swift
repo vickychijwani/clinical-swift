@@ -23,17 +23,18 @@ final class Router {
     private var pendingAppointmentEditRequest: AppointmentEditRequest?
 
     func presentDetails(_ root: Route) {
-        detailsPresentation = DetailsPresentation(root: root)
+        if let detailsPresentation {
+            // Keep the active sheet session stable so background selections replace its content.
+            // e.g., when switching between selected appointments
+            detailsPresentation.replaceRoot(with: root)
+        } else {
+            detailsPresentation = DetailsPresentation(root: root)
+        }
     }
 
     func pushDetails(_ route: Route) {
         guard detailsPresentation != nil else { return }
         detailsPresentation?.path.append(route)
-    }
-
-    func updateDetailsPath(_ path: [Route], presentationID: DetailsPresentation.ID) {
-        guard detailsPresentation?.id == presentationID else { return }
-        detailsPresentation?.path = path
     }
 
     func dismissDetails() {

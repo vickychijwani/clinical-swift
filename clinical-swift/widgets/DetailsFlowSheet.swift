@@ -3,16 +3,19 @@ import SwiftUI
 struct DetailsFlowSheet: View {
     @Environment(Router.self) private var router
 
-    let presentation: DetailsPresentation
-
-    @State private var selectedDetent: PresentationDetent = .medium
+    @Bindable var presentation: DetailsPresentation
 
     var body: some View {
-        NavigationStack(path: detailsPath) {
-            DetailsRouteView(
-                route: presentation.root,
-                onNavigate: navigate
-            )
+        NavigationStack(path: $presentation.path) {
+            ZStack {
+                DetailsRouteView(
+                    route: presentation.root,
+                    onNavigate: navigate
+                )
+                .id(presentation.root)
+                .transition(.opacity)
+            }
+            .animation(.easeInOut(duration: 0.15), value: presentation.root)
             .navigationDestination(for: Route.self) { route in
                 DetailsRouteView(
                     route: route,
@@ -30,48 +33,31 @@ struct DetailsFlowSheet: View {
                 }
             }
         }
-        .presentationDetents(availableDetents, selection: $selectedDetent)
+        .modifier(
+            FittedSheetModifier(
+                fitsVertically: isShowingAppointment,
+                fallbackDetent: .medium
+            )
+        )
         .presentationBackground(Color("AppBackground"))
+        .presentationBackgroundInteraction(
+            isShowingAppointment ? .enabled : .disabled
+        )
         .presentationContentInteraction(.resizes)
     }
 
-    private var detailsPath: Binding<[Route]> {
-        Binding(
-            get: {
-                guard router.detailsPresentation?.id == presentation.id else { return [] }
-                return router.detailsPresentation?.path ?? []
-            },
-            set: { path in
-                router.updateDetailsPath(path, presentationID: presentation.id)
-            }
-        )
-    }
-
-    private var currentRoute: Route {
-        guard router.detailsPresentation?.id == presentation.id else {
-            return presentation.root
-        }
-        return router.detailsPresentation?.path.last ?? presentation.root
-    }
-
     private var isAtRoot: Bool {
-        guard router.detailsPresentation?.id == presentation.id else { return true }
-        return router.detailsPresentation?.path.isEmpty ?? true
+        presentation.path.isEmpty
     }
 
-    private var availableDetents: Set<PresentationDetent> {
-        switch currentRoute {
-        case .patient:
-            [.medium]
-        case .appointment:
-            [.height(220), .medium, .large]
+    private var isShowingAppointment: Bool {
+        if case .appointment = presentation.currentRoute {
+            return true
         }
+        return false
     }
 
     private func navigate(to route: Route) {
-        if case .patient = route {
-            selectedDetent = .medium
-        }
         router.pushDetails(route)
     }
 }

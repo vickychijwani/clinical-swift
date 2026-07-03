@@ -32,19 +32,24 @@ struct RouterTests {
         #expect(router.patientsPath == patientsPath)
     }
 
-    @Test func detailsPushAndPathUpdateRequireAnActiveMatchingPresentation() throws {
+    @Test func detailsPushRequiresAnActivePresentation() {
         let router = Router()
         router.pushDetails(.patient(UUID()))
         #expect(router.detailsPresentation == nil)
+    }
 
-        router.presentDetails(.patient(UUID()))
+    @Test func presentingDetailsAgainReusesTheSessionAndReplacesHistory() throws {
+        let router = Router()
+        router.presentDetails(.appointment(UUID()))
+        router.pushDetails(.patient(UUID()))
         let presentationID = try #require(router.detailsPresentation?.id)
-        router.updateDetailsPath([.appointment(UUID())], presentationID: UUID())
-        #expect(router.detailsPresentation?.path == [])
+        let appointmentID = UUID()
 
-        let route = Route.appointment(UUID())
-        router.updateDetailsPath([route], presentationID: presentationID)
-        #expect(router.detailsPresentation?.path == [route])
+        router.presentDetails(.appointment(appointmentID))
+
+        #expect(router.detailsPresentation?.id == presentationID)
+        #expect(router.detailsPresentation?.root == .appointment(appointmentID))
+        #expect(router.detailsPresentation?.path == [])
     }
 
     @Test func dismissDetailsClearsTheCompletePresentation() {
@@ -67,7 +72,7 @@ struct RouterTests {
         router.openExternalDetails(.patient(patientID))
 
         #expect(router.selectedTab == .patients)
-        #expect(router.detailsPresentation?.id != previousID)
+        #expect(router.detailsPresentation?.id == previousID)
         #expect(router.detailsPresentation?.root == .patient(patientID))
         #expect(router.detailsPresentation?.path == [])
 
@@ -76,7 +81,7 @@ struct RouterTests {
         router.openExternalDetails(.appointment(appointmentID))
 
         #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation?.id != patientPresentationID)
+        #expect(router.detailsPresentation?.id == patientPresentationID)
         #expect(router.detailsPresentation?.root == .appointment(appointmentID))
         #expect(router.detailsPresentation?.path == [])
     }

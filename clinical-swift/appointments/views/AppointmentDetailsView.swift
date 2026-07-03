@@ -30,6 +30,7 @@ struct AppointmentDetailsView: View {
                         )
                     )
                     .padding()
+                    .fittedSheetContent()
                 }
                 .scrollBounceBehavior(.basedOnSize)
             } else {

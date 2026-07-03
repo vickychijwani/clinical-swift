@@ -59,15 +59,20 @@ import SwiftUI
 /// touches.
 struct FittedSheetModifier: ViewModifier {
     let fitsVertically: Bool
+    let fallbackDetent: PresentationDetent
 
     @State private var presentationDetents: Set<PresentationDetent>
     @State private var selectedDetent: PresentationDetent
     @State private var fittedDetent: PresentationDetent?
 
-    init(fitsVertically: Bool) {
+    init(
+        fitsVertically: Bool,
+        fallbackDetent: PresentationDetent = .large
+    ) {
         self.fitsVertically = fitsVertically
+        self.fallbackDetent = fallbackDetent
 
-        let initialDetent: PresentationDetent = fitsVertically ? .medium : .large
+        let initialDetent: PresentationDetent = fitsVertically ? .medium : fallbackDetent
         _presentationDetents = State(initialValue: [initialDetent])
         _selectedDetent = State(initialValue: initialDetent)
     }
@@ -91,7 +96,7 @@ struct FittedSheetModifier: ViewModifier {
             }
             .onChange(of: fitsVertically) {
                 if !fitsVertically {
-                    selectFullHeightDetent()
+                    selectFallbackDetent()
                 }
             }
             .transaction { transaction in
@@ -120,16 +125,16 @@ struct FittedSheetModifier: ViewModifier {
         }
     }
 
-    private func selectFullHeightDetent() {
-        presentationDetents.insert(.large)
-        selectedDetent = .large
+    private func selectFallbackDetent() {
+        presentationDetents.insert(fallbackDetent)
+        selectedDetent = fallbackDetent
     }
 
     private func removeStaleDetents() {
         if fitsVertically {
             presentationDetents = Set([fittedDetent, selectedDetent].compactMap(\.self))
         } else {
-            presentationDetents = [.large]
+            presentationDetents = [fallbackDetent]
         }
     }
 }

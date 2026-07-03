@@ -19,7 +19,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - Use `TimeOfDay` for clinic-level schedule boundaries such as opening, closing, and break times. Use `Date` for appointment instances on a specific day.
 - Appointment booking may render a draft appointment in the full schedule for context, but the display timeline is not the time editor. Keep draft time changes in the booking controls until a dedicated interaction model exists.
 - While a booking draft is active, appointment-card interactions should be disabled without disabling timeline scrolling or date-strip selection. This prevents accidental navigation when appointment-card tap actions are added.
-- While booking, leave empty space below the timeline equal to half the visible schedule height. This lets late appointments scroll above the sheet without making timeline layout depend on the sheet's measured height.
+- While booking or showing an interactable appointment-details sheet, leave empty space below the timeline equal to half the visible schedule height. This lets late appointments scroll above the sheet without making timeline layout depend on the sheet's measured height.
 - The booking sheet is intentionally phased: patient selection uses a full-height sheet for search results, then appointment details fit their content so the timeline regains priority as the scheduling preview.
 - In booking mode, keep the date strip outside the timeline scroll view. Date selection must remain pinned while the user scrolls the day around the draft appointment.
 - Do not enable swipe-to-dismiss on the booking sheet. It competes with timeline scrolling behind the sheet; use explicit toolbar actions so discard confirmation remains intentional.
