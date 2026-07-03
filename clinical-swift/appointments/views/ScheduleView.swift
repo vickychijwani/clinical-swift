@@ -87,6 +87,27 @@ struct ScheduleView: View {
             guard let request = router.appointmentEditRequest else { return }
             await startEditing(request)
         }
+        .task(id: bookingModel?.id) {
+            guard bookingModel != nil else { return }
+
+            // Let SwiftUI lay out the draft and sheet clearance before animating to its position.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            scrollToDraftAppointment()
+        }
+        .task(id: visibleAppointmentDetailsID) {
+            guard
+                let visibleAppointmentDetailsID,
+                let appointment = scheduleModel.appointments.first(where: {
+                    $0.id == visibleAppointmentDetailsID
+                })
+            else { return }
+
+            // Let SwiftUI add sheet clearance before scrolling the selected appointment into view.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            scrollToAppointment(appointment)
+        }
         // Update displayed appointments and re-calculate suggested slot for booking, if any
         .task(id: scheduleModel.selectedDate) {
             let requestedDate = scheduleModel.selectedDate
@@ -114,7 +135,9 @@ struct ScheduleView: View {
         // Auto-scroll to show draft booking on date/time/duration changes.
         // Why on duration changes? Because change of duration might change suggested slot and move
         // the draft automatically.
-        .onChange(of: activeBookingDate) {
+        .onChange(of: activeBookingDate) { previousDate, _ in
+            // Initial presentation scrolls after layout in the booking-model task above.
+            guard previousDate != nil else { return }
             scrollToDraftAppointment()
         }
         .onChange(of: draftPreviewScrollRequest) {
@@ -122,8 +145,8 @@ struct ScheduleView: View {
         }
     }
 
-    /// Switch to booking mode - create a model, select a slot based on existing appointments, and
-    /// scroll to preview.
+    /// Switch to booking mode and select a slot based on existing appointments. Installing the
+    /// model triggers the layout-aware preview scroll above.
     private func startBooking() {
         let bookingModel = AppointmentBookingModel(selectedDate: scheduleModel.selectedDate) {
             bookedDate in
@@ -138,7 +161,6 @@ struct ScheduleView: View {
         // Install the model after prefilling slot - to ensure the sheet starts out displaying the
         // pre-selected slot rather than briefly showing the clinic opening time.
         self.bookingModel = bookingModel
-        scrollToDraftAppointment()
     }
 
     private func startEditing(_ request: AppointmentEditRequest) async {
@@ -179,7 +201,6 @@ struct ScheduleView: View {
 
             self.bookingModel = bookingModel
             router.consumeAppointmentEditRequest(request.id)
-            scrollToDraftAppointment()
         } catch is CancellationError {
             return
         } catch {
@@ -238,12 +259,16 @@ struct ScheduleView: View {
     }
 
     private var isShowingAppointmentDetails: Bool {
-        guard let presentation = router.detailsPresentation else { return false }
+        visibleAppointmentDetailsID != nil
+    }
 
-        if case .appointment = presentation.currentRoute {
-            return true
-        }
-        return false
+    private var visibleAppointmentDetailsID: Appointment.ID? {
+        guard
+            let presentation = router.detailsPresentation,
+            case .appointment(let id) = presentation.currentRoute
+        else { return nil }
+
+        return id
     }
 
     private func selectAppointment(_ appointment: Appointment) {
@@ -263,12 +288,16 @@ struct ScheduleView: View {
             return
         }
 
+        scrollToAppointment(bookingModel.draftAppointment)
+    }
+
+    private func scrollToAppointment(_ appointment: Appointment) {
         withAnimation(.easeInOut(duration: 0.2)) {
-            scrollPosition.scrollTo(y: max(bookingScrollY(for: bookingModel.draft.start), 0))
+            scrollPosition.scrollTo(y: max(timelineScrollY(for: appointment.start), 0))
         }
     }
 
-    private func bookingScrollY(for start: Date) -> CGFloat {
+    private func timelineScrollY(for start: Date) -> CGFloat {
         timelineScale.yOffset(for: start.timeOfDay) - 80
     }
 }
