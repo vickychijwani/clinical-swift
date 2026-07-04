@@ -31,6 +31,7 @@ General invariants:
 - Normal appointment reads exclude cancelled rows by default. Cancelled records remain stored for audit use; a future administrative query must opt into them explicitly.
 - “Next appointment” metadata uses only future scheduled rows. Completed appointments remain historical records but are not upcoming work.
 - Migrations are append-only after release. Do not edit old migration SQL once users may have run it because existing databases replay migrations by name.
+- In `#sql` expressions, never interpolate a runtime value as `\(value)`. Always write `\(bind: value)`, including for optional values; bare interpolation is deprecated and can produce an optional value's debug description instead of a database bind.
 - Large binary blobs of data (BLOB type) MUST be in their own tables to avoid performance issues when querying non-blob data
 
 ## Do Not Reintroduce

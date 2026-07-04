@@ -116,7 +116,7 @@ private struct EditPatientForm: View {
         }
         .listSectionSpacing(.compact)
         .scrollContentBackground(.hidden)
-        .navigationTitle("Edit Patient")
+        .navigationTitle("New Patient")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

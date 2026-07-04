@@ -22,7 +22,7 @@ nonisolated struct PatientRecord: Identifiable, Sendable {
     ) {
         self.id = id
         self.name = name?.nilIfBlank
-        self.phone = phone?.nilIfBlank
+        self.phone = PhoneNumber.normalizedE164(phone)
         self.dob = dob
         self.gender = gender?.nilIfBlank
         self.createdAt = createdAt

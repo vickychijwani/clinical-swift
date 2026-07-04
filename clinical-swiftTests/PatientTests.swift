@@ -22,14 +22,31 @@ struct PatientTests {
         }
     }
 
-    @Test func trimsProvidedNameAndPhone() {
+    @Test func normalizesProvidedNameAndPhone() {
         let patient = Patient(
             name: "  Aarav Mehta  ",
             phone: "  +91 98201 44532  "
         )
 
         #expect(patient.name == "Aarav Mehta")
-        #expect(patient.phone == "+91 98201 44532")
+        #expect(patient.phone == "+919820144532")
+    }
+
+    @Test func assumesIndiaForPhoneWithoutCountryCode() {
+        #expect(Patient(name: nil, phone: "98201 44532").phone == "+919820144532")
+        #expect(Patient(name: nil, phone: "098201 44532").phone == "+919820144532")
+        #expect(Patient(name: nil, phone: "91 98201 44532").phone == "+919820144532")
+    }
+
+    @Test func preservesExplicitInternationalCountryCode() {
+        #expect(Patient(name: nil, phone: "+1 (415) 555-2671").phone == "+14155552671")
+        #expect(Patient(name: nil, phone: "0044 20 7946 0958").phone == "+442079460958")
+    }
+
+    @Test func formatsPhoneNumbersForDisplay() {
+        #expect(PhoneNumber.formattedForDisplay("+911234567890") == "+91 12345 67890")
+        #expect(PhoneNumber.formattedForDisplay("+12025550100") == "+1 202 555 0100")
+        #expect(PhoneNumber.formattedForDisplay("+442079460958") == "+442079460958")
     }
 
     @Test func displayNameFallsBackForUnknownPatients() {

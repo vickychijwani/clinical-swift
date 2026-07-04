@@ -5,6 +5,7 @@ This document captures the deliberate constraints an agent is likely to break if
 ## Invariants
 
 - A patient is valid only when at least one of name or phone number is present.
+- Stored phone numbers use compact E.164 format. Normalize punctuation and whitespace at the domain and persistence boundaries; when a number has no country code, treat it as an Indian number (`+91`). Apply readable grouping only at presentation boundaries.
 - Patients without a name display as `Unknown Patient`, but that fallback is presentation-only. Do not store it as a fake name.
 - Patient name search is word-prefix based and order-independent. Do not use substring matching because short queries like `an` should find `Anjali Desai` and `Mary Ann`, but not `Rani Dutta`.
 - Age is derived from date of birth at render/test time. Do not store age as independent patient state because it drifts every birthday.

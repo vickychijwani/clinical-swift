@@ -41,24 +41,7 @@ struct ViewPatientView: View {
     }
 
     private var normalizedPhoneNumber: String? {
-        guard let phoneNumber = details.patient.phone else { return nil }
-
-        let trimmedPhoneNumber = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        let startsWithPlus = trimmedPhoneNumber.starts(with: "+")
-        let allowedDigits = CharacterSet(charactersIn: "0123456789")
-        let digits = trimmedPhoneNumber
-            .unicodeScalars
-            .filter { allowedDigits.contains($0) }
-            .map(String.init)
-            .joined()
-
-        guard !digits.isEmpty else { return nil }
-
-        if startsWithPlus {
-            return "+\(digits)"
-        }
-
-        return "+91\(digits)"
+        PhoneNumber.normalizedE164(details.patient.phone)
     }
 
     private var whatsappPhoneNumber: String? {

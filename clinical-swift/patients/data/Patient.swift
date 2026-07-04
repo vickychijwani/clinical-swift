@@ -23,7 +23,7 @@ nonisolated struct Patient: Identifiable, Hashable, Sendable {
         createdDate: Date = .now
     ) {
         let normalizedName = name?.nilIfBlank
-        let normalizedPhone = phone?.nilIfBlank
+        let normalizedPhone = PhoneNumber.normalizedE164(phone)
 
         self.id = id
         self.name = normalizedName
@@ -43,7 +43,7 @@ nonisolated struct Patient: Identifiable, Hashable, Sendable {
 
     func validate() throws {
         let normalizedName = name?.nilIfBlank
-        let normalizedPhone = phone?.nilIfBlank
+        let normalizedPhone = PhoneNumber.normalizedE164(phone)
         guard normalizedName != nil || normalizedPhone != nil else {
             throw ValidationError.missingNameAndPhone
         }

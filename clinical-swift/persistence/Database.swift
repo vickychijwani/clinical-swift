@@ -92,6 +92,61 @@ func migrateDatabase(_ database: any DatabaseWriter) throws {
         .execute(db)
     }
 
+    migrator.registerMigration("Normalize patient phone numbers") { db in
+        let storedPhones = try String.fetchAll(
+            db,
+            sql: #"SELECT DISTINCT "phone" FROM "patients" WHERE "phone" IS NOT NULL"#
+        )
+
+        for storedPhone in storedPhones {
+            let normalizedPhone = PhoneNumber.normalizedE164(storedPhone)
+            try #sql(
+                """
+                UPDATE "patients"
+                SET "phone" = \(bind: normalizedPhone)
+                WHERE "phone" = \(bind: storedPhone)
+                """
+            )
+            .execute(db)
+        }
+
+        try #sql(
+            """
+            CREATE TRIGGER "validate_patient_phone_before_insert"
+            BEFORE INSERT ON "patients"
+            WHEN NEW."phone" IS NOT NULL AND (
+              length(NEW."phone") NOT BETWEEN 2 AND 16
+              -- Require a plus and a nonzero first digit; GLOB's * can still match any characters.
+              OR NEW."phone" NOT GLOB '+[1-9]*'
+              -- Ensure every character after the plus is a digit.
+              OR substr(NEW."phone", 2) GLOB '*[^0-9]*'
+            )
+            BEGIN
+              SELECT RAISE(ABORT, 'patient phone must use E.164 format');
+            END
+            """
+        )
+        .execute(db)
+
+        try #sql(
+            """
+            CREATE TRIGGER "validate_patient_phone_before_update"
+            BEFORE UPDATE OF "phone" ON "patients"
+            WHEN NEW."phone" IS NOT NULL AND (
+              length(NEW."phone") NOT BETWEEN 2 AND 16
+              -- Require a plus and a nonzero first digit; GLOB's * can still match any characters.
+              OR NEW."phone" NOT GLOB '+[1-9]*'
+              -- Ensure every character after the plus is a digit.
+              OR substr(NEW."phone", 2) GLOB '*[^0-9]*'
+            )
+            BEGIN
+              SELECT RAISE(ABORT, 'patient phone must use E.164 format');
+            END
+            """
+        )
+        .execute(db)
+    }
+
     try migrator.migrate(database)
 }
 

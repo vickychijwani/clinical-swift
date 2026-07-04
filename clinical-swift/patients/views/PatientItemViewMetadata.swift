@@ -28,7 +28,7 @@ struct PatientItemViewMetadata: Equatable {
             parts.append(demographics)
         }
 
-        if patient.isUnknown, let phone = patient.phone {
+        if patient.isUnknown, let phone = PhoneNumber.formattedForDisplay(patient.phone) {
             parts.append(phone)
         }
 

@@ -30,7 +30,7 @@ nonisolated struct PatientDraft: Equatable, Sendable {
     var normalized: PatientDraft {
         PatientDraft(
             name: name?.nilIfBlank,
-            phone: phone?.nilIfBlank,
+            phone: PhoneNumber.normalizedE164(phone),
             dob: dob,
             gender: gender
         )
@@ -59,7 +59,7 @@ nonisolated struct PatientDraft: Equatable, Sendable {
         Patient(
             id: id,
             name: name?.nilIfBlank,
-            phone: phone?.nilIfBlank,
+            phone: PhoneNumber.normalizedE164(phone),
             dob: dob,
             gender: gender
         )
