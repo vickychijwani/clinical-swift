@@ -31,9 +31,7 @@ struct PatientsView: View {
             }
         }
         .sheet(isPresented: $isAddingPatient) {
-            NavigationStack {
-                EditPatientView()
-            }
+            EditPatientView()
         }
     }
 

@@ -17,19 +17,21 @@ struct EditPatientView: View {
     }
 
     var body: some View {
-        ConfirmingFormSheet(
-            hasUnsavedChanges: hasUnsavedChanges,
-            title: "Discard unsaved changes?",
-            message: "Your patient details have not been saved."
-        ) { guardedDismiss in
-            EditPatientForm(
-                draft: $draft,
-                saveErrorMessage: $saveErrorMessage,
-                guardedDismiss: guardedDismiss,
-                savePatient: savePatient
-            )
+        NavigationStack {
+            ConfirmingFormSheet(
+                hasUnsavedChanges: hasUnsavedChanges,
+                title: "Discard unsaved changes?",
+                message: "Your patient details have not been saved."
+            ) { guardedDismiss in
+                EditPatientForm(
+                    draft: $draft,
+                    saveErrorMessage: $saveErrorMessage,
+                    guardedDismiss: guardedDismiss,
+                    savePatient: savePatient
+                )
+            }
         }
-        .presentationDetents([.medium])
+        .modifier(FittedSheetModifier(fitsVertically: true))
         .background(Color("AppBackground"))
     }
 
@@ -70,6 +72,7 @@ private struct EditPatientForm: View {
 
     @State private var isPickingDOB = false
     @State private var draftDOB = Date()
+    @State private var areOptionalDetailsExpanded = false
 
     init(
         draft: Binding<PatientDraft>,
@@ -85,22 +88,33 @@ private struct EditPatientForm: View {
 
     var body: some View {
         Form {
-            TextField("Name", text: $draft.name.replacingNil())
-                .textContentType(.name)
-                .autocorrectionDisabled()
-            PhoneField("Phone number", phone: $draft.phone.replacingNil()) { contactName in
-                draft.prefillName(fromContactName: contactName)
+            Section {
+                PhoneField("Phone number", phone: $draft.phone.replacingNil()) { contactName in
+                    draft.prefillName(fromContactName: contactName)
+                }
             }
 
-            PatientDOBField(
-                title: "Date of birth",
-                selection: $draft.dob,
-                isPickingDOB: $isPickingDOB,
-                draftDOB: $draftDOB
-            )
+            Section {
+                TextField("Name", text: $draft.name.replacingNil())
+                    .textContentType(.name)
+                    .autocorrectionDisabled()
+            }
 
-            PatientGenderField(title: "Gender", selection: $draft.gender)
+            Section {
+                DisclosureGroup("Optional details", isExpanded: $areOptionalDetailsExpanded) {
+                    PatientDOBField(
+                        title: "Date of birth",
+                        selection: $draft.dob,
+                        isPickingDOB: $isPickingDOB,
+                        draftDOB: $draftDOB
+                    )
+
+                    PatientGenderField(title: "Gender", selection: $draft.gender)
+                }
+            }
+            .fittedSheetContent()
         }
+        .listSectionSpacing(.compact)
         .scrollContentBackground(.hidden)
         .navigationTitle("Edit Patient")
         .navigationBarTitleDisplayMode(.inline)
@@ -226,7 +240,5 @@ private struct PatientGenderField: View {
     let _ = try! prepareDependencies {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
-    NavigationStack {
-        EditPatientView()
-    }
+    EditPatientView()
 }
