@@ -8,6 +8,7 @@ This document captures the deliberate constraints an agent is likely to break wh
 - Booking during or across the clinic break is valid. The break is a scheduling preference, not unavailable time.
 - Automatic time prefilling should prefer an empty interval within the regular working segments because the clinic usually has a single doctor.
 - Existing appointments must not restrict manual time selection or saving. Multiple doctors may be available even when the selected interval is occupied.
+- Scheduling inputs inherit the normal appointment-read policy: cancelled rows are excluded before slot suggestions are calculated. Do not make each availability consumer remember to filter them.
 - Patient selection uses a stable full-height sheet so search results and the keyboard do not resize it.
 - Appointment details fit the sheet to their content so the schedule remains visible. Only this step allows interaction with the schedule behind the sheet.
 - The booking sheet is not manually resizable or swipe-dismissible. Explicit toolbar actions keep step changes and discard confirmation intentional.

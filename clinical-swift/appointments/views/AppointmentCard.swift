@@ -5,14 +5,8 @@ struct AppointmentCard: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            switch appt.status {
-            case .draft:
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color("AccentColor").opacity(0.08).gradient)
-            default:
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.white)
-            }
+            RoundedRectangle(cornerRadius: 8)
+                .fill(style.background)
 
             cardContent
                 .padding(.horizontal, 8)
@@ -22,24 +16,13 @@ struct AppointmentCard: View {
                     alignment: .topLeading
                 )
                 .clipped()
+                .opacity(style.contentOpacity)
 
-            switch appt.status {
-            case .draft:
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(
-                        Color("AccentColor").opacity(0.5),
-                        style: StrokeStyle(
-                            lineWidth: 3,
-                            lineCap: .round,
-                            dash: [5, 10]
-                        )
-                    )
-            default:
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.gray.opacity(0.15), lineWidth: 2)
-            }
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(style.stroke, style: style.strokeStyle)
         }
         .clipShape(.rect(cornerRadius: 8))
+        .animation(.easeInOut(duration: 0.2), value: appt.status)
     }
 
     private var cardContent: some View {
@@ -95,6 +78,54 @@ struct AppointmentCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipped()
+    }
+
+    private var style: Style {
+        switch appt.status {
+        case .draft:
+            Style(
+                background: Color("AccentColor").opacity(0.08),
+                stroke: Color("AccentColor").opacity(0.5),
+                strokeStyle: StrokeStyle(
+                    lineWidth: 3,
+                    lineCap: .round,
+                    dash: [5, 10]
+                ),
+                contentOpacity: 1
+            )
+
+        case .scheduled:
+            Style(
+                background: .white,
+                stroke: .gray.opacity(0.15),
+                strokeStyle: StrokeStyle(lineWidth: 2),
+                contentOpacity: 1
+            )
+
+        case .completed:
+            Style(
+                background: Color(red: 0.95, green: 0.95, blue: 0.95),
+                stroke: .gray.opacity(0.1),
+                strokeStyle: StrokeStyle(lineWidth: 2),
+                contentOpacity: 0.6
+            )
+
+        case .cancelled:
+            // Normal appointment queries exclude cancelled records before rendering.
+            Style(
+                background: .clear,
+                stroke: .clear,
+                strokeStyle: StrokeStyle(lineWidth: 0),
+                contentOpacity: 0
+            )
+        }
+    }
+
+    private struct Style {
+        let background: Color
+        let stroke: Color
+        let strokeStyle: StrokeStyle
+        let contentOpacity: Double
     }
 }
 

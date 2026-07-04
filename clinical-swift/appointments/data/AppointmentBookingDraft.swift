@@ -101,12 +101,12 @@ struct AppointmentBookingDraft: Equatable, Sendable {
             throw AppointmentBookingValidationError.missingPatient
         }
 
-        return AppointmentRecord(
+        return try AppointmentRecord.persisted(
             id: id,
             patientID: selectedPatient.id,
             start: start,
             durationMinutes: durationMinutes,
-            status: Appointment.Status.scheduled.storageValue,
+            status: .scheduled,
             createdAt: now,
             updatedAt: now
         )

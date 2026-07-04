@@ -214,18 +214,17 @@ struct AppointmentBookingModelTests {
         try await database.write { db in
             try PatientRecord.insert { PatientRecord(originalPatient) }.execute(db)
             try PatientRecord.insert { PatientRecord(newPatient) }.execute(db)
-            try AppointmentRecord.insert {
-                AppointmentRecord(
-                    id: appointmentID,
-                    patientID: originalPatient.id,
-                    start: originalStart,
-                    durationMinutes: 30,
-                    status: Appointment.Status.scheduled.storageValue,
-                    createdAt: createdAt,
-                    updatedAt: createdAt
-                )
-            }
-            .execute(db)
+            let record = try AppointmentRecord.persisted(
+                id: appointmentID,
+                patientID: originalPatient.id,
+                start: originalStart,
+                durationMinutes: 30,
+                status: .scheduled,
+                createdAt: createdAt,
+                updatedAt: createdAt
+            )
+            try AppointmentRecord.insert { record }
+                .execute(db)
         }
 
         var savedDate: Date?
@@ -262,7 +261,7 @@ struct AppointmentBookingModelTests {
         #expect(record?.patientID == newPatient.id)
         #expect(record?.start == editedStart)
         #expect(record?.durationMinutes == 60)
-        #expect(record?.status == Appointment.Status.scheduled.storageValue)
+        #expect(record?.status == Appointment.Status.scheduled.rawValue)
         #expect(record?.createdAt == createdAt)
         #expect(record?.updatedAt == updatedAt)
     }

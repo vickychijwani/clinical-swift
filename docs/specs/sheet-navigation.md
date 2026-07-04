@@ -1,5 +1,5 @@
 ----
-status: complete
+status: implemented
 ----
 
 # Details Sheet Cross-Navigation

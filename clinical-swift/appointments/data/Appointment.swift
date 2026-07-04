@@ -29,10 +29,29 @@ nonisolated struct Appointment: Identifiable, Sendable {
         self.status = status
     }
 
-    enum Status: String, Sendable {
+    nonisolated enum Status: String, Sendable {
         case draft  // Never stored in DB; only for previews
         case scheduled
         case completed
         case cancelled
+
+        func validateTransition(to requestedStatus: Status) throws {
+            guard self != .draft, requestedStatus != .draft else {
+                throw AppointmentStatusTransitionError.transientStatus
+            }
+
+            guard self != requestedStatus else {
+                return
+            }
+
+            guard self == .scheduled,
+                requestedStatus == .completed || requestedStatus == .cancelled
+            else {
+                throw AppointmentStatusTransitionError.invalidTransition(
+                    current: self,
+                    requested: requestedStatus
+                )
+            }
+        }
     }
 }

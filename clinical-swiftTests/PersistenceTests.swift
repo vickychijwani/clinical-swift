@@ -43,8 +43,10 @@ struct PersistenceTests {
     }
 
     @Test func appointmentStatusStorageMappingIsDeterministic() {
-        #expect(Appointment.Status.scheduled.storageValue == "scheduled")
+        #expect(Appointment.Status.scheduled.persistedValue == "scheduled")
+        #expect(Appointment.Status.draft.persistedValue == nil)
         #expect(Appointment.Status(storageValue: "completed") == .completed)
+        #expect(Appointment.Status(storageValue: "draft") == nil)
         #expect(Appointment.Status(storageValue: "unexpected") == nil)
     }
 
@@ -89,18 +91,17 @@ struct PersistenceTests {
             .execute(db)
 
             for start in [past, later, next] {
-                try AppointmentRecord.insert {
-                    AppointmentRecord(
-                        id: UUID(),
-                        patientID: patientID,
-                        start: start,
-                        durationMinutes: 30,
-                        status: Appointment.Status.scheduled.storageValue,
-                        createdAt: start,
-                        updatedAt: start
-                    )
-                }
-                .execute(db)
+                let record = try AppointmentRecord.persisted(
+                    id: UUID(),
+                    patientID: patientID,
+                    start: start,
+                    durationMinutes: 30,
+                    status: .scheduled,
+                    createdAt: start,
+                    updatedAt: start
+                )
+                try AppointmentRecord.insert { record }
+                    .execute(db)
             }
         }
 
@@ -138,18 +139,17 @@ struct PersistenceTests {
             }
             .execute(db)
 
-            try AppointmentRecord.insert {
-                AppointmentRecord(
-                    id: appointmentID,
-                    patientID: patientID,
-                    start: appointmentTime,
-                    durationMinutes: 45,
-                    status: Appointment.Status.completed.storageValue,
-                    createdAt: appointmentTime,
-                    updatedAt: appointmentTime
-                )
-            }
-            .execute(db)
+            let record = try AppointmentRecord.persisted(
+                id: appointmentID,
+                patientID: patientID,
+                start: appointmentTime,
+                durationMinutes: 45,
+                status: .completed,
+                createdAt: appointmentTime,
+                updatedAt: appointmentTime
+            )
+            try AppointmentRecord.insert { record }
+                .execute(db)
         }
 
         let rows = try database.read { db in
@@ -245,18 +245,17 @@ struct PersistenceTests {
             }
             .execute(db)
 
-            try AppointmentRecord.insert {
-                AppointmentRecord(
-                    id: appointmentID,
-                    patientID: patientID,
-                    start: now,
-                    durationMinutes: 30,
-                    status: Appointment.Status.scheduled.storageValue,
-                    createdAt: now,
-                    updatedAt: now
-                )
-            }
-            .execute(db)
+            let record = try AppointmentRecord.persisted(
+                id: appointmentID,
+                patientID: patientID,
+                start: now,
+                durationMinutes: 30,
+                status: .scheduled,
+                createdAt: now,
+                updatedAt: now
+            )
+            try AppointmentRecord.insert { record }
+                .execute(db)
 
             try PatientRecord.find(patientID).delete()
                 .execute(db)

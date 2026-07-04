@@ -11,7 +11,7 @@ nonisolated struct AppointmentRecord: Identifiable, Sendable {
     var createdAt: Date
     var updatedAt: Date
 
-    init(
+    private init(
         id: UUID,
         patientID: PatientRecord.ID,
         start: Date,
@@ -28,17 +28,41 @@ nonisolated struct AppointmentRecord: Identifiable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    static func persisted(
+        id: UUID,
+        patientID: PatientRecord.ID,
+        start: Date,
+        durationMinutes: Int,
+        status: Appointment.Status,
+        createdAt: Date,
+        updatedAt: Date
+    ) throws -> Self {
+        guard let status = status.persistedValue else {
+            throw AppointmentStatusTransitionError.transientStatus
+        }
+
+        return Self(
+            id: id,
+            patientID: patientID,
+            start: start,
+            durationMinutes: durationMinutes,
+            status: status,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
 }
 
 extension Appointment.Status {
     nonisolated init?(storageValue: String) {
-        self.init(rawValue: storageValue)
+        guard let status = Self(rawValue: storageValue), status != .draft else {
+            return nil
+        }
+        self = status
     }
 
-    nonisolated var storageValue: String {
-        guard self != Appointment.Status.draft else {
-            return ""
-        }
-        return rawValue
+    nonisolated var persistedValue: String? {
+        self == .draft ? nil : rawValue
     }
 }

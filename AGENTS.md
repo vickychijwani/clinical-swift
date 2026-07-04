@@ -15,12 +15,10 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfre
 - Appointment booking validation and scheduling principles: `docs/appointment-booking.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
 - Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
-- Details sheet routing, local navigation history, and cross-navigation: `docs/specs/sheet-navigation.md`
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 
-Files under `docs/specs/` are immutable feature specifications. Do not edit them during
-implementation unless the user explicitly requests a specification change.
+Files under `docs/specs/` are feature specifications - mutable while in `pending` state, and immutable once `implemented`. When a pending spec is implemented, update its status.
 
 ## Documentation Guidance
 

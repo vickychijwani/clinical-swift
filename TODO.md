@@ -8,21 +8,24 @@
 - [x] Patients list
 - [x] New patient
   - [ ] Pick contact first - autofill patient name
-  - [ ] Or share contact to create Patient
+  - [ ] Show contact card “attached” on patient details
 - [ ] View patient
   - [ ] Timeline of appointments (all - future, present, past)
-- [ ] Edit patient
+  - [ ] Edit patient
 - [x] New appointment
   - [x] Show preview in schedule for maximum context
   - [x] Date selection synchronize with schedule
   - [x] Pre-fill next available slot
+    - [ ] Consider only future times (e.g., when scheduling a same-day appointment)
   - [ ] Quick-add new patient from new appointment page
-  - [ ] Share recent call to open new appointment page for patient associated with that phone number
 - [x] View appointment
   - [x] Jump to patient
   - [ ] For scheduled appointments: Mark as done -> record payment + due, schedule next appt, add “follow-up” tag,  clinical notes in future, implant records, lots of actions…
   - [ ] Cancel appointment - confirm cancellation and then hide it from view
 - [x] Edit appointment
+- [ ] Universal search - next to tab bar - search for patients, appointments, payments, search by phone number - entrypoint for several other features
+  - [ ] Share recent call / contact to create Patient
+  - [ ] Share recent call / contact to open patient details (or show search results if multiple, e.g., family members) associated with that phone number
 - [ ] Send SMS + WhatsApp Biz message + auto-copy to clipboard
   - [ ] Allow editing of message
   - [ ] Allow changing contact/number when sending msg (sometimes number changes temporarily or permanently - shouldn’t require Patient record update)
@@ -42,6 +45,7 @@ Refactors:
 
 Bugs:
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
+- [ ] When switching to a different date, selected appointment sheet should be dismissed (record a UX invariant: never show appointment details for date X on the timeline for date Y, to prevent user confusion). However, if navigation within sheet is used to go from appointment on date X -> patient -> appointment on date Y, then instead jump to date Y in schedule but keep the date X appointment in navigation history - and switch back to the date X schedule when navigating back to that appointment. In other words, bind the date strip to selected appointment at all times - and dismiss the sheet if the date is changed by selecting on the date strip directly.
 
 Nice to haves:
 - [x] Display appointments scheduled in break too

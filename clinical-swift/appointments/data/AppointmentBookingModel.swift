@@ -170,7 +170,7 @@ import SQLiteData
                     // Ensure the stored appointment status hasn't changed while editing
                     guard
                         let record = try AppointmentRecord.find(appointmentID).fetchOne(db),
-                        record.status == Appointment.Status.scheduled.storageValue
+                        record.status == Appointment.Status.scheduled.rawValue
                     else {
                         throw AppointmentEditingError.unavailable
                     }

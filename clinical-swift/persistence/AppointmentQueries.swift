@@ -55,6 +55,7 @@ nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleApp
         AppointmentRecord
         .where { $0.start >= start }
         .where { $0.start < end }
+        .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
         .order { $0.start.asc() }
         .join(PatientRecord.all) { $0.patientID.eq($1.id) }
         .select { appt, patient in
@@ -78,6 +79,7 @@ nonisolated func appointmentDetailsQuery(
 ) -> some Statement<ScheduleAppointmentRow> {
     AppointmentRecord
         .where { $0.id.eq(id) }
+        .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
         .join(PatientRecord.all) { $0.patientID.eq($1.id) }
         .select { appt, patient in
             ScheduleAppointmentRow.Columns(

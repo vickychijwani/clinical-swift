@@ -134,16 +134,17 @@ nonisolated private let databaseLogger = Logger(
                     guard let patientID = patientIDsByName[appointment.patientName] else {
                         continue
                     }
+                    let record = try AppointmentRecord.persisted(
+                        id: appointment.id,
+                        patientID: patientID,
+                        start: appointment.start,
+                        durationMinutes: appointment.durationMinutes,
+                        status: appointment.status,
+                        createdAt: appointment.start,
+                        updatedAt: appointment.start
+                    )
                     try AppointmentRecord.insert {
-                        AppointmentRecord(
-                            id: appointment.id,
-                            patientID: patientID,
-                            start: appointment.start,
-                            durationMinutes: appointment.durationMinutes,
-                            status: appointment.status.storageValue,
-                            createdAt: appointment.start,
-                            updatedAt: appointment.start
-                        )
+                        record
                     }
                     .execute(db)
                 }

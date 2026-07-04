@@ -127,7 +127,6 @@ struct AppointmentDetailsSummary: View {
         case .draft:
             .accentColor
         case .completed, .cancelled:
-            // TODO: Define completed and cancelled status presentation with those features.
             .secondary
         }
     }

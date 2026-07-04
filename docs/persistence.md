@@ -25,6 +25,11 @@ General invariants:
 - Every record table has standard `createdAt` and `updatedAt` fields.
 - Appointments reference patients by `patientID`. Do not store patient names in appointments as the source of truth because patient names can change.
 - Core domain structs do not store derived fields, e.g., `Patient` does not store fields like `nextAppointmentDate`. In that example, derive appointment rollups into list/read models from future appointment rows so they cannot drift from the schedule.
+- Persisted appointment status is a one-way state machine: scheduled appointments may become completed or cancelled, while completed and cancelled appointments are terminal. Status-only self-transitions are idempotent and must not advance `updatedAt`.
+- Appointment status changes must read, validate, and write within one database transaction. Do not perform transition checks only against a value previously loaded by the UI because that can overwrite a newer terminal state.
+- `draft` is presentation-only appointment state. Persistence construction and mutation APIs must reject it rather than encoding a placeholder value.
+- Normal appointment reads exclude cancelled rows by default. Cancelled records remain stored for audit use; a future administrative query must opt into them explicitly.
+- “Next appointment” metadata uses only future scheduled rows. Completed appointments remain historical records but are not upcoming work.
 - Migrations are append-only after release. Do not edit old migration SQL once users may have run it because existing databases replay migrations by name.
 - Large binary blobs of data (BLOB type) MUST be in their own tables to avoid performance issues when querying non-blob data
 
@@ -32,6 +37,7 @@ General invariants:
 
 - Do not make database records drive presentation fallbacks. e.g., Unknown-patient display names belong in the domain/UI layer, not in stored patient names.
 - Do not pass SQL selection rows through patient UI. Map them to read models first so SQLite query shape stays behind the persistence boundary.
+- Do not scatter cancellation filters through view models. Enforce normal visibility in persistence queries so future views cannot accidentally expose retained cancelled rows.
 
 ## Edge Cases
 

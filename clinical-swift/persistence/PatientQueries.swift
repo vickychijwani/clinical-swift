@@ -48,6 +48,7 @@ nonisolated func patientListRowsQuery(now: Date = .now) -> some Statement<Patien
         LEFT JOIN "appointments"
           ON "appointments"."patientID" = "patients"."id"
           AND "appointments"."start" >= \(now)
+          AND "appointments"."status" = \(bind: Appointment.Status.scheduled.rawValue)
         GROUP BY "patients"."id"
         ORDER BY
           "patients"."name" IS NULL,
@@ -76,6 +77,7 @@ nonisolated func patientDetailsQuery(
         LEFT JOIN "appointments"
           ON "appointments"."patientID" = "patients"."id"
           AND "appointments"."start" >= \(now)
+          AND "appointments"."status" = \(bind: Appointment.Status.scheduled.rawValue)
         WHERE "patients"."id" = \(id)
         GROUP BY "patients"."id"
         """
