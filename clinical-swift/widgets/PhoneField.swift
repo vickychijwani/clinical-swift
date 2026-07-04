@@ -3,11 +3,17 @@ import SwiftUI
 struct PhoneField: View {
     let label: String
     @Binding var phone: String
+    let onPickContact: (String?) -> Void
     @State private var showingContacts = false
 
-    init(_ label: String, phone: Binding<String>) {
+    init(
+        _ label: String,
+        phone: Binding<String>,
+        onPickContact: @escaping (String?) -> Void = { _ in }
+    ) {
         self.label = label
         self._phone = phone
+        self.onPickContact = onPickContact
     }
 
     var body: some View {
@@ -27,8 +33,9 @@ struct PhoneField: View {
             .accessibilityLabel("Pick contact")
         }
         .sheet(isPresented: $showingContacts) {
-            ContactPhonePicker { selectedPhone in
+            ContactPhonePicker { selectedPhone, contactName in
                 phone = selectedPhone
+                onPickContact(contactName)
                 // No need to set showingContacts to false, dismissal is automatic
             }
         }

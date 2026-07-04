@@ -88,7 +88,9 @@ private struct EditPatientForm: View {
             TextField("Name", text: $draft.name.replacingNil())
                 .textContentType(.name)
                 .autocorrectionDisabled()
-            PhoneField("Phone number", phone: $draft.phone.replacingNil())
+            PhoneField("Phone number", phone: $draft.phone.replacingNil()) { contactName in
+                draft.prefillName(fromContactName: contactName)
+            }
 
             PatientDOBField(
                 title: "Date of birth",

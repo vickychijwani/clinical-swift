@@ -1,8 +1,9 @@
 import ContactsUI
+import Foundation
 import SwiftUI
 
 struct ContactPhonePicker: UIViewControllerRepresentable {
-    var onPick: (String) -> Void
+    var onPick: (_ phone: String, _ contactName: String?) -> Void
 
     func makeUIViewController(context: Context) -> CNContactPickerViewController {
         let picker = CNContactPickerViewController()
@@ -26,9 +27,9 @@ struct ContactPhonePicker: UIViewControllerRepresentable {
     }
 
     final class Coordinator: NSObject, CNContactPickerDelegate {
-        let onPick: (String) -> Void
+        let onPick: (_ phone: String, _ contactName: String?) -> Void
 
-        init(onPick: @escaping (String) -> Void) {
+        init(onPick: @escaping (_ phone: String, _ contactName: String?) -> Void) {
             self.onPick = onPick
         }
 
@@ -40,7 +41,19 @@ struct ContactPhonePicker: UIViewControllerRepresentable {
                 let phone = contactProperty.value as? CNPhoneNumber
             else { return }
 
-            onPick(phone.stringValue)
+            let contact = contactProperty.contact
+            var nameComponents = PersonNameComponents()
+            nameComponents.namePrefix = contact.namePrefix
+            nameComponents.givenName = contact.givenName
+            nameComponents.middleName = contact.middleName
+            nameComponents.familyName = contact.familyName
+            nameComponents.nameSuffix = contact.nameSuffix
+
+            let contactName =
+                nameComponents.formatted().nilIfBlank
+                ?? contact.organizationName.nilIfBlank
+
+            onPick(phone.stringValue, contactName)
         }
     }
 }

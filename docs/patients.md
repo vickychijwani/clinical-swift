@@ -9,6 +9,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - Patient name search is word-prefix based and order-independent. Do not use substring matching because short queries like `an` should find `Anjali Desai` and `Mary Ann`, but not `Rani Dutta`.
 - Age is derived from date of birth at render/test time. Do not store age as independent patient state because it drifts every birthday.
 - Next appointment metadata is list/read-model data, not intrinsic patient state. Keep it off `Patient` so appointment changes remain the only source of truth.
+- Contact import only prefills a blank patient name and never overwrites an existing one. It removes the bookkeeping prefixes `Patient `, `Website Lead `, and `Lead ` from imported names. A `Patient Called ` contact must not prefill a name because that label represents an unknown caller rather than a patient identity.
 
 ## Do Not Reintroduce
 

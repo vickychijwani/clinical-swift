@@ -7,11 +7,12 @@
   - [ ] Swipe to navigate day-wise
 - [x] Patients list
 - [x] New patient
-  - [ ] Pick contact first - autofill patient name
+  - [x] Pick contact first - autofill patient name
   - [ ] Show contact card “attached” on patient details
 - [ ] View patient
   - [ ] Timeline of appointments (all - future, present, past)
   - [ ] Edit patient
+  - [ ] Hide optional details like dob/gender to reduce friction with first-appointment creation
 - [x] New appointment
   - [x] Show preview in schedule for maximum context
   - [x] Date selection synchronize with schedule
@@ -21,7 +22,7 @@
 - [x] View appointment
   - [x] Jump to patient
   - [ ] For scheduled appointments: Mark as done -> record payment + due, schedule next appt, add “follow-up” tag,  clinical notes in future, implant records, lots of actions…
-  - [ ] Cancel appointment - confirm cancellation and then hide it from view
+  - [x] Cancel appointment - confirm cancellation and then hide it from view
 - [x] Edit appointment
 - [ ] Universal search - next to tab bar - search for patients, appointments, payments, search by phone number - entrypoint for several other features
   - [ ] Share recent call / contact to create Patient

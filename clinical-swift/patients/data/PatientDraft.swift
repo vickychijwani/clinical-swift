@@ -36,6 +36,25 @@ nonisolated struct PatientDraft: Equatable, Sendable {
         )
     }
 
+    static func prefilledName(fromContactName contactName: String?) -> String? {
+        guard let contactName = contactName?.nilIfBlank else { return nil }
+
+        let lowercaseName = contactName.lowercased()
+        guard !lowercaseName.hasPrefix("patient called ") else { return nil }
+
+        let removablePrefixes = ["patient ", "website lead ", "lead "]
+        for prefix in removablePrefixes where lowercaseName.hasPrefix(prefix) {
+            return String(contactName.dropFirst(prefix.count)).nilIfBlank
+        }
+
+        return contactName
+    }
+
+    mutating func prefillName(fromContactName contactName: String?) {
+        guard name?.nilIfBlank == nil else { return }
+        name = Self.prefilledName(fromContactName: contactName)
+    }
+
     func makePatient(id: UUID = UUID()) -> Patient {
         Patient(
             id: id,
