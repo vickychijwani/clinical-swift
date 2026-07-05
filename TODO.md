@@ -1,4 +1,4 @@
-# Basics
+# Roadmap
 [Original doc with lots of requirements](https://docs.google.com/document/d/1dWiT6XEOwU3o48DvTp2mEwCcKFEvL732_ve6VYm7DuI/edit?tab=t.0)
 
 ## M1: Replace Shortcuts + Calendar setup
@@ -47,8 +47,11 @@ Refactors:
 Bugs:
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
 - [ ] When switching to a different date, selected appointment sheet should be dismissed (record a UX invariant: never show appointment details for date X on the timeline for date Y, to prevent user confusion). However, if navigation within sheet is used to go from appointment on date X -> patient -> appointment on date Y, then instead jump to date Y in schedule but keep the date X appointment in navigation history - and switch back to the date X schedule when navigating back to that appointment. In other words, bind the date strip to selected appointment at all times - and dismiss the sheet if the date is changed by selecting on the date strip directly.
+- [ ] Cancel button is too prominent; make Complete take more space, and Cancel/Reschedule can be smaller-size controls
 
 Nice to haves:
+- [ ] Remove year from header, make it less prominent (see iOS Calendar app)
+- [ ] Style hour and now markers like iOS Cal app
 - [x] Display appointments scheduled in break too
 - [ ] Drag-n-drop to reschedule appointments
 - [ ] Add “today”, “yesterday”, “tomorrow” + day in header - or just subtly grey out past dates
