@@ -174,6 +174,8 @@ private struct PatientDOBField: View {
                 Text(selection?.formatted(.dateTime.day().month().year()) ?? "Add")
                     .foregroundStyle(selection == nil ? .secondary : .primary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }

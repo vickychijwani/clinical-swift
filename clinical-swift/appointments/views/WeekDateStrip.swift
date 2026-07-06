@@ -222,6 +222,9 @@ private struct DateStripCell: View {
             }
             .foregroundStyle(foregroundStyle)
             .frame(minWidth: 44, minHeight: displayMode.cellMinHeight)
+            .contentShape(
+                .rect(cornerRadius: displayMode.cornerRadius, style: .continuous)
+            )
             .background {
                 if isSelected {
                     ZStack {

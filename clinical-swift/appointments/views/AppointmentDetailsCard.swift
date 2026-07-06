@@ -35,6 +35,8 @@ struct AppointmentDetailsCard: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }

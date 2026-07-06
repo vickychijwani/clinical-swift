@@ -15,6 +15,8 @@ struct PatientList: View {
                             onSelectPatient(item.id)
                         } label: {
                             PatientItemView(item: item)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                         .listRowInsets(

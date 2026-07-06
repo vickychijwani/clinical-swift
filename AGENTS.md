@@ -64,6 +64,9 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - Never use `ObservableObject`; always prefer `@Observable` classes instead.
 - Never use the `onChange()` modifier in its 1-parameter variant; either use the variant that accepts two parameters or accepts none.
 - Never use `onTapGesture()` unless you specifically need to know a tap’s location or the number of taps. All other usages should use `Button`.
+- For plain buttons with composite labels containing `Spacer` or other transparent areas, give the
+  label its intended frame and apply `contentShape()` after the frame. Backgrounds and clipping
+  define appearance, not a reliable hit-testing boundary.
 - Never use `Task.sleep(nanoseconds:)`; always use `Task.sleep(for:)` instead.
 - Never use `UIScreen.main.bounds` to read the size of the available space.
 - Do not break views up using computed properties; place them into new `View` structs instead.
