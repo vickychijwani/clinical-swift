@@ -27,7 +27,7 @@ struct AppointmentDetailsModelTests {
             model.dismissPrompt()
         }
 
-        let record = try fixture.database.read { db in
+        let record = try await fixture.database.read { db in
             try AppointmentRecord.find(fixture.appointmentID).fetchOne(db)
         }
         #expect(record?.status == Appointment.Status.scheduled.rawValue)
@@ -55,9 +55,11 @@ struct AppointmentDetailsModelTests {
 
     @Test func staleTerminalStatusRefreshesDetailsAndExplainsConflict() async throws {
         let fixture = try makeFixture(status: .scheduled)
+        let updatedAt = Date(timeIntervalSinceReferenceDate: 3_000)
 
         try await withDependencies {
             $0.defaultDatabase = fixture.database
+            $0.date.now = updatedAt
         } operation: {
             let model = AppointmentDetailsModel(appointmentID: fixture.appointmentID)
             try await model.load()
@@ -78,9 +80,11 @@ struct AppointmentDetailsModelTests {
 
     @Test func unexpectedPersistenceFailureKeepsAnErrorPrompt() async throws {
         let database = try testDatabase()
+        let updatedAt = Date(timeIntervalSinceReferenceDate: 2_000)
 
         let result = await withDependencies {
             $0.defaultDatabase = database
+            $0.date.now = updatedAt
         } operation: {
             let model = AppointmentDetailsModel(
                 appointmentID: UUID(),
@@ -98,9 +102,11 @@ struct AppointmentDetailsModelTests {
     @Test func duplicateSubmissionIsRejectedWhileFirstWriteIsPending() async throws {
         let database = try testDatabase()
         let gate = StatusUpdateGate()
+        let updatedAt = Date(timeIntervalSinceReferenceDate: 2_000)
 
         let results = await withDependencies {
             $0.defaultDatabase = database
+            $0.date.now = updatedAt
         } operation: {
             let model = AppointmentDetailsModel(
                 appointmentID: UUID(),

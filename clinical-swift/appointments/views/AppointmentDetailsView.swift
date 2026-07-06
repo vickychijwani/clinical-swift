@@ -59,11 +59,11 @@ struct AppointmentDetailsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if let appointment = model.details?.appointment,
-                    appointment.status == .scheduled
+                if let details = model.details,
+                    details.appointment.status == .scheduled
                 {
                     Button("Edit Appointment", systemImage: "pencil") {
-                        router.requestAppointmentEdit(appointment.id)
+                        router.requestAppointmentEdit(details)
                     }
                     .labelStyle(.iconOnly)
                     .disabled(model.isUpdatingStatus)

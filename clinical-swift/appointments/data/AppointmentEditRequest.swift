@@ -2,5 +2,13 @@ import Foundation
 
 nonisolated struct AppointmentEditRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
-    let appointmentID: Appointment.ID
+    let details: AppointmentDetails
+
+    var appointmentID: Appointment.ID {
+        details.appointment.id
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
 }

@@ -1,9 +1,9 @@
+import Dependencies
 import SQLiteData
 import SwiftUI
 
 struct ScheduleView: View {
     @Dependency(\.calendar) private var calendar
-    @Dependency(\.defaultDatabase) private var database
     @Environment(Router.self) private var router
 
     /// `nil` means normal schedule mode; non-nil means booking mode.
@@ -13,7 +13,6 @@ struct ScheduleView: View {
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
-    @State private var editErrorMessage: String?
 
     init() {
         scheduleModel = ScheduleModel(selectedDate: Date.now)
@@ -67,25 +66,15 @@ struct ScheduleView: View {
                 }
             }
         }
-        .sheet(item: $bookingModel) { bookingModel in
+        .sheet(
+            item: $bookingModel,
+            onDismiss: router.appointmentEditorDidDismiss
+        ) { bookingModel in
             AppointmentBookingView(model: bookingModel)
-        }
-        .alert(
-            "Unable to edit appointment",
-            isPresented: Binding(
-                get: { editErrorMessage != nil },
-                set: { if !$0 { editErrorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                editErrorMessage = nil
-            }
-        } message: {
-            Text(editErrorMessage ?? "")
         }
         .task(id: router.appointmentEditRequest?.id) {
             guard let request = router.appointmentEditRequest else { return }
-            await startEditing(request)
+            startEditing(request)
         }
         .task(id: bookingModel?.id) {
             guard bookingModel != nil else { return }
@@ -163,55 +152,31 @@ struct ScheduleView: View {
         self.bookingModel = bookingModel
     }
 
-    private func startEditing(_ request: AppointmentEditRequest) async {
-        do {
-            let row = try await database.read { db in
-                try appointmentDetailsQuery(id: request.appointmentID).fetchOne(db)
-            }
-            guard
-                let details = row?.details,
-                details.appointment.status == .scheduled
-            else {
-                failEditing(request)
-                return
-            }
-
-            // Do not consume in a defer or in the caller. A cancelled task or stale request has not
-            // been handled; leaving it active lets the current ScheduleView process it later.
-            guard !Task.isCancelled,
-                router.appointmentEditRequest?.id == request.id
-            else { return }
-
-            let wasShowingAppointmentDate = details.appointment.start.isSameDayAs(
-                scheduleModel.selectedDate
-            )
-            scheduleModel.selectedDate = details.appointment.start.startOfDay(using: calendar)
-
-            let bookingModel = AppointmentBookingModel(editing: details) { savedDate in
-                refreshAppointments(for: savedDate)
-            }
-            // If the date changed, these appointments still belong to the previous day. The
-            // date-keyed load task will update the booking model after loading the correct day.
-            if wasShowingAppointmentDate {
-                bookingModel.updateAppointments(
-                    scheduleModel.appointments,
-                    for: scheduleModel.selectedDate
-                )
-            }
-
-            self.bookingModel = bookingModel
-            router.consumeAppointmentEditRequest(request.id)
-        } catch is CancellationError {
-            return
-        } catch {
-            failEditing(request)
-        }
-    }
-
-    private func failEditing(_ request: AppointmentEditRequest) {
+    private func startEditing(_ request: AppointmentEditRequest) {
         guard router.appointmentEditRequest?.id == request.id else { return }
+
+        // Use the details that were already visible so the editor can start without another read.
+        // Saving still validates the current stored appointment before writing.
+        let details = request.details
+        let wasShowingAppointmentDate = details.appointment.start.isSameDayAs(
+            scheduleModel.selectedDate
+        )
+        scheduleModel.selectedDate = details.appointment.start.startOfDay(using: calendar)
+
+        let bookingModel = AppointmentBookingModel(editing: details) { savedDate in
+            refreshAppointments(for: savedDate)
+        }
+        // If the date changed, these appointments still belong to the previous day. The
+        // date-keyed load task will update the booking model after loading the correct day.
+        if wasShowingAppointmentDate {
+            bookingModel.updateAppointments(
+                scheduleModel.appointments,
+                for: scheduleModel.selectedDate
+            )
+        }
+
+        self.bookingModel = bookingModel
         router.consumeAppointmentEditRequest(request.id)
-        editErrorMessage = "This appointment is unavailable or is no longer scheduled."
     }
 
     private var selectedDateBinding: Binding<Date> {

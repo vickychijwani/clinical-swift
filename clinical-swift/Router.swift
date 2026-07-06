@@ -21,6 +21,7 @@ final class Router {
     private(set) var appointmentEditRequest: AppointmentEditRequest?
 
     private var pendingAppointmentEditRequest: AppointmentEditRequest?
+    private var suspendedDetailsSession: SuspendedDetailsSession?
 
     func presentDetails(_ root: Route) {
         if let detailsPresentation {
@@ -41,15 +42,20 @@ final class Router {
         detailsPresentation = nil
     }
 
-    func requestAppointmentEdit(_ appointmentID: Appointment.ID) {
-        let request = AppointmentEditRequest(appointmentID: appointmentID)
-        selectedTab = .schedule
+    func requestAppointmentEdit(_ details: AppointmentDetails) {
+        let request = AppointmentEditRequest(details: details)
 
-        if detailsPresentation == nil {
-            appointmentEditRequest = request
-        } else {
+        if let detailsPresentation {
+            suspendedDetailsSession = SuspendedDetailsSession(
+                presentation: detailsPresentation,
+                returnTab: selectedTab
+            )
             pendingAppointmentEditRequest = request
+            selectedTab = .schedule
             dismissDetails()
+        } else {
+            selectedTab = .schedule
+            appointmentEditRequest = request
         }
     }
 
@@ -64,14 +70,30 @@ final class Router {
         appointmentEditRequest = nil
     }
 
+    func appointmentEditorDidDismiss() {
+        guard let suspendedDetailsSession else { return }
+        self.suspendedDetailsSession = nil
+        selectedTab = suspendedDetailsSession.returnTab
+        detailsPresentation = suspendedDetailsSession.presentation
+    }
+
     func openExternalDetails(_ route: Route) {
-        selectedTab =
+        let destinationTab: AppTab =
             switch route {
             case .patient:
                 .patients
             case .appointment:
                 .schedule
             }
+
+        if var suspendedDetailsSession {
+            suspendedDetailsSession.presentation.replaceRoot(with: route)
+            suspendedDetailsSession.returnTab = destinationTab
+            self.suspendedDetailsSession = suspendedDetailsSession
+            return
+        }
+
+        selectedTab = destinationTab
         presentDetails(route)
     }
 
@@ -110,4 +132,9 @@ final class Router {
             \.paymentsPath
         }
     }
+}
+
+private struct SuspendedDetailsSession {
+    let presentation: DetailsPresentation
+    var returnTab: AppTab
 }

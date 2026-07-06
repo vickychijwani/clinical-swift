@@ -86,17 +86,23 @@ struct RouterTests {
         #expect(router.detailsPresentation?.path == [])
     }
 
-    @Test func appointmentEditWaitsForDetailsDismissalAndPreservesTabPaths() {
+    @Test func appointmentEditSuspendsDetailsUntilEditorDismissal() throws {
         let router = Router()
         let appointmentID = UUID()
+        let details = appointmentDetails(id: appointmentID)
         let schedulePath: [Route] = [.patient(UUID())]
         let patientsPath: [Route] = [.appointment(UUID())]
+        let detailsPath: [Route] = [.patient(UUID()), .appointment(appointmentID)]
         router.selectedTab = .patients
         router.schedulePath = schedulePath
         router.patientsPath = patientsPath
         router.presentDetails(.appointment(appointmentID))
+        for route in detailsPath {
+            router.pushDetails(route)
+        }
+        let presentation = try #require(router.detailsPresentation)
 
-        router.requestAppointmentEdit(appointmentID)
+        router.requestAppointmentEdit(details)
 
         #expect(router.selectedTab == .schedule)
         #expect(router.detailsPresentation == nil)
@@ -107,13 +113,25 @@ struct RouterTests {
         router.detailsDidDismiss()
 
         #expect(router.appointmentEditRequest?.appointmentID == appointmentID)
+        #expect(router.appointmentEditRequest?.details.patient.id == details.patient.id)
+
+        let requestID = try #require(router.appointmentEditRequest?.id)
+        router.consumeAppointmentEditRequest(requestID)
+        router.appointmentEditorDidDismiss()
+
+        #expect(router.selectedTab == .patients)
+        #expect(router.detailsPresentation === presentation)
+        #expect(router.detailsPresentation?.path == detailsPath)
+        #expect(router.schedulePath == schedulePath)
+        #expect(router.patientsPath == patientsPath)
     }
 
     @Test func appointmentEditRequestsAreUniquelyIdentifiedAndConsumedByIdentity() throws {
         let router = Router()
         let appointmentID = UUID()
+        let details = appointmentDetails(id: appointmentID)
 
-        router.requestAppointmentEdit(appointmentID)
+        router.requestAppointmentEdit(details)
         let firstRequest = try #require(router.appointmentEditRequest)
         router.consumeAppointmentEditRequest(UUID())
         #expect(router.appointmentEditRequest == firstRequest)
@@ -121,8 +139,60 @@ struct RouterTests {
         router.consumeAppointmentEditRequest(firstRequest.id)
         #expect(router.appointmentEditRequest == nil)
 
-        router.requestAppointmentEdit(appointmentID)
+        router.requestAppointmentEdit(details)
         #expect(router.appointmentEditRequest?.appointmentID == appointmentID)
         #expect(router.appointmentEditRequest?.id != firstRequest.id)
+    }
+
+    @Test func directAppointmentEditDoesNotRestoreDetails() throws {
+        let router = Router()
+
+        router.requestAppointmentEdit(appointmentDetails())
+        let requestID = try #require(router.appointmentEditRequest?.id)
+        router.consumeAppointmentEditRequest(requestID)
+        router.appointmentEditorDidDismiss()
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation == nil)
+    }
+
+    @Test func externalDetailsReplaceSuspendedSessionWithoutInterruptingEditing() throws {
+        let router = Router()
+        let editedAppointmentID = UUID()
+        router.selectedTab = .patients
+        router.presentDetails(.appointment(editedAppointmentID))
+        let presentation = try #require(router.detailsPresentation)
+
+        router.requestAppointmentEdit(appointmentDetails(id: editedAppointmentID))
+        let externalPatientID = UUID()
+        router.openExternalDetails(.patient(externalPatientID))
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation == nil)
+
+        router.detailsDidDismiss()
+        let requestID = try #require(router.appointmentEditRequest?.id)
+        router.consumeAppointmentEditRequest(requestID)
+        router.appointmentEditorDidDismiss()
+
+        #expect(router.selectedTab == .patients)
+        #expect(router.detailsPresentation === presentation)
+        #expect(router.detailsPresentation?.root == .patient(externalPatientID))
+        #expect(router.detailsPresentation?.path == [])
+    }
+
+    private func appointmentDetails(id: Appointment.ID = UUID()) -> AppointmentDetails {
+        let date = Date(timeIntervalSince1970: 0)
+        let patient = Patient(name: "Aarav Mehta", createdDate: date)
+        return AppointmentDetails(
+            appointment: Appointment(
+                id: id,
+                patientName: patient.displayName,
+                start: date,
+                durationMinutes: 30,
+                status: .scheduled
+            ),
+            patient: patient
+        )
     }
 }

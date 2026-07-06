@@ -80,9 +80,16 @@ final class AppointmentDetailsModel {
 
     private func handleStatusUpdateError(_ error: AppointmentStatusUpdateError) async {
         switch error {
-        case .transition(.invalidTransition(_, _)):
+        case .transition(.invalidTransition(let currentStatus, _)):
             _ = try? await $row.load(appointmentDetailsQuery(id: appointmentID))
-            prompt = .error("This appointment was already updated.")
+            switch currentStatus {
+            case .completed:
+                prompt = .error("This appointment was already completed.")
+            case .cancelled:
+                prompt = .error("This appointment was already cancelled.")
+            case .draft, .scheduled:
+                prompt = .error("This appointment was already updated.")
+            }
 
         case .unavailable:
             _ = try? await $row.load(appointmentDetailsQuery(id: appointmentID))
