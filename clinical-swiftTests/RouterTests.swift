@@ -4,6 +4,24 @@ import Testing
 @testable import clinical_swift
 
 struct RouterTests {
+    @Test func patientTimelineNavigationPreservesRepeatedRoutes() {
+        let router = Router()
+        let patientID = UUID()
+        let appointmentID = UUID()
+
+        router.presentDetails(.patient(patientID))
+        router.pushDetails(.appointment(appointmentID))
+        router.pushDetails(.patient(patientID))
+
+        #expect(router.detailsPresentation?.root == .patient(patientID))
+        #expect(
+            router.detailsPresentation?.path == [
+                .appointment(appointmentID),
+                .patient(patientID),
+            ]
+        )
+    }
+
     @Test func detailsHistoryPreservesRepeatedRoutesAndTabState() throws {
         let router = Router()
         let appointmentID = UUID()

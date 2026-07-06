@@ -1,6 +1,6 @@
 import SwiftUI
 
-extension Text {
+extension View {
     func styleAppointmentTime() -> some View {
         self.modifier(
             AppTextStyleModifier(

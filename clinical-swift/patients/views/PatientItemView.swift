@@ -2,6 +2,15 @@ import SwiftUI
 
 struct PatientItemView: View {
     let item: PatientDetails
+    let onNameVisibilityChange: (@MainActor @Sendable (Bool) -> Void)?
+
+    init(
+        item: PatientDetails,
+        onNameVisibilityChange: (@MainActor @Sendable (Bool) -> Void)? = nil
+    ) {
+        self.item = item
+        self.onNameVisibilityChange = onNameVisibilityChange
+    }
 
     private var patient: Patient {
         item.patient
@@ -12,9 +21,20 @@ struct PatientItemView: View {
             PatientAvatar(patient: patient)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(patient.displayName)
-                    .styleBodyBold()
-                    .lineLimit(1)
+                Group {
+                    if let onNameVisibilityChange {
+                        Text(patient.displayName)
+                            .onScrollVisibilityChange(
+                                threshold: PatientDetailsNavigationTitle
+                                    .nameVisibilityThreshold,
+                                onNameVisibilityChange
+                            )
+                    } else {
+                        Text(patient.displayName)
+                    }
+                }
+                .styleBodyBold()
+                .lineLimit(1)
 
                 if let subtitle = PatientItemViewMetadata.metadata(for: item)
                     .subtitle

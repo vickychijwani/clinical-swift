@@ -90,14 +90,20 @@ struct AppointmentDetailsSummary: View {
 
                     Spacer()
 
-                    Image(systemName: "circle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(statusColor)
+                    HStack(spacing: 4) {
+                        Image(systemName: "circle.fill")
+                            .font(.caption2)
+
+                        Text(statusPresentation.label)
+                            .font(.caption)
+                    }
+                    .foregroundStyle(statusColor)
                 }
 
                 Text(formattedTimeRange)
                     .font(.title3)
                     .bold()
+                    .foregroundStyle(timeColor)
             }
         }
     }
@@ -122,13 +128,26 @@ struct AppointmentDetailsSummary: View {
         )
     }
 
+    private var statusPresentation: AppointmentStatusPresentation {
+        AppointmentStatusPresentation(status: appointment.status)
+    }
+
     private var statusColor: Color {
-        switch appointment.status {
-        case .scheduled:
+        switch statusPresentation.treatment {
+        case .active:
             .green
-        case .draft:
+        case .accent:
             .accentColor
-        case .completed, .cancelled:
+        case .muted:
+            .secondary
+        }
+    }
+
+    private var timeColor: Color {
+        switch statusPresentation.treatment {
+        case .active, .accent:
+            .primary
+        case .muted:
             .secondary
         }
     }

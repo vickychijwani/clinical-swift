@@ -10,6 +10,8 @@ This document captures the deliberate constraints an agent is likely to break if
 - Patient name search is word-prefix based and order-independent. Do not use substring matching because short queries like `an` should find `Anjali Desai` and `Mary Ann`, but not `Rani Dutta`.
 - Age is derived from date of birth at render/test time. Do not store age as independent patient state because it drifts every birthday.
 - Next appointment metadata is list/read-model data, not intrinsic patient state. Keep it off `Patient` so appointment changes remain the only source of truth.
+- Patient appointment history is a live read model scoped by patient ID, not intrinsic `Patient` state. Include scheduled and completed appointments, exclude retained cancelled rows, and order by start, creation date, then appointment ID, all descending, so equal start times remain deterministic.
+- In patient details, keep the navigation title as `Patient Details` while the name in the summary card remains visible. Switch to the patient's display name when that name leaves the scroll viewport; this title state must not affect navigation or scroll position.
 - Contact import only prefills a blank patient name and never overwrites an existing one. It removes the bookkeeping prefixes `Patient `, `Website Lead `, and `Lead ` from imported names. A `Patient Called ` contact must not prefill a name because that label represents an unknown caller rather than a patient identity.
 
 ## Do Not Reintroduce

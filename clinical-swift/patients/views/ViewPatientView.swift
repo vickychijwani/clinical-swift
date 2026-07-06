@@ -2,42 +2,81 @@ import SwiftUI
 
 struct ViewPatientView: View {
     @Environment(\.openURL) private var openURL
+    @State private var isPatientNameVisible = true
 
     let details: PatientDetails
+    let appointmentRows: [PatientTimelineAppointmentRow]
+    let onSelectAppointment: @MainActor @Sendable (Appointment.ID) -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
-            PatientItemView(item: details)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                PatientItemView(
+                    item: details,
+                    onNameVisibilityChange: { isPatientNameVisible in
+                        self.isPatientNameVisible = isPatientNameVisible
+                    }
+                )
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(Color.white)
                 .clipShape(.rect(cornerRadius: 8))
 
-            HStack(spacing: 12) {
-                Button {
-                    callPatient()
-                } label: {
-                    Label("Call", systemImage: "phone.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(telURL == nil)
+                HStack(spacing: 12) {
+                    Button {
+                        callPatient()
+                    } label: {
+                        Label("Call", systemImage: "phone.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(telURL == nil)
 
-                Button {
-                    openWhatsAppChat()
-                } label: {
-                    Label("WhatsApp", systemImage: "message.fill")
-                        .frame(maxWidth: .infinity)
+                    Button {
+                        openWhatsAppChat()
+                    } label: {
+                        Label("WhatsApp", systemImage: "message.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(whatsappURL == nil)
                 }
-                .buttonStyle(.bordered)
-                .disabled(whatsappURL == nil)
+
+                Text("Appointments")
+                    .font(.headline)
+
+                if appointmentRows.isEmpty {
+                    Text("No appointments yet")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical)
+                } else {
+                    ForEach(appointmentRows) { row in
+                        if let appointment = row.appointment(
+                            patientName: details.patient.displayName
+                        ) {
+                            AppointmentDetailsCard(
+                                appointment: appointment,
+                                variant: .patientTimeline(
+                                    onSelectAppointment: {
+                                        onSelectAppointment(appointment.id)
+                                    }
+                                )
+                            )
+                        }
+                    }
+                }
             }
-
-            Spacer()
+            .padding(16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(16)
         .background(Color("AppBackground"))
+        .navigationTitle(
+            PatientDetailsNavigationTitle.text(
+                patientDisplayName: details.patient.displayName,
+                isNameVisible: isPatientNameVisible
+            )
+        )
     }
 
     private var normalizedPhoneNumber: String? {
@@ -86,7 +125,11 @@ struct ViewPatientView: View {
             )
         ) { item in
             NavigationStack {
-                ViewPatientView(details: item)
+                ViewPatientView(
+                    details: item,
+                    appointmentRows: [],
+                    onSelectAppointment: { _ in }
+                )
             }
             .presentationDetents([.medium, .large])
         }
