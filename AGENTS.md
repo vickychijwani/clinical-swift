@@ -45,6 +45,7 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - All shared data should use `@Observable` classes with `@State` (for ownership) and `@Bindable` / `@Environment` (for passing).
 - Strongly prefer not to use `ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`, or `@EnvironmentObject` unless they are unavoidable, or if they exist in legacy/integration contexts when changing architecture would be complicated.
 - Assume strict Swift concurrency rules are being applied.
+- The app target uses `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; type members, including `static let` constants, are MainActor-isolated by default. Before referencing a member from a `@Sendable` closure, verify its isolation. Mark immutable, `Sendable` constants `nonisolated` when they do not require actor protection, or capture an appropriate `Sendable` local value.
 - Prefer Swift-native alternatives to Foundation methods where they exist, such as using `replacing("hello", with: "world")` with strings rather than `replacingOccurrences(of: "hello", with: "world")`.
 - Prefer modern Foundation API, for example `URL.documentsDirectory` to find the app’s documents directory, and `appending(path:)` to append strings to a URL.
 - Never use C-style number formatting such as `Text(String(format: "%.2f", abs(myNumber)))`; always use `Text(abs(change), format: .number.precision(.fractionLength(2)))` instead.
