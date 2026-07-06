@@ -2,6 +2,8 @@ import SQLiteData
 import SwiftUI
 
 struct PatientDetailsView: View {
+    @Environment(Router.self) private var router
+
     @FetchOne private var row: PatientListRow?
     @FetchAll private var appointmentRows: [PatientTimelineAppointmentRow]
 
@@ -37,6 +39,16 @@ struct PatientDetailsView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let patient = row?.item.patient {
+                    Button("Edit Patient", systemImage: "pencil") {
+                        router.requestPatientEdit(patient)
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
+        }
     }
 }
 
@@ -47,4 +59,5 @@ struct PatientDetailsView: View {
     NavigationStack {
         PatientDetailsView(id: samplePatients[0].id) { _ in }
     }
+    .environment(Router())
 }

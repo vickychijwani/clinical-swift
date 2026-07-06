@@ -3,29 +3,25 @@ import SwiftUI
 
 struct EditPatientView: View {
     @Environment(\.dismiss) private var dismiss
-    @Dependency(\.defaultDatabase) private var database
 
-    private let originalDraft: PatientDraft
-
-    @State private var draft: PatientDraft
-    @State private var saveErrorMessage: String?
+    @State private var model: PatientEditorModel
 
     init(patient: Patient? = nil) {
-        let draft = PatientDraft(patient: patient)
-        self.originalDraft = draft.normalized
-        self._draft = State(initialValue: draft)
+        _model = State(initialValue: PatientEditorModel(patient: patient))
     }
 
     var body: some View {
+        @Bindable var model = model
+
         NavigationStack {
             ConfirmingFormSheet(
-                hasUnsavedChanges: hasUnsavedChanges,
+                hasUnsavedChanges: model.hasUnsavedChanges,
                 title: "Discard unsaved changes?",
                 message: "Your patient details have not been saved."
             ) { guardedDismiss in
                 EditPatientForm(
-                    draft: $draft,
-                    saveErrorMessage: $saveErrorMessage,
+                    draft: $model.draft,
+                    title: model.title,
                     guardedDismiss: guardedDismiss,
                     savePatient: savePatient
                 )
@@ -33,40 +29,31 @@ struct EditPatientView: View {
         }
         .modifier(FittedSheetModifier(fitsVertically: true))
         .background(Color("AppBackground"))
-    }
-
-    private var hasUnsavedChanges: Bool {
-        draft.normalized != originalDraft
+        .alert(
+            "Unable to save patient",
+            isPresented: Binding(
+                get: { model.saveErrorMessage != nil },
+                set: { if !$0 { model.dismissSaveError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                model.dismissSaveError()
+            }
+        } message: {
+            Text(model.saveErrorMessage ?? "")
+        }
     }
 
     private func savePatient() async {
-        let patient = draft.makePatient()
-
-        do {
-            try patient.validate()
-        } catch Patient.ValidationError.missingNameAndPhone {
-            saveErrorMessage = "Enter a name or phone number."
-            return
-        } catch {
-            saveErrorMessage = "Check the patient details and try again."
-            return
-        }
-
-        do {
-            try await database.write { db in
-                try PatientRecord.insert { PatientRecord(patient) }
-                    .execute(db)
-            }
+        if await model.save() {
             dismiss()
-        } catch {
-            saveErrorMessage = "The patient could not be saved."
         }
     }
 }
 
 private struct EditPatientForm: View {
     @Binding var draft: PatientDraft
-    @Binding var saveErrorMessage: String?
+    let title: String
     let guardedDismiss: FormSheetDismissAction
     let savePatient: @MainActor () async -> Void
 
@@ -76,12 +63,12 @@ private struct EditPatientForm: View {
 
     init(
         draft: Binding<PatientDraft>,
-        saveErrorMessage: Binding<String?>,
+        title: String,
         guardedDismiss: FormSheetDismissAction,
         savePatient: @escaping @MainActor () async -> Void
     ) {
         self._draft = draft
-        self._saveErrorMessage = saveErrorMessage
+        self.title = title
         self.guardedDismiss = guardedDismiss
         self.savePatient = savePatient
     }
@@ -116,7 +103,7 @@ private struct EditPatientForm: View {
         }
         .listSectionSpacing(.compact)
         .scrollContentBackground(.hidden)
-        .navigationTitle("New Patient")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -137,19 +124,6 @@ private struct EditPatientForm: View {
         }
         .sheet(isPresented: $isPickingDOB) {
             PatientDOBPicker(dob: $draft.dob, draftDOB: $draftDOB, isPresented: $isPickingDOB)
-        }
-        .alert(
-            "Unable to save patient",
-            isPresented: Binding(
-                get: { saveErrorMessage != nil },
-                set: { if !$0 { saveErrorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                saveErrorMessage = nil
-            }
-        } message: {
-            Text(saveErrorMessage ?? "")
         }
     }
 }

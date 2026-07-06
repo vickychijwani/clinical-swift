@@ -19,9 +19,11 @@ final class Router {
     var paymentsPath: [Route] = []
     var detailsPresentation: DetailsPresentation?
     private(set) var appointmentEditRequest: AppointmentEditRequest?
+    private(set) var patientEditRequest: PatientEditRequest?
 
-    private var pendingAppointmentEditRequest: AppointmentEditRequest?
+    private var pendingEditorHandoff: PendingEditorHandoff?
     private var suspendedDetailsSession: SuspendedDetailsSession?
+    private var activeEditorSession: EditorSession?
 
     func presentDetails(_ root: Route) {
         if let detailsPresentation {
@@ -43,14 +45,16 @@ final class Router {
     }
 
     func requestAppointmentEdit(_ details: AppointmentDetails) {
+        guard canRequestEditor else { return }
         let request = AppointmentEditRequest(details: details)
+        activeEditorSession = .appointment
 
         if let detailsPresentation {
             suspendedDetailsSession = SuspendedDetailsSession(
                 presentation: detailsPresentation,
                 returnTab: selectedTab
             )
-            pendingAppointmentEditRequest = request
+            pendingEditorHandoff = .appointment(request)
             selectedTab = .schedule
             dismissDetails()
         } else {
@@ -59,10 +63,33 @@ final class Router {
         }
     }
 
+    func requestPatientEdit(_ patient: Patient) {
+        guard canRequestEditor else { return }
+        let request = PatientEditRequest(patient: patient)
+        activeEditorSession = .patient
+
+        if let detailsPresentation {
+            suspendedDetailsSession = SuspendedDetailsSession(
+                presentation: detailsPresentation,
+                returnTab: selectedTab
+            )
+            pendingEditorHandoff = .patient(request)
+            dismissDetails()
+        } else {
+            patientEditRequest = request
+        }
+    }
+
     func detailsDidDismiss() {
-        guard let pendingAppointmentEditRequest else { return }
-        self.pendingAppointmentEditRequest = nil
-        appointmentEditRequest = pendingAppointmentEditRequest
+        guard let pendingEditorHandoff else { return }
+        self.pendingEditorHandoff = nil
+
+        switch pendingEditorHandoff {
+        case .appointment(let request):
+            appointmentEditRequest = request
+        case .patient(let request):
+            patientEditRequest = request
+        }
     }
 
     func consumeAppointmentEditRequest(_ requestID: AppointmentEditRequest.ID) {
@@ -70,11 +97,32 @@ final class Router {
         appointmentEditRequest = nil
     }
 
+    func consumePatientEditRequest(_ requestID: PatientEditRequest.ID) {
+        guard patientEditRequest?.id == requestID else { return }
+        patientEditRequest = nil
+    }
+
     func appointmentEditorDidDismiss() {
+        guard activeEditorSession == .appointment else { return }
+        activeEditorSession = nil
+        restoreSuspendedDetailsSession()
+    }
+
+    func patientEditorDidDismiss() {
+        guard activeEditorSession == .patient else { return }
+        activeEditorSession = nil
+        restoreSuspendedDetailsSession()
+    }
+
+    private func restoreSuspendedDetailsSession() {
         guard let suspendedDetailsSession else { return }
         self.suspendedDetailsSession = nil
         selectedTab = suspendedDetailsSession.returnTab
         detailsPresentation = suspendedDetailsSession.presentation
+    }
+
+    private var canRequestEditor: Bool {
+        activeEditorSession == nil
     }
 
     func openExternalDetails(_ route: Route) {
@@ -137,4 +185,14 @@ final class Router {
 private struct SuspendedDetailsSession {
     let presentation: DetailsPresentation
     var returnTab: AppTab
+}
+
+private enum PendingEditorHandoff {
+    case appointment(AppointmentEditRequest)
+    case patient(PatientEditRequest)
+}
+
+private enum EditorSession {
+    case appointment
+    case patient
 }

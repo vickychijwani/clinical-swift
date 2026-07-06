@@ -15,6 +15,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfre
 - Appointment booking validation and scheduling principles: `docs/appointment-booking.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
 - Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
+- Test structure, dependency overrides, and async database access: `docs/testing.md`
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 

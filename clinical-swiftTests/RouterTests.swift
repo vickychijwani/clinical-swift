@@ -156,10 +156,93 @@ struct RouterTests {
 
         router.consumeAppointmentEditRequest(firstRequest.id)
         #expect(router.appointmentEditRequest == nil)
+        router.appointmentEditorDidDismiss()
 
         router.requestAppointmentEdit(details)
         #expect(router.appointmentEditRequest?.appointmentID == appointmentID)
         #expect(router.appointmentEditRequest?.id != firstRequest.id)
+    }
+
+    @Test func patientEditRestoresExactDetailsHistoryWithoutChangingTabState() throws {
+        let router = Router()
+        let patient = Patient(name: "Aarav Mehta")
+        let appointmentID = UUID()
+        let schedulePath: [Route] = [.appointment(UUID())]
+        let patientsPath: [Route] = [.patient(UUID())]
+        let detailsPath: [Route] = [
+            .appointment(appointmentID),
+            .patient(patient.id),
+        ]
+        router.selectedTab = .schedule
+        router.schedulePath = schedulePath
+        router.patientsPath = patientsPath
+        router.presentDetails(.patient(patient.id))
+        for route in detailsPath {
+            router.pushDetails(route)
+        }
+        let presentation = try #require(router.detailsPresentation)
+
+        router.requestPatientEdit(patient)
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation == nil)
+        #expect(router.patientEditRequest == nil)
+        #expect(router.schedulePath == schedulePath)
+        #expect(router.patientsPath == patientsPath)
+
+        router.detailsDidDismiss()
+
+        let request = try #require(router.patientEditRequest)
+        #expect(request.patientID == patient.id)
+        router.consumePatientEditRequest(request.id)
+        router.patientEditorDidDismiss()
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation === presentation)
+        #expect(router.detailsPresentation?.path == detailsPath)
+        #expect(router.schedulePath == schedulePath)
+        #expect(router.patientsPath == patientsPath)
+    }
+
+    @Test func editorRequestsCannotCompeteForTheDetailsHandoff() throws {
+        let router = Router()
+        let patient = Patient(name: "Aarav Mehta")
+        router.presentDetails(.patient(patient.id))
+
+        router.requestPatientEdit(patient)
+        router.requestAppointmentEdit(appointmentDetails())
+        router.detailsDidDismiss()
+
+        #expect(router.patientEditRequest?.patientID == patient.id)
+        #expect(router.appointmentEditRequest == nil)
+
+        let requestID = try #require(router.patientEditRequest?.id)
+        router.consumePatientEditRequest(requestID)
+        router.requestAppointmentEdit(appointmentDetails())
+
+        #expect(router.appointmentEditRequest == nil)
+    }
+
+    @Test func externalDetailsReplacePatientEditorsSuspendedSession() throws {
+        let router = Router()
+        let patient = Patient(name: "Aarav Mehta")
+        router.selectedTab = .schedule
+        router.presentDetails(.patient(patient.id))
+        let presentation = try #require(router.detailsPresentation)
+
+        router.requestPatientEdit(patient)
+        let externalAppointmentID = UUID()
+        router.openExternalDetails(.appointment(externalAppointmentID))
+        router.detailsDidDismiss()
+
+        let requestID = try #require(router.patientEditRequest?.id)
+        router.consumePatientEditRequest(requestID)
+        router.patientEditorDidDismiss()
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation === presentation)
+        #expect(router.detailsPresentation?.root == .appointment(externalAppointmentID))
+        #expect(router.detailsPresentation?.path == [])
     }
 
     @Test func directAppointmentEditDoesNotRestoreDetails() throws {

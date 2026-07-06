@@ -9,10 +9,11 @@
 - [x] New patient
   - [x] Pick contact first - autofill patient name
   - [ ] Show contact card “attached” on patient details
-- [ ] View patient
-  - [ ] Timeline of appointments (all - future, present, past)
-  - [ ] Edit patient
-  - [ ] Hide optional details like dob/gender to reduce friction with first-appointment creation
+- [x] View patient
+  - [x] Timeline of appointments (all - future, present, past)
+    - [x] Remember to refresh timeline when navigating back from an appointment's details - date/time could have changed
+  - [x] Edit patient
+  - [x] Hide optional details like dob/gender to reduce friction with first-appointment creation
 - [x] New appointment
   - [x] Show preview in schedule for maximum context
   - [x] Date selection synchronize with schedule
