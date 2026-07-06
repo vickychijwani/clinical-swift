@@ -51,6 +51,9 @@ Bugs:
 - [ ] Cancel button is too prominent; make Complete take more space, and Cancel/Reschedule can be smaller-size controls
 
 Nice to haves:
+- [ ] Toolbar for Complete/Cancel/Call/WhatsApp buttons
+- [ ] Action Sheets for Complete/Cancel/Discard prompts
+- [ ] Variety of pastel or illustrated patient avatars
 - [ ] Remove year from header, make it less prominent (see iOS Calendar app)
 - [ ] Style hour and now markers like iOS Cal app
 - [x] Display appointments scheduled in break too
@@ -90,6 +93,7 @@ Nice to haves:
 
 ## M3: Reduce dependency on paper forms in clinic
 - [ ] Add "Notes" in appointment view
+- [ ] View all Notes on appointment/patient detail pages
 - [ ] Scan OPD form with camera, including notes
 - [ ] iPad app to view and edit patient records/notes in larger size
 
