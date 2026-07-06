@@ -96,6 +96,7 @@ struct FittedSheetModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .presentationDetents(presentationDetents, selection: $selectedDetent)
+            .presentationDragIndicator(.hidden)
             .overlayPreferenceValue(FittedSheetContentMeasurementKey.self) { measurement in
                 GeometryReader { proxy in
                     let frame = measurement.bounds.map { proxy[$0] } ?? .zero

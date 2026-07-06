@@ -134,7 +134,7 @@ private struct AppointmentStatusActionsView: View {
             .buttonStyle(.bordered)
         }
         .buttonSizing(.flexible)
-        .controlSize(.mini)
+        .controlSize(.regular)
         .disabled(isUpdating)
     }
 }

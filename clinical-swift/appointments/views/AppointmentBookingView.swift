@@ -312,27 +312,15 @@ private struct AppointmentBookingTimeSection: View {
 private struct AppointmentBookingDurationSection: View {
     @Binding var durationMinutes: Minutes
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 50), spacing: 8)
-    ]
-
     var body: some View {
         AppointmentBookingSection(title: "Duration") {
-            LazyVGrid(columns: columns, spacing: 8) {
+            Picker("Duration", selection: $durationMinutes) {
                 ForEach(AppointmentBookingDraft.durationOptions, id: \.self) { minutes in
-                    Button {
-                        durationMinutes = minutes
-                    } label: {
-                        Text(durationLabel(for: minutes))
-                            .styleFormPicker()
-                            .frame(maxWidth: .infinity, minHeight: 34)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .buttonBorderShape(.capsule)
-                    .tint(durationMinutes == minutes ? .accentColor : .secondary)
+                    Text(durationLabel(for: minutes))
+                        .tag(minutes)
                 }
             }
+            .pickerStyle(.segmented)
         }
     }
 

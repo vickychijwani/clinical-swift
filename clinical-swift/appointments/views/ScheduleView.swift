@@ -255,11 +255,8 @@ struct ScheduleView: View {
     }
 
     private var needsSheetClearance: Bool {
-        bookingModel != nil || isShowingAppointmentDetails
-    }
-
-    private var isShowingAppointmentDetails: Bool {
-        visibleAppointmentDetailsID != nil
+        bookingModel != nil
+            || (router.selectedTab == .schedule && router.detailsPresentation != nil)
     }
 
     private var visibleAppointmentDetailsID: Appointment.ID? {

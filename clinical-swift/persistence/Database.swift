@@ -103,7 +103,7 @@ func migrateDatabase(_ database: any DatabaseWriter) throws {
             try #sql(
                 """
                 UPDATE "patients"
-                SET "phone" = \(bind: normalizedPhone)
+                SET "phone" = \(#bind(normalizedPhone, as: String?.self))
                 WHERE "phone" = \(bind: storedPhone)
                 """
             )
