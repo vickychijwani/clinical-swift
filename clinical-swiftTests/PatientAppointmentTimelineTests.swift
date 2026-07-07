@@ -115,15 +115,15 @@ struct PatientAppointmentTimelineTests {
             }
         }
 
-        let rows = try database.read { db in
+        let records = try database.read { db in
             try patientTimelineAppointmentsQuery(patientID: patientID).fetchAll(db)
         }
-        let emptyRows = try database.read { db in
+        let emptyRecords = try database.read { db in
             try patientTimelineAppointmentsQuery(patientID: emptyPatientID).fetchAll(db)
         }
 
         #expect(
-            rows.map(\.id) == [
+            records.map(\.id) == [
                 latestStartID,
                 higherTiedID,
                 lowerTiedID,
@@ -131,14 +131,14 @@ struct PatientAppointmentTimelineTests {
             ]
         )
         #expect(
-            rows.map(\.status) == [
+            records.map(\.status) == [
                 "completed",
                 "scheduled",
                 "completed",
                 "scheduled",
             ]
         )
-        #expect(emptyRows.isEmpty)
+        #expect(emptyRecords.isEmpty)
     }
 
     @Test func statusPresentationCoversEveryAppointmentStatus() {

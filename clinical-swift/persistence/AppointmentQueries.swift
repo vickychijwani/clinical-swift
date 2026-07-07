@@ -46,28 +46,6 @@ nonisolated struct ScheduleAppointmentRow: Identifiable, Sendable {
     }
 }
 
-@Selection
-nonisolated struct PatientTimelineAppointmentRow: Identifiable, Sendable {
-    let id: UUID
-    let start: Date
-    let durationMinutes: Int
-    let status: String
-
-    func appointment(patientName: String) -> Appointment? {
-        guard let status = Appointment.Status(storageValue: status) else {
-            return nil
-        }
-
-        return Appointment(
-            id: id,
-            patientName: patientName,
-            start: start,
-            durationMinutes: durationMinutes,
-            status: status
-        )
-    }
-}
-
 nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleAppointmentRow> {
     let calendar = Calendar.autoupdatingCurrent
     let start = selectedDate.startOfDay(using: calendar)
@@ -121,7 +99,7 @@ nonisolated func appointmentDetailsQuery(
 
 nonisolated func patientTimelineAppointmentsQuery(
     patientID: Patient.ID
-) -> some Statement<PatientTimelineAppointmentRow> {
+) -> some Statement<AppointmentRecord> {
     AppointmentRecord
         .where { $0.patientID.eq(patientID) }
         .where {
@@ -131,12 +109,5 @@ nonisolated func patientTimelineAppointmentsQuery(
             ])
         }
         .order { ($0.start.desc(), $0.createdAt.desc(), $0.id.desc()) }
-        .select {
-            PatientTimelineAppointmentRow.Columns(
-                id: $0.id,
-                start: $0.start,
-                durationMinutes: $0.durationMinutes,
-                status: $0.status
-            )
-        }
+        .selectStar()
 }

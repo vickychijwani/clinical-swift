@@ -5,7 +5,7 @@ struct PatientDetailsView: View {
     @Environment(Router.self) private var router
 
     @FetchOne private var row: PatientListRow?
-    @FetchAll private var appointmentRows: [PatientTimelineAppointmentRow]
+    @FetchAll private var appointmentRecords: [AppointmentRecord]
 
     let onSelectAppointment: @MainActor @Sendable (Appointment.ID) -> Void
 
@@ -14,7 +14,7 @@ struct PatientDetailsView: View {
         onSelectAppointment: @escaping @MainActor @Sendable (Appointment.ID) -> Void
     ) {
         _row = FetchOne(patientDetailsQuery(id: id))
-        _appointmentRows = FetchAll(
+        _appointmentRecords = FetchAll(
             patientTimelineAppointmentsQuery(patientID: id),
             animation: .default
         )
@@ -26,7 +26,9 @@ struct PatientDetailsView: View {
             if let details = row?.item {
                 ViewPatientView(
                     details: details,
-                    appointmentRows: appointmentRows,
+                    appointments: appointmentRecords.compactMap {
+                        $0.appointment(patientName: details.patient.displayName)
+                    },
                     onSelectAppointment: onSelectAppointment
                 )
             } else {

@@ -52,6 +52,20 @@ nonisolated struct AppointmentRecord: Identifiable, Sendable {
             updatedAt: updatedAt
         )
     }
+
+    nonisolated func appointment(patientName: String) -> Appointment? {
+        guard let status = Appointment.Status(storageValue: status) else {
+            return nil
+        }
+
+        return Appointment(
+            id: id,
+            patientName: patientName,
+            start: start,
+            durationMinutes: durationMinutes,
+            status: status
+        )
+    }
 }
 
 extension Appointment.Status {

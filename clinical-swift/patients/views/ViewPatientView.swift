@@ -5,7 +5,7 @@ struct ViewPatientView: View {
     @State private var isPatientNameVisible = true
 
     let details: PatientDetails
-    let appointmentRows: [PatientTimelineAppointmentRow]
+    let appointments: [Appointment]
     let onSelectAppointment: @MainActor @Sendable (Appointment.ID) -> Void
 
     var body: some View {
@@ -45,24 +45,20 @@ struct ViewPatientView: View {
                 Text("Appointments")
                     .font(.headline)
 
-                if appointmentRows.isEmpty {
+                if appointments.isEmpty {
                     Text("No appointments yet")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    ForEach(appointmentRows) { row in
-                        if let appointment = row.appointment(
-                            patientName: details.patient.displayName
-                        ) {
-                            AppointmentDetailsCard(
-                                appointment: appointment,
-                                variant: .patientTimeline(
-                                    onSelectAppointment: {
-                                        onSelectAppointment(appointment.id)
-                                    }
-                                )
+                    ForEach(appointments) { appointment in
+                        AppointmentDetailsCard(
+                            appointment: appointment,
+                            variant: .patientTimeline(
+                                onSelectAppointment: {
+                                    onSelectAppointment(appointment.id)
+                                }
                             )
-                        }
+                        )
                     }
                 }
             }
@@ -135,7 +131,7 @@ nonisolated enum PatientDetailsNavigationTitle {
             NavigationStack {
                 ViewPatientView(
                     details: item,
-                    appointmentRows: [],
+                    appointments: [],
                     onSelectAppointment: { _ in }
                 )
             }

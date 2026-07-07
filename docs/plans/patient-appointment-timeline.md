@@ -6,14 +6,15 @@ Add a live, latest-first appointment timeline to the existing patient details sh
 
 ## Implementation Changes
 
-- Add a StructuredQueries projection and `patientTimelineAppointmentsQuery(patientID:)` selecting only ID, start, duration, and status.
+- Query appointment records with `patientTimelineAppointmentsQuery(patientID:)`, then map them to `Appointment` values using the patient name already loaded by `PatientDetailsView`.
   - Include scheduled and completed rows; exclude cancelled rows.
   - Sort by start, creation date, and appointment ID, all descending.
   - Load it through `@FetchAll` so edits and status changes update the active or revisited patient view without manual refresh.
+  - Pass only mapped `Appointment` values into `ViewPatientView` so persistence types remain at the data-loading boundary.
 - Extend `PatientDetailsView(id:onSelectAppointment:)` and route the callback through `DetailsRouteView` to the existing `.appointment(id)` destination.
 - Rebuild `ViewPatientView` as one `ScrollView` containing the summary card, contact actions, and an `Appointments` section.
   - Use lazy construction for appointment cards.
-  - Show `No appointments yet` when the projection is empty.
+  - Show `No appointments yet` when the history is empty.
   - Reuse `AppointmentDetailsCard`’s `.patientTimeline` variant and make the entire card invoke the route callback.
 - Give the timeline card a cohesive status presentation:
   - Scheduled: explicit `Scheduled` label with the existing green emphasis and primary time text.
@@ -27,7 +28,7 @@ Add a live, latest-first appointment timeline to the existing patient details sh
 
 ## Interfaces and Types
 
-- Add an internal lightweight patient-timeline appointment selection type; do not add history to `Patient`.
+- Reuse `AppointmentRecord` for the persistence query; do not add history to `Patient`.
 - Add appointment-selection closures to the patient details views.
 - Add small testable semantic helpers for timeline status presentation and summary-visibility title selection.
 - No database migration, new route, third-party dependency, or selected-tab navigation mutation.
