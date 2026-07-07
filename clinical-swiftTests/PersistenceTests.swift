@@ -112,9 +112,9 @@ struct PersistenceTests {
             try patientDetailsQuery(id: patientID, now: now).fetchOne(db)
         }
 
-        #expect(rows.map(\.item.nextAppointmentDate) == [next])
-        #expect(rows.map(\.item.patient.name) == ["Aarav Mehta"])
-        #expect(detailsRow?.item == rows.first?.item)
+        #expect(rows.map(\.details.nextAppointmentDate) == [next])
+        #expect(rows.map(\.details.patient.name) == ["Aarav Mehta"])
+        #expect(detailsRow?.details == rows.first?.details)
     }
 
     @Test func scheduleRowsJoinAppointmentsToPatientDisplayNames() throws {
@@ -158,7 +158,7 @@ struct PersistenceTests {
         let detailsRow = try database.read { db in
             try appointmentDetailsQuery(id: appointmentID).fetchOne(db)
         }
-        let appointment = try #require(rows.first?.appointment)
+        let appointment = try #require(rows.first?.details?.appointment)
         let details = try #require(rows.first?.details)
         let currentDetails = try #require(detailsRow?.details)
 
@@ -215,7 +215,7 @@ struct PersistenceTests {
         let rows = try database.read { db in
             try querySchedule(selectedDate: selectedDate).fetchAll(db)
         }
-        let appointment = try #require(rows.first?.appointment)
+        let appointment = try #require(rows.first?.details?.appointment)
 
         #expect(rows.count == 1)
         #expect(appointment.id == appointmentID)

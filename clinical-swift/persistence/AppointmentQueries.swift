@@ -2,51 +2,32 @@ import Foundation
 import SQLiteData
 
 @Selection
-nonisolated struct ScheduleAppointmentRow: Identifiable, Sendable {
-    let id: UUID
-    let patientID: UUID
-    let patientName: String?
-    let patientPhone: String?
-    let patientDOB: Date?
-    let patientGender: String?
-    let patientCreatedAt: Date
-    let start: Date
-    let durationMinutes: Int
-    let status: String
+nonisolated struct AppointmentPatientSelection: Identifiable, Sendable {
+    let appointmentRecord: AppointmentRecord
+    let patientRecord: PatientRecord
 
-    var appointment: Appointment? {
-        guard let status = Appointment.Status(storageValue: status) else {
-            return nil
-        }
-        return Appointment(
-            id: id,
-            patientName: patientName ?? Patient.unknownDisplayName,
-            start: start,
-            durationMinutes: durationMinutes,
-            status: status
-        )
-    }
+    var id: Appointment.ID { appointmentRecord.id }
 
     var details: AppointmentDetails? {
-        guard let appointment else {
+        let patient = Patient(patientRecord)
+        guard
+            let appointment = appointmentRecord.appointment(
+                patientName: patient.displayName
+            )
+        else {
             return nil
         }
 
         return AppointmentDetails(
             appointment: appointment,
-            patient: Patient(
-                id: patientID,
-                name: patientName,
-                phone: patientPhone,
-                dob: patientDOB,
-                gender: patientGender.flatMap(Gender.init(storageValue:)),
-                createdDate: patientCreatedAt
-            )
+            patient: patient
         )
     }
 }
 
-nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleAppointmentRow> {
+nonisolated func querySchedule(
+    selectedDate: Date
+) -> some Statement<AppointmentPatientSelection> {
     let calendar = Calendar.autoupdatingCurrent
     let start = selectedDate.startOfDay(using: calendar)
     let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
@@ -58,41 +39,25 @@ nonisolated func querySchedule(selectedDate: Date) -> some Statement<ScheduleApp
         .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
         .order { $0.start.asc() }
         .join(PatientRecord.all) { $0.patientID.eq($1.id) }
-        .select { appt, patient in
-            ScheduleAppointmentRow.Columns(
-                id: appt.id,
-                patientID: patient.id,
-                patientName: patient.name,
-                patientPhone: patient.phone,
-                patientDOB: patient.dob,
-                patientGender: patient.gender,
-                patientCreatedAt: patient.createdAt,
-                start: appt.start,
-                durationMinutes: appt.durationMinutes,
-                status: appt.status
+        .select { appointment, patient in
+            AppointmentPatientSelection.Columns(
+                appointmentRecord: appointment,
+                patientRecord: patient
             )
         }
 }
 
 nonisolated func appointmentDetailsQuery(
     id: Appointment.ID
-) -> some Statement<ScheduleAppointmentRow> {
+) -> some Statement<AppointmentPatientSelection> {
     AppointmentRecord
         .where { $0.id.eq(id) }
         .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
         .join(PatientRecord.all) { $0.patientID.eq($1.id) }
-        .select { appt, patient in
-            ScheduleAppointmentRow.Columns(
-                id: appt.id,
-                patientID: patient.id,
-                patientName: patient.name,
-                patientPhone: patient.phone,
-                patientDOB: patient.dob,
-                patientGender: patient.gender,
-                patientCreatedAt: patient.createdAt,
-                start: appt.start,
-                durationMinutes: appt.durationMinutes,
-                status: appt.status
+        .select { appointment, patient in
+            AppointmentPatientSelection.Columns(
+                appointmentRecord: appointment,
+                patientRecord: patient
             )
         }
 }

@@ -22,6 +22,9 @@ Although sync is not yet implemented, note these invariants related to sync (app
 General invariants:
 
 - Domain structs remain separate from database records. `Patient` and `Appointment` are UI-facing values; `PatientRecord` and `AppointmentRecord` define the SQLite boundary.
+- Typed read selections should nest complete record values alongside aggregates or joined records. This keeps query projections aligned with table schemas and avoids duplicating record construction field by field.
+- StructuredQueries expressions can overwhelm Swift's type checker after a join. Apply single-table filtering, grouping, and ordering before the join when semantics allow, and use one named intermediate query to establish the simpler generic type.
+- `collate` requires a non-optional string expression. For nullable text, use `column.ifnull("").collate(...)`; prefer `ifnull` over the heavily overloaded query `??` operator to reduce compiler work.
 - Every record table has standard `createdAt` and `updatedAt` fields.
 - Appointments reference patients by `patientID`. Do not store patient names in appointments as the source of truth because patient names can change.
 - Core domain structs do not store derived fields, e.g., `Patient` does not store fields like `nextAppointmentDate`. In that example, derive appointment rollups into list/read models from future appointment rows so they cannot drift from the schedule.

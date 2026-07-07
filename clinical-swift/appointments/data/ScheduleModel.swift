@@ -5,14 +5,14 @@ import SQLiteData
     var selectedDate: Date
 
     @ObservationIgnored @Dependency(\.calendar) var calendar
-    @ObservationIgnored @FetchAll(ScheduleAppointmentRow.none) var appointmentRows
+    @ObservationIgnored @FetchAll(AppointmentPatientSelection.none) var appointmentRows
 
     init(selectedDate: Date) {
         self.selectedDate = selectedDate
     }
 
     var appointments: [Appointment] {
-        appointmentRows.compactMap(\.appointment)
+        appointmentRows.compactMap { $0.details?.appointment }
     }
 
     func details(for appointment: Appointment) -> AppointmentDetails? {

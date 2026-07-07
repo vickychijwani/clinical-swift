@@ -5,7 +5,7 @@ struct PatientsView: View {
     @Environment(Router.self) private var router
 
     @FetchAll(patientListRowsQuery(), animation: .default)
-    private var patientRows: [PatientListRow]
+    private var patientRows: [PatientDetailsSelection]
     @State private var searchText = ""
     @State private var isAddingPatient = false
 
@@ -36,7 +36,7 @@ struct PatientsView: View {
     }
 
     private var patientDetailsList: [PatientDetails] {
-        patientRows.map(\.item)
+        patientRows.map(\.details)
     }
 }
 

@@ -4,7 +4,7 @@ import SwiftUI
 struct PatientDetailsView: View {
     @Environment(Router.self) private var router
 
-    @FetchOne private var row: PatientListRow?
+    @FetchOne private var row: PatientDetailsSelection?
     @FetchAll private var appointmentRecords: [AppointmentRecord]
 
     let onSelectAppointment: @MainActor @Sendable (Appointment.ID) -> Void
@@ -23,7 +23,7 @@ struct PatientDetailsView: View {
 
     var body: some View {
         Group {
-            if let details = row?.item {
+            if let details = row?.details {
                 ViewPatientView(
                     details: details,
                     appointments: appointmentRecords.compactMap {
@@ -43,7 +43,7 @@ struct PatientDetailsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if let patient = row?.item.patient {
+                if let patient = row?.details.patient {
                     Button("Edit Patient", systemImage: "pencil") {
                         router.requestPatientEdit(patient)
                     }

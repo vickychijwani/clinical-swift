@@ -172,7 +172,7 @@ struct AppointmentStatusPersistenceTests {
 
         #expect(Set(scheduleRows.map(\.id)) == Set([completedID, scheduledID]))
         #expect(cancelledDetails == nil)
-        #expect(patientRow?.item.nextAppointmentDate == scheduledStart)
+        #expect(patientRow?.details.nextAppointmentDate == scheduledStart)
         #expect(retainedCancelledRecord?.status == Appointment.Status.cancelled.rawValue)
     }
 

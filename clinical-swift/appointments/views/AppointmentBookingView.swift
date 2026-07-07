@@ -6,7 +6,7 @@ struct AppointmentBookingView: View {
     @Environment(\.dismiss) private var dismiss
 
     @FetchAll(patientListRowsQuery())
-    private var patientRows: [PatientListRow]
+    private var patientRows: [PatientDetailsSelection]
 
     @Bindable var model: AppointmentBookingModel
 
@@ -36,7 +36,7 @@ struct AppointmentBookingView: View {
                 AppointmentBookingForm(
                     model: model,
                     step: $bookingStep,
-                    patientItems: patientRows.map(\.item),
+                    patientItems: patientRows.map(\.details),
                     guardedDismiss: guardedDismiss,
                     saveAppointment: saveAppointment
                 )

@@ -5,7 +5,7 @@ import SQLiteData
 final class AppointmentDetailsModel {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.date.now) private var now
-    @ObservationIgnored @FetchOne private var row: ScheduleAppointmentRow?
+    @ObservationIgnored @FetchOne private var row: AppointmentPatientSelection?
 
     let appointmentID: Appointment.ID
     private let statusUpdater: StatusUpdater?
