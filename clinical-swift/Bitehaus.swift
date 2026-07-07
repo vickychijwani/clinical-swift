@@ -19,3 +19,9 @@ nonisolated struct Bitehaus {
     static let firstHalf = Bitehaus.opening...Bitehaus.break.start
     static let secondHalf = Bitehaus.break.end...Bitehaus.closing
 }
+
+nonisolated struct BreakBlock {
+    let start: TimeOfDay
+    let end: TimeOfDay
+    let title: String
+}

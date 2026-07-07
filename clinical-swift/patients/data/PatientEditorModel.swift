@@ -96,3 +96,7 @@ final class PatientEditorModel {
         saveErrorMessage = nil
     }
 }
+
+nonisolated enum PatientEditingError: Error {
+    case unavailable
+}

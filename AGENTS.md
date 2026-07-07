@@ -102,7 +102,7 @@ If SwiftData is configured to use CloudKit:
 - Use a consistent project structure, with folder layout determined by app features.
 - Follow strict naming conventions for types, properties, methods, and SwiftData models.
 - For frequently used domain types and fields, prefer short, unambiguous names over verbose expansions, such as `phone`, `dob`, and `Gender`.
-- Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
+- Place small one-off structs/enums in the file where they're primarily owned/created, instead of creating many files with a single small struct/enum.
 - Write unit tests for core application logic.
 - Only write UI tests if unit tests are not possible.
 - Prefer readable dates parsed with standard strategies, such as ISO-8601 strings, over custom `DateComponents` fixture builders.

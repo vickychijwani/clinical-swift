@@ -182,6 +182,58 @@ final class Router {
     }
 }
 
+@MainActor @Observable
+final class DetailsPresentation: Identifiable {
+    let id: UUID
+    private(set) var root: Route
+    var path: [Route]
+
+    var currentRoute: Route {
+        path.last ?? root
+    }
+
+    init(
+        id: UUID = UUID(),
+        root: Route,
+        path: [Route] = []
+    ) {
+        self.id = id
+        self.root = root
+        self.path = path
+    }
+
+    func replaceRoot(with route: Route) {
+        root = route
+        path.removeAll()
+    }
+}
+
+nonisolated struct AppointmentEditRequest: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    let details: AppointmentDetails
+
+    var appointmentID: Appointment.ID {
+        details.appointment.id
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+nonisolated struct PatientEditRequest: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    let patient: Patient
+
+    var patientID: Patient.ID {
+        patient.id
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 private struct SuspendedDetailsSession {
     let presentation: DetailsPresentation
     var returnTab: AppTab

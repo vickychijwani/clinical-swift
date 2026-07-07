@@ -49,7 +49,6 @@ struct ViewPatientView: View {
                     Text("No appointments yet")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical)
                 } else {
                     ForEach(appointmentRows) { row in
                         if let appointment = row.appointment(
@@ -105,6 +104,15 @@ struct ViewPatientView: View {
     private func openWhatsAppChat() {
         guard let whatsappURL else { return }
         openURL(whatsappURL)
+    }
+}
+
+nonisolated enum PatientDetailsNavigationTitle {
+    // Display patient name in nav title when the name field is almost entirely off-screen (1% visible)
+    static let nameVisibilityThreshold = 0.01
+
+    static func text(patientDisplayName: String, isNameVisible: Bool) -> String {
+        isNameVisible ? "Patient Details" : patientDisplayName
     }
 }
 

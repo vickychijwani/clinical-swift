@@ -51,3 +51,14 @@ extension DatabaseWriter {
         }
     }
 }
+
+nonisolated enum AppointmentStatusUpdateError: Error, Equatable, Sendable {
+    case unavailable
+    case invalidStoredStatus(String)
+    case transition(AppointmentStatusTransitionError)
+}
+
+nonisolated enum AppointmentStatusUpdateResult: Equatable, Sendable {
+    case updated
+    case unchanged
+}
