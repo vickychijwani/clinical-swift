@@ -33,28 +33,13 @@ struct DetailsFlowSheet: View {
                 }
             }
         }
-        .modifier(
-            FittedSheetModifier(
-                fitsVertically: isShowingAppointment,
-                fallbackDetent: .medium
-            )
-        )
+        .presentationDetents([.medium])
         .presentationBackground(Color("AppBackground"))
-        .presentationBackgroundInteraction(
-            isShowingAppointment ? .enabled : .disabled
-        )
         .presentationContentInteraction(.resizes)
     }
 
     private var isAtRoot: Bool {
         presentation.path.isEmpty
-    }
-
-    private var isShowingAppointment: Bool {
-        if case .appointment = presentation.currentRoute {
-            return true
-        }
-        return false
     }
 
     private func navigate(to route: Route) {

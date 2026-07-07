@@ -20,7 +20,7 @@ struct AppointmentDetailsView: View {
         Group {
             if let details = model.details {
                 ScrollView {
-                    VStack {
+                    VStack(alignment: .leading, spacing: 12) {
                         AppointmentDetailsCard(
                             appointment: details.appointment,
                             variant: .standard(
@@ -32,10 +32,13 @@ struct AppointmentDetailsView: View {
                         )
 
                         if model.showsStatusActions {
-                            AppointmentStatusActionsView(
+                            AppointmentDetailsActionsView(
                                 isUpdating: model.isUpdatingStatus,
                                 onComplete: {
                                     model.requestStatus(.completed)
+                                },
+                                onReschedule: {
+                                    router.requestAppointmentEdit(details)
                                 },
                                 onCancel: {
                                     model.requestStatus(.cancelled)
@@ -44,7 +47,6 @@ struct AppointmentDetailsView: View {
                         }
                     }
                     .padding()
-                    .fittedSheetContent()
                 }
                 .scrollBounceBehavior(.basedOnSize)
             } else {
@@ -57,19 +59,6 @@ struct AppointmentDetailsView: View {
         }
         .navigationTitle("Appointment")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if let details = model.details,
-                    details.appointment.status == .scheduled
-                {
-                    Button("Edit Appointment", systemImage: "pencil") {
-                        router.requestAppointmentEdit(details)
-                    }
-                    .labelStyle(.iconOnly)
-                    .disabled(model.isUpdatingStatus)
-                }
-            }
-        }
         .alert(
             model.prompt?.title ?? "",
             isPresented: Binding(
@@ -116,26 +105,41 @@ struct AppointmentDetailsView: View {
     }
 }
 
-private struct AppointmentStatusActionsView: View {
+private struct AppointmentDetailsActionsView: View {
     let isUpdating: Bool
     let onComplete: @MainActor () -> Void
+    let onReschedule: @MainActor () -> Void
     let onCancel: @MainActor () -> Void
 
     var body: some View {
-        HStack {
-            Button("Complete", systemImage: "checkmark", action: onComplete)
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity)
+        GlassEffectContainer {
+            HStack {
+                Button {
+                    onComplete()
+                } label: {
+                    Label("Complete", systemImage: "checkmark")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
 
-            Button(role: .destructive, action: onCancel) {
-                Label("Cancel", systemImage: "xmark.bin")
-                    .frame(maxWidth: .infinity)
+                Button {
+                    onReschedule()
+                } label: {
+                    Label("Reschedule", systemImage: "calendar.badge.clock")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+
+                Button(role: .destructive) {
+                    onCancel()
+                } label: {
+                    Image(systemName: "xmark.bin")
+                }
+                .buttonStyle(.glass)
             }
-            .buttonStyle(.bordered)
+            .disabled(isUpdating)
         }
-        .buttonSizing(.flexible)
-        .controlSize(.regular)
-        .disabled(isUpdating)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

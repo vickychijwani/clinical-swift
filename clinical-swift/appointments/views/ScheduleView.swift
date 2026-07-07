@@ -76,6 +76,10 @@ struct ScheduleView: View {
             guard let request = router.appointmentEditRequest else { return }
             startEditing(request)
         }
+        .task(id: router.appointmentBookingRequest?.id) {
+            guard let request = router.appointmentBookingRequest else { return }
+            startBooking(request)
+        }
         .task(id: bookingModel?.id) {
             guard bookingModel != nil else { return }
 
@@ -136,9 +140,11 @@ struct ScheduleView: View {
 
     /// Switch to booking mode and select a slot based on existing appointments. Installing the
     /// model triggers the layout-aware preview scroll above.
-    private func startBooking() {
-        let bookingModel = AppointmentBookingModel(selectedDate: scheduleModel.selectedDate) {
-            bookedDate in
+    private func startBooking(selectedPatient: Patient? = nil) {
+        let bookingModel = AppointmentBookingModel(
+            selectedDate: scheduleModel.selectedDate,
+            selectedPatient: selectedPatient
+        ) { bookedDate in
             refreshAppointments(for: bookedDate)
         }
         bookingModel.updateAppointments(
@@ -150,6 +156,12 @@ struct ScheduleView: View {
         // Install the model after prefilling slot - to ensure the sheet starts out displaying the
         // pre-selected slot rather than briefly showing the clinic opening time.
         self.bookingModel = bookingModel
+    }
+
+    private func startBooking(_ request: AppointmentBookingRequest) {
+        guard router.appointmentBookingRequest?.id == request.id else { return }
+        startBooking(selectedPatient: request.patient)
+        router.consumeAppointmentBookingRequest(request.id)
     }
 
     private func startEditing(_ request: AppointmentEditRequest) {

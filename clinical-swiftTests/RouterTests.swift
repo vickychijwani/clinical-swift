@@ -163,6 +163,44 @@ struct RouterTests {
         #expect(router.appointmentEditRequest?.id != firstRequest.id)
     }
 
+    @Test func appointmentBookingFromPatientDetailsRestoresExactNavigationState() throws {
+        let router = Router()
+        let patient = Patient(name: "Aarav Mehta")
+        let appointmentID = UUID()
+        let schedulePath: [Route] = [.appointment(UUID())]
+        let patientsPath: [Route] = [.patient(UUID())]
+        let detailsPath: [Route] = [.appointment(appointmentID)]
+        router.selectedTab = .patients
+        router.schedulePath = schedulePath
+        router.patientsPath = patientsPath
+        router.presentDetails(.patient(patient.id))
+        for route in detailsPath {
+            router.pushDetails(route)
+        }
+        let presentation = try #require(router.detailsPresentation)
+
+        router.requestAppointmentBooking(for: patient)
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation == nil)
+        #expect(router.appointmentBookingRequest == nil)
+        #expect(router.schedulePath == schedulePath)
+        #expect(router.patientsPath == patientsPath)
+
+        router.detailsDidDismiss()
+
+        let request = try #require(router.appointmentBookingRequest)
+        #expect(request.patientID == patient.id)
+        router.consumeAppointmentBookingRequest(request.id)
+        router.appointmentEditorDidDismiss()
+
+        #expect(router.selectedTab == .patients)
+        #expect(router.detailsPresentation === presentation)
+        #expect(router.detailsPresentation?.path == detailsPath)
+        #expect(router.schedulePath == schedulePath)
+        #expect(router.patientsPath == patientsPath)
+    }
+
     @Test func patientEditRestoresExactDetailsHistoryWithoutChangingTabState() throws {
         let router = Router()
         let patient = Patient(name: "Aarav Mehta")

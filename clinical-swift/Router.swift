@@ -18,6 +18,7 @@ final class Router {
     var patientsPath: [Route] = []
     var paymentsPath: [Route] = []
     var detailsPresentation: DetailsPresentation?
+    private(set) var appointmentBookingRequest: AppointmentBookingRequest?
     private(set) var appointmentEditRequest: AppointmentEditRequest?
     private(set) var patientEditRequest: PatientEditRequest?
 
@@ -63,6 +64,25 @@ final class Router {
         }
     }
 
+    func requestAppointmentBooking(for patient: Patient) {
+        guard canRequestEditor else { return }
+        let request = AppointmentBookingRequest(patient: patient)
+        activeEditorSession = .appointment
+
+        if let detailsPresentation {
+            suspendedDetailsSession = SuspendedDetailsSession(
+                presentation: detailsPresentation,
+                returnTab: selectedTab
+            )
+            pendingEditorHandoff = .appointmentBooking(request)
+            selectedTab = .schedule
+            dismissDetails()
+        } else {
+            selectedTab = .schedule
+            appointmentBookingRequest = request
+        }
+    }
+
     func requestPatientEdit(_ patient: Patient) {
         guard canRequestEditor else { return }
         let request = PatientEditRequest(patient: patient)
@@ -85,6 +105,8 @@ final class Router {
         self.pendingEditorHandoff = nil
 
         switch pendingEditorHandoff {
+        case .appointmentBooking(let request):
+            appointmentBookingRequest = request
         case .appointment(let request):
             appointmentEditRequest = request
         case .patient(let request):
@@ -95,6 +117,11 @@ final class Router {
     func consumeAppointmentEditRequest(_ requestID: AppointmentEditRequest.ID) {
         guard appointmentEditRequest?.id == requestID else { return }
         appointmentEditRequest = nil
+    }
+
+    func consumeAppointmentBookingRequest(_ requestID: AppointmentBookingRequest.ID) {
+        guard appointmentBookingRequest?.id == requestID else { return }
+        appointmentBookingRequest = nil
     }
 
     func consumePatientEditRequest(_ requestID: PatientEditRequest.ID) {
@@ -221,6 +248,19 @@ nonisolated struct AppointmentEditRequest: Identifiable, Equatable, Sendable {
     }
 }
 
+nonisolated struct AppointmentBookingRequest: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    let patient: Patient
+
+    var patientID: Patient.ID {
+        patient.id
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 nonisolated struct PatientEditRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
     let patient: Patient
@@ -240,6 +280,7 @@ private struct SuspendedDetailsSession {
 }
 
 private enum PendingEditorHandoff {
+    case appointmentBooking(AppointmentBookingRequest)
     case appointment(AppointmentEditRequest)
     case patient(PatientEditRequest)
 }

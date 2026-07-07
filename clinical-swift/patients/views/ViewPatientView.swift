@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ViewPatientView: View {
-    @Environment(\.openURL) private var openURL
+    @Environment(Router.self) private var router
     @State private var isPatientNameVisible = true
 
     let details: PatientDetails
@@ -11,7 +11,7 @@ struct ViewPatientView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                PatientItemView(
+                PatientSummaryView(
                     item: details,
                     onNameVisibilityChange: { isPatientNameVisible in
                         self.isPatientNameVisible = isPatientNameVisible
@@ -20,27 +20,9 @@ struct ViewPatientView: View {
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(Color.white)
-                .clipShape(.rect(cornerRadius: 8))
+                .clipShape(.rect(cornerRadius: 32))
 
-                HStack(spacing: 12) {
-                    Button {
-                        callPatient()
-                    } label: {
-                        Label("Call", systemImage: "phone.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(telURL == nil)
-
-                    Button {
-                        openWhatsAppChat()
-                    } label: {
-                        Label("WhatsApp", systemImage: "message.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(whatsappURL == nil)
-                }
+                PatientActionsView(scheduleAppointment: scheduleAppointment)
 
                 Text("Appointments")
                     .font(.headline)
@@ -72,34 +54,36 @@ struct ViewPatientView: View {
                 isNameVisible: isPatientNameVisible
             )
         )
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Edit Patient", systemImage: "pencil", action: editPatient)
+                    .labelStyle(.iconOnly)
+            }
+        }
     }
 
-    private var normalizedPhoneNumber: String? {
-        PhoneNumber.normalizedE164(details.patient.phone)
+    private func scheduleAppointment() {
+        router.requestAppointmentBooking(for: details.patient)
     }
 
-    private var whatsappPhoneNumber: String? {
-        normalizedPhoneNumber?.filter(\.isNumber)
+    private func editPatient() {
+        router.requestPatientEdit(details.patient)
     }
+}
 
-    private var telURL: URL? {
-        guard let normalizedPhoneNumber else { return nil }
-        return URL(string: "tel://\(normalizedPhoneNumber)")
-    }
+private struct PatientActionsView: View {
+    let scheduleAppointment: () -> Void
 
-    private var whatsappURL: URL? {
-        guard let whatsappPhoneNumber else { return nil }
-        return URL(string: "https://wa.me/\(whatsappPhoneNumber)")
-    }
-
-    private func callPatient() {
-        guard let telURL else { return }
-        openURL(telURL)
-    }
-
-    private func openWhatsAppChat() {
-        guard let whatsappURL else { return }
-        openURL(whatsappURL)
+    var body: some View {
+        GlassEffectContainer {
+            Button {
+                scheduleAppointment()
+            } label: {
+                Label("Schedule Appointment", systemImage: "calendar.badge.plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+        }
     }
 }
 
@@ -135,6 +119,7 @@ nonisolated enum PatientDetailsNavigationTitle {
                     onSelectAppointment: { _ in }
                 )
             }
+            .environment(Router())
             .presentationDetents([.medium, .large])
         }
 }

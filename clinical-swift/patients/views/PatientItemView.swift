@@ -1,19 +1,23 @@
 import SwiftUI
 
 struct PatientItemView: View {
-    let item: PatientDetails
+    let patient: Patient
+    let subtitle: String?
     let onNameVisibilityChange: (@MainActor @Sendable (Bool) -> Void)?
 
     init(
         item: PatientDetails,
         onNameVisibilityChange: (@MainActor @Sendable (Bool) -> Void)? = nil
     ) {
-        self.item = item
+        patient = item.patient
+        subtitle = PatientItemViewMetadata.metadata(for: item).subtitle
         self.onNameVisibilityChange = onNameVisibilityChange
     }
 
-    private var patient: Patient {
-        item.patient
+    init(patient: Patient) {
+        self.patient = patient
+        subtitle = PatientItemViewMetadata.demographics(for: patient)
+        onNameVisibilityChange = nil
     }
 
     var body: some View {
@@ -36,9 +40,7 @@ struct PatientItemView: View {
                 .styleBodyBold()
                 .lineLimit(1)
 
-                if let subtitle = PatientItemViewMetadata.metadata(for: item)
-                    .subtitle
-                {
+                if let subtitle {
                     Text(subtitle)
                         .styleCaption()
                         .lineLimit(2)

@@ -11,39 +11,15 @@ struct AppointmentDetailsCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 AppointmentDetailsSummary(appointment: appointment)
 
-                Button {
-                    onSelectPatient()
-                } label: {
-                    HStack {
-                        PatientAvatar(patient: patient)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(patient.displayName)
-                                .font(.headline)
-                                .lineLimit(1)
-
-                            if let demographics = PatientItemViewMetadata.demographics(for: patient)
-                            {
-                                Text(demographics)
-                                    .styleCaption()
-                            }
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.forward")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
+                PatientSummaryView(
+                    patient: patient,
+                    onSelect: onSelectPatient
+                )
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.background)
-            .clipShape(.rect(cornerRadius: 18))
+            .clipShape(.rect(cornerRadius: 32))
 
         case .patientTimeline(let onSelectAppointment):
             Button {
@@ -53,7 +29,7 @@ struct AppointmentDetailsCard: View {
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.background)
-                    .clipShape(.rect(cornerRadius: 18))
+                    .clipShape(.rect(cornerRadius: 32))
             }
             .buttonStyle(.plain)
         }

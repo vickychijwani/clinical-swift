@@ -12,6 +12,7 @@
 - [x] View patient
   - [x] Timeline of appointments (all - future, present, past)
     - [x] Remember to refresh timeline when navigating back from an appointment's details - date/time could have changed
+  - [ ] Schedule Appointment button
   - [x] Edit patient
   - [x] Hide optional details like dob/gender to reduce friction with first-appointment creation
 - [x] New appointment
@@ -40,6 +41,7 @@
 - [ ] Block off time ranges (e.g., travelling, holiday, etc) OR sync to Calendar
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
+- [ ] Basic dark mode support - check if Monu’s phone has it enabled - contrast is terrible
 
 Refactors:
 - [x] Remove TimelineSegment; use TimelineScale for universal placement
@@ -47,12 +49,21 @@ Refactors:
 
 Bugs:
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
+- [ ] Fitted sheet still resizes upon scroll, in patient edit sheet. Other sheets are fine (but they also don't have scrollable contents at the moment, I think, not sure).
 - [ ] When switching to a different date, selected appointment sheet should be dismissed (record a UX invariant: never show appointment details for date X on the timeline for date Y, to prevent user confusion). However, if navigation within sheet is used to go from appointment on date X -> patient -> appointment on date Y, then instead jump to date Y in schedule but keep the date X appointment in navigation history - and switch back to the date X schedule when navigating back to that appointment. In other words, bind the date strip to selected appointment at all times - and dismiss the sheet if the date is changed by selecting on the date strip directly.
-- [ ] Cancel button is too prominent; make Complete take more space, and Cancel/Reschedule can be smaller-size controls
+- [x] Cancel button is too prominent; make Complete take more space, and Cancel/Reschedule can be smaller-size controls
+- [ ] Appointment details sheet background is white when opened from patient details
+- [ ] Appointment cards in patient details should have a chevron
+
+Observations from in-hand testing:
+- [ ] Appointment edit flow initiation is too slow - sheet animations
+- [ ] Would be nice to be able to click directly on the schedule and drag to adjust start time, in 5 or 15min increments
 
 Nice to haves:
-- [ ] Toolbar for Complete/Cancel/Call/WhatsApp buttons
+- [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [ ] Action Sheets for Complete/Cancel/Discard prompts
+- [ ] Direct interactions with Timeline for appointment booking/reschedule
+  - [ ] First organize Timeline into clearly-defined Z-stack layers - they are already separate, just organize them better
 - [ ] Variety of pastel or illustrated patient avatars
 - [ ] Remove year from header, make it less prominent (see iOS Calendar app)
 - [ ] Style hour and now markers like iOS Cal app
