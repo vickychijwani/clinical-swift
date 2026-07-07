@@ -37,6 +37,8 @@
   - [ ] Make sure SMS is sent from Bitehaus number, not personal
 - [ ] Widget
 - [ ] Shortcut to create appointment
+- [ ] End of day reminders (maybe location-fenced?) to mark all appointments complete/cancelled, record payments (or indicate "no payment"), etc
+  - [ ] Indicators/flags on appointment cards to indicate whether they're processed or not
 - [ ] Calendar sync for CarPlay + my visibility - but remove Calendar widget from home screen to ensure app adoption
 - [ ] Block off time ranges (e.g., travelling, holiday, etc) OR sync to Calendar
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
@@ -56,12 +58,13 @@ Bugs:
 - [ ] Appointment cards in patient details should have a chevron
 
 Observations from in-hand testing:
-- [ ] Appointment edit flow initiation is too slow - sheet animations
 - [ ] Would be nice to be able to click directly on the schedule and drag to adjust start time, in 5 or 15min increments
 
 Nice to haves:
+- [ ] Appointment summary card - Instead of cal icon use non-cal icons for scheduled, completed, cancelled, etc
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [ ] Action Sheets for Complete/Cancel/Discard prompts
+- [ ] Fun animated welcome text with draw + gradient symbol animations
 - [ ] Direct interactions with Timeline for appointment booking/reschedule
   - [ ] First organize Timeline into clearly-defined Z-stack layers - they are already separate, just organize them better
 - [ ] Variety of pastel or illustrated patient avatars
