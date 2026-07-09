@@ -82,6 +82,7 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - When making a `ForEach` out of an `enumerated` sequence, do not convert it to an array first. So, prefer `ForEach(x.enumerated(), id: \.element.id)` instead of `ForEach(Array(x.enumerated()), id: \.element.id)`.
 - When hiding scroll view indicators, use the `.scrollIndicators(.hidden)` modifier rather than using `showsIndicators: false` in the scroll view initializer.
 - Use the newest ScrollView APIs for item scrolling and positioning (e.g. `ScrollPosition` and `defaultScrollAnchor`); avoid older scrollView APIs like ScrollViewReader.
+- Use `confirmationDialog` for confirmation prompts everywhere; reserve alerts for errors or informational messages that do not present a choice between actions.
 - Form sheets with unsaved draft values must confirm before discarding changes (use ConfirmingFormSheet.swift for this). Sheets can disappear through gestures and toolbar actions, so dirty state needs one shared discard path.
 - Place view logic into view models or similar, so it can be tested.
 - Avoid `AnyView` unless it is absolutely required.

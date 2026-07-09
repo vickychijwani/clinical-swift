@@ -89,12 +89,7 @@ private struct AppointmentBookingForm: View {
                             selectPatientStep()
                         }
                     } else {
-                        Button {
-                            guardedDismiss()
-                        } label: {
-                            Label("Cancel", systemImage: "xmark")
-                                .labelStyle(.iconOnly)
-                        }
+                        FormSheetCancelButton(action: guardedDismiss)
                     }
                 }
 

@@ -1,17 +1,5 @@
 import SwiftUI
 
-struct FormSheetDismissAction {
-    private let action: () -> Void
-
-    init(_ action: @escaping () -> Void) {
-        self.action = action
-    }
-
-    func callAsFunction() {
-        action()
-    }
-}
-
 struct ConfirmingFormSheet<Content: View>: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -20,8 +8,6 @@ struct ConfirmingFormSheet<Content: View>: View {
     private let message: LocalizedStringKey
     private let allowsInteractiveDismiss: Bool
     private let content: (FormSheetDismissAction) -> Content
-
-    @State private var isConfirmingDiscard = false
 
     init(
         hasUnsavedChanges: Bool,
@@ -38,23 +24,72 @@ struct ConfirmingFormSheet<Content: View>: View {
     }
 
     var body: some View {
-        content(FormSheetDismissAction(attemptDismiss))
-            .interactiveDismissDisabled(!allowsInteractiveDismiss || hasUnsavedChanges)
-            .alert(title, isPresented: $isConfirmingDiscard) {
-                Button("Keep Editing", role: .cancel) {}
-                Button("Discard Changes", role: .destructive) {
-                    dismiss()
-                }
-            } message: {
-                Text(message)
-            }
+        content(
+            FormSheetDismissAction(
+                title: title,
+                message: message,
+                hasUnsavedChanges: { hasUnsavedChanges },
+                dismiss: { dismiss() }
+            )
+        )
+        .interactiveDismissDisabled(!allowsInteractiveDismiss || hasUnsavedChanges)
+    }
+}
+
+struct FormSheetDismissAction {
+    fileprivate let title: LocalizedStringKey
+    fileprivate let message: LocalizedStringKey
+    private let hasUnsavedChanges: () -> Bool
+    private let dismiss: () -> Void
+
+    init(
+        title: LocalizedStringKey,
+        message: LocalizedStringKey,
+        hasUnsavedChanges: @escaping () -> Bool,
+        dismiss: @escaping () -> Void
+    ) {
+        self.title = title
+        self.message = message
+        self.hasUnsavedChanges = hasUnsavedChanges
+        self.dismiss = dismiss
     }
 
-    private func attemptDismiss() {
-        if hasUnsavedChanges {
-            isConfirmingDiscard = true
-        } else {
-            dismiss()
+    fileprivate var needsConfirmation: Bool {
+        hasUnsavedChanges()
+    }
+
+    fileprivate func dismissSheet() {
+        dismiss()
+    }
+}
+
+struct FormSheetCancelButton: View {
+    let action: FormSheetDismissAction
+
+    @State private var isConfirmingDiscard = false
+
+    var body: some View {
+        Button {
+            if action.needsConfirmation {
+                isConfirmingDiscard = true
+            } else {
+                action.dismissSheet()
+            }
+        } label: {
+            Label("Cancel", systemImage: "xmark")
+                .labelStyle(.iconOnly)
+        }
+        .confirmationDialog(
+            action.title,
+            isPresented: $isConfirmingDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Keep Editing", role: .cancel) {}
+            Button("Discard Changes", role: .destructive) {
+                action.dismissSheet()
+            }
+        } message: {
+            Text(action.message)
         }
     }
 }

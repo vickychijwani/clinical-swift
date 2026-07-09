@@ -107,12 +107,7 @@ private struct EditPatientForm: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    guardedDismiss()
-                } label: {
-                    Label("Cancel", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                }
+                FormSheetCancelButton(action: guardedDismiss)
             }
 
             ToolbarItem(placement: .confirmationAction) {

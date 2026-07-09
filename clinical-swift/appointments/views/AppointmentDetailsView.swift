@@ -35,13 +35,13 @@ struct AppointmentDetailsView: View {
                             AppointmentDetailsActionsView(
                                 isUpdating: model.isUpdatingStatus,
                                 onComplete: {
-                                    model.requestStatus(.completed)
+                                    performStatusUpdate(.completed)
                                 },
                                 onReschedule: {
                                     router.requestAppointmentEdit(details)
                                 },
                                 onCancel: {
-                                    model.requestStatus(.cancelled)
+                                    performStatusUpdate(.cancelled)
                                 }
                             )
                         }
@@ -60,39 +60,17 @@ struct AppointmentDetailsView: View {
         .navigationTitle("Appointment")
         .navigationBarTitleDisplayMode(.inline)
         .alert(
-            model.prompt?.title ?? "",
+            "Unable to update appointment",
             isPresented: Binding(
-                get: { model.prompt != nil },
-                set: { if !$0 { model.dismissPrompt() } }
+                get: { model.errorMessage != nil },
+                set: { if !$0 { model.dismissError() } }
             )
         ) {
-            switch model.prompt {
-            case .completeConfirmation:
-                Button("Complete") {
-                    performStatusUpdate(.completed)
-                }
-                Button("Not Yet", role: .cancel) {
-                    model.dismissPrompt()
-                }
-
-            case .cancelConfirmation:
-                Button("Cancel Appointment", role: .destructive) {
-                    performStatusUpdate(.cancelled)
-                }
-                Button("Keep Scheduled", role: .cancel) {
-                    model.dismissPrompt()
-                }
-
-            case .error:
-                Button("OK", role: .cancel) {
-                    model.dismissPrompt()
-                }
-
-            case nil:
-                EmptyView()
+            Button("OK", role: .cancel) {
+                model.dismissError()
             }
         } message: {
-            Text(model.prompt?.message ?? "")
+            Text(model.errorMessage ?? "")
         }
     }
 
@@ -111,16 +89,30 @@ private struct AppointmentDetailsActionsView: View {
     let onReschedule: @MainActor () -> Void
     let onCancel: @MainActor () -> Void
 
+    @State private var isConfirmingComplete = false
+    @State private var isConfirmingCancellation = false
+
     var body: some View {
         GlassEffectContainer {
             HStack {
                 Button {
-                    onComplete()
+                    isConfirmingComplete = true
                 } label: {
                     Label("Complete", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
+                .confirmationDialog(
+                    "Complete appointment?",
+                    isPresented: $isConfirmingComplete,
+                    titleVisibility: .hidden
+                ) {
+                    Button("Complete") {
+                        onComplete()
+                    }
+                } message: {
+                    Text("Mark this appointment as completed?")
+                }
 
                 Button {
                     onReschedule()
@@ -134,11 +126,24 @@ private struct AppointmentDetailsActionsView: View {
                 .buttonStyle(.glass)
 
                 Button(role: .destructive) {
-                    onCancel()
+                    isConfirmingCancellation = true
                 } label: {
                     Image(systemName: "xmark.bin")
                 }
                 .buttonStyle(.glass)
+                .confirmationDialog(
+                    "Cancel appointment?",
+                    isPresented: $isConfirmingCancellation,
+                    titleVisibility: .hidden,
+                ) {
+                    Button("Cancel Appointment", role: .destructive) {
+                        onCancel()
+                    }
+                } message: {
+                    Text(
+                        "This appointment will be hidden from the schedule and appointment history."
+                    )
+                }
             }
             .disabled(isUpdating)
         }

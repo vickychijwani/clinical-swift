@@ -10,7 +10,7 @@ final class AppointmentDetailsModel {
     let appointmentID: Appointment.ID
     private let statusUpdater: StatusUpdater?
 
-    private(set) var prompt: Prompt?
+    private(set) var errorMessage: String?
     private(set) var isUpdatingStatus = false
 
     init(
@@ -30,21 +30,8 @@ final class AppointmentDetailsModel {
         details?.appointment.status == .scheduled
     }
 
-    func requestStatus(_ status: Appointment.Status) {
-        guard showsStatusActions else { return }
-
-        switch status {
-        case .completed:
-            prompt = .completeConfirmation
-        case .cancelled:
-            prompt = .cancelConfirmation
-        case .draft, .scheduled:
-            break
-        }
-    }
-
-    func dismissPrompt() {
-        prompt = nil
+    func dismissError() {
+        errorMessage = nil
     }
 
     func load() async throws {
@@ -54,7 +41,7 @@ final class AppointmentDetailsModel {
     func updateStatus(to requestedStatus: Appointment.Status) async -> Bool {
         guard !isUpdatingStatus else { return false }
 
-        prompt = nil
+        errorMessage = nil
         isUpdatingStatus = true
         defer { isUpdatingStatus = false }
 
@@ -73,7 +60,7 @@ final class AppointmentDetailsModel {
             await handleStatusUpdateError(error)
             return false
         } catch {
-            prompt = .error("The appointment could not be updated.")
+            errorMessage = "The appointment could not be updated."
             return false
         }
     }
@@ -84,47 +71,19 @@ final class AppointmentDetailsModel {
             _ = try? await $row.load(appointmentDetailsQuery(id: appointmentID))
             switch currentStatus {
             case .completed:
-                prompt = .error("This appointment was already completed.")
+                errorMessage = "This appointment was already completed."
             case .cancelled:
-                prompt = .error("This appointment was already cancelled.")
+                errorMessage = "This appointment was already cancelled."
             case .draft, .scheduled:
-                prompt = .error("This appointment was already updated.")
+                errorMessage = "This appointment was already updated."
             }
 
         case .unavailable:
             _ = try? await $row.load(appointmentDetailsQuery(id: appointmentID))
-            prompt = .error("This appointment is no longer available.")
+            errorMessage = "This appointment is no longer available."
 
         case .invalidStoredStatus, .transition(.transientStatus):
-            prompt = .error("The appointment could not be updated.")
-        }
-    }
-
-    enum Prompt: Equatable {
-        case completeConfirmation
-        case cancelConfirmation
-        case error(String)
-
-        var title: String {
-            switch self {
-            case .completeConfirmation:
-                "Complete appointment?"
-            case .cancelConfirmation:
-                "Cancel appointment?"
-            case .error:
-                "Unable to update appointment"
-            }
-        }
-
-        var message: String {
-            switch self {
-            case .completeConfirmation:
-                "Mark this appointment as completed?"
-            case .cancelConfirmation:
-                "This appointment will be hidden from the schedule and appointment history."
-            case .error(let message):
-                message
-            }
+            errorMessage = "The appointment could not be updated."
         }
     }
 

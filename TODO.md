@@ -63,7 +63,7 @@ Observations from in-hand testing:
 Nice to haves:
 - [x] Appointment summary card - Instead of cal icon use non-cal icons for scheduled, completed, cancelled, etc
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
-- [ ] Action Sheets for Complete/Cancel/Discard prompts
+- [x] Action Sheets for Complete/Cancel/Discard prompts
 - [ ] Fun animated welcome text with draw + gradient symbol animations
 - [ ] Direct interactions with Timeline for appointment booking/reschedule
   - [ ] First organize Timeline into clearly-defined Z-stack layers - they are already separate, just organize them better
@@ -71,7 +71,6 @@ Nice to haves:
 - [ ] Remove year from header, make it less prominent (see iOS Calendar app)
 - [ ] Style hour and now markers like iOS Cal app
 - [x] Display appointments scheduled in break too
-- [ ] Drag-n-drop to reschedule appointments
 - [ ] Add “today”, “yesterday”, “tomorrow” + day in header - or just subtly grey out past dates
 - [ ] Appointment booking: Order patients by most recent appt first (most common usecase: scheduling a follow-up)
 - [ ] Quick-tag patients for follow-up, or interested in implants/etc from appointment view

@@ -7,7 +7,7 @@ import Testing
 
 @MainActor
 struct AppointmentDetailsModelTests {
-    @Test func scheduledAppointmentOffersConfirmationsAndDecliningDoesNothing() async throws {
+    @Test func scheduledAppointmentShowsStatusActionsWithoutChangingStatus() async throws {
         let fixture = try makeFixture(status: .scheduled)
 
         try await withDependencies {
@@ -17,14 +17,6 @@ struct AppointmentDetailsModelTests {
             try await model.load()
 
             #expect(model.showsStatusActions)
-            model.requestStatus(.completed)
-            #expect(model.prompt == .completeConfirmation)
-            model.dismissPrompt()
-            #expect(model.prompt == nil)
-
-            model.requestStatus(.cancelled)
-            #expect(model.prompt == .cancelConfirmation)
-            model.dismissPrompt()
         }
 
         let record = try await fixture.database.read { db in
@@ -74,7 +66,7 @@ struct AppointmentDetailsModelTests {
             #expect(!didUpdate)
             #expect(!model.showsStatusActions)
             #expect(model.details?.appointment.status == .completed)
-            #expect(model.prompt == .error("This appointment was already completed."))
+            #expect(model.errorMessage == "This appointment was already completed.")
         }
     }
 
@@ -92,11 +84,11 @@ struct AppointmentDetailsModelTests {
                     throw TestError.failed
                 }
             )
-            return (await model.updateStatus(to: .completed), model.prompt)
+            return (await model.updateStatus(to: .completed), model.errorMessage)
         }
 
         #expect(!result.0)
-        #expect(result.1 == .error("The appointment could not be updated."))
+        #expect(result.1 == "The appointment could not be updated.")
     }
 
     @Test func duplicateSubmissionIsRejectedWhileFirstWriteIsPending() async throws {
