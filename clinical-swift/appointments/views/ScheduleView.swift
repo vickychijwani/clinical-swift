@@ -2,7 +2,7 @@ import Dependencies
 import SQLiteData
 import SwiftUI
 
-private let scheduleDayRadius = 2
+private let scheduleDayRadius = 3
 
 struct ScheduleView: View {
     @Dependency(\.calendar) private var calendar
