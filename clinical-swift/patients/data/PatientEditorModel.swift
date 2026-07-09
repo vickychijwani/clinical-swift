@@ -13,8 +13,13 @@ final class PatientEditorModel {
     var draft: PatientDraft
     private(set) var saveErrorMessage: String?
 
-    init(patient: Patient? = nil) {
-        let draft = PatientDraft(patient: patient)
+    init(patient: Patient? = nil, initialDraft: PatientDraft = PatientDraft()) {
+        let draft: PatientDraft
+        if let patient {
+            draft = PatientDraft(patient: patient)
+        } else {
+            draft = initialDraft
+        }
         self.editedPatient = patient
         self.originalDraft = draft.normalized
         self.draft = draft
@@ -28,15 +33,16 @@ final class PatientEditorModel {
         draft.normalized != originalDraft
     }
 
-    func save() async -> Bool {
+    func save() async -> Patient? {
         saveErrorMessage = nil
+        let normalizedDraft = draft.normalized
 
         let patient = Patient(
             id: editedPatient?.id ?? UUID(),
-            name: draft.name,
-            phone: draft.phone,
-            dob: draft.dob,
-            gender: draft.gender,
+            name: normalizedDraft.name,
+            phone: normalizedDraft.phone,
+            dob: normalizedDraft.dob,
+            gender: normalizedDraft.gender,
             createdDate: editedPatient?.createdDate ?? now
         )
 
@@ -44,10 +50,10 @@ final class PatientEditorModel {
             try patient.validate()
         } catch Patient.ValidationError.missingNameAndPhone {
             saveErrorMessage = "Enter a name or phone number."
-            return false
+            return nil
         } catch {
             saveErrorMessage = "Check the patient details and try again."
-            return false
+            return nil
         }
 
         do {
@@ -82,13 +88,13 @@ final class PatientEditorModel {
                 }
             }
 
-            return true
+            return patient
         } catch is PatientEditingError {
             saveErrorMessage = "This patient can no longer be edited."
-            return false
+            return nil
         } catch {
             saveErrorMessage = "The patient could not be saved."
-            return false
+            return nil
         }
     }
 

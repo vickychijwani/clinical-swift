@@ -71,6 +71,7 @@ private struct AppointmentBookingForm: View {
     @Binding var step: AppointmentBookingStep
 
     @FocusState private var patientSearchIsFocused: Bool
+    @State private var patientCreationRequest: PatientCreationRequest?
 
     let patientItems: [PatientDetails]
     let guardedDismiss: FormSheetDismissAction
@@ -132,6 +133,11 @@ private struct AppointmentBookingForm: View {
             } message: {
                 Text(model.saveErrorMessage ?? "")
             }
+            .sheet(item: $patientCreationRequest) { request in
+                EditPatientView(initialDraft: request.initialDraft) { patient in
+                    selectPatient(patient)
+                }
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -142,7 +148,8 @@ private struct AppointmentBookingForm: View {
                     searchText: $model.searchText,
                     patientItems: filteredPatientItems,
                     searchIsFocused: $patientSearchIsFocused,
-                    selectPatient: selectPatient
+                    selectPatient: selectPatient,
+                    createPatient: createPatient
                 )
                 .padding()
             }
@@ -196,14 +203,29 @@ private struct AppointmentBookingForm: View {
     }
 
     private func selectPatient(_ patient: PatientDetails) {
-        model.draft.selectedPatient = patient.patient
+        selectPatient(patient.patient)
+    }
+
+    private func selectPatient(_ patient: Patient) {
+        model.draft.selectedPatient = patient
         model.searchText = ""
         step = .details
+    }
+
+    private func createPatient() {
+        patientCreationRequest = PatientCreationRequest(
+            initialDraft: PatientDraft(name: model.searchText.nilIfBlank)
+        )
     }
 
     private func selectPatientStep() {
         step = .selectPatient
     }
+}
+
+private struct PatientCreationRequest: Identifiable {
+    let id = UUID()
+    let initialDraft: PatientDraft
 }
 
 private struct AppointmentBookingSection<Content: View>: View {
@@ -225,6 +247,7 @@ private struct AppointmentBookingPatientSelectionStep: View {
     let patientItems: [PatientDetails]
     let searchIsFocused: FocusState<Bool>.Binding
     let selectPatient: (PatientDetails) -> Void
+    let createPatient: () -> Void
 
     var body: some View {
         AppointmentBookingSection(title: "Patient") {
@@ -248,10 +271,18 @@ private struct AppointmentBookingPatientSelectionStep: View {
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.secondary)
                     }
+
+                    Button("New", systemImage: "plus") {
+                        createPatient()
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
                 }
                 .padding(10)
                 .background(.background)
-                .clipShape(.rect(cornerRadius: 18))
+                .clipShape(.capsule)
 
                 LazyVStack(spacing: 0) {
                     ForEach(patientItems) { item in

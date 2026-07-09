@@ -5,9 +5,17 @@ struct EditPatientView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var model: PatientEditorModel
+    private let onSave: @MainActor (Patient) -> Void
 
-    init(patient: Patient? = nil) {
-        _model = State(initialValue: PatientEditorModel(patient: patient))
+    init(
+        patient: Patient? = nil,
+        initialDraft: PatientDraft = PatientDraft(),
+        onSave: @escaping @MainActor (Patient) -> Void = { _ in }
+    ) {
+        _model = State(
+            initialValue: PatientEditorModel(patient: patient, initialDraft: initialDraft)
+        )
+        self.onSave = onSave
     }
 
     var body: some View {
@@ -45,7 +53,8 @@ struct EditPatientView: View {
     }
 
     private func savePatient() async {
-        if await model.save() {
+        if let patient = await model.save() {
+            onSave(patient)
             dismiss()
         }
     }
@@ -84,6 +93,7 @@ private struct EditPatientForm: View {
             Section {
                 TextField("Name", text: $draft.name.replacingNil())
                     .textContentType(.name)
+                    .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()
             }
 

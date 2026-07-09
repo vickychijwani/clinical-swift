@@ -29,11 +29,23 @@ nonisolated struct PatientDraft: Equatable, Sendable {
 
     var normalized: PatientDraft {
         PatientDraft(
-            name: name?.nilIfBlank,
+            name: Self.normalizedName(name),
             phone: PhoneNumber.normalizedE164(phone),
             dob: dob,
             gender: gender
         )
+    }
+
+    static func normalizedName(_ name: String?) -> String? {
+        guard let name else { return nil }
+
+        let collapsedName =
+            name
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        guard !collapsedName.isEmpty else { return nil }
+
+        return titleCasedName(collapsedName)
     }
 
     static func prefilledName(fromContactName contactName: String?) -> String? {
@@ -58,10 +70,29 @@ nonisolated struct PatientDraft: Equatable, Sendable {
     func makePatient(id: UUID = UUID()) -> Patient {
         Patient(
             id: id,
-            name: name?.nilIfBlank,
+            name: Self.normalizedName(name),
             phone: PhoneNumber.normalizedE164(phone),
             dob: dob,
             gender: gender
         )
+    }
+
+    private static func titleCasedName(_ name: String) -> String {
+        let nameSeparators: Set<Character> = [" ", "'", "’", "-", "."]
+        var result = ""
+        var shouldUppercaseLetter = true
+
+        for character in name {
+            if character.isLetter {
+                let value = String(character)
+                result += shouldUppercaseLetter ? value.uppercased() : value.lowercased()
+                shouldUppercaseLetter = false
+            } else {
+                result.append(character)
+                shouldUppercaseLetter = nameSeparators.contains(character)
+            }
+        }
+
+        return result
     }
 }

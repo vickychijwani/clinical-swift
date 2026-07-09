@@ -41,7 +41,7 @@ struct PatientEditorModelTests {
                 .execute(db)
         }
 
-        let saved = await withDependencies {
+        let savedPatient = await withDependencies {
             $0.defaultDatabase = database
             $0.date.now = updatedAt
         } operation: {
@@ -55,7 +55,11 @@ struct PatientEditorModelTests {
         let record = try await database.read { db in
             try PatientRecord.find(patient.id).fetchOne(db)
         }
-        #expect(saved)
+        #expect(savedPatient?.id == patient.id)
+        #expect(savedPatient?.name == "Aarav Shah")
+        #expect(savedPatient?.phone == "+919820144533")
+        #expect(savedPatient?.gender == .other)
+        #expect(savedPatient?.createdDate == createdAt)
         #expect(record?.id == patient.id)
         #expect(record?.name == "Aarav Shah")
         #expect(record?.phone == "+919820144533")
@@ -73,11 +77,11 @@ struct PatientEditorModelTests {
             $0.date.now = Date(timeIntervalSinceReferenceDate: 2_000)
         } operation: {
             let model = PatientEditorModel(patient: patient)
-            let saved = await model.save()
-            return (saved, model.saveErrorMessage)
+            let savedPatient = await model.save()
+            return (savedPatient, model.saveErrorMessage)
         }
 
-        #expect(!result.0)
+        #expect(result.0 == nil)
         #expect(result.1 == "This patient can no longer be edited.")
     }
 
@@ -85,7 +89,7 @@ struct PatientEditorModelTests {
         let database = try testDatabase()
         let now = Date(timeIntervalSinceReferenceDate: 2_000)
 
-        let saved = await withDependencies {
+        let savedPatient = await withDependencies {
             $0.defaultDatabase = database
             $0.date.now = now
         } operation: {
@@ -98,10 +102,44 @@ struct PatientEditorModelTests {
         let record = try await database.read { db in
             try PatientRecord.all.fetchOne(db)
         }
-        #expect(saved)
+        #expect(savedPatient?.name == "Aarav Mehta")
+        #expect(savedPatient?.phone == "+919820144532")
+        #expect(savedPatient?.createdDate == now)
         #expect(record?.name == "Aarav Mehta")
         #expect(record?.phone == "+919820144532")
         #expect(record?.createdAt == now)
+        #expect(record?.updatedAt == now)
+    }
+
+    @Test func creationWithInitialDraftReturnsSavedPatientAndPersistsSameIdentity() async throws {
+        let database = try testDatabase()
+        let now = Date(timeIntervalSinceReferenceDate: 3_000)
+
+        let savedPatient = await withDependencies {
+            $0.defaultDatabase = database
+            $0.date.now = now
+        } operation: {
+            let model = PatientEditorModel(
+                initialDraft: PatientDraft(
+                    name: "  Meera Iyer  ",
+                    phone: "98201 44534"
+                )
+            )
+            return await model.save()
+        }
+
+        #expect(savedPatient?.name == "Meera Iyer")
+        #expect(savedPatient?.phone == "+919820144534")
+        #expect(savedPatient?.createdDate == now)
+
+        guard let savedPatient else { return }
+        let record = try await database.read { db in
+            try PatientRecord.find(savedPatient.id).fetchOne(db)
+        }
+        #expect(record?.id == savedPatient.id)
+        #expect(record?.name == savedPatient.name)
+        #expect(record?.phone == savedPatient.phone)
+        #expect(record?.createdAt == savedPatient.createdDate)
         #expect(record?.updatedAt == now)
     }
 

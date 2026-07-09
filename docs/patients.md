@@ -7,6 +7,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - A patient is valid only when at least one of name or phone number is present.
 - Stored phone numbers use compact E.164 format. Normalize punctuation and whitespace at the domain and persistence boundaries; when a number has no country code, treat it as an Indian number (`+91`). Apply readable grouping only at presentation boundaries.
 - Patients without a name display as `Unknown Patient`, but that fallback is presentation-only. Do not store it as a fake name.
+- Patient names are stored in title case with collapsed internal whitespace and no leading or trailing spaces. The edit field may hold raw draft input; normalize at the save boundary so persisted rows stay consistent.
 - Patient name search is word-prefix based and order-independent. Do not use substring matching because short queries like `an` should find `Anjali Desai` and `Mary Ann`, but not `Rani Dutta`.
 - Age is derived from date of birth at render/test time. Do not store age as independent patient state because it drifts every birthday.
 - Next appointment metadata is list/read-model data, not intrinsic patient state. Keep it off `Patient` so appointment changes remain the only source of truth.

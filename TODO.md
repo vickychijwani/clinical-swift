@@ -20,15 +20,12 @@
   - [x] Date selection synchronize with schedule
   - [x] Pre-fill next available slot
     - [x] Pre-fill only future times, if date is today
-  - [ ] Quick-add new patient from new appointment page
+  - [x] Quick-create new patient from new appointment page
 - [x] View appointment
   - [x] Jump to patient
   - [ ] For scheduled appointments: Mark as done -> record payment + due, schedule next appt, add “follow-up” tag,  clinical notes in future, implant records, lots of actions…
   - [x] Cancel appointment - confirm cancellation and then hide it from view
 - [x] Edit appointment
-- [ ] Universal search - next to tab bar - search for patients, appointments, payments, search by phone number - entrypoint for several other features
-  - [ ] Share recent call / contact to create Patient
-  - [ ] Share recent call / contact to open patient details (or show search results if multiple, e.g., family members) associated with that phone number
 - [ ] Send SMS + WhatsApp Biz message + auto-copy to clipboard
   - [ ] Allow editing of message
   - [ ] Allow changing contact/number when sending msg (sometimes number changes temporarily or permanently - shouldn’t require Patient record update)
@@ -44,6 +41,9 @@
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
 - [ ] Basic dark mode support - check if Monu’s phone has it enabled - contrast is terrible
+- [ ] Universal search - next to tab bar - search for patients, appointments, payments, search by phone number - entrypoint for several other features
+  - [ ] Share recent call / contact to create Patient
+  - [ ] Share recent call / contact to open patient details (or show search results if multiple, e.g., family members) associated with that phone number
 
 Refactors:
 - [x] Remove TimelineSegment; use TimelineScale for universal placement
