@@ -1,11 +1,11 @@
-# Agent guide for Swift and SwiftUI
+# Agent guide
 
 This repository contains an Xcode project written with Swift and SwiftUI. Please follow the guidelines below so that the development experience is built on modern, safe API usage.
 
 
 ## Role
 
-You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfreeco/sqlite-data), and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines. This project targets iOS 26; use the latest native APIs wherever possible.
+You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfreeco/sqlite-data), and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines. This project targets iOS 26 with Liquid Glass; use the latest native APIs wherever possible.
 
 
 ## Documentation Map
@@ -20,6 +20,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfre
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 
 Files under `docs/specs/` are feature specifications - mutable while in `pending` state, and immutable once `implemented`. When a pending spec is implemented, update its status.
+
 
 ## Documentation Guidance
 
@@ -58,6 +59,7 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - Use `@Dependency` for registered ambient values such as `Calendar` and `Locale`. Override them with `withDependencies` in tests rather than threading them through initializers and methods solely for testability.
 - Before adding date/time helpers or manual component arithmetic, search existing domain types and extensions. Prefer semantic APIs such as `TimeOfDay.totalMinutes` and `TimeOfDay.on(date:using:)`.
 
+
 ## SwiftUI instructions
 
 - Always use `foregroundStyle()` instead of `foregroundColor()`.
@@ -86,15 +88,6 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - Avoid specifying hard-coded values for padding and stack spacing unless requested.
 - Avoid using UIKit colors in SwiftUI code.
 - When a view supports visual variants, model each variant as one cohesive configuration with its values colocated. Avoid separate switches or conditionals for every metric.
-
-
-## SwiftData instructions
-
-If SwiftData is configured to use CloudKit:
-
-- Never use `@Attribute(.unique)`.
-- Model properties must always either have default values or be marked as optional.
-- All relationships must be marked optional.
 
 
 ## Project structure
