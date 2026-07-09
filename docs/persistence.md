@@ -28,6 +28,7 @@ General invariants:
 - Every record table has standard `createdAt` and `updatedAt` fields.
 - Appointments reference patients by `patientID`. Do not store patient names in appointments as the source of truth because patient names can change.
 - Core domain structs do not store derived fields, e.g., `Patient` does not store fields like `nextAppointmentDate`. In that example, derive appointment rollups into list/read models from future appointment rows so they cannot drift from the schedule.
+- Storage-backed read models that must stay current with appointment writes or future sync should use SQLiteData observed queries (`@FetchAll`, `@FetchOne`, or `@Fetch`) instead of explicit caches. Manual caches force every write path, including future background sync, to remember change-notification events and are easy to leave stale.
 - Persisted appointment status is a one-way state machine: scheduled appointments may become completed or cancelled, while completed and cancelled appointments are terminal. Status-only self-transitions are idempotent and must not advance `updatedAt`.
 - Appointment status changes must read, validate, and write within one database transaction. Do not perform transition checks only against a value previously loaded by the UI because that can overwrite a newer terminal state.
 - `draft` is presentation-only appointment state. Persistence construction and mutation APIs must reject it rather than encoding a placeholder value.

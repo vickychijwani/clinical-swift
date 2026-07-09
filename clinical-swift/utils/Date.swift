@@ -32,6 +32,13 @@ extension Date {
             ?? startOfDay(using: calendar)
     }
 
+    nonisolated func date(byAddingDays days: Int, using calendar: Calendar = .autoupdatingCurrent)
+        -> Date
+    {
+        calendar.date(byAdding: .day, value: days, to: self)?.startOfDay(using: calendar)
+            ?? startOfDay(using: calendar)
+    }
+
     nonisolated func addMinutes(_ minutes: Int, using calendar: Calendar = .autoupdatingCurrent)
         -> Date?
     {

@@ -10,6 +10,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - Displayed and selected dates should be normalized to the calendar start of day. Compare day identity with calendar APIs, not raw `Date` equality.
 - A single completed swipe may advance at most one calendar week. If the strip uses a three-page paging window, commit the selected page after scrolling becomes idle before recentering.
 - Today styling is independent from selection. When today is visible, both its weekday and date number should use the accent color.
+- External day-navigation controls, such as a paged schedule, may drive `selectedDate`. The strip must follow those changes across week boundaries instead of treating its own scroll state as authoritative.
 
 ## Do Not Reintroduce
 

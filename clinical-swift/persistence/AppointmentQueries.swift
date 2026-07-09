@@ -30,12 +30,30 @@ nonisolated func querySchedule(
 ) -> some Statement<AppointmentPatientSelection> {
     let calendar = Calendar.autoupdatingCurrent
     let start = selectedDate.startOfDay(using: calendar)
-    let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
+    let endExclusive = calendar.date(byAdding: .day, value: 1, to: start) ?? start
 
+    return scheduleAppointmentsQuery(start: start, endExclusive: endExclusive)
+}
+
+nonisolated func queryScheduleWindow(
+    centeredOn selectedDate: Date
+) -> some Statement<AppointmentPatientSelection> {
+    let calendar = Calendar.autoupdatingCurrent
+    let center = selectedDate.startOfDay(using: calendar)
+    let start = center.date(byAddingDays: -1, using: calendar)
+    let endExclusive = center.date(byAddingDays: 2, using: calendar)
+
+    return scheduleAppointmentsQuery(start: start, endExclusive: endExclusive)
+}
+
+nonisolated private func scheduleAppointmentsQuery(
+    start: Date,
+    endExclusive: Date
+) -> some Statement<AppointmentPatientSelection> {
     return
         AppointmentRecord
         .where { $0.start >= start }
-        .where { $0.start < end }
+        .where { $0.start < endExclusive }
         .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
         .order { $0.start.asc() }
         .join(PatientRecord.all) { $0.patientID.eq($1.id) }

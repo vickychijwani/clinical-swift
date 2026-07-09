@@ -58,6 +58,8 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - Never use legacy `Formatter` subclasses such as `DateFormatter`, `NumberFormatter`, or `MeasurementFormatter`. Always use the modern `FormatStyle` API instead. For example, to format a date, use `myDate.formatted(date: .abbreviated, time: .shortened)`. To parse a date from a string, use `Date(inputString, strategy: .iso8601)`. For numbers, use `myNumber.formatted(.number)` or custom format styles.
 - Use `@Dependency` for registered ambient values such as `Calendar` and `Locale`. Override them with `withDependencies` in tests rather than threading them through initializers and methods solely for testability.
 - Before adding date/time helpers or manual component arithmetic, search existing domain types and extensions. Prefer semantic APIs such as `TimeOfDay.totalMinutes` and `TimeOfDay.on(date:using:)`.
+- Keep overloads grouped together so readers can compare related entry points and avoid missing
+  behavior that only differs by parameter shape.
 
 
 ## SwiftUI instructions

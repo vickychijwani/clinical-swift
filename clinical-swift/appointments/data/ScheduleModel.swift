@@ -5,14 +5,22 @@ import SQLiteData
     var selectedDate: Date
 
     @ObservationIgnored @Dependency(\.calendar) var calendar
-    @ObservationIgnored @FetchAll(AppointmentPatientSelection.none) var appointmentRows
+    @ObservationIgnored @FetchAll(AppointmentPatientSelection.none) private var appointmentRows
 
     init(selectedDate: Date) {
-        self.selectedDate = selectedDate
+        self.selectedDate = selectedDate.startOfDay()
     }
 
     var appointments: [Appointment] {
-        appointmentRows.compactMap { $0.details?.appointment }
+        appointments(for: selectedDate)
+    }
+
+    func appointments(for date: Date) -> [Appointment] {
+        let selectedDate = date.startOfDay(using: calendar)
+        return
+            appointmentRows
+            .compactMap { $0.details?.appointment }
+            .filter { calendar.isDate($0.start, inSameDayAs: selectedDate) }
     }
 
     func details(for appointment: Appointment) -> AppointmentDetails? {
@@ -20,6 +28,15 @@ import SQLiteData
     }
 
     func load() async throws {
-        try await $appointmentRows.load(querySchedule(selectedDate: selectedDate))
+        try await loadVisibleDays(centeredOn: selectedDate)
+    }
+
+    func loadVisibleDays(centeredOn date: Date) async throws {
+        let centerDate = date.startOfDay(using: calendar)
+        guard calendar.isDate(centerDate, inSameDayAs: selectedDate) else {
+            return
+        }
+
+        try await $appointmentRows.load(queryScheduleWindow(centeredOn: centerDate))
     }
 }

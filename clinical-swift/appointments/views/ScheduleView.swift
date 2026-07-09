@@ -22,29 +22,17 @@ struct ScheduleView: View {
         VStack(spacing: 0) {
             WeekDateStrip(selectedDate: selectedDateBinding)
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    Timeline(
-                        appointments: visibleAppointments,
-                        scale: timelineScale,
-                        showsNowMarker: calendar.isDateInToday(scheduleModel.selectedDate),
-                        appointmentInteractionsEnabled: bookingModel == nil,
-                        onSelectAppointment: selectAppointment
-                    )
-
-                    if needsSheetClearance {
-                        // Leave room to scroll late appointments above an interactable sheet.
-                        Color.clear
-                            .containerRelativeFrame(
-                                .vertical,
-                                count: 2,
-                                span: 1,
-                                spacing: 0
-                            )
-                    }
-                }
+            CalendarDayPager(selectedDate: selectedDateBinding, calendar: calendar) { date in
+                ScheduleTimelinePage(
+                    date: date,
+                    appointments: visibleAppointments(for: date),
+                    calendar: calendar,
+                    needsSheetClearance: needsSheetClearance,
+                    appointmentInteractionsEnabled: bookingModel == nil,
+                    scrollPosition: scrollPositionBinding(for: date),
+                    onSelectAppointment: selectAppointment
+                )
             }
-            .modifier(TimelineScrollModifier(scrollPosition: $scrollPosition))
         }
         .background(Color("AppBackground"))
         .navigationTitle(
@@ -105,7 +93,7 @@ struct ScheduleView: View {
         .task(id: scheduleModel.selectedDate) {
             let requestedDate = scheduleModel.selectedDate
             do {
-                try await scheduleModel.load()
+                try await scheduleModel.loadVisibleDays(centeredOn: requestedDate)
 
                 // If date selection has changed after async load completion, stop here.
                 guard !Task.isCancelled,
@@ -116,7 +104,7 @@ struct ScheduleView: View {
 
                 if let bookingModel {
                     bookingModel.updateAppointments(
-                        scheduleModel.appointments,
+                        scheduleModel.appointments(for: requestedDate),
                         for: requestedDate
                     )
                     scrollToDraftAppointment()
@@ -148,7 +136,7 @@ struct ScheduleView: View {
             refreshAppointments(for: bookedDate)
         }
         bookingModel.updateAppointments(
-            scheduleModel.appointments,
+            scheduleModel.appointments(for: scheduleModel.selectedDate),
             for: scheduleModel.selectedDate
         )
         bookingModel.prefillFirstAvailableSlot()
@@ -182,7 +170,7 @@ struct ScheduleView: View {
         // date-keyed load task will update the booking model after loading the correct day.
         if wasShowingAppointmentDate {
             bookingModel.updateAppointments(
-                scheduleModel.appointments,
+                scheduleModel.appointments(for: scheduleModel.selectedDate),
                 for: scheduleModel.selectedDate
             )
         }
@@ -216,19 +204,23 @@ struct ScheduleView: View {
         bookingModel?.draftPreviewScrollRequest ?? 0
     }
 
-    private var visibleAppointments: [Appointment] {
-        guard let bookingModel else {
-            return scheduleModel.appointments
+    private func visibleAppointments(for date: Date) -> [Appointment] {
+        let appointments = scheduleModel.appointments(for: date)
+        guard
+            let bookingModel,
+            bookingModel.selectedDate.isSameDayAs(date)
+        else {
+            return appointments
         }
 
-        let appointments = scheduleModel.appointments.filter {
+        let visibleAppointments = appointments.filter {
             $0.id != bookingModel.purpose.editedAppointmentID
         }
-        return appointments + [bookingModel.draftAppointment]
+        return visibleAppointments + [bookingModel.draftAppointment]
     }
 
-    private var timelineScale: TimelineScale {
-        TimelineScale(appointments: visibleAppointments)
+    private func timelineScale(for date: Date) -> TimelineScale {
+        TimelineScale(appointments: visibleAppointments(for: date))
     }
 
     private var needsSheetClearance: Bool {
@@ -253,7 +245,7 @@ struct ScheduleView: View {
         scheduleModel.selectedDate = date.startOfDay(using: calendar)
         bookingModel = nil
         Task {
-            _ = try? await scheduleModel.load()
+            _ = try? await scheduleModel.loadVisibleDays(centeredOn: date)
         }
     }
 
@@ -272,7 +264,51 @@ struct ScheduleView: View {
     }
 
     private func timelineScrollY(for start: Date) -> CGFloat {
-        timelineScale.yOffset(for: start.timeOfDay) - 80
+        timelineScale(for: scheduleModel.selectedDate).yOffset(for: start.timeOfDay) - 80
+    }
+
+    private func scrollPositionBinding(for date: Date) -> Binding<ScrollPosition> {
+        guard date.isSameDayAs(scheduleModel.selectedDate) else {
+            return .constant(ScrollPosition())
+        }
+
+        return $scrollPosition
+    }
+}
+
+private struct ScheduleTimelinePage: View {
+    let date: Date
+    let appointments: [Appointment]
+    let calendar: Calendar
+    let needsSheetClearance: Bool
+    let appointmentInteractionsEnabled: Bool
+    @Binding var scrollPosition: ScrollPosition
+    let onSelectAppointment: (Appointment) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Timeline(
+                    appointments: appointments,
+                    scale: TimelineScale(appointments: appointments),
+                    showsNowMarker: calendar.isDateInToday(date),
+                    appointmentInteractionsEnabled: appointmentInteractionsEnabled,
+                    onSelectAppointment: onSelectAppointment
+                )
+
+                if needsSheetClearance {
+                    // Leave room to scroll late appointments above an interactable sheet.
+                    Color.clear
+                        .containerRelativeFrame(
+                            .vertical,
+                            count: 2,
+                            span: 1,
+                            spacing: 0
+                        )
+                }
+            }
+        }
+        .modifier(TimelineScrollModifier(scrollPosition: $scrollPosition))
     }
 }
 

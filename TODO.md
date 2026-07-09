@@ -4,7 +4,7 @@
 ## M1: Replace Shortcuts + Calendar setup
 - [x] Schedule of appointments
   - [x] Handle appointment overlap (e.g., 2 doctors or incorrect appt duration)
-  - [ ] Swipe to navigate day-wise
+  - [x] Swipe to navigate day-wise
 - [x] Patients list
 - [x] New patient
   - [x] Pick contact first - autofill patient name
