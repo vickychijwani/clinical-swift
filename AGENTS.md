@@ -83,6 +83,7 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - When hiding scroll view indicators, use the `.scrollIndicators(.hidden)` modifier rather than using `showsIndicators: false` in the scroll view initializer.
 - Use the newest ScrollView APIs for item scrolling and positioning (e.g. `ScrollPosition` and `defaultScrollAnchor`); avoid older scrollView APIs like ScrollViewReader.
 - Use `confirmationDialog` for confirmation prompts everywhere; reserve alerts for errors or informational messages that do not present a choice between actions.
+- Use `AsyncButton` when a button tap immediately starts async work. Use `ConfirmingAsyncButton` when a button must show a confirmation dialog before starting async work. Keep shared in-flight state and errors in the owning model when multiple controls or call paths can trigger the same operation.
 - Form sheets with unsaved draft values must confirm before discarding changes (use ConfirmingFormSheet.swift for this). Sheets can disappear through gestures and toolbar actions, so dirty state needs one shared discard path.
 - Place view logic into view models or similar, so it can be tested.
 - Avoid `AnyView` unless it is absolutely required.

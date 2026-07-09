@@ -35,13 +35,13 @@ struct AppointmentDetailsView: View {
                             AppointmentDetailsActionsView(
                                 isUpdating: model.isUpdatingStatus,
                                 onComplete: {
-                                    performStatusUpdate(.completed)
+                                    await performStatusUpdate(.completed)
                                 },
                                 onReschedule: {
                                     router.requestAppointmentEdit(details)
                                 },
                                 onCancel: {
-                                    performStatusUpdate(.cancelled)
+                                    await performStatusUpdate(.cancelled)
                                 }
                             )
                         }
@@ -74,45 +74,31 @@ struct AppointmentDetailsView: View {
         }
     }
 
-    private func performStatusUpdate(_ status: Appointment.Status) {
-        Task {
-            if await model.updateStatus(to: status) {
-                router.dismissDetails()
-            }
+    private func performStatusUpdate(_ status: Appointment.Status) async {
+        if await model.updateStatus(to: status) {
+            router.dismissDetails()
         }
     }
 }
 
 private struct AppointmentDetailsActionsView: View {
     let isUpdating: Bool
-    let onComplete: @MainActor () -> Void
+    let onComplete: @MainActor () async -> Void
     let onReschedule: @MainActor () -> Void
-    let onCancel: @MainActor () -> Void
-
-    @State private var isConfirmingComplete = false
-    @State private var isConfirmingCancellation = false
+    let onCancel: @MainActor () async -> Void
 
     var body: some View {
         GlassEffectContainer {
             HStack {
-                Button {
-                    isConfirmingComplete = true
-                } label: {
+                ConfirmingAsyncButton(
+                    "Complete",
+                    message: Text("Mark this appointment as completed?"),
+                    action: onComplete
+                ) {
                     Label("Complete", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
-                .confirmationDialog(
-                    "Complete appointment?",
-                    isPresented: $isConfirmingComplete,
-                    titleVisibility: .hidden
-                ) {
-                    Button("Complete") {
-                        onComplete()
-                    }
-                } message: {
-                    Text("Mark this appointment as completed?")
-                }
 
                 Button {
                     onReschedule()
@@ -125,25 +111,17 @@ private struct AppointmentDetailsActionsView: View {
                 }
                 .buttonStyle(.glass)
 
-                Button(role: .destructive) {
-                    isConfirmingCancellation = true
-                } label: {
+                ConfirmingAsyncButton(
+                    "Cancel Appointment",
+                    role: .destructive,
+                    message: Text(
+                        "This appointment will be hidden from the schedule and appointment history."
+                    ),
+                    action: onCancel
+                ) {
                     Image(systemName: "xmark.bin")
                 }
                 .buttonStyle(.glass)
-                .confirmationDialog(
-                    "Cancel appointment?",
-                    isPresented: $isConfirmingCancellation,
-                    titleVisibility: .hidden,
-                ) {
-                    Button("Cancel Appointment", role: .destructive) {
-                        onCancel()
-                    }
-                } message: {
-                    Text(
-                        "This appointment will be hidden from the schedule and appointment history."
-                    )
-                }
             }
             .disabled(isUpdating)
         }

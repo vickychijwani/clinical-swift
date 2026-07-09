@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// A button wrapper for actions that immediately start async main-actor work.
+/// It prevents repeated taps while its own action is running; shared operation state still belongs in the owning model.
 struct AsyncButton<Label: View>: View {
     @State private var isRunning = false
 
