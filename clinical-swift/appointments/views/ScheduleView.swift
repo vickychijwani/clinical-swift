@@ -46,8 +46,7 @@ struct ScheduleView: View {
                 .dateTime
                     .weekday()
                     .month()
-                    .day()
-                    .year())
+                    .day())
         )
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {

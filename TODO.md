@@ -68,7 +68,7 @@ Nice to haves:
 - [ ] Direct interactions with Timeline for appointment booking/reschedule
   - [ ] First organize Timeline into clearly-defined Z-stack layers - they are already separate, just organize them better
 - [ ] Variety of pastel or illustrated patient avatars
-- [ ] Remove year from header, make it less prominent (see iOS Calendar app)
+- [x] Remove year from header
 - [ ] Style hour and now markers like iOS Cal app
 - [x] Display appointments scheduled in break too
 - [ ] Add “today”, “yesterday”, “tomorrow” + day in header - or just subtly grey out past dates
