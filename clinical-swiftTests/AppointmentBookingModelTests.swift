@@ -66,6 +66,83 @@ struct AppointmentBookingModelTests {
         }
     }
 
+    @Test func todayInitialPrefillStartsAtNextFiveMinuteBoundary() throws {
+        let calendar = gregorianCalendar
+        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let examples: [(now: Date, expectedStart: Date)] = [
+            (
+                try Date("2026-04-21T16:13:00Z", strategy: .iso8601),
+                selectedDate.setTime(16, 15, using: calendar)
+            ),
+            (
+                try Date("2026-04-21T16:01:00Z", strategy: .iso8601),
+                selectedDate.setTime(16, 5, using: calendar)
+            ),
+            (
+                try Date("2026-04-21T16:15:55Z", strategy: .iso8601),
+                selectedDate.setTime(16, 15, using: calendar)
+            ),
+            (
+                try Date("2026-04-21T16:16:00Z", strategy: .iso8601),
+                selectedDate.setTime(16, 20, using: calendar)
+            ),
+        ]
+
+        for example in examples {
+            withDependencies {
+                $0.calendar = calendar
+                $0.date.now = example.now
+            } operation: {
+                let model = AppointmentBookingModel(selectedDate: selectedDate) { _ in }
+
+                model.prefillFirstAvailableSlot()
+
+                #expect(model.draft.start == example.expectedStart)
+            }
+        }
+    }
+
+    @Test func nonTodayInitialPrefillUsesPreferredDefaultRegardlessOfCurrentTime() throws {
+        let calendar = gregorianCalendar
+        let tomorrow = try Date("2026-04-22T00:00:00Z", strategy: .iso8601)
+        let yesterday = try Date("2026-04-20T00:00:00Z", strategy: .iso8601)
+        let now = try Date("2026-04-21T16:13:00Z", strategy: .iso8601)
+
+        withDependencies {
+            $0.calendar = calendar
+            $0.date.now = now
+        } operation: {
+            let tomorrowModel = AppointmentBookingModel(selectedDate: tomorrow) { _ in }
+            tomorrowModel.prefillFirstAvailableSlot()
+
+            let yesterdayModel = AppointmentBookingModel(selectedDate: yesterday) { _ in }
+            yesterdayModel.prefillFirstAvailableSlot()
+
+            #expect(tomorrowModel.draft.start == tomorrow.setTime(10, 0, using: calendar))
+            #expect(yesterdayModel.draft.start == yesterday.setTime(10, 0, using: calendar))
+        }
+    }
+
+    @Test func dateChangeToTodayPreservesAvailableClockTimeEvenWhenPastCurrentTime() throws {
+        let calendar = gregorianCalendar
+        let today = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let tomorrow = try Date("2026-04-22T00:00:00Z", strategy: .iso8601)
+        let now = try Date("2026-04-21T16:13:00Z", strategy: .iso8601)
+
+        withDependencies {
+            $0.calendar = calendar
+            $0.date.now = now
+        } operation: {
+            let model = AppointmentBookingModel(selectedDate: tomorrow) { _ in }
+            model.selectStart(tomorrow.setTime(11, 0, using: calendar))
+
+            model.selectDate(today)
+            model.updateAppointments([], for: today)
+
+            #expect(model.draft.start == today.setTime(11, 0, using: calendar))
+        }
+    }
+
     @Test func durationChangePreservesStartWhenAppointmentStillFits() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)

@@ -28,22 +28,22 @@ nonisolated struct AppointmentAvailability {
     }
 
     func firstAvailableSlot(
-        neededDurationMinutes: Int
+        neededDurationMinutes: Int,
+        earliestStart: Date? = nil
     ) -> Date? {
-        let firstShiftSlot = firstAvailableSlot(
-            from: Bitehaus.preferredFirstShiftStart.on(date: searchDate, using: calendar),
-            to: Bitehaus.break.start.on(date: searchDate, using: calendar),
-            neededDurationMinutes: neededDurationMinutes
-        )
-        if let firstShiftSlot {
-            return firstShiftSlot
+        let windows = searchWindows(earliestStart: earliestStart)
+
+        for window in windows {
+            if let slot = firstAvailableSlot(
+                from: window.start,
+                to: window.end,
+                neededDurationMinutes: neededDurationMinutes
+            ) {
+                return slot
+            }
         }
 
-        return firstAvailableSlot(
-            from: Bitehaus.preferredSecondShiftStart.on(date: searchDate, using: calendar),
-            to: Bitehaus.closing.on(date: searchDate, using: calendar),
-            neededDurationMinutes: neededDurationMinutes
-        )
+        return nil
     }
 
     private var busyIntervals: [(start: Date, end: Date)] {
@@ -116,5 +116,31 @@ nonisolated struct AppointmentAvailability {
         }
 
         return candidate <= latestAllowedStart ? candidate : nil
+    }
+
+    private func searchWindows(earliestStart: Date?) -> [(start: Date, end: Date)] {
+        if let earliestStart {
+            return [
+                (
+                    max(earliestStart, Bitehaus.opening.on(date: searchDate, using: calendar)),
+                    Bitehaus.break.start.on(date: searchDate, using: calendar)
+                ),
+                (
+                    max(earliestStart, Bitehaus.break.end.on(date: searchDate, using: calendar)),
+                    Bitehaus.closing.on(date: searchDate, using: calendar)
+                ),
+            ]
+        }
+
+        return [
+            (
+                Bitehaus.preferredFirstShiftStart.on(date: searchDate, using: calendar),
+                Bitehaus.break.start.on(date: searchDate, using: calendar)
+            ),
+            (
+                Bitehaus.preferredSecondShiftStart.on(date: searchDate, using: calendar),
+                Bitehaus.closing.on(date: searchDate, using: calendar)
+            ),
+        ]
     }
 }

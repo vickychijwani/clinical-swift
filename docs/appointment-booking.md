@@ -7,6 +7,7 @@ This document captures the deliberate constraints an agent is likely to break wh
 - Overlapping appointments are valid. The clinic can have multiple doctors attending different patients at the same time, so an existing appointment does not make that interval unavailable.
 - Booking during or across the clinic break is valid. The break is a scheduling preference, not unavailable time.
 - Automatic time prefilling should prefer an empty interval within the regular working segments because the clinic usually has a single doctor.
+- When creating a booking for today, automatic prefilling must not suggest a past clock-minute bucket. Start the search from the next 5-minute boundary after the current clock minute, ignoring seconds, but still preserve a valid user-carried clock time when changing dates.
 - Existing appointments must not restrict manual time selection or saving. Multiple doctors may be available even when the selected interval is occupied.
 - Scheduling inputs inherit the normal appointment-read policy: cancelled rows are excluded before slot suggestions are calculated. Do not make each availability consumer remember to filter them.
 - Patient selection uses a stable full-height sheet so search results and the keyboard do not resize it.

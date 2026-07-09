@@ -221,13 +221,27 @@ import SQLiteData
 
         guard
             let slot = availability.firstAvailableSlot(
-                neededDurationMinutes: draft.durationMinutes
+                neededDurationMinutes: draft.durationMinutes,
+                earliestStart: earliestAutomaticPrefillStart
             )
         else {
             return
         }
 
         draft.start = slot
+    }
+
+    private var earliestAutomaticPrefillStart: Date? {
+        guard calendar.isDate(draft.selectedDate, inSameDayAs: now) else {
+            return nil
+        }
+
+        let boundaryMinutes = 5
+        let currentMinutes = TimeOfDay(date: now, calendar: calendar).totalMinutes
+        let roundedMinutes =
+            ((currentMinutes + boundaryMinutes - 1) / boundaryMinutes) * boundaryMinutes
+
+        return now.startOfDay(using: calendar).addMinutes(roundedMinutes, using: calendar)
     }
 
     /// This exists for reliably scrolling to preview the draft, if its slot has changed.

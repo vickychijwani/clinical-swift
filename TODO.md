@@ -19,7 +19,7 @@
   - [x] Show preview in schedule for maximum context
   - [x] Date selection synchronize with schedule
   - [x] Pre-fill next available slot
-    - [ ] Consider only future times (e.g., when scheduling a same-day appointment)
+    - [x] Pre-fill only future times, if date is today
   - [ ] Quick-add new patient from new appointment page
 - [x] View appointment
   - [x] Jump to patient
