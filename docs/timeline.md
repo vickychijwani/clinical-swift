@@ -26,6 +26,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - Do not enable swipe-to-dismiss on the booking sheet. It competes with timeline scrolling behind the sheet; use explicit toolbar actions so discard confirmation remains intentional.
 - If date, duration, time selection, or availability reconciliation moves the draft appointment, request a timeline scroll to reveal the new preview position. Manual timeline browsing should be the only way the draft card goes off-screen.
 - Horizontal day paging owns date navigation only. Timeline coordinate policy, break expansion, and programmatic vertical scrolling must continue to derive from `TimelineScale` for the day being rendered.
+- Horizontal day paging renders and loads beyond the immediately adjacent day so a second swipe can begin before the first page animation commits. Keep the pager radius and schedule query window in sync; otherwise fast swipes can land on an empty placeholder for a day whose appointments have not been loaded yet.
 
 ## Do Not Reintroduce
 

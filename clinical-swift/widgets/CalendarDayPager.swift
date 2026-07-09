@@ -4,6 +4,7 @@ struct CalendarDayPager<Content: View>: View {
     @Binding var selectedDate: Date
 
     let calendar: Calendar
+    let dayRadius: Int
     let content: (Date) -> Content
 
     @State private var visibleDate: Date
@@ -14,10 +15,12 @@ struct CalendarDayPager<Content: View>: View {
     init(
         selectedDate: Binding<Date>,
         calendar: Calendar = .autoupdatingCurrent,
+        dayRadius: Int,
         @ViewBuilder content: @escaping (Date) -> Content
     ) {
         self._selectedDate = selectedDate
         self.calendar = calendar
+        self.dayRadius = max(dayRadius, 1)
         self.content = content
         self._visibleDate = State(
             initialValue: selectedDate.wrappedValue.startOfDay(using: calendar)
@@ -27,7 +30,7 @@ struct CalendarDayPager<Content: View>: View {
     var body: some View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
-                ForEach(CalendarDayPageOffset.allCases) { page in
+                ForEach(pageOffsets) { page in
                     content(
                         visibleDate.date(
                             byAddingDays: page.dayOffset,
@@ -80,6 +83,10 @@ struct CalendarDayPager<Content: View>: View {
         }
     }
 
+    private var pageOffsets: [CalendarDayPageOffset] {
+        (-dayRadius...dayRadius).map(CalendarDayPageOffset.init)
+    }
+
     private func normalizeSelection() {
         selectedDate = selectedDate.startOfDay(using: calendar)
         visibleDate = selectedDate
@@ -109,16 +116,12 @@ struct CalendarDayPager<Content: View>: View {
     }
 }
 
-private enum CalendarDayPageOffset: Int, CaseIterable, Identifiable {
-    case previous = -1
-    case current = 0
-    case next = 1
+private struct CalendarDayPageOffset: Hashable, Identifiable {
+    static let current = CalendarDayPageOffset(dayOffset: 0)
 
-    var id: Self {
-        self
-    }
+    let dayOffset: Int
 
-    var dayOffset: Int {
-        rawValue
+    var id: Int {
+        dayOffset
     }
 }

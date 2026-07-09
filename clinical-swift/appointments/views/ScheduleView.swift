@@ -2,6 +2,8 @@ import Dependencies
 import SQLiteData
 import SwiftUI
 
+private let scheduleDayRadius = 2
+
 struct ScheduleView: View {
     @Dependency(\.calendar) private var calendar
     @Environment(Router.self) private var router
@@ -22,7 +24,11 @@ struct ScheduleView: View {
         VStack(spacing: 0) {
             WeekDateStrip(selectedDate: selectedDateBinding)
 
-            CalendarDayPager(selectedDate: selectedDateBinding, calendar: calendar) { date in
+            CalendarDayPager(
+                selectedDate: selectedDateBinding,
+                calendar: calendar,
+                dayRadius: scheduleDayRadius
+            ) { date in
                 ScheduleTimelinePage(
                     date: date,
                     appointments: visibleAppointments(for: date),
@@ -93,7 +99,10 @@ struct ScheduleView: View {
         .task(id: scheduleModel.selectedDate) {
             let requestedDate = scheduleModel.selectedDate
             do {
-                try await scheduleModel.loadVisibleDays(centeredOn: requestedDate)
+                try await scheduleModel.loadVisibleDays(
+                    centeredOn: requestedDate,
+                    dayRadius: scheduleDayRadius
+                )
 
                 // If date selection has changed after async load completion, stop here.
                 guard !Task.isCancelled,
@@ -245,7 +254,10 @@ struct ScheduleView: View {
         scheduleModel.selectedDate = date.startOfDay(using: calendar)
         bookingModel = nil
         Task {
-            _ = try? await scheduleModel.loadVisibleDays(centeredOn: date)
+            _ = try? await scheduleModel.loadVisibleDays(
+                centeredOn: date,
+                dayRadius: scheduleDayRadius
+            )
         }
     }
 

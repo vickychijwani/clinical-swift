@@ -36,12 +36,14 @@ nonisolated func querySchedule(
 }
 
 nonisolated func queryScheduleWindow(
-    centeredOn selectedDate: Date
+    centeredOn selectedDate: Date,
+    dayRadius: Int
 ) -> some Statement<AppointmentPatientSelection> {
     let calendar = Calendar.autoupdatingCurrent
+    let dayRadius = max(dayRadius, 1)
     let center = selectedDate.startOfDay(using: calendar)
-    let start = center.date(byAddingDays: -1, using: calendar)
-    let endExclusive = center.date(byAddingDays: 2, using: calendar)
+    let start = center.date(byAddingDays: -dayRadius, using: calendar)
+    let endExclusive = center.date(byAddingDays: dayRadius + 1, using: calendar)
 
     return scheduleAppointmentsQuery(start: start, endExclusive: endExclusive)
 }
