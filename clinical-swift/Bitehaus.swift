@@ -7,7 +7,7 @@ nonisolated struct Bitehaus {
     static let preferredSecondShiftStart = TimeOfDay.init(16, 30)
     static let doctor = "Dr. Monica Mulchandani"
     static let clinicName = "Bitehaus Dental Clinic"
-    static let clinicLocation = "https://maps.app.goo.gl/osLykQdZYhJiqBEJ6"
+    static let mapLink = "https://maps.app.goo.gl/M3cuCEojHWQQ1NkC7"
     static let openingMonth = DateComponents(year: 2023, month: 8)
     static let `break` = BreakBlock.init(
         start: .init(13, 0),

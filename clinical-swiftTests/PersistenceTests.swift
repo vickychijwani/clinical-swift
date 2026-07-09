@@ -225,6 +225,94 @@ struct PersistenceTests {
         #expect(appointment.status == .scheduled)
     }
 
+    @Test func earliestScheduledAppointmentIgnoresCompletedAndCancelledRows() throws {
+        let database = try testDatabase()
+        let calendar = Calendar.autoupdatingCurrent
+        let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000007"))
+        let otherPatientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000008"))
+        let cancelledID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000009"))
+        let completedID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000010"))
+        let earliestScheduledID = try #require(
+            UUID(uuidString: "00000000-0000-0000-0000-000000000011"))
+        let laterScheduledID = try #require(
+            UUID(uuidString: "00000000-0000-0000-0000-000000000012"))
+        let otherPatientAppointmentID = try #require(
+            UUID(uuidString: "00000000-0000-0000-0000-000000000013")
+        )
+        let day = Date(timeIntervalSinceReferenceDate: 20_000).startOfDay(using: calendar)
+
+        try database.write { db in
+            for (id, name) in [
+                (patientID, "Aarav Mehta"),
+                (otherPatientID, "Anjali Desai"),
+            ] {
+                try PatientRecord.insert {
+                    PatientRecord(
+                        id: id,
+                        name: name,
+                        phone: nil,
+                        dob: nil,
+                        gender: nil,
+                        createdAt: day,
+                        updatedAt: day
+                    )
+                }
+                .execute(db)
+            }
+
+            for fixture in [
+                AppointmentSeed(
+                    id: cancelledID,
+                    patientID: patientID,
+                    start: day.setTime(9, 0, using: calendar),
+                    status: .cancelled
+                ),
+                AppointmentSeed(
+                    id: completedID,
+                    patientID: patientID,
+                    start: day.setTime(9, 30, using: calendar),
+                    status: .completed
+                ),
+                AppointmentSeed(
+                    id: earliestScheduledID,
+                    patientID: patientID,
+                    start: day.setTime(10, 0, using: calendar),
+                    status: .scheduled
+                ),
+                AppointmentSeed(
+                    id: laterScheduledID,
+                    patientID: patientID,
+                    start: day.setTime(11, 0, using: calendar),
+                    status: .scheduled
+                ),
+                AppointmentSeed(
+                    id: otherPatientAppointmentID,
+                    patientID: otherPatientID,
+                    start: day.setTime(8, 0, using: calendar),
+                    status: .scheduled
+                ),
+            ] {
+                let record = try AppointmentRecord.persisted(
+                    id: fixture.id,
+                    patientID: fixture.patientID,
+                    start: fixture.start,
+                    durationMinutes: 30,
+                    status: fixture.status,
+                    createdAt: fixture.start,
+                    updatedAt: fixture.start
+                )
+                try AppointmentRecord.insert { record }
+                    .execute(db)
+            }
+        }
+
+        let earliest = try database.read { db in
+            try earliestScheduledAppointmentQuery(patientID: patientID).fetchOne(db)
+        }
+
+        #expect(earliest?.id == earliestScheduledID)
+    }
+
     @Test func deletingPatientCascadesAppointments() throws {
         let database = try testDatabase()
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000004"))
@@ -302,5 +390,12 @@ struct PersistenceTests {
         let database = try DatabaseQueue(configuration: configuration)
         try migrateDatabase(database)
         return database
+    }
+
+    private struct AppointmentSeed {
+        let id: Appointment.ID
+        let patientID: Patient.ID
+        let start: Date
+        let status: Appointment.Status
     }
 }

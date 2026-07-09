@@ -59,6 +59,19 @@ struct AppointmentDetailsView: View {
         }
         .navigationTitle("Appointment")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let details = model.details, model.showsMessagingAction {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(
+                        "Send Appointment Confirmation",
+                        systemImage: "arrow.up.message"
+                    ) {
+                        router.requestAppointmentMessage(details)
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
+        }
         .alert(
             "Unable to update appointment",
             isPresented: Binding(

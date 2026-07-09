@@ -26,11 +26,11 @@
   - [ ] For scheduled appointments: Mark as done -> record payment + due, schedule next appt, add “follow-up” tag,  clinical notes in future, implant records, lots of actions…
   - [x] Cancel appointment - confirm cancellation and then hide it from view
 - [x] Edit appointment
-- [ ] Send SMS + WhatsApp Biz message + auto-copy to clipboard
-  - [ ] Allow editing of message
+- [x] Send SMS + WhatsApp Biz message + auto-copy to clipboard
+  - [x] Allow editing of message
   - [ ] Allow changing contact/number when sending msg (sometimes number changes temporarily or permanently - shouldn’t require Patient record update)
   - [ ] Don't put patient's name OR add honorific before name
-  - [ ] Also send location if first appt
+  - [x] Also send location if first appt
   - [ ] Make sure SMS is sent from Bitehaus number, not personal
 - [ ] Widget
 - [ ] Shortcut to create appointment

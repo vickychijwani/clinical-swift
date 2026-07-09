@@ -31,7 +31,25 @@ struct ContentView: View {
         ) { request in
             EditPatientView(patient: request.patient)
         }
+        .sheet(
+            item: appointmentMessageRequestBinding,
+            onDismiss: router.appointmentMessageDidDismiss
+        ) { request in
+            AppointmentMessageView(id: request.appointmentID)
+        }
         .environment(router)
+    }
+
+    private var appointmentMessageRequestBinding: Binding<AppointmentMessageRequest?> {
+        Binding(
+            get: { router.appointmentMessageRequest },
+            set: { newValue in
+                guard newValue == nil, let requestID = router.appointmentMessageRequest?.id else {
+                    return
+                }
+                router.consumeAppointmentMessageRequest(requestID)
+            }
+        )
     }
 
     private var patientEditRequestBinding: Binding<PatientEditRequest?> {

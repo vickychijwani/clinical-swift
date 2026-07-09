@@ -163,6 +163,44 @@ struct RouterTests {
         #expect(router.appointmentEditRequest?.id != firstRequest.id)
     }
 
+    @Test func appointmentMessageFromDetailsRestoresExactNavigationState() throws {
+        let router = Router()
+        let appointmentID = UUID()
+        let details = appointmentDetails(id: appointmentID)
+        let schedulePath: [Route] = [.patient(UUID())]
+        let patientsPath: [Route] = [.appointment(UUID())]
+        let detailsPath: [Route] = [.patient(UUID()), .appointment(appointmentID)]
+        router.selectedTab = .patients
+        router.schedulePath = schedulePath
+        router.patientsPath = patientsPath
+        router.presentDetails(.appointment(appointmentID))
+        for route in detailsPath {
+            router.pushDetails(route)
+        }
+        let presentation = try #require(router.detailsPresentation)
+
+        router.requestAppointmentMessage(details)
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation == nil)
+        #expect(router.appointmentMessageRequest == nil)
+        #expect(router.schedulePath == schedulePath)
+        #expect(router.patientsPath == patientsPath)
+
+        router.detailsDidDismiss()
+
+        let request = try #require(router.appointmentMessageRequest)
+        #expect(request.appointmentID == appointmentID)
+        router.consumeAppointmentMessageRequest(request.id)
+        router.appointmentMessageDidDismiss()
+
+        #expect(router.selectedTab == .patients)
+        #expect(router.detailsPresentation === presentation)
+        #expect(router.detailsPresentation?.path == detailsPath)
+        #expect(router.schedulePath == schedulePath)
+        #expect(router.patientsPath == patientsPath)
+    }
+
     @Test func appointmentBookingFromPatientDetailsRestoresExactNavigationState() throws {
         let router = Router()
         let patient = Patient(name: "Aarav Mehta")
@@ -249,10 +287,12 @@ struct RouterTests {
 
         router.requestPatientEdit(patient)
         router.requestAppointmentEdit(appointmentDetails())
+        router.requestAppointmentMessage(appointmentDetails())
         router.detailsDidDismiss()
 
         #expect(router.patientEditRequest?.patientID == patient.id)
         #expect(router.appointmentEditRequest == nil)
+        #expect(router.appointmentMessageRequest == nil)
 
         let requestID = try #require(router.patientEditRequest?.id)
         router.consumePatientEditRequest(requestID)
@@ -290,6 +330,19 @@ struct RouterTests {
         let requestID = try #require(router.appointmentEditRequest?.id)
         router.consumeAppointmentEditRequest(requestID)
         router.appointmentEditorDidDismiss()
+
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation == nil)
+    }
+
+    @Test func directAppointmentMessageDoesNotRestoreDetails() throws {
+        let router = Router()
+        let details = appointmentDetails()
+
+        router.requestAppointmentMessage(details)
+        let requestID = try #require(router.appointmentMessageRequest?.id)
+        router.consumeAppointmentMessageRequest(requestID)
+        router.appointmentMessageDidDismiss()
 
         #expect(router.selectedTab == .schedule)
         #expect(router.detailsPresentation == nil)

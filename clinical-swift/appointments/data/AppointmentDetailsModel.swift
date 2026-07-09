@@ -30,6 +30,10 @@ final class AppointmentDetailsModel {
         details?.appointment.status == .scheduled
     }
 
+    var showsMessagingAction: Bool {
+        details?.appointment.status == .scheduled
+    }
+
     func dismissError() {
         errorMessage = nil
     }

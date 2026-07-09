@@ -48,4 +48,9 @@ nonisolated enum PhoneNumber {
 
         return number
     }
+
+    static func whatsAppDigits(_ value: String?) -> String? {
+        guard let number = normalizedE164(value) else { return nil }
+        return number.filter(\.isNumber)
+    }
 }
