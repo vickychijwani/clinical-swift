@@ -125,8 +125,11 @@ private struct AppointmentDetailsActionsView: View {
                 Button {
                     onReschedule()
                 } label: {
-                    Label("Reschedule", systemImage: "calendar.badge.clock")
-                        .frame(maxWidth: .infinity)
+                    Label(
+                        "Reschedule",
+                        systemImage: "clock.arrow.trianglehead.clockwise.rotate.90.path.dotted"
+                    )
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glass)
 

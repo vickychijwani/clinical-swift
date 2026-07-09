@@ -148,12 +148,16 @@ struct PatientAppointmentTimelineTests {
         let cancelled = AppointmentStatusPresentation(status: .cancelled)
 
         #expect(scheduled.label == "Scheduled")
+        #expect(scheduled.systemImage == "clock")
         #expect(scheduled.treatment == .active)
         #expect(completed.label == "Completed")
+        #expect(completed.systemImage == "checkmark.circle")
         #expect(completed.treatment == .muted)
         #expect(draft.label == "Draft")
+        #expect(draft.systemImage == "clock")
         #expect(draft.treatment == .accent)
         #expect(cancelled.label == "Cancelled")
+        #expect(cancelled.systemImage == "xmark.circle")
         #expect(cancelled.treatment == .muted)
     }
 

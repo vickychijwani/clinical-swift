@@ -61,7 +61,7 @@ Observations from in-hand testing:
 - [ ] Would be nice to be able to click directly on the schedule and drag to adjust start time, in 5 or 15min increments
 
 Nice to haves:
-- [ ] Appointment summary card - Instead of cal icon use non-cal icons for scheduled, completed, cancelled, etc
+- [x] Appointment summary card - Instead of cal icon use non-cal icons for scheduled, completed, cancelled, etc
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [ ] Action Sheets for Complete/Cancel/Discard prompts
 - [ ] Fun animated welcome text with draw + gradient symbol animations

@@ -33,7 +33,7 @@ struct DetailsFlowSheet: View {
                 }
             }
         }
-        .presentationDetents([.height(270), .medium])
+        .presentationDetents([.height(280), .medium])
         .presentationBackground(Color("AppBackground"))
         .presentationContentInteraction(.resizes)
     }

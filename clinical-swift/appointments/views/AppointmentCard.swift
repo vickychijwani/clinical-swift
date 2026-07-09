@@ -62,10 +62,17 @@ struct AppointmentCard: View {
     }
 
     private var timeText: some View {
-        Text("\(appt.start.formatted(.dateTime.hour().minute()))")
-            .styleAppointmentTime()
-            .layoutPriority(1)
-            .fixedSize(horizontal: true, vertical: false)
+        HStack(spacing: 2) {
+            Image(systemName: statusPresentation.systemImage)
+            Text(appt.start.formatted(.dateTime.hour().minute()))
+        }
+        .styleAppointmentTime()
+        .layoutPriority(1)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var statusPresentation: AppointmentStatusPresentation {
+        AppointmentStatusPresentation(status: appt.status)
     }
 
     private var patientNameText: some View {

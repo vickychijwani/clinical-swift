@@ -11,6 +11,8 @@ struct AppointmentDetailsCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 AppointmentDetailsSummary(appointment: appointment)
 
+                Divider()
+
                 PatientSummaryView(
                     patient: patient,
                     onSelect: onSelectPatient
@@ -50,11 +52,11 @@ struct AppointmentDetailsSummary: View {
 
     var body: some View {
         HStack(alignment: .center) {
-            Image(systemName: "calendar")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(width: 34, height: 34)
-                .background(Color.secondary.opacity(0.1))
+            Image(systemName: statusPresentation.systemImage)
+                .font(.system(size: 32))
+                .frame(width: 32, height: 32)
+                .foregroundStyle(statusColor)
+                .background(statusColor.opacity(0.1))
                 .clipShape(.circle)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -65,15 +67,6 @@ struct AppointmentDetailsSummary: View {
                         .foregroundStyle(.secondary)
 
                     Spacer()
-
-                    HStack(spacing: 4) {
-                        Image(systemName: "circle.fill")
-                            .font(.caption2)
-
-                        Text(statusPresentation.label)
-                            .font(.caption)
-                    }
-                    .foregroundStyle(statusColor)
                 }
 
                 Text(formattedTimeRange)
@@ -126,34 +119,6 @@ struct AppointmentDetailsSummary: View {
         case .muted:
             .secondary
         }
-    }
-}
-
-nonisolated struct AppointmentStatusPresentation: Equatable, Sendable {
-    let label: String
-    let treatment: Treatment
-
-    init(status: Appointment.Status) {
-        switch status {
-        case .scheduled:
-            label = "Scheduled"
-            treatment = .active
-        case .completed:
-            label = "Completed"
-            treatment = .muted
-        case .draft:
-            label = "Draft"
-            treatment = .accent
-        case .cancelled:
-            label = "Cancelled"
-            treatment = .muted
-        }
-    }
-
-    enum Treatment: Equatable, Sendable {
-        case active
-        case accent
-        case muted
     }
 }
 
