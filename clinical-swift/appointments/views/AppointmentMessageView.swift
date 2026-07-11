@@ -59,6 +59,7 @@ struct AppointmentMessageView: View {
 private struct AppointmentMessageComposeView: View {
     @Bindable var model: AppointmentMessageModel
     @State private var isPickingRecipient = false
+    @State private var pendingWhatsAppRequest: AppointmentWhatsAppRequest?
 
     let onSMSWasSent: @MainActor (_ request: AppointmentWhatsAppRequest) async -> Void
 
@@ -131,11 +132,19 @@ private struct AppointmentMessageComposeView: View {
             }
             .ignoresSafeArea()
         }
-        .sheet(item: $model.smsDraft) { draft in
-            MessageComposeView(draft: draft) { result in
-                if let request = model.finishSMS(with: result) {
+        .sheet(
+            item: $model.smsDraft,
+            onDismiss: {
+                guard let request = pendingWhatsAppRequest else { return }
+                pendingWhatsAppRequest = nil
+
+                Task { @MainActor in
                     await onSMSWasSent(request)
                 }
+            }
+        ) { draft in
+            MessageComposeView(draft: draft) { result in
+                pendingWhatsAppRequest = model.finishSMS(with: result)
             }
         }
         .alert(
@@ -156,7 +165,7 @@ private struct AppointmentMessageComposeView: View {
 
 private struct MessageComposeView: UIViewControllerRepresentable {
     let draft: AppointmentSMSDraft
-    let onFinish: @MainActor (MessageComposeResult) async -> Void
+    let onFinish: @MainActor (MessageComposeResult) -> Void
 
     func makeUIViewController(context: Context) -> MFMessageComposeViewController {
         let viewController = MFMessageComposeViewController()
@@ -176,9 +185,9 @@ private struct MessageComposeView: UIViewControllerRepresentable {
     }
 
     final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
-        let onFinish: @MainActor (MessageComposeResult) async -> Void
+        let onFinish: @MainActor (MessageComposeResult) -> Void
 
-        init(onFinish: @escaping @MainActor (MessageComposeResult) async -> Void) {
+        init(onFinish: @escaping @MainActor (MessageComposeResult) -> Void) {
             self.onFinish = onFinish
         }
 
@@ -186,10 +195,9 @@ private struct MessageComposeView: UIViewControllerRepresentable {
             _ controller: MFMessageComposeViewController,
             didFinishWith result: MessageComposeResult
         ) {
-            controller.dismiss(animated: true) {
-                Task { @MainActor in
-                    await self.onFinish(result)
-                }
+            // SwiftUI owns the sheet presentation, so changing its bound item must dismiss it.
+            Task { @MainActor in
+                self.onFinish(result)
             }
         }
     }
