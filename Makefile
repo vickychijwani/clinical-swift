@@ -12,6 +12,7 @@ TEAM_ID := WM7GP7FBL7
 ASC_KEY_ID := 643N8M76NP
 ASC_ISSUER_ID := 2b91f873-699b-498f-b1b6-5043a8d5f2ac
 ASC_PRIVATE_KEYS_DIR ?= $(HOME)/.appstoreconnect/private_keys
+XCODE_CLOUD_WORKFLOW_ID := 3EE75F71-B995-470A-9CB8-745EEEF77267
 
 BUILD_DIR := $(CURDIR)/build
 DERIVED_DATA := $(BUILD_DIR)/DerivedData
@@ -29,12 +30,14 @@ EXPORT_PATH := $(EXPORT_DIR)/$(APP_NAME)-$(BUILD_NUMBER)
 TESTFLIGHT_EXPORT_OPTIONS := $(CURDIR)/TestFlightExportOptions.plist
 BACKUP_ARCHIVE_SCRIPT := $(CURDIR)/scripts/backup_archive_to_github.sh
 NEXT_BUILD_NUMBER_SCRIPT := $(CURDIR)/scripts/next_app_store_build_number.swift
+TRIGGER_XCODE_CLOUD_BUILD_SCRIPT := $(CURDIR)/scripts/trigger_xcode_cloud_build.swift
 
 DESTINATION := platform=iOS Simulator,name=$(SIMULATOR),OS=latest
 ARCHIVE_DESTINATION := generic/platform=iOS
 XCBEAUTIFY := xcbeautify -q --disable-logging
 XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
 RESOLVE_BUILD_NUMBER := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" xcrun swift "$(NEXT_BUILD_NUMBER_SCRIPT)" "$(BUNDLE_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
+TRIGGER_XCODE_CLOUD_BUILD := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" xcrun swift "$(TRIGGER_XCODE_CLOUD_BUILD_SCRIPT)" "$(XCODE_CLOUD_WORKFLOW_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
 XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
 	-configuration "$(CONFIGURATION)" \
 	-destination "$(DESTINATION)" \
@@ -50,7 +53,7 @@ UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)"
 
 .DEFAULT_GOAL := build-and-run
 
-.PHONY: help diagnose prepare check-tools check-github-tools check-build-number next-build-number resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
+.PHONY: help diagnose prepare check-tools check-app-store-connect-tools check-github-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
 
 help:
 	@printf "%s\n" \
@@ -59,6 +62,9 @@ help:
 		"  make build            Build the app" \
 		"  make test             Run unit tests" \
 		"  make ui-test          Run UI tests" \
+		"" \
+		"Xcode Cloud:" \
+		"  make xcode-cloud-build  Start the configured workflow on its default branch" \
 		"" \
 		"TestFlight workflow:" \
 		"  make release-testflight  Archive, upload, back up, and remove locally" \
@@ -91,6 +97,7 @@ diagnose:
 	@printf "Bundle ID:     %s\n" "$(BUNDLE_ID)"
 	@printf "ASC key ID:    %s\n" "$(ASC_KEY_ID)"
 	@printf "ASC issuer ID: %s\n" "$(ASC_ISSUER_ID)"
+	@printf "Cloud workflow: %s\n" "$(XCODE_CLOUD_WORKFLOW_ID)"
 	@printf "xcodebuild:    %s\n" "$$(xcrun --find xcodebuild)"
 	@printf "xcbeautify:    %s\n" "$$(command -v $(XCBEAUTIFY))"
 
@@ -101,6 +108,9 @@ check-tools:
 	@command -v xcodebuild >/dev/null
 	@command -v xcrun >/dev/null
 	@command -v $(XCBEAUTIFY) >/dev/null || { echo "xcbeautify is required. Install it with: brew install xcbeautify"; exit 1; }
+
+check-app-store-connect-tools:
+	@command -v xcrun >/dev/null
 
 check-github-tools:
 	@command -v gh >/dev/null || { echo "GitHub CLI is required. Install it with: brew install gh"; exit 1; }
@@ -113,9 +123,13 @@ check-build-number:
 	@test -n "$(BUILD_NUMBER)" || { echo "BUILD_NUMBER is required. Example: make upload-testflight BUILD_NUMBER=2"; exit 2; }
 	@[[ "$(BUILD_NUMBER)" =~ ^[0-9]+(\.[0-9]+){0,2}$$ ]] || { echo "BUILD_NUMBER must contain one to three numeric components, for example 2 or 2.1"; exit 2; }
 
-next-build-number: check-tools
+next-build-number: check-app-store-connect-tools
 	@number="$$($(RESOLVE_BUILD_NUMBER))" || exit; \
 	printf "Next App Store Connect build number: %s\n" "$$number"
+
+xcode-cloud-build: check-app-store-connect-tools
+	@test -f "$(TRIGGER_XCODE_CLOUD_BUILD_SCRIPT)" || { echo "Xcode Cloud trigger script is missing: $(TRIGGER_XCODE_CLOUD_BUILD_SCRIPT)"; exit 1; }
+	@$(TRIGGER_XCODE_CLOUD_BUILD)
 
 resolve-packages: check-tools prepare
 	@set -o pipefail; \
