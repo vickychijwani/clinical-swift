@@ -38,12 +38,12 @@ final class AppointmentMessageDetailsModel {
                 return
             }
 
-            let firstScheduledAppointment = try await database.read { db in
-                try earliestScheduledAppointmentQuery(patientID: details.patient.id).fetchOne(db)
+            let firstVisibleAppointment = try await database.read { db in
+                try earliestVisibleAppointmentQuery(patientID: details.patient.id).fetchOne(db)
             }
             messageModel = AppointmentMessageModel(
                 details: details,
-                includesLocation: firstScheduledAppointment?.id == details.appointment.id
+                includesLocation: firstVisibleAppointment?.id == details.appointment.id
             )
         } catch {
             errorMessage = "Appointment messaging could not be loaded."

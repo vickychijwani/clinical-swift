@@ -225,7 +225,7 @@ struct PersistenceTests {
         #expect(appointment.status == .scheduled)
     }
 
-    @Test func earliestScheduledAppointmentIgnoresCompletedAndCancelledRows() throws {
+    @Test func earliestVisibleAppointmentIncludesCompletedAndIgnoresCancelledRows() throws {
         let database = try testDatabase()
         let calendar = Calendar.autoupdatingCurrent
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000007"))
@@ -307,10 +307,10 @@ struct PersistenceTests {
         }
 
         let earliest = try database.read { db in
-            try earliestScheduledAppointmentQuery(patientID: patientID).fetchOne(db)
+            try earliestVisibleAppointmentQuery(patientID: patientID).fetchOne(db)
         }
 
-        #expect(earliest?.id == earliestScheduledID)
+        #expect(earliest?.id == completedID)
     }
 
     @Test func deletingPatientCascadesAppointments() throws {

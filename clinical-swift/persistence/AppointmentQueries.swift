@@ -97,12 +97,12 @@ nonisolated func patientTimelineAppointmentsQuery(
         .selectStar()
 }
 
-nonisolated func earliestScheduledAppointmentQuery(
+nonisolated func earliestVisibleAppointmentQuery(
     patientID: Patient.ID
 ) -> some Statement<AppointmentRecord> {
     AppointmentRecord
         .where { $0.patientID.eq(patientID) }
-        .where { $0.status.eq(Appointment.Status.scheduled.rawValue) }
+        .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
         .order { ($0.start.asc(), $0.createdAt.asc(), $0.id.asc()) }
         .selectStar()
 }
