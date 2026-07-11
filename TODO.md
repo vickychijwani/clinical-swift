@@ -33,6 +33,7 @@
     - [ ] Also update Patient record automatically
   - [x] Disable “Send” button if valid phone number is not present
   - [x] Also send location if first appt
+  - [x] Add honorific in message greeting
   - [ ] Make sure SMS is sent from Bitehaus number, not personal
 - [ ] Widget
 - [ ] Shortcut to create appointment
@@ -66,7 +67,6 @@ Nice to haves:
 - [x] Appointment summary card - Instead of cal icon use non-cal icons for scheduled, completed, cancelled, etc
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [x] Action Sheets for Complete/Cancel/Discard prompts
-- [ ] Honorific support in appointment reminder messages
 - [ ] Fun animated welcome text with draw + gradient symbol animations
 - [ ] Direct interactions with Timeline for appointment booking/reschedule
   - [ ] First organize Timeline into clearly-defined Z-stack layers - they are already separate, just organize them better

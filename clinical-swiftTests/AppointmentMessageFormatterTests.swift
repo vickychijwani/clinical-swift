@@ -10,6 +10,7 @@ struct AppointmentMessageFormatterTests {
         let start = try Date("2026-03-04T18:30:00Z", strategy: .iso8601)
         let details = appointmentDetails(
             patientName: "Aarav Mehta",
+            patientGender: .male,
             start: start
         )
 
@@ -25,7 +26,7 @@ struct AppointmentMessageFormatterTests {
         #expect(
             message
                 == """
-                Hello Aarav,
+                Hello Mr. Aarav,
 
                 Your appointment with Dr. Monica Mulchandani at Bitehaus Dental Clinic is confirmed on Wed, 4 Mar at 6:30 PM.
 
@@ -41,6 +42,7 @@ struct AppointmentMessageFormatterTests {
         let start = try Date("2026-03-04T18:00:00Z", strategy: .iso8601)
         let details = appointmentDetails(
             patientName: "Anjali Desai",
+            patientGender: .female,
             start: start
         )
 
@@ -56,7 +58,7 @@ struct AppointmentMessageFormatterTests {
         #expect(
             message
                 == """
-                Hello Anjali,
+                Hello Ms. Anjali,
 
                 This is a gentle reminder that you have an appointment with Dr. Monica Mulchandani at Bitehaus Dental Clinic for today at 6:00 PM.
 
@@ -82,13 +84,37 @@ struct AppointmentMessageFormatterTests {
         #expect(namelessMessage.hasPrefix("Hello,\n\nYour appointment"))
     }
 
+    @Test func otherOrMissingGenderOmitsHonorific() throws {
+        let start = try Date("2026-03-04T18:00:00Z", strategy: .iso8601)
+
+        for gender in [Gender.other, nil] {
+            let details = appointmentDetails(
+                patientName: "Sam Shah",
+                patientGender: gender,
+                start: start
+            )
+            let message = AppointmentMessageFormatter(
+                kind: .confirmation,
+                details: details,
+                includesLocation: false,
+                now: start,
+                calendar: fixedCalendar
+            )
+            .message()
+
+            #expect(message.hasPrefix("Hello Sam,\n\nYour appointment"))
+        }
+    }
+
     private func appointmentDetails(
         patientName: String?,
+        patientGender: Gender? = nil,
         start: Date
     ) -> AppointmentDetails {
         let patient = Patient(
             name: patientName,
             phone: "+91 98201 44532",
+            gender: patientGender,
             createdDate: start
         )
         return AppointmentDetails(

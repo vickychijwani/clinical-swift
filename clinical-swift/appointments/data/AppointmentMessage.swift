@@ -25,7 +25,7 @@ nonisolated struct AppointmentMessageFormatter: Sendable {
     let calendar: Calendar
 
     func message() -> String {
-        let greeting = patientName.map { "Hello \($0)," } ?? "Hello,"
+        let greeting = details.patient.firstNameWithHonorific.map { "Hello \($0)," } ?? "Hello,"
         let body =
             switch kind {
             case .confirmation:
@@ -41,14 +41,6 @@ nonisolated struct AppointmentMessageFormatter: Sendable {
 
             Best Regards 🙏
             """
-    }
-
-    private var patientName: String? {
-        guard let name = details.patient.name?.nilIfBlank else {
-            return nil
-        }
-
-        return name.split(whereSeparator: \.isWhitespace).first.map(String.init)
     }
 
     private var dateClause: String {

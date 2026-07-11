@@ -51,7 +51,7 @@ struct AppointmentMessageView: View {
             }
         }
         .interactiveDismissDisabled()
-        .presentationDetents([.large])
+        .presentationDetents([.height(560)])
         .presentationBackground(Color("AppBackground"))
     }
 }

@@ -62,6 +62,20 @@ nonisolated struct Patient: Identifiable, Hashable, Sendable {
 
         return years
     }
+
+    var firstNameWithHonorific: String? {
+        guard
+            let name = name?.nilIfBlank,
+            let firstName = name.split(whereSeparator: \.isWhitespace).first.map(String.init)
+        else {
+            return nil
+        }
+
+        if let honorific = gender?.honorific {
+            return "\(honorific) \(firstName)"
+        }
+        return firstName
+    }
 }
 
 nonisolated enum Gender: Hashable, Sendable {
@@ -77,6 +91,17 @@ nonisolated enum Gender: Hashable, Sendable {
             "M"
         case .other:
             "Other"
+        }
+    }
+
+    var honorific: String? {
+        switch self {
+        case .female:
+            "Ms."
+        case .male:
+            "Mr."
+        case .other:
+            nil
         }
     }
 }
