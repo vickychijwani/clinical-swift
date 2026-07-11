@@ -15,6 +15,7 @@
   - [x] Schedule Appointment button
   - [x] Edit patient
   - [x] Hide optional details like dob/gender to reduce friction with first-appointment creation
+  - [ ] Handle (or disallow) missing phone number
 - [x] New appointment
   - [x] Show preview in schedule for maximum context
   - [x] Date selection synchronize with schedule
@@ -28,8 +29,9 @@
 - [x] Edit appointment
 - [x] Send SMS + WhatsApp Biz message + auto-copy to clipboard
   - [x] Allow editing of message
-  - [ ] Allow changing contact/number when sending msg (sometimes number changes temporarily or permanently - shouldn’t require Patient record update)
-  - [ ] Don't put patient's name OR add honorific before name
+  - [x] Allow changing contact/number when sending msg
+    - [ ] Also update Patient record automatically
+  - [x] Disable “Send” button if valid phone number is not present
   - [x] Also send location if first appt
   - [ ] Make sure SMS is sent from Bitehaus number, not personal
 - [ ] Widget
@@ -64,6 +66,7 @@ Nice to haves:
 - [x] Appointment summary card - Instead of cal icon use non-cal icons for scheduled, completed, cancelled, etc
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [x] Action Sheets for Complete/Cancel/Discard prompts
+- [ ] Honorific support in appointment reminder messages
 - [ ] Fun animated welcome text with draw + gradient symbol animations
 - [ ] Direct interactions with Timeline for appointment booking/reschedule
   - [ ] First organize Timeline into clearly-defined Z-stack layers - they are already separate, just organize them better

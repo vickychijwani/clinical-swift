@@ -58,6 +58,7 @@ struct AppointmentMessageView: View {
 
 private struct AppointmentMessageComposeView: View {
     @Bindable var model: AppointmentMessageModel
+    @State private var isPickingRecipient = false
 
     let onSMSWasSent: @MainActor (_ request: AppointmentWhatsAppRequest) async -> Void
 
@@ -86,15 +87,44 @@ private struct AppointmentMessageComposeView: View {
                     .foregroundStyle(.red)
             }
 
+            HStack(spacing: 4) {
+                Text("Sending to")
+
+                Button {
+                    isPickingRecipient = true
+                } label: {
+                    Label(model.recipientLabel, systemImage: model.recipientSystemImage)
+                        .labelIconToTitleSpacing(4)
+                        .dottedUnderline()
+                        .foregroundStyle(Color("AccentColor"))
+                }
+                .buttonStyle(.plain)
+            }
+            .foregroundStyle(.secondary)
+            .font(.subheadline)
+            .frame(maxWidth: .infinity)
+            .multilineTextAlignment(.center)
+
             Button(action: model.startSend) {
                 Label("Send", systemImage: "arrow.up.message")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
+            .disabled(!model.hasValidRecipientPhone)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color("AppBackground"))
+        .task {
+            await model.loadRecipientName()
+        }
+        .sheet(isPresented: $isPickingRecipient) {
+            ContactPhonePicker { phone, contactName in
+                model.selectRecipient(phone: phone, name: contactName)
+                // No need to set isPickingRecipient to false, dismissal is automatic
+            }
+            .ignoresSafeArea()
+        }
         .sheet(item: $model.smsDraft) { draft in
             MessageComposeView(draft: draft) { result in
                 if let request = model.finishSMS(with: result) {

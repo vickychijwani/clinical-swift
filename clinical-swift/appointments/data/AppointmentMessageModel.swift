@@ -5,6 +5,7 @@ import MessageUI
 @MainActor @Observable
 final class AppointmentMessageModel {
     @ObservationIgnored @Dependency(\.appointmentMessagingClient) private var messagingClient
+    @ObservationIgnored @Dependency(\.appointmentContactClient) private var contactClient
     @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.date.now) private var now
 
@@ -26,11 +27,40 @@ final class AppointmentMessageModel {
     var message = ""
     var errorMessage: String?
     var smsDraft: AppointmentSMSDraft?
+    private(set) var recipientPhone: String?
+    private(set) var recipientName: String?
+
+    var hasValidRecipientPhone: Bool {
+        PhoneNumber.normalizedE164(recipientPhone) != nil
+    }
+
+    var recipientLabel: String {
+        recipientName
+            ?? PhoneNumber.formattedForDisplay(recipientPhone)
+            ?? "Choose contact"
+    }
+
+    var recipientSystemImage: String {
+        recipientName == nil && hasValidRecipientPhone ? "phone" : "person"
+    }
 
     init(details: AppointmentDetails, includesLocation: Bool) {
         self.details = details
         self.includesLocation = includesLocation
+        recipientPhone = PhoneNumber.normalizedE164(details.patient.phone)
         regenerateMessage()
+    }
+
+    func loadRecipientName() async {
+        guard recipientName == nil, let recipientPhone else { return }
+        recipientName = await contactClient.nameForPhone(recipientPhone)
+    }
+
+    func selectRecipient(phone: String, name: String?) {
+        guard let normalizedPhone = PhoneNumber.normalizedE164(phone) else { return }
+        recipientPhone = normalizedPhone
+        recipientName = name?.nilIfBlank
+        errorMessage = nil
     }
 
     func regenerateMessage() {
@@ -49,7 +79,7 @@ final class AppointmentMessageModel {
         errorMessage = nil
         messagingClient.copy(message)
 
-        guard let phone = PhoneNumber.normalizedE164(details.patient.phone),
+        guard let phone = recipientPhone,
             let phoneDigits = PhoneNumber.whatsAppDigits(phone)
         else {
             errorMessage =

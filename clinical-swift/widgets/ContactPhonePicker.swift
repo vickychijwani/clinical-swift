@@ -41,19 +41,21 @@ struct ContactPhonePicker: UIViewControllerRepresentable {
                 let phone = contactProperty.value as? CNPhoneNumber
             else { return }
 
-            let contact = contactProperty.contact
-            var nameComponents = PersonNameComponents()
-            nameComponents.namePrefix = contact.namePrefix
-            nameComponents.givenName = contact.givenName
-            nameComponents.middleName = contact.middleName
-            nameComponents.familyName = contact.familyName
-            nameComponents.nameSuffix = contact.nameSuffix
-
-            let contactName =
-                nameComponents.formatted().nilIfBlank
-                ?? contact.organizationName.nilIfBlank
-
-            onPick(phone.stringValue, contactName)
+            onPick(phone.stringValue, contactProperty.contact.formattedName)
         }
+    }
+}
+
+extension CNContact {
+    var formattedName: String? {
+        var components = PersonNameComponents()
+        components.namePrefix = namePrefix
+        components.givenName = givenName
+        components.middleName = middleName
+        components.familyName = familyName
+        components.nameSuffix = nameSuffix
+
+        return components.formatted().nilIfBlank
+            ?? organizationName.nilIfBlank
     }
 }

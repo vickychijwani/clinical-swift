@@ -15,6 +15,9 @@ struct AppointmentMessageModelTests {
             $0.appointmentMessagingClient = recorder.client
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
+            #expect(model.hasValidRecipientPhone)
+            #expect(model.recipientLabel == "+91 98201 44532")
+            #expect(model.recipientSystemImage == "phone")
             model.startSend()
 
             #expect(recorder.copiedMessages == [model.message])
@@ -32,6 +35,7 @@ struct AppointmentMessageModelTests {
             $0.appointmentMessagingClient = recorder.client
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
+            #expect(model.hasValidRecipientPhone)
             model.startSend()
             let request = try #require(model.finishSMS(with: .sent))
             let didOpenWhatsApp = await model.openWhatsApp(request)
@@ -39,6 +43,41 @@ struct AppointmentMessageModelTests {
             #expect(didOpenWhatsApp)
             #expect(recorder.openedWhatsApp == [request])
             #expect(model.errorMessage == nil)
+        }
+    }
+
+    @Test func selectedContactBecomesMessageRecipient() {
+        let recorder = MessagingRecorder(canSendText: true)
+        let details = appointmentDetails(phone: "+91 98201 44532")
+
+        withDependencies {
+            $0.appointmentMessagingClient = recorder.client
+        } operation: {
+            let model = AppointmentMessageModel(details: details, includesLocation: false)
+            model.selectRecipient(phone: "98765 43210", name: "Nisha Shah")
+            model.startSend()
+
+            #expect(model.recipientName == "Nisha Shah")
+            #expect(model.smsDraft?.recipient == "+919876543210")
+            #expect(model.smsDraft?.phoneDigits == "919876543210")
+        }
+    }
+
+    @Test func loadsInitialRecipientNameFromContacts() async {
+        let details = appointmentDetails(phone: "+91 98201 44532")
+
+        await withDependencies {
+            $0.appointmentContactClient = AppointmentContactClient { phone in
+                #expect(phone == "+919820144532")
+                return "Aarav Mobile"
+            }
+        } operation: {
+            let model = AppointmentMessageModel(details: details, includesLocation: false)
+            await model.loadRecipientName()
+
+            #expect(model.recipientName == "Aarav Mobile")
+            #expect(model.recipientLabel == "Aarav Mobile")
+            #expect(model.recipientSystemImage == "person")
         }
     }
 
@@ -67,6 +106,9 @@ struct AppointmentMessageModelTests {
             $0.appointmentMessagingClient = recorder.client
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
+            #expect(!model.hasValidRecipientPhone)
+            #expect(model.recipientLabel == "Choose contact")
+            #expect(model.recipientSystemImage == "person")
             model.startSend()
 
             #expect(recorder.copiedMessages == [model.message])
