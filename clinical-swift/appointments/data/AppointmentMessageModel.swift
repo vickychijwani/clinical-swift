@@ -18,12 +18,6 @@ final class AppointmentMessageModel {
             regenerateMessage()
         }
     }
-    var includesPatientName = true {
-        didSet {
-            guard oldValue != includesPatientName else { return }
-            regenerateMessage()
-        }
-    }
     var message = ""
     var errorMessage: String?
     var smsDraft: AppointmentSMSDraft?
@@ -67,7 +61,6 @@ final class AppointmentMessageModel {
         message = AppointmentMessageFormatter(
             kind: kind,
             details: details,
-            includesPatientName: includesPatientName,
             includesLocation: includesLocation,
             now: now,
             calendar: calendar

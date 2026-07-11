@@ -77,8 +77,6 @@ private struct AppointmentMessageComposeView: View {
                 .background(.regularMaterial, in: .rect(cornerRadius: 12))
                 .scrollContentBackground(.hidden)
 
-            Toggle("Include patient name", isOn: $model.includesPatientName)
-
             Spacer(minLength: 0)
 
             if let errorMessage = model.errorMessage {

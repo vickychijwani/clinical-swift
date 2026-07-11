@@ -20,7 +20,6 @@ nonisolated enum AppointmentMessageKind: String, CaseIterable, Identifiable, Sen
 nonisolated struct AppointmentMessageFormatter: Sendable {
     let kind: AppointmentMessageKind
     let details: AppointmentDetails
-    let includesPatientName: Bool
     let includesLocation: Bool
     let now: Date
     let calendar: Calendar
@@ -45,7 +44,7 @@ nonisolated struct AppointmentMessageFormatter: Sendable {
     }
 
     private var patientName: String? {
-        guard includesPatientName, let name = details.patient.name?.nilIfBlank else {
+        guard let name = details.patient.name?.nilIfBlank else {
             return nil
         }
 

@@ -16,7 +16,6 @@ struct AppointmentMessageFormatterTests {
         let message = AppointmentMessageFormatter(
             kind: .confirmation,
             details: details,
-            includesPatientName: true,
             includesLocation: true,
             now: try Date("2026-03-03T09:00:00Z", strategy: .iso8601),
             calendar: calendar
@@ -49,7 +48,6 @@ struct AppointmentMessageFormatterTests {
         let message = AppointmentMessageFormatter(
             kind: .reminder,
             details: details,
-            includesPatientName: true,
             includesLocation: false,
             now: try Date("2026-03-04T09:00:00Z", strategy: .iso8601),
             calendar: calendar
@@ -68,32 +66,20 @@ struct AppointmentMessageFormatterTests {
         )
     }
 
-    @Test func disabledOrMissingPatientNameUsesPlainGreeting() throws {
+    @Test func missingPatientNameUsesPlainGreeting() throws {
         let calendar = fixedCalendar
         let start = try Date("2026-03-04T18:00:00Z", strategy: .iso8601)
-        let namedDetails = appointmentDetails(patientName: "Dev Malhotra", start: start)
         let namelessDetails = appointmentDetails(patientName: nil, start: start)
 
-        let disabledNameMessage = AppointmentMessageFormatter(
-            kind: .confirmation,
-            details: namedDetails,
-            includesPatientName: false,
-            includesLocation: false,
-            now: start,
-            calendar: calendar
-        )
-        .message()
         let namelessMessage = AppointmentMessageFormatter(
             kind: .confirmation,
             details: namelessDetails,
-            includesPatientName: true,
             includesLocation: false,
             now: start,
             calendar: calendar
         )
         .message()
 
-        #expect(disabledNameMessage.hasPrefix("Hello,\n\nYour appointment"))
         #expect(namelessMessage.hasPrefix("Hello,\n\nYour appointment"))
     }
 

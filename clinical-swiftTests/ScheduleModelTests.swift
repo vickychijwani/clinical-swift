@@ -43,7 +43,7 @@ struct ScheduleModelTests {
             let model = ScheduleModel(selectedDate: selectedDate)
             model.selectedDate = selectedDate.startOfDay(using: calendar)
 
-            try await model.loadVisibleDays(centeredOn: selectedDate)
+            try await model.loadVisibleDays(centeredOn: selectedDate, dayRadius: 1)
 
             #expect(model.appointments(for: previousDate).map(\.id) == [previousID])
             #expect(model.appointments.map(\.id) == [selectedID])
@@ -77,8 +77,8 @@ struct ScheduleModelTests {
             let model = ScheduleModel(selectedDate: selectedDate)
             model.selectedDate = selectedDate.startOfDay(using: calendar)
 
-            try await model.loadVisibleDays(centeredOn: selectedDate)
-            try await model.loadVisibleDays(centeredOn: staleDate)
+            try await model.loadVisibleDays(centeredOn: selectedDate, dayRadius: 1)
+            try await model.loadVisibleDays(centeredOn: staleDate, dayRadius: 1)
 
             #expect(model.appointments.map(\.id) == [selectedID])
             #expect(model.appointments(for: staleDate).isEmpty)
