@@ -65,7 +65,7 @@ final class Router {
         }
     }
 
-    func requestAppointmentBooking(for patient: Patient) {
+    func requestAppointmentBooking(for patient: Patient? = nil) {
         guard canRequestSheet else { return }
         let request = AppointmentBookingRequest(patient: patient)
         activeSheetSession = .appointment
@@ -283,10 +283,10 @@ nonisolated struct AppointmentEditRequest: Identifiable, Equatable, Sendable {
 
 nonisolated struct AppointmentBookingRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
-    let patient: Patient
+    let patient: Patient?
 
-    var patientID: Patient.ID {
-        patient.id
+    var patientID: Patient.ID? {
+        patient?.id
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {

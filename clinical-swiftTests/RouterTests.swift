@@ -239,6 +239,17 @@ struct RouterTests {
         #expect(router.patientsPath == patientsPath)
     }
 
+    @Test func appointmentBookingCanBeRequestedWithoutPatient() throws {
+        let router = Router()
+        router.selectedTab = .patients
+
+        router.requestAppointmentBooking()
+
+        #expect(router.selectedTab == .schedule)
+        let request = try #require(router.appointmentBookingRequest)
+        #expect(request.patient == nil)
+    }
+
     @Test func patientEditRestoresExactDetailsHistoryWithoutChangingTabState() throws {
         let router = Router()
         let patient = Patient(name: "Aarav Mehta")
