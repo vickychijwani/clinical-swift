@@ -32,7 +32,7 @@ NEXT_BUILD_NUMBER_SCRIPT := $(CURDIR)/scripts/next_app_store_build_number.swift
 
 DESTINATION := platform=iOS Simulator,name=$(SIMULATOR),OS=latest
 ARCHIVE_DESTINATION := generic/platform=iOS
-XCBEAUTIFY := xcbeautify -qq --disable-logging
+XCBEAUTIFY := xcbeautify -q --disable-logging
 XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
 RESOLVE_BUILD_NUMBER := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" xcrun swift "$(NEXT_BUILD_NUMBER_SCRIPT)" "$(BUNDLE_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
 XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \

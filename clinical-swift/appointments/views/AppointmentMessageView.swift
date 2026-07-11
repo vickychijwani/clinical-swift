@@ -85,25 +85,33 @@ private struct AppointmentMessageComposeView: View {
                     .foregroundStyle(.red)
             }
 
-            HStack(spacing: 4) {
-                Text("Sending to")
+            VStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    Text("Sending to")
 
-                Button {
-                    isPickingRecipient = true
-                } label: {
-                    Label(model.recipientLabel, systemImage: model.recipientSystemImage)
-                        .labelIconToTitleSpacing(4)
-                        .dottedUnderline()
-                        .foregroundStyle(Color("AccentColor"))
+                    Button {
+                        isPickingRecipient = true
+                    } label: {
+                        Label(model.recipientLabel, systemImage: model.recipientSystemImage)
+                            .labelIconToTitleSpacing(4)
+                            .dottedUnderline()
+                            .foregroundStyle(Color("AccentColor"))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+
+                if model.willSaveRecipientPhone {
+                    Text("This will be saved as the patient's contact number")
+                }
             }
             .foregroundStyle(.secondary)
             .font(.subheadline)
             .frame(maxWidth: .infinity)
             .multilineTextAlignment(.center)
 
-            Button(action: model.startSend) {
+            AsyncButton {
+                model.startSend()
+            } label: {
                 Label("Send", systemImage: "arrow.up.message")
                     .frame(maxWidth: .infinity)
             }
@@ -129,6 +137,19 @@ private struct AppointmentMessageComposeView: View {
                     await onSMSWasSent(request)
                 }
             }
+        }
+        .alert(
+            "Unable to save patient",
+            isPresented: Binding(
+                get: { model.patientSaveErrorMessage != nil },
+                set: { if !$0 { model.dismissPatientSaveError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                model.dismissPatientSaveError()
+            }
+        } message: {
+            Text(model.patientSaveErrorMessage ?? "")
         }
     }
 }

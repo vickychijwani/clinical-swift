@@ -1,6 +1,7 @@
 import Dependencies
 import Foundation
 import MessageUI
+import SQLiteData
 import Testing
 
 @testable import clinical_swift
@@ -50,12 +51,62 @@ struct AppointmentMessageModelTests {
         }
     }
 
-    @Test func selectedContactBecomesMessageRecipient() {
+    @Test func selectedContactStartsMessageAndSavesPatientConcurrently() async throws {
         let recorder = MessagingRecorder(canSendText: true)
+        let database = try testDatabase()
+        let details = appointmentDetails(phone: "+91 98201 44532")
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(details.patient) }
+                .execute(db)
+        }
+
+        await withDependencies {
+            $0.appointmentMessagingClient = recorder.client
+            $0.defaultDatabase = database
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
+        } operation: {
+            let model = AppointmentMessageModel(details: details, includesLocation: false)
+            model.selectRecipient(phone: "98765 43210", name: "Nisha Shah")
+            #expect(model.willSaveRecipientPhone)
+            model.startSend()
+
+            #expect(model.recipientName == "Nisha Shah")
+            #expect(model.smsDraft?.recipient == "+919876543210")
+            #expect(model.smsDraft?.phoneDigits == "919876543210")
+
+            await model.waitForRecipientPhoneSave()
+            #expect(!model.willSaveRecipientPhone)
+        }
+
+        let savedPhone = try await database.read { db in
+            try PatientRecord.find(details.patient.id).fetchOne(db)?.phone
+        }
+        #expect(savedPhone == "+919876543210")
+    }
+
+    @Test func equivalentSelectedPhoneIsNotMarkedForSaving() {
         let details = appointmentDetails(phone: "+91 98201 44532")
 
         withDependencies {
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
+        } operation: {
+            let model = AppointmentMessageModel(details: details, includesLocation: false)
+            model.selectRecipient(phone: "98201 44532", name: "Aarav Mobile")
+
+            #expect(!model.willSaveRecipientPhone)
+        }
+    }
+
+    @Test func failedPatientSaveStillStartsMessageWorkflow() async throws {
+        let recorder = MessagingRecorder(canSendText: true)
+        let database = try testDatabase()
+        let details = appointmentDetails(phone: "+91 98201 44532")
+
+        await withDependencies {
             $0.appointmentMessagingClient = recorder.client
+            $0.defaultDatabase = database
             $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
@@ -63,9 +114,12 @@ struct AppointmentMessageModelTests {
             model.selectRecipient(phone: "98765 43210", name: "Nisha Shah")
             model.startSend()
 
-            #expect(model.recipientName == "Nisha Shah")
+            #expect(recorder.copiedMessages == [model.message])
             #expect(model.smsDraft?.recipient == "+919876543210")
             #expect(model.smsDraft?.phoneDigits == "919876543210")
+
+            await model.waitForRecipientPhoneSave()
+            #expect(model.patientSaveErrorMessage == "This patient can no longer be edited.")
         }
     }
 
@@ -179,6 +233,20 @@ struct AppointmentMessageModelTests {
         calendar.locale = Locale(identifier: "en_US_POSIX")
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
         return calendar
+    }
+
+    private func testDatabase() throws -> DatabaseQueue {
+        var configuration = Configuration()
+        configuration.foreignKeysEnabled = true
+        let database = try DatabaseQueue(configuration: configuration)
+        try migrateDatabase(database)
+        return database
+    }
+}
+
+extension AppointmentMessageModel {
+    internal func waitForRecipientPhoneSave() async {
+        await recipientPhoneSaveTask?.value
     }
 }
 

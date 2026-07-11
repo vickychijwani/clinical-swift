@@ -20,9 +20,12 @@ final class AppointmentMessageModel {
     }
     var message = ""
     var errorMessage: String?
+    private(set) var patientSaveErrorMessage: String?
     var smsDraft: AppointmentSMSDraft?
     private(set) var recipientPhone: String?
     private(set) var recipientName: String?
+    private var savedPatientPhone: String?
+    @ObservationIgnored internal var recipientPhoneSaveTask: Task<Void, Never>?
 
     var hasValidRecipientPhone: Bool {
         PhoneNumber.normalizedE164(recipientPhone) != nil
@@ -38,10 +41,19 @@ final class AppointmentMessageModel {
         recipientName == nil && hasValidRecipientPhone ? "phone" : "person"
     }
 
+    var willSaveRecipientPhone: Bool {
+        guard let recipientPhone = PhoneNumber.normalizedE164(recipientPhone) else {
+            return false
+        }
+        return recipientPhone != savedPatientPhone
+    }
+
     init(details: AppointmentDetails, includesLocation: Bool) {
         self.details = details
         self.includesLocation = includesLocation
-        recipientPhone = PhoneNumber.normalizedE164(details.patient.phone)
+        let patientPhone = PhoneNumber.normalizedE164(details.patient.phone)
+        recipientPhone = patientPhone
+        savedPatientPhone = patientPhone
         regenerateMessage()
     }
 
@@ -70,6 +82,12 @@ final class AppointmentMessageModel {
 
     func startSend() {
         errorMessage = nil
+        patientSaveErrorMessage = nil
+
+        if willSaveRecipientPhone {
+            startRecipientPhoneSave()
+        }
+
         messagingClient.copy(message)
 
         guard let phone = recipientPhone,
@@ -90,6 +108,31 @@ final class AppointmentMessageModel {
             phoneDigits: phoneDigits,
             body: message
         )
+    }
+
+    private func startRecipientPhoneSave() {
+        guard recipientPhoneSaveTask == nil else { return }
+
+        recipientPhoneSaveTask = Task { @MainActor in
+            defer { recipientPhoneSaveTask = nil }
+            await saveRecipientPhone()
+        }
+    }
+
+    private func saveRecipientPhone() async {
+        let editorModel = PatientEditorModel(patient: details.patient)
+        editorModel.draft.phone = recipientPhone
+
+        guard let patient = await editorModel.save() else {
+            patientSaveErrorMessage = editorModel.saveErrorMessage
+            return
+        }
+
+        savedPatientPhone = patient.phone
+    }
+
+    func dismissPatientSaveError() {
+        patientSaveErrorMessage = nil
     }
 
     func finishSMS(with result: MessageComposeResult) -> AppointmentWhatsAppRequest? {

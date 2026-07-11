@@ -30,7 +30,7 @@
 - [x] Send SMS + WhatsApp Biz message + auto-copy to clipboard
   - [x] Allow editing of message
   - [x] Allow changing contact/number when sending msg
-    - [ ] Also update Patient record automatically
+    - [x] Also update Patient record automatically
   - [x] Disable “Send” button if valid phone number is not present
   - [x] Also send location if first appt
   - [x] Add honorific in message greeting
