@@ -2,8 +2,8 @@ SHELL := /bin/bash
 
 PROJECT := clinical-swift.xcodeproj
 SCHEME := clinical-swift
-UNIT_TEST_TARGET := clinical-swiftTests
-UI_TEST_TARGET := clinical-swiftUITests
+UNIT_TEST_SCHEME := clinical-swift-UnitTests
+UI_TEST_SCHEME := clinical-swift-UITests
 CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
 BUNDLE_ID := in.bitehaus.clinical
@@ -32,17 +32,21 @@ NEXT_BUILD_NUMBER_SCRIPT := $(CURDIR)/scripts/next_app_store_build_number.swift
 
 DESTINATION := platform=iOS Simulator,name=$(SIMULATOR),OS=latest
 ARCHIVE_DESTINATION := generic/platform=iOS
-XCBEAUTIFY := xcbeautify
+XCBEAUTIFY := xcbeautify -qq --disable-logging
 XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
 RESOLVE_BUILD_NUMBER := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" xcrun swift "$(NEXT_BUILD_NUMBER_SCRIPT)" "$(BUNDLE_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
-XCODEBUILD_FLAGS := -project "$(PROJECT)" \
-	-scheme "$(SCHEME)" \
+XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
 	-configuration "$(CONFIGURATION)" \
 	-destination "$(DESTINATION)" \
 	-destination-timeout 60 \
 	-derivedDataPath "$(DERIVED_DATA)" \
 	-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
+	-disableAutomaticPackageResolution \
+    -skipPackageUpdates \
 	CODE_SIGNING_ALLOWED=NO
+XCODEBUILD_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
+UNIT_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO
+UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)"
 
 .DEFAULT_GOAL := build-and-run
 
@@ -78,6 +82,8 @@ help:
 diagnose:
 	@printf "Project:       %s\n" "$(PROJECT)"
 	@printf "Scheme:        %s\n" "$(SCHEME)"
+	@printf "Unit tests:    %s\n" "$(UNIT_TEST_SCHEME)"
+	@printf "UI tests:      %s\n" "$(UI_TEST_SCHEME)"
 	@printf "Configuration: %s\n" "$(CONFIGURATION)"
 	@printf "Simulator:     %s\n" "$(SIMULATOR)"
 	@printf "Destination:   %s\n" "$(DESTINATION)"
@@ -130,15 +136,20 @@ build: check-tools prepare
 test: check-tools prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
-		$(XCODEBUILD_FLAGS) \
-		test -only-testing:$(UNIT_TEST_TARGET) \
-		2>&1 | tee "$(LOG_DIR)/test.log" | $(XCBEAUTIFY)
+		$(UNIT_TEST_FLAGS) \
+		test \
+		2>&1 | tee "$(LOG_DIR)/test.log" | $(XCBEAUTIFY); \
+	status=$$?; \
+	if (( status != 0 )); then \
+		awk '/recorded an issue/{ issue = 1 } issue { print } issue && /^✘ Test .* failed after/{ issue = 0 }' "$(LOG_DIR)/test.log"; \
+	fi; \
+	exit $$status
 
 ui-test: check-tools prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
-		$(XCODEBUILD_FLAGS) \
-		test -only-testing:$(UI_TEST_TARGET) \
+		$(UI_TEST_FLAGS) \
+		test \
 		2>&1 | tee "$(LOG_DIR)/ui-test.log" | $(XCBEAUTIFY)
 
 archive: check-tools prepare

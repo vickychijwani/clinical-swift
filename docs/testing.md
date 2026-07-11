@@ -2,6 +2,11 @@
 
 This document captures testing rules that are easy to miss under strict Swift concurrency.
 
+## Test Commands
+
+- `make test` uses the shared unit-test scheme and must not build or run the UI-test target. Parallel Xcode test runners are disabled for this command so it can use the selected simulator directly instead of creating a simulator clone.
+- `make ui-test` uses the separate shared UI-test scheme. Keep unit and UI targets in their respective schemes so selecting one kind of test does not build the other bundle.
+
 ## Async Database Access
 
 - In an `async` test, calls to `DatabaseWriter.read` and `DatabaseWriter.write` resolve to their asynchronous overloads. Always write `try await database.read { ... }` and `try await database.write { ... }`.

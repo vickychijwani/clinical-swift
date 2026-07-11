@@ -56,18 +56,17 @@ nonisolated struct AppointmentMessageFormatter: Sendable {
             return "for today"
         }
 
-        let weekday = details.appointment.start.formatted(
-            Date.FormatStyle()
-                .weekday(.abbreviated)
-                .locale(Locale(identifier: "en_US_POSIX"))
+        let formattedDate = details.appointment.start.formatted(
+            Date.FormatStyle(
+                locale: calendar.locale ?? .autoupdatingCurrent,
+                calendar: calendar,
+                timeZone: calendar.timeZone
+            )
+            .weekday(.abbreviated)
+            .day()
+            .month(.abbreviated)
         )
-        let month = details.appointment.start.formatted(
-            Date.FormatStyle()
-                .month(.abbreviated)
-                .locale(Locale(identifier: "en_US_POSIX"))
-        )
-        let day = calendar.component(.day, from: details.appointment.start)
-        return "on \(weekday), \(day) \(month)"
+        return "on \(formattedDate)"
     }
 
     private var time: String {

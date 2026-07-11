@@ -38,6 +38,7 @@ struct AppointmentBookingModelTests {
 
         withDependencies {
             $0.calendar = calendar
+            $0.date.now = initialDate
         } operation: {
             let model = AppointmentBookingModel(selectedDate: initialDate) { _ in }
             model.selectStart(initialDate.setTime(11, 0, using: calendar))
@@ -52,9 +53,11 @@ struct AppointmentBookingModelTests {
     @Test func dateChangeFallsBackWhenClockTimeCrossesBreak() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let now = try Date("2026-04-20T00:00:00Z", strategy: .iso8601)
 
         withDependencies {
             $0.calendar = calendar
+            $0.date.now = now
         } operation: {
             let model = AppointmentBookingModel(selectedDate: selectedDate) { _ in }
             model.selectDuration(60)
@@ -179,6 +182,7 @@ struct AppointmentBookingModelTests {
 
         withDependencies {
             $0.calendar = calendar
+            $0.date.now = initialDate
         } operation: {
             let model = AppointmentBookingModel(selectedDate: initialDate) { _ in }
             model.selectStart(initialDate.setTime(11, 0, using: calendar))

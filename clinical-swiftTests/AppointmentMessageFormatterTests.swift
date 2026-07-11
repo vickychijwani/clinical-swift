@@ -31,7 +31,6 @@ struct AppointmentMessageFormatterTests {
 
                 Location: https://maps.app.goo.gl/M3cuCEojHWQQ1NkC7
 
-
                 Best Regards 🙏
                 """
         )
@@ -105,7 +104,7 @@ struct AppointmentMessageFormatterTests {
 
     private var fixedCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.locale = Locale(identifier: "en_IN")
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
         return calendar
     }

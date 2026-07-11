@@ -13,6 +13,8 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
             #expect(model.hasValidRecipientPhone)
@@ -33,6 +35,8 @@ struct AppointmentMessageModelTests {
 
         try await withDependencies {
             $0.appointmentMessagingClient = recorder.client
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
             #expect(model.hasValidRecipientPhone)
@@ -52,6 +56,8 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
             model.selectRecipient(phone: "98765 43210", name: "Nisha Shah")
@@ -71,6 +77,8 @@ struct AppointmentMessageModelTests {
                 #expect(phone == "+919820144532")
                 return "Aarav Mobile"
             }
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
             await model.loadRecipientName()
@@ -87,6 +95,8 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
             model.startSend()
@@ -104,6 +114,8 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
             #expect(!model.hasValidRecipientPhone)
@@ -126,6 +138,8 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
+            $0.calendar = fixedCalendar
+            $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
             model.startSend()
@@ -154,6 +168,17 @@ struct AppointmentMessageModelTests {
             ),
             patient: patient
         )
+    }
+
+    private var fixedNow: Date {
+        Date(timeIntervalSinceReferenceDate: 0)
+    }
+
+    private var fixedCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+        return calendar
     }
 }
 
