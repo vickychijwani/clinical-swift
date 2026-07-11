@@ -1,3 +1,4 @@
+import Contacts
 import SQLiteData
 import SwiftUI
 
@@ -69,6 +70,7 @@ private struct EditPatientForm: View {
     @State private var isPickingDOB = false
     @State private var draftDOB = Date()
     @State private var areOptionalDetailsExpanded = false
+    @State private var hasRequestedContactsAccess = false
 
     init(
         draft: Binding<PatientDraft>,
@@ -87,6 +89,8 @@ private struct EditPatientForm: View {
             Section {
                 PhoneField("Phone number", phone: $draft.phone.replacingNil()) { contactName in
                     draft.prefillName(fromContactName: contactName)
+                } onContactPickerOpened: {
+                    await requestContactsAccessIfNeeded()
                 }
             }
 
@@ -130,6 +134,14 @@ private struct EditPatientForm: View {
         .sheet(isPresented: $isPickingDOB) {
             PatientDOBPicker(dob: $draft.dob, draftDOB: $draftDOB, isPresented: $isPickingDOB)
         }
+    }
+
+    private func requestContactsAccessIfNeeded() async {
+        guard !hasRequestedContactsAccess else { return }
+
+        hasRequestedContactsAccess = true
+        let contactStore = CNContactStore()
+        _ = try? await contactStore.requestAccess(for: .contacts)
     }
 }
 

@@ -4,16 +4,19 @@ struct PhoneField: View {
     let label: String
     @Binding var phone: String
     let onPickContact: (String?) -> Void
+    let onContactPickerOpened: @MainActor () async -> Void
     @State private var showingContacts = false
 
     init(
         _ label: String,
         phone: Binding<String>,
-        onPickContact: @escaping (String?) -> Void = { _ in }
+        onPickContact: @escaping (String?) -> Void = { _ in },
+        onContactPickerOpened: @escaping @MainActor () async -> Void = {}
     ) {
         self.label = label
         self._phone = phone
         self.onPickContact = onPickContact
+        self.onContactPickerOpened = onContactPickerOpened
     }
 
     var body: some View {
@@ -24,7 +27,10 @@ struct PhoneField: View {
                 .autocorrectionDisabled()
 
             Button {
-                showingContacts = true
+                Task {
+                    await onContactPickerOpened()
+                    showingContacts = true
+                }
             } label: {
                 Image(systemName: "person.crop.circle")
                     .font(.title3)
