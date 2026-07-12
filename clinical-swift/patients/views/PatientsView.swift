@@ -7,13 +7,16 @@ struct PatientsView: View {
     @FetchAll(patientListRowsQuery(), animation: .default)
     private var patientRows: [PatientDetailsSelection]
     @State private var searchText = ""
+    @State private var externalPhoneNumbers: Set<String>?
+    @State private var externalSearchText: String?
     @State private var isAddingPatient = false
 
     var body: some View {
         PatientList(
             sections: PatientSection.sections(
                 from: patientDetailsList,
-                searchText: searchText
+                searchText: searchText,
+                matchingPhoneNumbers: externalPhoneNumbers
             ),
             onSelectPatient: { patientID in
                 router.presentDetails(.patient(patientID))
@@ -32,6 +35,21 @@ struct PatientsView: View {
         }
         .sheet(isPresented: $isAddingPatient) {
             EditPatientView()
+        }
+        .task(id: router.patientSearchRequest?.id) {
+            guard let request = router.patientSearchRequest else { return }
+            externalPhoneNumbers = request.phoneNumbers
+            externalSearchText = request.phoneNumbers
+                .sorted()
+                .compactMap(PhoneNumber.formattedForDisplay)
+                .joined(separator: ", ")
+            searchText = externalSearchText ?? ""
+            router.consumePatientSearchRequest(request.id)
+        }
+        .onChange(of: searchText) { _, newValue in
+            guard let externalSearchText, newValue != externalSearchText else { return }
+            externalPhoneNumbers = nil
+            self.externalSearchText = nil
         }
     }
 

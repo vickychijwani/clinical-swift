@@ -8,11 +8,17 @@ struct PatientSection: Identifiable, Hashable {
 
     static func sections(
         from items: [PatientDetails],
-        searchText: String = ""
+        searchText: String = "",
+        matchingPhoneNumbers: Set<String>? = nil
     ) -> [PatientSection] {
         let locale = Locale.autoupdatingCurrent
         let filteredItems = items.filter { item in
-            PatientNameSearch.matches(
+            if let matchingPhoneNumbers {
+                guard let phone = item.patient.phone else { return false }
+                return matchingPhoneNumbers.contains(phone)
+            }
+
+            return PatientNameSearch.matches(
                 item.patient.name,
                 searchText: searchText,
                 locale: locale

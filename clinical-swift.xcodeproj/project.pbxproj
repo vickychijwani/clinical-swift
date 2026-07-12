@@ -468,6 +468,15 @@
 				DEVELOPMENT_TEAM = WM7GP7FBL7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes = (
+					{
+						CFBundleTypeRole = Editor;
+						CFBundleURLName = in.bitehaus.clinical;
+						CFBundleURLSchemes = (
+							clinical,
+						);
+					},
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = Clinical;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSContactsUsageDescription = "Clinical uses Contacts data to keep contact names and phone numbers in sync.";
@@ -504,6 +513,15 @@
 				DEVELOPMENT_TEAM = WM7GP7FBL7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes = (
+					{
+						CFBundleTypeRole = Editor;
+						CFBundleURLName = in.bitehaus.clinical;
+						CFBundleURLSchemes = (
+							clinical,
+						);
+					},
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = Clinical;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSContactsUsageDescription = "Clinical uses Contacts data to keep contact names and phone numbers in sync.";

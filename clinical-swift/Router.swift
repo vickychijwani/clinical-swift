@@ -22,6 +22,7 @@ final class Router {
     private(set) var appointmentEditRequest: AppointmentEditRequest?
     private(set) var appointmentMessageRequest: AppointmentMessageRequest?
     private(set) var patientEditRequest: PatientEditRequest?
+    private(set) var patientSearchRequest: PatientSearchRequest?
 
     private var pendingSheetHandoff: PendingSheetHandoff?
     private var suspendedDetailsSession: SuspendedDetailsSession?
@@ -82,6 +83,13 @@ final class Router {
             selectedTab = .schedule
             appointmentBookingRequest = request
         }
+    }
+
+    @discardableResult
+    func open(_ url: URL) -> Bool {
+        guard ClinicalURL(url) == .bookAppointment else { return false }
+        requestAppointmentBooking()
+        return true
     }
 
     func requestAppointmentMessage(_ details: AppointmentDetails) {
@@ -156,6 +164,11 @@ final class Router {
         patientEditRequest = nil
     }
 
+    func consumePatientSearchRequest(_ requestID: PatientSearchRequest.ID) {
+        guard patientSearchRequest?.id == requestID else { return }
+        patientSearchRequest = nil
+    }
+
     func appointmentEditorDidDismiss() {
         guard activeSheetSession == .appointment else { return }
         activeSheetSession = nil
@@ -203,6 +216,17 @@ final class Router {
 
         selectedTab = destinationTab
         presentDetails(route)
+    }
+
+    func openExternalPatientSearch(phoneNumbers: Set<String>) {
+        let normalizedPhoneNumbers = Set(phoneNumbers.compactMap(PhoneNumber.normalizedE164))
+        guard !normalizedPhoneNumbers.isEmpty else { return }
+
+        selectedTab = .patients
+        // An external list destination replaces any details session waiting behind an editor.
+        suspendedDetailsSession = nil
+        dismissDetails()
+        patientSearchRequest = PatientSearchRequest(phoneNumbers: normalizedPhoneNumbers)
     }
 
     func openPatient(_ id: UUID, in tab: AppTab?) {
@@ -310,6 +334,15 @@ nonisolated struct PatientEditRequest: Identifiable, Equatable, Sendable {
     var patientID: Patient.ID {
         patient.id
     }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+nonisolated struct PatientSearchRequest: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    let phoneNumbers: Set<String>
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id

@@ -9,6 +9,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - Patients without a name display as `Unknown Patient`, but that fallback is presentation-only. Do not store it as a fake name.
 - Patient names are stored in title case with collapsed internal whitespace and no leading or trailing spaces. The edit field may hold raw draft input; normalize at the save boundary so persisted rows stay consistent.
 - Patient name search is word-prefix based and order-independent. Do not use substring matching because short queries like `an` should find `Anjali Desai` and `Mary Ann`, but not `Rani Dutta`.
+- Contact-driven external search is a separate exact-phone filter. Keep every normalized phone supplied by the contact so patients linked through different aliases can appear together; editing the visible search text returns the list to normal name search.
 - Age is derived from date of birth at render/test time. Do not store age as independent patient state because it drifts every birthday.
 - Next appointment metadata is list/read-model data, not intrinsic patient state. Keep it off `Patient` so appointment changes remain the only source of truth.
 - Patient appointment history is a live read model scoped by patient ID, not intrinsic `Patient` state. Include scheduled and completed appointments, exclude retained cancelled rows, and order by start, creation date, then appointment ID, all descending, so equal start times remain deterministic.

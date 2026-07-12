@@ -2,7 +2,7 @@ import SQLiteData
 import SwiftUI
 
 struct ContentView: View {
-    @State private var router = Router()
+    @Bindable var router: Router
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
@@ -38,6 +38,9 @@ struct ContentView: View {
             AppointmentMessageView(id: request.appointmentID)
         }
         .environment(router)
+        .onOpenURL { url in
+            router.open(url)
+        }
     }
 
     private var appointmentMessageRequestBinding: Binding<AppointmentMessageRequest?> {
@@ -69,5 +72,5 @@ struct ContentView: View {
     let _ = try! prepareDependencies {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
-    ContentView()
+    ContentView(router: Router())
 }

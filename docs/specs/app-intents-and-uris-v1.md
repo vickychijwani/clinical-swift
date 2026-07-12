@@ -1,5 +1,5 @@
 ----
-status: pending
+status: implemented
 ----
 
 # App Intents & URIs v1

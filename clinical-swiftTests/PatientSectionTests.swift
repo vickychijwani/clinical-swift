@@ -99,8 +99,27 @@ struct PatientSectionTests {
             ])
     }
 
-    private func patient(name: String) -> PatientDetails {
-        PatientDetails(patient: Patient(name: name), nextAppointmentDate: nil)
+    @Test func externalPhoneFilterMatchesEverySuppliedNumberExactly() {
+        let first = patient(name: "Aarav Mehta", phone: "98201 44532")
+        let second = patient(name: "Mira Shah", phone: "+91 98201 44533")
+        let unrelated = patient(name: "Ishaan Puri", phone: "98201 44534")
+
+        let sections = PatientSection.sections(
+            from: [first, second, unrelated],
+            searchText: "+91 98201 44532, +91 98201 44533",
+            matchingPhoneNumbers: ["+919820144532", "+919820144533"]
+        )
+
+        #expect(
+            sections.flatMap(\.items).map(\.patient.name) == [
+                "Aarav Mehta",
+                "Mira Shah",
+            ]
+        )
+    }
+
+    private func patient(name: String, phone: String? = nil) -> PatientDetails {
+        PatientDetails(patient: Patient(name: name, phone: phone), nextAppointmentDate: nil)
     }
 
     private func unknownPatient(createdDate: Date) -> PatientDetails {

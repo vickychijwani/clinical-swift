@@ -250,6 +250,54 @@ struct RouterTests {
         #expect(request.patient == nil)
     }
 
+    @Test func bookingURLUsesTheParameterlessRouterRequest() throws {
+        let router = Router()
+        router.selectedTab = .patients
+
+        let wasHandled = router.open(
+            try #require(URL(string: "clinical://appointments/book"))
+        )
+
+        #expect(wasHandled)
+        #expect(router.selectedTab == .schedule)
+        #expect(router.appointmentBookingRequest?.patient == nil)
+    }
+
+    @Test func externalPatientSearchSelectsPatientsAndNormalizesPhones() throws {
+        let router = Router()
+        router.presentDetails(.appointment(UUID()))
+
+        router.openExternalPatientSearch(
+            phoneNumbers: ["98201 44532", "+91 98201 44533"]
+        )
+
+        #expect(router.selectedTab == .patients)
+        #expect(router.detailsPresentation == nil)
+        let request = try #require(router.patientSearchRequest)
+        #expect(request.phoneNumbers == ["+919820144532", "+919820144533"])
+
+        router.consumePatientSearchRequest(request.id)
+        #expect(router.patientSearchRequest == nil)
+    }
+
+    @Test func externalPatientSearchReplacesDetailsSuspendedBehindAnEditor() throws {
+        let router = Router()
+        let patient = Patient(name: "Aarav Mehta")
+        router.selectedTab = .schedule
+        router.presentDetails(.patient(patient.id))
+        router.requestPatientEdit(patient)
+
+        router.openExternalPatientSearch(phoneNumbers: ["98201 44532"])
+        router.detailsDidDismiss()
+        let editRequest = try #require(router.patientEditRequest)
+        router.consumePatientEditRequest(editRequest.id)
+        router.patientEditorDidDismiss()
+
+        #expect(router.selectedTab == .patients)
+        #expect(router.detailsPresentation == nil)
+        #expect(router.patientSearchRequest?.phoneNumbers == ["+919820144532"])
+    }
+
     @Test func patientEditRestoresExactDetailsHistoryWithoutChangingTabState() throws {
         let router = Router()
         let patient = Patient(name: "Aarav Mehta")
