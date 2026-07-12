@@ -69,6 +69,8 @@ Nice to haves:
 - [x] Action Sheets for Complete/Cancel/Discard prompts
 - [ ] First non-cancelled appointment should default to 15 min
 - [ ] Fun animated greetings with draw + gradient symbol animations
+- [ ] Remove striped pattern from break
+- [ ] Animations in empty spaces - resting cat or plant waving in the breeze
 - [ ] Variety of pastel or illustrated patient avatars
 - [ ] Style hour and now markers like iOS Cal app
 - [ ] Reduce visual weight of break, remove 8-9pm and possibly 9-9:30, 4-4:30 (anyway it's possible to schedule in breaks now)
