@@ -33,7 +33,7 @@ struct ScheduleView: View {
                     date: date,
                     appointments: visibleAppointments(for: date),
                     calendar: calendar,
-                    needsSheetClearance: needsSheetClearance,
+                    needsBookingClearance: bookingModel != nil,
                     appointmentInteractionsEnabled: bookingModel == nil,
                     scrollPosition: scrollPositionBinding(for: date),
                     onSelectAppointment: selectAppointment
@@ -89,9 +89,6 @@ struct ScheduleView: View {
                 })
             else { return }
 
-            // Let SwiftUI add sheet clearance before scrolling the selected appointment into view.
-            await Task.yield()
-            guard !Task.isCancelled else { return }
             scrollToAppointment(appointment)
         }
         // Update displayed appointments and re-calculate suggested slot for booking, if any
@@ -231,11 +228,6 @@ struct ScheduleView: View {
         TimelineScale(appointments: visibleAppointments(for: date))
     }
 
-    private var needsSheetClearance: Bool {
-        bookingModel != nil
-            || (router.selectedTab == .schedule && router.detailsPresentation != nil)
-    }
-
     private var visibleAppointmentDetailsID: Appointment.ID? {
         guard
             let presentation = router.detailsPresentation,
@@ -291,7 +283,7 @@ private struct ScheduleTimelinePage: View {
     let date: Date
     let appointments: [Appointment]
     let calendar: Calendar
-    let needsSheetClearance: Bool
+    let needsBookingClearance: Bool
     let appointmentInteractionsEnabled: Bool
     @Binding var scrollPosition: ScrollPosition
     let onSelectAppointment: (Appointment) -> Void
@@ -307,8 +299,8 @@ private struct ScheduleTimelinePage: View {
                     onSelectAppointment: onSelectAppointment
                 )
 
-                if needsSheetClearance {
-                    // Leave room to scroll late appointments above an interactable sheet.
+                if needsBookingClearance {
+                    // Leave room to scroll late appointments above the booking sheet.
                     Color.clear
                         .containerRelativeFrame(
                             .vertical,

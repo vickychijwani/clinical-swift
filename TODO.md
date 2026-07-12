@@ -53,7 +53,8 @@ Refactors:
 - [x] Extract reusable "auto-height" sheet component from AppointmentBooking sheet
 
 Bugs:
-- [ ] Remove timeline sheet clearance for details sheet - anyway it's modal now!
+- [x] Remove timeline sheet clearance for details sheet - anyway it's modal now!
+- [ ] Simplify Router behaviour - newly-triggered actions are always more critical/time-sensitive compared to whatever was on-screen - interrupting is better than queueing the request
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
 - [ ] Fitted sheet still resizes upon scroll, in patient edit sheet. Other sheets are fine (but they also don't have scrollable contents at the moment, I think, not sure).
 - [ ] When switching to a different date, selected appointment sheet should be dismissed (record a UX invariant: never show appointment details for date X on the schedule for date Y, to prevent user confusion). However, if navigation within sheet is used to go from appointment on date X -> patient -> appointment on date Y, then instead jump to date Y in schedule but keep the date X appointment in navigation history - and switch back to the date X schedule when navigating back to that appointment. In other words, bind the date strip to selected appointment at all times - and dismiss the sheet if the date is changed by selecting on the date strip directly.
@@ -61,26 +62,23 @@ Bugs:
 
 Observations from in-hand testing:
 - [ ] Would be nice to be able to click directly on the schedule and drag to adjust start time, in 5 or 15min increments
+  - [ ] Then organize Timeline into clearly-defined Z-stack layers for future extensibility - they are already separate, just organize them better
 
 Nice to haves:
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [x] Action Sheets for Complete/Cancel/Discard prompts
 - [ ] First non-cancelled appointment should default to 15 min
 - [ ] Fun animated greetings with draw + gradient symbol animations
-- [ ] Direct interactions with Timeline for appointment booking/reschedule
-  - [ ] First organize Timeline into clearly-defined Z-stack layers - they are already separate, just organize them better
 - [ ] Variety of pastel or illustrated patient avatars
 - [ ] Style hour and now markers like iOS Cal app
 - [ ] Reduce visual weight of break, remove 8-9pm and possibly 9-9:30, 4-4:30 (anyway it's possible to schedule in breaks now)
 - [x] Display appointments scheduled in break too
 - [ ] Add “today”, “yesterday”, “tomorrow” + day in header - or just subtly grey out past dates?
-- [ ] Appointment booking: Order patients by most recent appt first (most common usecase: scheduling a follow-up)
+- [ ] Appointment booking: Order patients by most recent appt + recently created first (most common usecase: scheduling a follow-up OR appt for new patient)
 - [ ] Quick-tag patients for follow-up, or interested in implants/etc from appointment view
 - [ ] Offer phone number selection if picked contact has multiple numbers
-- [ ] Jump to date?
-- [ ] Pre-fill appt time with next available slot (consider clinic opening times + booked slots + unbookable slots)
+- [ ] Jump to specific date?
 - [ ] Share phone number (without saving) to app, it will create contact (if shared contact doesn't have a name)
-- [ ] Add "Schedule appointment" button on patient details page - prefill patient when tapped
 - [ ] Merge patient A with patient B - when multiple patients are created accidentally (or due to a bug)
 - [ ] When contact with name + number is shared - open patient view page if already exists (name + number, fallback to just number) for quick appt scheduling, OR open patient edit page to create new pt
   - [ ] Offer selection if multiple patients have same number
