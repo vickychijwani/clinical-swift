@@ -19,6 +19,26 @@ struct AppIntentsTests {
         #expect(ClinicalURL(try #require(URL(string: "https://appointments/book"))) == nil)
     }
 
+    @Test func widgetURLsRoundTripAndRejectMalformedDestinations() throws {
+        let appointmentID = UUID()
+        let appointmentURL = try #require(ClinicalURL.appointment(appointmentID).url)
+        #expect(ClinicalURL(appointmentURL) == .appointment(appointmentID))
+
+        let day = try #require(ScheduleDay(year: 2026, month: 7, day: 13))
+        let scheduleURL = try #require(ClinicalURL.schedule(day).url)
+        #expect(scheduleURL.absoluteString == "clinical://schedule?date=2026-07-13")
+        #expect(ClinicalURL(scheduleURL) == .schedule(day))
+
+        #expect(ClinicalURL(try #require(URL(string: "clinical://appointments/not-a-uuid"))) == nil)
+        #expect(
+            ClinicalURL(try #require(URL(string: "clinical://schedule?date=2026-02-30"))) == nil)
+        #expect(
+            ClinicalURL(
+                try #require(URL(string: "clinical://schedule?date=2026-07-13&extra=1"))
+            ) == nil
+        )
+    }
+
     @Test func contactPhonesIncludePrimaryAndAliasesAndDiscardOtherHandles() {
         let person = IntentPerson(
             identifier: .contact("contact-id"),

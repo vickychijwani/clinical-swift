@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import OSLog
 import SQLiteData
 
@@ -22,10 +23,18 @@ func appDatabase(seedSamples: Bool = false) throws -> any DatabaseWriter {
         }
     #endif
 
-    let database = try defaultDatabase(configuration: configuration)
+    let database: any DatabaseWriter
+    if context == .live {
+        database = try ClinicalSharedDatabase.openWriter(
+            at: ClinicalSharedDatabase.databaseURL(),
+            configuration: configuration,
+            setup: migrateDatabase
+        )
+    } else {
+        database = try defaultDatabase(configuration: configuration)
+        try migrateDatabase(database)
+    }
     databaseLogger.debug("open '\(database.path)'")
-
-    try migrateDatabase(database)
 
     #if DEBUG
         if seedSamples, context != .test {

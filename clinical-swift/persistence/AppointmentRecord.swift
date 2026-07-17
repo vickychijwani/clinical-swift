@@ -67,16 +67,3 @@ nonisolated struct AppointmentRecord: Identifiable, Sendable {
         )
     }
 }
-
-extension Appointment.Status {
-    nonisolated init?(storageValue: String) {
-        guard let status = Self(rawValue: storageValue), status != .draft else {
-            return nil
-        }
-        self = status
-    }
-
-    nonisolated var persistedValue: String? {
-        self == .draft ? nil : rawValue
-    }
-}

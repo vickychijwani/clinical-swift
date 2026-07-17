@@ -2,7 +2,7 @@ import SwiftUI
 
 extension View {
     func styleAppointmentTime() -> some View {
-        self.modifier(
+        modifier(
             AppTextStyleModifier(
                 font: .system(size: 12, weight: .semibold)
                     .monospacedDigit(),
@@ -13,7 +13,7 @@ extension View {
     }
 
     func styleSectionTitle() -> some View {
-        self.modifier(
+        modifier(
             AppTextStyleModifier(
                 font: .caption.bold(),
                 style: .secondary,
@@ -23,19 +23,15 @@ extension View {
     }
 
     func styleFormPicker() -> some View {
-        self.modifier(
-            AppTextStyleModifier(font: .system(size: 16, weight: .regular))
-        )
+        modifier(AppTextStyleModifier(font: .system(size: 16, weight: .regular)))
     }
 
     func styleBodyBold() -> some View {
-        self.modifier(
-            AppTextStyleModifier(font: .system(size: 14, weight: .semibold))
-        )
+        modifier(AppTextStyleModifier(font: .system(size: 14, weight: .semibold)))
     }
 
     func styleCaption() -> some View {
-        self.modifier(
+        modifier(
             AppTextStyleModifier(
                 font: .system(size: 12, weight: .regular),
                 style: .secondary
@@ -45,14 +41,11 @@ extension View {
 }
 
 struct AppTextStyleModifier: ViewModifier {
-    var font: Font? = nil
-    var style: AnyShapeStyle? = nil
-    var color: Color? = nil
-
-    /// Letter spacing.
-    var tracking: Double? = nil
-
-    var textCase: Text.Case? = nil
+    var font: Font?
+    var style: AnyShapeStyle?
+    var color: Color?
+    var tracking: Double?
+    var textCase: Text.Case?
 
     init(
         font: Font,
@@ -62,7 +55,7 @@ struct AppTextStyleModifier: ViewModifier {
     ) {
         self.font = font
         self.color = color
-        self.style = nil
+        style = nil
         self.tracking = tracking
         self.textCase = textCase
     }
@@ -74,19 +67,15 @@ struct AppTextStyleModifier: ViewModifier {
         textCase: Text.Case? = nil
     ) {
         self.font = font
-        self.color = nil
+        color = nil
         self.style = AnyShapeStyle(style)
         self.tracking = tracking
         self.textCase = textCase
     }
 
     private var resolvedStyle: AnyShapeStyle {
-        if let style {
-            return style
-        }
-        if let color {
-            return AnyShapeStyle(color)
-        }
+        if let style { return style }
+        if let color { return AnyShapeStyle(color) }
         return AnyShapeStyle(.primary)
     }
 

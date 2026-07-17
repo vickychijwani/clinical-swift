@@ -73,6 +73,13 @@ struct ScheduleView: View {
             guard let request = router.appointmentBookingRequest else { return }
             startBooking(request)
         }
+        .task(id: router.scheduleDateRequest?.id) {
+            guard let request = router.scheduleDateRequest else { return }
+            if let date = request.day.date(using: calendar) {
+                scheduleModel.selectedDate = date
+            }
+            router.consumeScheduleDateRequest(request.id)
+        }
         .task(id: bookingModel?.id) {
             guard bookingModel != nil else { return }
 

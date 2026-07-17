@@ -16,6 +16,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfre
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
 - Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
 - Test structure, dependency overrides, and async database access: `docs/testing.md`
+- WidgetKit, App Group database access, timeline refresh, exact-fit layout, and widget routing: `docs/widgets.md`
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 

@@ -45,8 +45,7 @@ XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
 	-derivedDataPath "$(DERIVED_DATA)" \
 	-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
 	-disableAutomaticPackageResolution \
-    -skipPackageUpdates \
-	CODE_SIGNING_ALLOWED=NO
+	-skipPackageUpdates
 XCODEBUILD_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
 UNIT_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO
 UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)"

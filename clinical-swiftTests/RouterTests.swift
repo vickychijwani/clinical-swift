@@ -432,6 +432,36 @@ struct RouterTests {
         #expect(router.detailsPresentation?.path == [])
     }
 
+    @Test func widgetAppointmentURLUsesExternalDetailsRouting() throws {
+        let router = Router()
+        let appointmentID = UUID()
+        let url = try #require(ClinicalURL.appointment(appointmentID).url)
+
+        #expect(router.open(url))
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation?.root == .appointment(appointmentID))
+    }
+
+    @Test func widgetScheduleURLReplacesDetailsAndPublishesConsumableDateRequest() throws {
+        let router = Router()
+        router.selectedTab = .patients
+        router.presentDetails(.patient(UUID()))
+        let day = try #require(ScheduleDay(year: 2026, month: 7, day: 13))
+        let url = try #require(ClinicalURL.schedule(day).url)
+
+        #expect(router.open(url))
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation == nil)
+        #expect(router.scheduleDateRequest?.day == day)
+
+        router.consumeScheduleDateRequest(UUID())
+        #expect(router.scheduleDateRequest != nil)
+
+        let requestID = try #require(router.scheduleDateRequest?.id)
+        router.consumeScheduleDateRequest(requestID)
+        #expect(router.scheduleDateRequest == nil)
+    }
+
     private func appointmentDetails(id: Appointment.ID = UUID()) -> AppointmentDetails {
         let date = Date(timeIntervalSince1970: 0)
         let patient = Patient(name: "Aarav Mehta", createdDate: date)

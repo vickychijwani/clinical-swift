@@ -2,27 +2,6 @@ import AppIntents
 import Foundation
 import SQLiteData
 
-nonisolated enum ClinicalURL: Equatable {
-    case bookAppointment
-
-    init?(_ url: URL) {
-        guard
-            url.scheme?.lowercased() == "clinical",
-            url.host?.lowercased() == "appointments",
-            url.path == "/book",
-            url.user == nil,
-            url.password == nil,
-            url.port == nil,
-            url.query == nil,
-            url.fragment == nil
-        else {
-            return nil
-        }
-
-        self = .bookAppointment
-    }
-}
-
 @MainActor
 final class ClinicalAppActions {
     private let router: Router

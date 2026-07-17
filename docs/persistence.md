@@ -21,6 +21,13 @@ Although sync is not yet implemented, note these invariants related to sync (app
 
 General invariants:
 
+- The live database resides in the `group.in.bitehaus.clinical` App Group so the WidgetKit
+  extension can read it. The app remains the only migration and write owner; extensions open a
+  coordinated read-only pool and never create or migrate the database.
+- Shared database connections use persistent WAL mode and `NSFileCoordinator`. Do not replace this
+  with an uncoordinated read-only connection: read-only processes cannot recreate missing WAL/SHM
+  sidecars, and cross-process opening has additional file-locking constraints.
+
 - Domain structs remain separate from database records. `Patient` and `Appointment` are UI-facing values; `PatientRecord` and `AppointmentRecord` define the SQLite boundary.
 - Typed read selections should nest complete record values alongside aggregates or joined records. This keeps query projections aligned with table schemas and avoids duplicating record construction field by field.
 - StructuredQueries expressions can overwhelm Swift's type checker after a join. Apply single-table filtering, grouping, and ordering before the join when semantics allow, and use one named intermediate query to establish the simpler generic type.

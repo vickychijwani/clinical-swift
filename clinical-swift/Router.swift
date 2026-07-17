@@ -23,6 +23,7 @@ final class Router {
     private(set) var appointmentMessageRequest: AppointmentMessageRequest?
     private(set) var patientEditRequest: PatientEditRequest?
     private(set) var patientSearchRequest: PatientSearchRequest?
+    private(set) var scheduleDateRequest: ScheduleDateRequest?
 
     private var pendingSheetHandoff: PendingSheetHandoff?
     private var suspendedDetailsSession: SuspendedDetailsSession?
@@ -87,8 +88,16 @@ final class Router {
 
     @discardableResult
     func open(_ url: URL) -> Bool {
-        guard ClinicalURL(url) == .bookAppointment else { return false }
-        requestAppointmentBooking()
+        guard let clinicalURL = ClinicalURL(url) else { return false }
+
+        switch clinicalURL {
+        case .bookAppointment:
+            requestAppointmentBooking()
+        case .appointment(let id):
+            openExternalDetails(.appointment(id))
+        case .schedule(let day):
+            openExternalSchedule(day)
+        }
         return true
     }
 
@@ -169,6 +178,11 @@ final class Router {
         patientSearchRequest = nil
     }
 
+    func consumeScheduleDateRequest(_ requestID: ScheduleDateRequest.ID) {
+        guard scheduleDateRequest?.id == requestID else { return }
+        scheduleDateRequest = nil
+    }
+
     func appointmentEditorDidDismiss() {
         guard activeSheetSession == .appointment else { return }
         activeSheetSession = nil
@@ -227,6 +241,13 @@ final class Router {
         suspendedDetailsSession = nil
         dismissDetails()
         patientSearchRequest = PatientSearchRequest(phoneNumbers: normalizedPhoneNumbers)
+    }
+
+    func openExternalSchedule(_ day: ScheduleDay) {
+        selectedTab = .schedule
+        suspendedDetailsSession = nil
+        dismissDetails()
+        scheduleDateRequest = ScheduleDateRequest(day: day)
     }
 
     func openPatient(_ id: UUID, in tab: AppTab?) {
@@ -343,6 +364,15 @@ nonisolated struct PatientEditRequest: Identifiable, Equatable, Sendable {
 nonisolated struct PatientSearchRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
     let phoneNumbers: Set<String>
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+nonisolated struct ScheduleDateRequest: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    let day: ScheduleDay
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id

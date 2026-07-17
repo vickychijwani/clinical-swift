@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated struct Patient: Identifiable, Hashable, Sendable {
-    static let unknownDisplayName = "Unknown Patient"
+    static let unknownDisplayName = PatientDisplayName.unknown
 
     let id: UUID
     let name: String?
@@ -34,7 +34,7 @@ nonisolated struct Patient: Identifiable, Hashable, Sendable {
     }
 
     var displayName: String {
-        name ?? Self.unknownDisplayName
+        PatientDisplayName.resolve(name)
     }
 
     var isUnknown: Bool {
