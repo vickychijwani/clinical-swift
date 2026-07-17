@@ -54,6 +54,7 @@ Refactors:
 
 Bugs:
 - [x] Remove timeline sheet clearance for details sheet - anyway it's modal now!
+- [ ] Opening appointment details via widget opens on today/existing selected date rather than appt date
 - [ ] Simplify Router behaviour - newly-triggered actions are always more critical/time-sensitive compared to whatever was on-screen - interrupting is better than queueing the request
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
 - [ ] Fitted sheet still resizes upon scroll, in patient edit sheet. Other sheets are fine (but they also don't have scrollable contents at the moment, I think, not sure).
@@ -68,6 +69,7 @@ Nice to haves:
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [x] Action Sheets for Complete/Cancel/Discard prompts
 - [ ] First non-cancelled appointment should default to 15 min
+- [ ] Warning in appointment booking for time in past
 - [ ] Fun animated greetings with draw + gradient symbol animations
 - [ ] Remove striped pattern from break
 - [ ] Animations in empty spaces - resting cat or plant waving in the breeze
