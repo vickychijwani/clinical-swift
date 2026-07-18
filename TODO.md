@@ -69,6 +69,7 @@ Observations from in-hand testing:
 Nice to haves:
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [x] Action Sheets for Complete/Cancel/Discard prompts
+- [ ] Quick-add patient button in appointment booking isn't intuitive - should be shown as a search result
 - [ ] First non-cancelled appointment should default to 15 min
 - [ ] Warning in appointment booking for time in past
 - [ ] Fun animated greetings with draw + gradient symbol animations
@@ -105,6 +106,36 @@ Nice to haves:
 - [ ] Automatically read incoming/outgoing transaction notifications from Gmail? You can even create a simple Google Workspace MCP server [directly with Google Apps Script](https://github.com/tanaikech/MCPApp)! Show a card like "Review detected payments" and let user select which ones should be recorded, edit them in-line, or dismiss
 - [ ] Photo(s) of bills for outgoing payments (note: there may be more than 1)
 - [ ] Auto-populate outgoing payment from bill photo
+
+High-level structure suggested by ChatGPT: https://chatgpt.com/share/6a5fb3c9-f710-83e8-a54d-d1d5a4580a77
+
+> Keep the imported bank event separate from the business record:
+> A bank transaction is evidence that money moved; a Clinical payment explains why it moved
+
+```
+struct BankTransaction {
+    var id: UUID
+    var provider: BankDataProvider
+    var externalID: String?
+    var bankReference: String?
+    var postedAt: Date
+    var amount: Decimal
+    var direction: Direction
+    var narration: String
+    var status: Status
+    var reconciliationStatus: ReconciliationStatus
+    var rawPayloadHash: String
+}
+
+struct Payment {
+    var id: UUID
+    var patientID: Patient.ID?
+    var appointmentID: Appointment.ID?
+    var amount: Decimal
+    var method: PaymentMethod
+    var bankTransactionID: BankTransaction.ID?
+}
+```
 
 ## M2.1: iPad optimized
 - [ ] Clinic dashboard - appointments, patient records, and payments
