@@ -1,19 +1,11 @@
 import Foundation
 import SQLiteData
 
+/// A query-backed cache for explicitly requested schedule days. Selection intentionally belongs to
+/// `Router`, because external appointment and schedule entry points must update the visible day too.
 @MainActor @Observable class ScheduleModel {
-    var selectedDate: Date
-
     @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @FetchAll(AppointmentPatientSelection.none) private var appointmentRows
-
-    init(selectedDate: Date) {
-        self.selectedDate = selectedDate.startOfDay()
-    }
-
-    var appointments: [Appointment] {
-        appointments(for: selectedDate)
-    }
 
     func appointments(for date: Date) -> [Appointment] {
         let selectedDate = date.startOfDay(using: calendar)
@@ -27,16 +19,8 @@ import SQLiteData
         appointmentRows.first(where: { $0.id == appointment.id })?.details
     }
 
-    func load(dayRadius: Int) async throws {
-        try await loadVisibleDays(centeredOn: selectedDate, dayRadius: dayRadius)
-    }
-
     func loadVisibleDays(centeredOn date: Date, dayRadius: Int) async throws {
         let centerDate = date.startOfDay(using: calendar)
-        guard calendar.isDate(centerDate, inSameDayAs: selectedDate) else {
-            return
-        }
-
         try await $appointmentRows.load(
             queryScheduleWindow(centeredOn: centerDate, dayRadius: dayRadius)
         )

@@ -9,7 +9,6 @@ struct PatientsView: View {
     @State private var searchText = ""
     @State private var externalPhoneNumbers: Set<String>?
     @State private var externalSearchText: String?
-    @State private var isAddingPatient = false
 
     var body: some View {
         PatientList(
@@ -29,12 +28,9 @@ struct PatientsView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Add", systemImage: "plus") {
-                    isAddingPatient = true
+                    router.requestPatientCreation()
                 }
             }
-        }
-        .sheet(isPresented: $isAddingPatient) {
-            EditPatientView()
         }
         .task(id: router.patientSearchRequest?.id) {
             guard let request = router.patientSearchRequest else { return }

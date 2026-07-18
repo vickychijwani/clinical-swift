@@ -19,23 +19,32 @@ struct ContentView: View {
             }
         }
         .sheet(
-            item: $router.detailsPresentation,
-            onDismiss: router.detailsDidDismiss
+            item: detailsPresentationBinding,
+            onDismiss: router.presentationDidDismiss
         ) { presentation in
             DetailsFlowSheet(presentation: presentation)
                 .id(presentation.id)
+                .onAppear {
+                    router.presentationDidAppear(presentation.id)
+                }
         }
         .sheet(
             item: patientEditRequestBinding,
-            onDismiss: router.patientEditorDidDismiss
+            onDismiss: router.presentationDidDismiss
         ) { request in
             EditPatientView(patient: request.patient)
+                .onAppear {
+                    router.presentationDidAppear(request.id)
+                }
         }
         .sheet(
             item: appointmentMessageRequestBinding,
-            onDismiss: router.appointmentMessageDidDismiss
+            onDismiss: router.presentationDidDismiss
         ) { request in
             AppointmentMessageView(id: request.appointmentID)
+                .onAppear {
+                    router.presentationDidAppear(request.id)
+                }
         }
         .environment(router)
         .onOpenURL { url in
@@ -43,26 +52,29 @@ struct ContentView: View {
         }
     }
 
+    private var detailsPresentationBinding: Binding<DetailsPresentation?> {
+        presentationBinding(get: { router.detailsPresentation })
+    }
+
     private var appointmentMessageRequestBinding: Binding<AppointmentMessageRequest?> {
-        Binding(
-            get: { router.appointmentMessageRequest },
-            set: { newValue in
-                guard newValue == nil, let requestID = router.appointmentMessageRequest?.id else {
-                    return
-                }
-                router.consumeAppointmentMessageRequest(requestID)
-            }
-        )
+        presentationBinding(get: { router.appointmentMessageRequest })
     }
 
     private var patientEditRequestBinding: Binding<PatientEditRequest?> {
+        presentationBinding(get: { router.patientEditRequest })
+    }
+
+    private func presentationBinding<Value: Identifiable>(
+        get: @escaping @MainActor @Sendable () -> Value?
+    ) -> Binding<Value?> {
+        // These values are projections of Router.activePresentation, not independent sheet state.
+        // Route a sheet's nil write-back through the router so it can distinguish user dismissal
+        // from an in-progress replacement and preserve the single-presentation invariant.
         Binding(
-            get: { router.patientEditRequest },
+            get: get,
             set: { newValue in
-                guard newValue == nil, let requestID = router.patientEditRequest?.id else {
-                    return
-                }
-                router.consumePatientEditRequest(requestID)
+                guard newValue == nil else { return }
+                router.dismissPresentation()
             }
         )
     }

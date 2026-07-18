@@ -14,13 +14,13 @@ This document captures the deliberate constraints an agent is likely to break wh
 - Appointment details fit the sheet to their content so the schedule remains visible. Only this step allows interaction with the schedule behind the sheet.
 - The booking sheet is not manually resizable or swipe-dismissible. Explicit toolbar actions keep step changes and discard confirmation intentional.
 - Creating and editing share one scheduling flow. Edit mode starts on appointment details because rescheduling is the common path, while Back still permits changing the patient.
-- Appointment editing is coordinated by the Schedule tab. Entry points from a details flow suspend that presentation and its originating tab, dismiss it, and present the editor only after dismissal so sheets never compete for presentation.
-- Starting a booking from patient details follows the same Schedule-owned handoff, with that patient preselected. Saving or cancelling restores the suspended details route, navigation history, and originating tab.
+- Appointment editing is coordinated by the Schedule tab. Entry points from a details flow permanently replace that presentation, select the appointment's day, and present the editor only after dismissal so sheets never compete for presentation.
+- Starting a booking from patient details follows the same Schedule-owned handoff, with that patient preselected. The interrupted details route and navigation history are discarded rather than restored after booking ends.
 - Patient creation from the booking patient search is an in-context nested form, not a router handoff. Prefill the new patient name from the current search text, and only mutate the booking draft after patient save succeeds. Cancelling the patient form or hitting a patient-save error must leave the booking search, selected patient, date, time, duration, and step as they were before creation started.
-- Saving or cancelling an edit restores the suspended details root and navigation history on its originating tab. Scroll position and sheet detent are transient and return to their normal defaults.
+- Saving or cancelling an edit returns to the Schedule tab without restoring the interrupted details flow. The saved appointment date remains selected.
 - While editing, render one draft preview and omit the persisted version of that appointment. Keeping both would duplicate the appointment and make availability suggestions treat it as its own conflict.
 - Opening an existing appointment for editing must preserve its saved time exactly. Automatic prefilling remains creation and subsequent date or duration change behavior, not edit initialization behavior.
-- Saving an edit updates the existing appointment identity and preserves its status and creation timestamp. Schedule refreshes the saved date before the suspended details presentation returns.
+- Saving an edit updates the existing appointment identity and preserves its status and creation timestamp. Schedule refreshes and selects the saved date before the editor closes.
 
 ## Do Not Reintroduce
 

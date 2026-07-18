@@ -17,7 +17,7 @@ struct ScheduleView: View {
     @State private var scrollPosition = ScrollPosition()
 
     init() {
-        scheduleModel = ScheduleModel(selectedDate: Date.now)
+        scheduleModel = ScheduleModel()
     }
 
     var body: some View {
@@ -42,7 +42,7 @@ struct ScheduleView: View {
         }
         .background(Color("AppBackground"))
         .navigationTitle(
-            scheduleModel.selectedDate.formatted(
+            router.selectedScheduleDate.formatted(
                 .dateTime
                     .weekday()
                     .month()
@@ -54,31 +54,33 @@ struct ScheduleView: View {
                 // Display '+' button only if we're not already booking an appointment
                 if bookingModel == nil {
                     Button("Add", systemImage: "plus") {
-                        startBooking()
+                        router.requestAppointmentBooking()
                     }
                 }
             }
         }
         .sheet(
             item: $bookingModel,
-            onDismiss: router.appointmentEditorDidDismiss
+            onDismiss: router.presentationDidDismiss
         ) { bookingModel in
             AppointmentBookingView(model: bookingModel)
+                .onAppear {
+                    guard let presentationID = appointmentEditorRequest?.id else { return }
+                    router.presentationDidAppear(presentationID)
+                }
         }
-        .task(id: router.appointmentEditRequest?.id) {
-            guard let request = router.appointmentEditRequest else { return }
-            startEditing(request)
-        }
-        .task(id: router.appointmentBookingRequest?.id) {
-            guard let request = router.appointmentBookingRequest else { return }
-            startBooking(request)
-        }
-        .task(id: router.scheduleDateRequest?.id) {
-            guard let request = router.scheduleDateRequest else { return }
-            if let date = request.day.date(using: calendar) {
-                scheduleModel.selectedDate = date
+        .task(id: appointmentEditorRequest?.id) {
+            guard let appointmentEditorRequest else {
+                bookingModel = nil
+                return
             }
-            router.consumeScheduleDateRequest(request.id)
+
+            switch appointmentEditorRequest {
+            case .booking(let request):
+                startBooking(request)
+            case .edit(let request):
+                startEditing(request)
+            }
         }
         .task(id: bookingModel?.id) {
             guard bookingModel != nil else { return }
@@ -88,19 +90,12 @@ struct ScheduleView: View {
             guard !Task.isCancelled else { return }
             scrollToDraftAppointment()
         }
-        .task(id: visibleAppointmentDetailsID) {
-            guard
-                let visibleAppointmentDetailsID,
-                let appointment = scheduleModel.appointments.first(where: {
-                    $0.id == visibleAppointmentDetailsID
-                })
-            else { return }
-
-            scrollToAppointment(appointment)
+        .task(id: visibleAppointmentDetailsScrollRequest) {
+            scrollToVisibleAppointmentDetails()
         }
         // Update displayed appointments and re-calculate suggested slot for booking, if any
-        .task(id: scheduleModel.selectedDate) {
-            let requestedDate = scheduleModel.selectedDate
+        .task(id: router.selectedScheduleDate) {
+            let requestedDate = router.selectedScheduleDate
             do {
                 try await scheduleModel.loadVisibleDays(
                     centeredOn: requestedDate,
@@ -109,10 +104,12 @@ struct ScheduleView: View {
 
                 // If date selection has changed after async load completion, stop here.
                 guard !Task.isCancelled,
-                    requestedDate.isSameDayAs(scheduleModel.selectedDate)
+                    requestedDate.isSameDayAs(router.selectedScheduleDate)
                 else {
                     return
                 }
+
+                scrollToVisibleAppointmentDetails()
 
                 if let bookingModel {
                     bookingModel.updateAppointments(
@@ -142,14 +139,14 @@ struct ScheduleView: View {
     /// model triggers the layout-aware preview scroll above.
     private func startBooking(selectedPatient: Patient? = nil) {
         let bookingModel = AppointmentBookingModel(
-            selectedDate: scheduleModel.selectedDate,
+            selectedDate: router.selectedScheduleDate,
             selectedPatient: selectedPatient
         ) { bookedDate in
             refreshAppointments(for: bookedDate)
         }
         bookingModel.updateAppointments(
-            scheduleModel.appointments(for: scheduleModel.selectedDate),
-            for: scheduleModel.selectedDate
+            scheduleModel.appointments(for: router.selectedScheduleDate),
+            for: router.selectedScheduleDate
         )
         bookingModel.prefillFirstAvailableSlot()
 
@@ -161,7 +158,6 @@ struct ScheduleView: View {
     private func startBooking(_ request: AppointmentBookingRequest) {
         guard router.appointmentBookingRequest?.id == request.id else { return }
         startBooking(selectedPatient: request.patient)
-        router.consumeAppointmentBookingRequest(request.id)
     }
 
     private func startEditing(_ request: AppointmentEditRequest) {
@@ -170,31 +166,23 @@ struct ScheduleView: View {
         // Use the details that were already visible so the editor can start without another read.
         // Saving still validates the current stored appointment before writing.
         let details = request.details
-        let wasShowingAppointmentDate = details.appointment.start.isSameDayAs(
-            scheduleModel.selectedDate
-        )
-        scheduleModel.selectedDate = details.appointment.start.startOfDay(using: calendar)
-
         let bookingModel = AppointmentBookingModel(editing: details) { savedDate in
             refreshAppointments(for: savedDate)
         }
-        // If the date changed, these appointments still belong to the previous day. The
-        // date-keyed load task will update the booking model after loading the correct day.
-        if wasShowingAppointmentDate {
-            bookingModel.updateAppointments(
-                scheduleModel.appointments(for: scheduleModel.selectedDate),
-                for: scheduleModel.selectedDate
-            )
-        }
+        bookingModel.updateAppointments(
+            scheduleModel.appointments(for: router.selectedScheduleDate),
+            for: router.selectedScheduleDate
+        )
 
         self.bookingModel = bookingModel
-        router.consumeAppointmentEditRequest(request.id)
     }
 
     private var selectedDateBinding: Binding<Date> {
+        // Booking temporarily owns its draft date. Outside booking, always mutate the router's
+        // app-level selection so direct UI changes and external routing cannot diverge.
         Binding(
             get: {
-                bookingModel?.selectedDate ?? scheduleModel.selectedDate
+                bookingModel?.selectedDate ?? router.selectedScheduleDate
             },
             set: { newDate in
                 selectDate(newDate)
@@ -204,12 +192,24 @@ struct ScheduleView: View {
 
     private func selectDate(_ date: Date) {
         let selectedDate = date.startOfDay(using: calendar)
-        scheduleModel.selectedDate = selectedDate
+        router.selectScheduleDate(selectedDate)
         bookingModel?.selectDate(selectedDate)
     }
 
     private var activeBookingDate: Date? {
         bookingModel?.selectedDate
+    }
+
+    private var appointmentEditorRequest: AppointmentEditorRequest? {
+        // Booking and editing share one sheet host, but remain mutually exclusive cases of the
+        // router's single active presentation rather than separate pending requests.
+        if let request = router.appointmentBookingRequest {
+            .booking(request)
+        } else if let request = router.appointmentEditRequest {
+            .edit(request)
+        } else {
+            nil
+        }
     }
 
     private var draftPreviewScrollRequest: Int {
@@ -244,12 +244,20 @@ struct ScheduleView: View {
         return id
     }
 
+    private var visibleAppointmentDetailsScrollRequest: AppointmentDetailsScrollRequest? {
+        guard let visibleAppointmentDetailsID else { return nil }
+        return AppointmentDetailsScrollRequest(
+            appointmentID: visibleAppointmentDetailsID,
+            selectedDate: router.selectedScheduleDate
+        )
+    }
+
     private func selectAppointment(_ appointment: Appointment) {
         router.presentDetails(.appointment(appointment.id))
     }
 
     private func refreshAppointments(for date: Date) {
-        scheduleModel.selectedDate = date.startOfDay(using: calendar)
+        router.selectScheduleDate(date)
         bookingModel = nil
         Task {
             _ = try? await scheduleModel.loadVisibleDays(
@@ -267,6 +275,17 @@ struct ScheduleView: View {
         scrollToAppointment(bookingModel.draftAppointment)
     }
 
+    private func scrollToVisibleAppointmentDetails() {
+        guard
+            let visibleAppointmentDetailsID,
+            let appointment = scheduleModel.appointments(
+                for: router.selectedScheduleDate
+            ).first(where: { $0.id == visibleAppointmentDetailsID })
+        else { return }
+
+        scrollToAppointment(appointment)
+    }
+
     private func scrollToAppointment(_ appointment: Appointment) {
         withAnimation(.easeInOut(duration: 0.2)) {
             scrollPosition.scrollTo(y: max(timelineScrollY(for: appointment.start), 0))
@@ -274,15 +293,34 @@ struct ScheduleView: View {
     }
 
     private func timelineScrollY(for start: Date) -> CGFloat {
-        timelineScale(for: scheduleModel.selectedDate).yOffset(for: start.timeOfDay) - 80
+        timelineScale(for: router.selectedScheduleDate).yOffset(for: start.timeOfDay) - 80
     }
 
     private func scrollPositionBinding(for date: Date) -> Binding<ScrollPosition> {
-        guard date.isSameDayAs(scheduleModel.selectedDate) else {
+        guard date.isSameDayAs(router.selectedScheduleDate) else {
             return .constant(ScrollPosition())
         }
 
         return $scrollPosition
+    }
+}
+
+private struct AppointmentDetailsScrollRequest: Equatable {
+    let appointmentID: Appointment.ID
+    let selectedDate: Date
+}
+
+private enum AppointmentEditorRequest: Identifiable {
+    case booking(AppointmentBookingRequest)
+    case edit(AppointmentEditRequest)
+
+    var id: UUID {
+        switch self {
+        case .booking(let request):
+            request.id
+        case .edit(let request):
+            request.id
+        }
     }
 }
 

@@ -1,15 +1,18 @@
+import Dependencies
 import Foundation
 import Testing
 
 @testable import clinical_swift
 
+@MainActor
 struct RouterTests {
-    @Test func patientTimelineNavigationPreservesRepeatedRoutes() {
-        let router = Router()
+    @Test func detailsHistoryPreservesRepeatedRoutes() throws {
+        let router = makeRouter()
         let patientID = UUID()
         let appointmentID = UUID()
 
         router.presentDetails(.patient(patientID))
+        let presentationID = try #require(router.detailsPresentation?.id)
         router.pushDetails(.appointment(appointmentID))
         router.pushDetails(.patient(patientID))
 
@@ -20,44 +23,26 @@ struct RouterTests {
                 .patient(patientID),
             ]
         )
+
+        router.setDetailsPath([.appointment(appointmentID)], presentationID: presentationID)
+        #expect(router.detailsPresentation?.currentRoute == .appointment(appointmentID))
     }
 
-    @Test func detailsHistoryPreservesRepeatedRoutesAndTabState() throws {
-        let router = Router()
+    @Test func detailsPathMutationRequiresTheActivePresentationIdentity() throws {
+        let router = makeRouter()
+        router.presentDetails(.patient(UUID()))
+        let activeID = try #require(router.detailsPresentation?.id)
+
+        router.setDetailsPath([.appointment(UUID())], presentationID: UUID())
+        #expect(router.detailsPresentation?.path == [])
+
         let appointmentID = UUID()
-        let patientID = UUID()
-        let schedulePath: [Route] = [.patient(UUID())]
-        let patientsPath: [Route] = [.appointment(UUID())]
-        router.selectedTab = .schedule
-        router.schedulePath = schedulePath
-        router.patientsPath = patientsPath
-
-        router.presentDetails(.appointment(appointmentID))
-        let presentationID = try #require(router.detailsPresentation?.id)
-        router.pushDetails(.patient(patientID))
-        router.pushDetails(.appointment(appointmentID))
-
-        #expect(router.detailsPresentation?.id == presentationID)
-        #expect(router.detailsPresentation?.root == .appointment(appointmentID))
-        #expect(
-            router.detailsPresentation?.path == [
-                .patient(patientID),
-                .appointment(appointmentID),
-            ]
-        )
-        #expect(router.selectedTab == .schedule)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
-    }
-
-    @Test func detailsPushRequiresAnActivePresentation() {
-        let router = Router()
-        router.pushDetails(.patient(UUID()))
-        #expect(router.detailsPresentation == nil)
+        router.setDetailsPath([.appointment(appointmentID)], presentationID: activeID)
+        #expect(router.detailsPresentation?.path == [.appointment(appointmentID)])
     }
 
     @Test func presentingDetailsAgainReusesTheSessionAndReplacesHistory() throws {
-        let router = Router()
+        let router = makeRouter()
         router.presentDetails(.appointment(UUID()))
         router.pushDetails(.patient(UUID()))
         let presentationID = try #require(router.detailsPresentation?.id)
@@ -70,410 +55,358 @@ struct RouterTests {
         #expect(router.detailsPresentation?.path == [])
     }
 
-    @Test func dismissDetailsClearsTheCompletePresentation() {
-        let router = Router()
-        router.presentDetails(.appointment(UUID()))
-        router.pushDetails(.patient(UUID()))
+    @Test func changingTheScheduleDateDismissesDetailsButSelectingTheSameDayDoesNot() throws {
+        let calendar = gregorianCalendar
+        let selectedDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
+        let sameDay = try Date("2026-07-18T15:00:00Z", strategy: .iso8601)
+        let nextDay = try Date("2026-07-19T00:00:00Z", strategy: .iso8601)
 
-        router.dismissDetails()
+        withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let router = makeRouter(selectedScheduleDate: selectedDate)
+            router.presentDetails(.appointment(UUID()))
+            if let presentationID = router.detailsPresentation?.id {
+                router.presentationDidAppear(presentationID)
+            }
 
-        #expect(router.detailsPresentation == nil)
-    }
+            router.selectScheduleDate(sameDay)
+            #expect(router.detailsPresentation != nil)
 
-    @Test func externalDetailsReplaceHistoryAndSelectTheUnderlyingTab() throws {
-        let router = Router()
-        router.presentDetails(.appointment(UUID()))
-        router.pushDetails(.patient(UUID()))
-        let previousID = try #require(router.detailsPresentation?.id)
-        let patientID = UUID()
+            router.selectScheduleDate(nextDay)
+            #expect(router.selectedScheduleDate == nextDay)
+            #expect(router.detailsPresentation == nil)
 
-        router.openExternalDetails(.patient(patientID))
-
-        #expect(router.selectedTab == .patients)
-        #expect(router.detailsPresentation?.id == previousID)
-        #expect(router.detailsPresentation?.root == .patient(patientID))
-        #expect(router.detailsPresentation?.path == [])
-
-        let patientPresentationID = try #require(router.detailsPresentation?.id)
-        let appointmentID = UUID()
-        router.openExternalDetails(.appointment(appointmentID))
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation?.id == patientPresentationID)
-        #expect(router.detailsPresentation?.root == .appointment(appointmentID))
-        #expect(router.detailsPresentation?.path == [])
-    }
-
-    @Test func appointmentEditSuspendsDetailsUntilEditorDismissal() throws {
-        let router = Router()
-        let appointmentID = UUID()
-        let details = appointmentDetails(id: appointmentID)
-        let schedulePath: [Route] = [.patient(UUID())]
-        let patientsPath: [Route] = [.appointment(UUID())]
-        let detailsPath: [Route] = [.patient(UUID()), .appointment(appointmentID)]
-        router.selectedTab = .patients
-        router.schedulePath = schedulePath
-        router.patientsPath = patientsPath
-        router.presentDetails(.appointment(appointmentID))
-        for route in detailsPath {
-            router.pushDetails(route)
+            router.presentationDidDismiss()
+            #expect(router.activePresentation?.id == nil)
         }
-        let presentation = try #require(router.detailsPresentation)
-
-        router.requestAppointmentEdit(details)
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation == nil)
-        #expect(router.appointmentEditRequest == nil)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
-
-        router.detailsDidDismiss()
-
-        #expect(router.appointmentEditRequest?.appointmentID == appointmentID)
-        #expect(router.appointmentEditRequest?.details.patient.id == details.patient.id)
-
-        let requestID = try #require(router.appointmentEditRequest?.id)
-        router.consumeAppointmentEditRequest(requestID)
-        router.appointmentEditorDidDismiss()
-
-        #expect(router.selectedTab == .patients)
-        #expect(router.detailsPresentation === presentation)
-        #expect(router.detailsPresentation?.path == detailsPath)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
     }
 
-    @Test func appointmentEditRequestsAreUniquelyIdentifiedAndConsumedByIdentity() throws {
-        let router = Router()
-        let appointmentID = UUID()
-        let details = appointmentDetails(id: appointmentID)
+    @Test func appointmentResolutionAlignsTheScheduleWithoutDismissingDetails() throws {
+        let calendar = gregorianCalendar
+        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
+        let appointmentDate = try Date("2026-07-22T11:00:00Z", strategy: .iso8601)
 
-        router.requestAppointmentEdit(details)
-        let firstRequest = try #require(router.appointmentEditRequest)
-        router.consumeAppointmentEditRequest(UUID())
-        #expect(router.appointmentEditRequest == firstRequest)
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let router = makeRouter(selectedScheduleDate: initialDate)
+            router.selectedTab = .patients
+            let appointmentID = UUID()
+            router.presentDetails(.appointment(appointmentID))
+            let presentationID = try #require(router.detailsPresentation?.id)
 
-        router.consumeAppointmentEditRequest(firstRequest.id)
-        #expect(router.appointmentEditRequest == nil)
-        router.appointmentEditorDidDismiss()
+            #expect(
+                !router.scheduleIsAligned(
+                    with: appointmentDate,
+                    appointmentID: appointmentID,
+                    presentationID: presentationID
+                )
+            )
 
-        router.requestAppointmentEdit(details)
-        #expect(router.appointmentEditRequest?.appointmentID == appointmentID)
-        #expect(router.appointmentEditRequest?.id != firstRequest.id)
-    }
+            router.alignSchedule(
+                with: appointmentDate,
+                appointmentID: appointmentID,
+                presentationID: presentationID
+            )
 
-    @Test func appointmentMessageFromDetailsRestoresExactNavigationState() throws {
-        let router = Router()
-        let appointmentID = UUID()
-        let details = appointmentDetails(id: appointmentID)
-        let schedulePath: [Route] = [.patient(UUID())]
-        let patientsPath: [Route] = [.appointment(UUID())]
-        let detailsPath: [Route] = [.patient(UUID()), .appointment(appointmentID)]
-        router.selectedTab = .patients
-        router.schedulePath = schedulePath
-        router.patientsPath = patientsPath
-        router.presentDetails(.appointment(appointmentID))
-        for route in detailsPath {
-            router.pushDetails(route)
+            #expect(router.selectedTab == .schedule)
+            #expect(router.selectedScheduleDate == appointmentDate.startOfDay(using: calendar))
+            #expect(router.detailsPresentation?.currentRoute == .appointment(appointmentID))
+            #expect(
+                router.scheduleIsAligned(
+                    with: appointmentDate,
+                    appointmentID: appointmentID,
+                    presentationID: presentationID
+                )
+            )
+
+            let rescheduledDate = appointmentDate.date(byAddingDays: 2, using: calendar)
+            #expect(
+                !router.scheduleIsAligned(
+                    with: rescheduledDate,
+                    appointmentID: appointmentID,
+                    presentationID: presentationID
+                )
+            )
+            router.alignSchedule(
+                with: rescheduledDate,
+                appointmentID: appointmentID,
+                presentationID: presentationID
+            )
+            #expect(router.selectedScheduleDate == rescheduledDate)
         }
-        let presentation = try #require(router.detailsPresentation)
-
-        router.requestAppointmentMessage(details)
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation == nil)
-        #expect(router.appointmentMessageRequest == nil)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
-
-        router.detailsDidDismiss()
-
-        let request = try #require(router.appointmentMessageRequest)
-        #expect(request.appointmentID == appointmentID)
-        router.consumeAppointmentMessageRequest(request.id)
-        router.appointmentMessageDidDismiss()
-
-        #expect(router.selectedTab == .patients)
-        #expect(router.detailsPresentation === presentation)
-        #expect(router.detailsPresentation?.path == detailsPath)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
     }
 
-    @Test func appointmentBookingFromPatientDetailsRestoresExactNavigationState() throws {
-        let router = Router()
+    @Test func staleAppointmentResolutionCannotChangeTheSchedule() throws {
+        let calendar = gregorianCalendar
+        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
+        let staleDate = try Date("2026-07-20T11:00:00Z", strategy: .iso8601)
+        let currentDate = try Date("2026-07-21T11:00:00Z", strategy: .iso8601)
+
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let router = makeRouter(selectedScheduleDate: initialDate)
+            let staleID = UUID()
+            let currentID = UUID()
+            router.presentDetails(.appointment(staleID))
+            let presentationID = try #require(router.detailsPresentation?.id)
+            router.presentDetails(.appointment(currentID))
+
+            router.alignSchedule(
+                with: staleDate,
+                appointmentID: staleID,
+                presentationID: presentationID
+            )
+            #expect(router.selectedScheduleDate == initialDate)
+
+            router.alignSchedule(
+                with: currentDate,
+                appointmentID: currentID,
+                presentationID: presentationID
+            )
+            #expect(router.selectedScheduleDate == currentDate.startOfDay(using: calendar))
+
+            router.dismissDetails()
+            router.alignSchedule(
+                with: staleDate,
+                appointmentID: currentID,
+                presentationID: presentationID
+            )
+            #expect(router.selectedScheduleDate == currentDate.startOfDay(using: calendar))
+        }
+    }
+
+    @Test func crossNavigationRealignsAppointmentsWhilePreservingHistory() throws {
+        let calendar = gregorianCalendar
+        let dateX = try Date("2026-07-18T10:00:00Z", strategy: .iso8601)
+        let dateY = try Date("2026-07-24T15:00:00Z", strategy: .iso8601)
+
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let router = makeRouter(selectedScheduleDate: dateX)
+            let appointmentX = UUID()
+            let appointmentY = UUID()
+            let patientID = UUID()
+            router.presentDetails(.appointment(appointmentX))
+            let presentationID = try #require(router.detailsPresentation?.id)
+            router.alignSchedule(
+                with: dateX,
+                appointmentID: appointmentX,
+                presentationID: presentationID
+            )
+
+            router.pushDetails(.patient(patientID))
+            router.pushDetails(.appointment(appointmentY))
+            router.alignSchedule(
+                with: dateY,
+                appointmentID: appointmentY,
+                presentationID: presentationID
+            )
+            #expect(router.selectedScheduleDate == dateY.startOfDay(using: calendar))
+
+            router.setDetailsPath([.patient(patientID)], presentationID: presentationID)
+            #expect(router.selectedScheduleDate == dateY.startOfDay(using: calendar))
+
+            router.setDetailsPath([], presentationID: presentationID)
+            router.alignSchedule(
+                with: dateX,
+                appointmentID: appointmentX,
+                presentationID: presentationID
+            )
+
+            #expect(router.selectedScheduleDate == dateX.startOfDay(using: calendar))
+            #expect(router.detailsPresentation?.root == .appointment(appointmentX))
+            #expect(router.detailsPresentation?.path == [])
+        }
+    }
+
+    @Test func newestPresentationWinsDuringDismissalAndInterruptedStateNeverRestores() throws {
+        let router = makeRouter()
         let patient = Patient(name: "Aarav Mehta")
-        let appointmentID = UUID()
-        let schedulePath: [Route] = [.appointment(UUID())]
-        let patientsPath: [Route] = [.patient(UUID())]
-        let detailsPath: [Route] = [.appointment(appointmentID)]
-        router.selectedTab = .patients
-        router.schedulePath = schedulePath
-        router.patientsPath = patientsPath
         router.presentDetails(.patient(patient.id))
-        for route in detailsPath {
-            router.pushDetails(route)
-        }
-        let presentation = try #require(router.detailsPresentation)
+        router.presentationDidAppear(try #require(router.detailsPresentation?.id))
 
-        router.requestAppointmentBooking(for: patient)
+        router.requestPatientEdit(patient)
+        #expect(router.activePresentation?.id == nil)
 
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation == nil)
-        #expect(router.appointmentBookingRequest == nil)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
-
-        router.detailsDidDismiss()
-
-        let request = try #require(router.appointmentBookingRequest)
-        #expect(request.patientID == patient.id)
-        router.consumeAppointmentBookingRequest(request.id)
-        router.appointmentEditorDidDismiss()
-
-        #expect(router.selectedTab == .patients)
-        #expect(router.detailsPresentation === presentation)
-        #expect(router.detailsPresentation?.path == detailsPath)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
-    }
-
-    @Test func appointmentBookingCanBeRequestedWithoutPatient() throws {
-        let router = Router()
-        router.selectedTab = .patients
-
+        router.openAppointment(id: UUID())
         router.requestAppointmentBooking()
+        router.presentationDidDismiss()
 
-        #expect(router.selectedTab == .schedule)
-        let request = try #require(router.appointmentBookingRequest)
-        #expect(request.patient == nil)
+        #expect(router.appointmentBookingRequest != nil)
+        #expect(router.detailsPresentation == nil)
+        #expect(router.patientEditRequest == nil)
+
+        router.presentationDidDismiss()
+        #expect(router.activePresentation?.id == nil)
+        #expect(router.detailsPresentation == nil)
     }
 
-    @Test func bookingURLUsesTheParameterlessRouterRequest() throws {
-        let router = Router()
-        router.selectedTab = .patients
+    @Test func outgoingSheetDismissalDoesNotDiscardQueuedReplacement() throws {
+        let router = makeRouter()
+        let patient = Patient(name: "Aarav Mehta")
+        router.presentDetails(.patient(patient.id))
+        router.presentationDidAppear(try #require(router.detailsPresentation?.id))
 
-        let wasHandled = router.open(
-            try #require(URL(string: "clinical://appointments/book"))
-        )
+        router.requestPatientEdit(patient)
+        router.dismissPresentation()
+        router.presentationDidDismiss()
 
-        #expect(wasHandled)
-        #expect(router.selectedTab == .schedule)
-        #expect(router.appointmentBookingRequest?.patient == nil)
+        #expect(router.patientEditRequest?.patientID == patient.id)
     }
 
-    @Test func externalPatientSearchSelectsPatientsAndNormalizesPhones() throws {
-        let router = Router()
-        router.presentDetails(.appointment(UUID()))
+    @Test func externalDestinationDiscardsQueuedReplacement() throws {
+        let calendar = gregorianCalendar
+        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
+        let destinationDay = try #require(ScheduleDay(year: 2026, month: 7, day: 25))
+
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let router = Router(selectedScheduleDate: initialDate)
+            router.presentDetails(.appointment(UUID()))
+            router.presentationDidAppear(try #require(router.detailsPresentation?.id))
+            router.requestPatientCreation()
+
+            router.openExternalSchedule(destinationDay)
+            router.presentationDidDismiss()
+
+            #expect(router.activePresentation?.id == nil)
+            #expect(router.selectedScheduleDate == destinationDay.date(using: calendar))
+        }
+    }
+
+    @Test func externalAppointmentInterruptsEveryAppRootPresentation() throws {
+        let patient = Patient(name: "Aarav Mehta")
+        let details = appointmentDetails()
+
+        let bookingRouter = makeRouter()
+        bookingRouter.requestAppointmentBooking()
+        assertExternalAppointmentInterrupts(bookingRouter)
+
+        let editRouter = makeRouter()
+        editRouter.requestAppointmentEdit(details)
+        assertExternalAppointmentInterrupts(editRouter)
+
+        let messageRouter = makeRouter()
+        messageRouter.requestAppointmentMessage(details)
+        assertExternalAppointmentInterrupts(messageRouter)
+
+        let patientRouter = makeRouter()
+        patientRouter.requestPatientEdit(patient)
+        assertExternalAppointmentInterrupts(patientRouter)
+
+        let creationRouter = makeRouter()
+        creationRouter.requestPatientCreation()
+        assertExternalAppointmentInterrupts(creationRouter)
+
+        let detailsRouter = makeRouter()
+        detailsRouter.presentDetails(.patient(patient.id))
+        let presentationID = try #require(detailsRouter.detailsPresentation?.id)
+        let appointmentID = UUID()
+        detailsRouter.openAppointment(id: appointmentID)
+        #expect(detailsRouter.detailsPresentation?.id == presentationID)
+        #expect(detailsRouter.detailsPresentation?.root == .appointment(appointmentID))
+    }
+
+    @Test func anUnpresentedActionIsReplacedImmediatelyWithoutWaitingForDismissal() {
+        let router = makeRouter()
+        router.requestAppointmentBooking()
+        let appointmentID = UUID()
+
+        router.openAppointment(id: appointmentID)
+
+        #expect(router.detailsPresentation?.root == .appointment(appointmentID))
+        #expect(router.appointmentBookingRequest == nil)
+    }
+
+    @Test func externalPatientSearchInterruptsPresentationAndNormalizesPhones() throws {
+        let router = makeRouter()
+        router.requestAppointmentBooking()
+        if let presentationID = router.activePresentation?.id {
+            router.presentationDidAppear(presentationID)
+        }
 
         router.openExternalPatientSearch(
             phoneNumbers: ["98201 44532", "+91 98201 44533"]
         )
 
         #expect(router.selectedTab == .patients)
-        #expect(router.detailsPresentation == nil)
+        #expect(router.activePresentation?.id == nil)
         let request = try #require(router.patientSearchRequest)
         #expect(request.phoneNumbers == ["+919820144532", "+919820144533"])
 
-        router.consumePatientSearchRequest(request.id)
-        #expect(router.patientSearchRequest == nil)
+        router.presentationDidDismiss()
+        #expect(router.activePresentation?.id == nil)
     }
 
-    @Test func externalPatientSearchReplacesDetailsSuspendedBehindAnEditor() throws {
-        let router = Router()
-        let patient = Patient(name: "Aarav Mehta")
-        router.selectedTab = .schedule
-        router.presentDetails(.patient(patient.id))
-        router.requestPatientEdit(patient)
+    @Test func appointmentAndScheduleURLsUseAuthoritativeRouterEntryPoints() throws {
+        let calendar = gregorianCalendar
+        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
 
-        router.openExternalPatientSearch(phoneNumbers: ["98201 44532"])
-        router.detailsDidDismiss()
-        let editRequest = try #require(router.patientEditRequest)
-        router.consumePatientEditRequest(editRequest.id)
-        router.patientEditorDidDismiss()
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let router = makeRouter(selectedScheduleDate: initialDate)
+            let appointmentID = UUID()
+            let appointmentURL = try #require(ClinicalURL.appointment(appointmentID).url)
 
-        #expect(router.selectedTab == .patients)
-        #expect(router.detailsPresentation == nil)
-        #expect(router.patientSearchRequest?.phoneNumbers == ["+919820144532"])
-    }
+            #expect(router.open(appointmentURL))
+            #expect(router.selectedTab == .schedule)
+            #expect(router.detailsPresentation?.root == .appointment(appointmentID))
+            #expect(router.selectedScheduleDate == initialDate)
 
-    @Test func patientEditRestoresExactDetailsHistoryWithoutChangingTabState() throws {
-        let router = Router()
-        let patient = Patient(name: "Aarav Mehta")
-        let appointmentID = UUID()
-        let schedulePath: [Route] = [.appointment(UUID())]
-        let patientsPath: [Route] = [.patient(UUID())]
-        let detailsPath: [Route] = [
-            .appointment(appointmentID),
-            .patient(patient.id),
-        ]
-        router.selectedTab = .schedule
-        router.schedulePath = schedulePath
-        router.patientsPath = patientsPath
-        router.presentDetails(.patient(patient.id))
-        for route in detailsPath {
-            router.pushDetails(route)
+            let day = try #require(ScheduleDay(year: 2026, month: 7, day: 25))
+            let scheduleURL = try #require(ClinicalURL.schedule(day).url)
+            #expect(router.open(scheduleURL))
+            #expect(router.detailsPresentation == nil)
+            #expect(router.selectedScheduleDate == day.date(using: calendar))
         }
-        let presentation = try #require(router.detailsPresentation)
-
-        router.requestPatientEdit(patient)
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation == nil)
-        #expect(router.patientEditRequest == nil)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
-
-        router.detailsDidDismiss()
-
-        let request = try #require(router.patientEditRequest)
-        #expect(request.patientID == patient.id)
-        router.consumePatientEditRequest(request.id)
-        router.patientEditorDidDismiss()
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation === presentation)
-        #expect(router.detailsPresentation?.path == detailsPath)
-        #expect(router.schedulePath == schedulePath)
-        #expect(router.patientsPath == patientsPath)
     }
 
-    @Test func editorRequestsCannotCompeteForTheDetailsHandoff() throws {
-        let router = Router()
-        let patient = Patient(name: "Aarav Mehta")
-        router.presentDetails(.patient(patient.id))
-
-        router.requestPatientEdit(patient)
-        router.requestAppointmentEdit(appointmentDetails())
-        router.requestAppointmentMessage(appointmentDetails())
-        router.detailsDidDismiss()
-
-        #expect(router.patientEditRequest?.patientID == patient.id)
-        #expect(router.appointmentEditRequest == nil)
-        #expect(router.appointmentMessageRequest == nil)
-
-        let requestID = try #require(router.patientEditRequest?.id)
-        router.consumePatientEditRequest(requestID)
-        router.requestAppointmentEdit(appointmentDetails())
-
-        #expect(router.appointmentEditRequest == nil)
-    }
-
-    @Test func externalDetailsReplacePatientEditorsSuspendedSession() throws {
-        let router = Router()
-        let patient = Patient(name: "Aarav Mehta")
-        router.selectedTab = .schedule
-        router.presentDetails(.patient(patient.id))
-        let presentation = try #require(router.detailsPresentation)
-
-        router.requestPatientEdit(patient)
-        let externalAppointmentID = UUID()
-        router.openExternalDetails(.appointment(externalAppointmentID))
-        router.detailsDidDismiss()
-
-        let requestID = try #require(router.patientEditRequest?.id)
-        router.consumePatientEditRequest(requestID)
-        router.patientEditorDidDismiss()
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation === presentation)
-        #expect(router.detailsPresentation?.root == .appointment(externalAppointmentID))
-        #expect(router.detailsPresentation?.path == [])
-    }
-
-    @Test func directAppointmentEditDoesNotRestoreDetails() throws {
-        let router = Router()
-
-        router.requestAppointmentEdit(appointmentDetails())
-        let requestID = try #require(router.appointmentEditRequest?.id)
-        router.consumeAppointmentEditRequest(requestID)
-        router.appointmentEditorDidDismiss()
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation == nil)
-    }
-
-    @Test func directAppointmentMessageDoesNotRestoreDetails() throws {
-        let router = Router()
-        let details = appointmentDetails()
-
-        router.requestAppointmentMessage(details)
-        let requestID = try #require(router.appointmentMessageRequest?.id)
-        router.consumeAppointmentMessageRequest(requestID)
-        router.appointmentMessageDidDismiss()
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation == nil)
-    }
-
-    @Test func externalDetailsReplaceSuspendedSessionWithoutInterruptingEditing() throws {
-        let router = Router()
-        let editedAppointmentID = UUID()
-        router.selectedTab = .patients
-        router.presentDetails(.appointment(editedAppointmentID))
-        let presentation = try #require(router.detailsPresentation)
-
-        router.requestAppointmentEdit(appointmentDetails(id: editedAppointmentID))
-        let externalPatientID = UUID()
-        router.openExternalDetails(.patient(externalPatientID))
-
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation == nil)
-
-        router.detailsDidDismiss()
-        let requestID = try #require(router.appointmentEditRequest?.id)
-        router.consumeAppointmentEditRequest(requestID)
-        router.appointmentEditorDidDismiss()
-
-        #expect(router.selectedTab == .patients)
-        #expect(router.detailsPresentation === presentation)
-        #expect(router.detailsPresentation?.root == .patient(externalPatientID))
-        #expect(router.detailsPresentation?.path == [])
-    }
-
-    @Test func widgetAppointmentURLUsesExternalDetailsRouting() throws {
-        let router = Router()
+    private func assertExternalAppointmentInterrupts(_ router: Router) {
+        if let presentationID = router.activePresentation?.id {
+            router.presentationDidAppear(presentationID)
+        }
         let appointmentID = UUID()
-        let url = try #require(ClinicalURL.appointment(appointmentID).url)
+        router.openAppointment(id: appointmentID)
 
-        #expect(router.open(url))
-        #expect(router.selectedTab == .schedule)
+        #expect(router.activePresentation?.id == nil)
+        router.presentationDidDismiss()
         #expect(router.detailsPresentation?.root == .appointment(appointmentID))
     }
 
-    @Test func widgetScheduleURLReplacesDetailsAndPublishesConsumableDateRequest() throws {
-        let router = Router()
-        router.selectedTab = .patients
-        router.presentDetails(.patient(UUID()))
-        let day = try #require(ScheduleDay(year: 2026, month: 7, day: 13))
-        let url = try #require(ClinicalURL.schedule(day).url)
-
-        #expect(router.open(url))
-        #expect(router.selectedTab == .schedule)
-        #expect(router.detailsPresentation == nil)
-        #expect(router.scheduleDateRequest?.day == day)
-
-        router.consumeScheduleDateRequest(UUID())
-        #expect(router.scheduleDateRequest != nil)
-
-        let requestID = try #require(router.scheduleDateRequest?.id)
-        router.consumeScheduleDateRequest(requestID)
-        #expect(router.scheduleDateRequest == nil)
-    }
-
-    private func appointmentDetails(id: Appointment.ID = UUID()) -> AppointmentDetails {
-        let date = Date(timeIntervalSince1970: 0)
-        let patient = Patient(name: "Aarav Mehta", createdDate: date)
+    private func appointmentDetails(
+        id: Appointment.ID = UUID(),
+        start: Date = Date(timeIntervalSince1970: 0)
+    ) -> AppointmentDetails {
+        let patient = Patient(name: "Aarav Mehta", createdDate: start)
         return AppointmentDetails(
             appointment: Appointment(
                 id: id,
                 patientName: patient.displayName,
-                start: date,
+                start: start,
                 durationMinutes: 30,
                 status: .scheduled
             ),
             patient: patient
         )
+    }
+
+    private func makeRouter(selectedScheduleDate: Date = .now) -> Router {
+        withDependencies {
+            $0.calendar = gregorianCalendar
+        } operation: {
+            Router(selectedScheduleDate: selectedScheduleDate)
+        }
+    }
+
+    private var gregorianCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
     }
 }

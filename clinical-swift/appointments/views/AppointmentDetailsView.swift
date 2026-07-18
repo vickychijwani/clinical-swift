@@ -3,16 +3,76 @@ import SwiftUI
 
 struct AppointmentDetailsView: View {
     @Environment(Router.self) private var router
-
     @State private var model: AppointmentDetailsModel
+    @State private var hasResolvedInitialDetails = false
 
+    let presentationID: DetailsPresentation.ID
     let onSelectPatient: @MainActor @Sendable (Patient.ID) -> Void
 
     init(
         id: Appointment.ID,
+        presentationID: DetailsPresentation.ID,
         onSelectPatient: @escaping @MainActor @Sendable (Patient.ID) -> Void
     ) {
         _model = State(initialValue: AppointmentDetailsModel(appointmentID: id))
+        self.presentationID = presentationID
+        self.onSelectPatient = onSelectPatient
+    }
+
+    var body: some View {
+        Group {
+            if let details = model.details {
+                // The appointment date is unknown until this record resolves. Keep the sheet
+                // neutral until the router has aligned the Schedule tab and day; rendering sooner
+                // would show details for date X over a schedule displaying date Y.
+                if router.scheduleIsAligned(
+                    with: details.appointment.start,
+                    appointmentID: details.appointment.id,
+                    presentationID: presentationID
+                ) {
+                    AppointmentDetailsContent(
+                        model: model,
+                        onSelectPatient: onSelectPatient
+                    )
+                } else {
+                    ProgressView()
+                        .task(id: details.appointment.start) {
+                            router.alignSchedule(
+                                with: details.appointment.start,
+                                appointmentID: details.appointment.id,
+                                presentationID: presentationID
+                            )
+                        }
+                }
+            } else if hasResolvedInitialDetails {
+                AppointmentDetailsContent(
+                    model: model,
+                    onSelectPatient: onSelectPatient
+                )
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            _ = try? await model.load()
+            guard !Task.isCancelled else { return }
+            hasResolvedInitialDetails = true
+        }
+    }
+}
+
+private struct AppointmentDetailsContent: View {
+    @Environment(Router.self) private var router
+
+    @Bindable var model: AppointmentDetailsModel
+
+    let onSelectPatient: @MainActor @Sendable (Patient.ID) -> Void
+
+    init(
+        model: AppointmentDetailsModel,
+        onSelectPatient: @escaping @MainActor @Sendable (Patient.ID) -> Void
+    ) {
+        self.model = model
         self.onSelectPatient = onSelectPatient
     }
 
@@ -147,7 +207,9 @@ private struct AppointmentDetailsActionsView: View {
         $0.defaultDatabase = try appDatabase(seedSamples: true)
     }
     NavigationStack {
-        AppointmentDetailsView(id: sampleAppointments[0].id) { _ in }
+        AppointmentDetailsContent(
+            model: AppointmentDetailsModel(appointmentID: sampleAppointments[0].id)
+        ) { _ in }
     }
     .environment(Router())
 }

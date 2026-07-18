@@ -40,48 +40,15 @@ struct ScheduleModelTests {
             $0.calendar = calendar
             $0.defaultDatabase = database
         } operation: {
-            let model = ScheduleModel(selectedDate: selectedDate)
-            model.selectedDate = selectedDate.startOfDay(using: calendar)
+            let model = ScheduleModel()
 
             try await model.loadVisibleDays(centeredOn: selectedDate, dayRadius: 1)
 
             #expect(model.appointments(for: previousDate).map(\.id) == [previousID])
-            #expect(model.appointments.map(\.id) == [selectedID])
+            #expect(model.appointments(for: selectedDate).map(\.id) == [selectedID])
             #expect(model.appointments(for: nextDate).map(\.id) == [nextID])
             #expect(model.appointments(for: outsideDate).isEmpty)
             #expect(!model.appointments(for: selectedDate).contains { $0.id == cancelledID })
-        }
-    }
-
-    @Test func staleVisibleDayLoadDoesNotOverwriteCurrentCache() async throws {
-        let calendar = gregorianCalendar
-        let database = try testDatabase()
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let staleDate = selectedDate.date(byAddingDays: -7, using: calendar)
-        let selectedID = UUID()
-        let staleID = UUID()
-
-        try seedPatientAndAppointments(
-            database: database,
-            appointments: [
-                AppointmentSeed(
-                    id: selectedID, start: selectedDate.setTime(11, 0, using: calendar)),
-                AppointmentSeed(id: staleID, start: staleDate.setTime(11, 0, using: calendar)),
-            ]
-        )
-
-        try await withDependencies {
-            $0.calendar = calendar
-            $0.defaultDatabase = database
-        } operation: {
-            let model = ScheduleModel(selectedDate: selectedDate)
-            model.selectedDate = selectedDate.startOfDay(using: calendar)
-
-            try await model.loadVisibleDays(centeredOn: selectedDate, dayRadius: 1)
-            try await model.loadVisibleDays(centeredOn: staleDate, dayRadius: 1)
-
-            #expect(model.appointments.map(\.id) == [selectedID])
-            #expect(model.appointments(for: staleDate).isEmpty)
         }
     }
 

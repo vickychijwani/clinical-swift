@@ -6,10 +6,11 @@ struct DetailsFlowSheet: View {
     @Bindable var presentation: DetailsPresentation
 
     var body: some View {
-        NavigationStack(path: $presentation.path) {
+        NavigationStack(path: pathBinding) {
             ZStack {
                 DetailsRouteView(
                     route: presentation.root,
+                    presentationID: presentation.id,
                     onNavigate: navigate
                 )
                 .id(presentation.root)
@@ -19,6 +20,7 @@ struct DetailsFlowSheet: View {
             .navigationDestination(for: Route.self) { route in
                 DetailsRouteView(
                     route: route,
+                    presentationID: presentation.id,
                     onNavigate: navigate
                 )
             }
@@ -40,6 +42,15 @@ struct DetailsFlowSheet: View {
 
     private var isAtRoot: Bool {
         presentation.path.isEmpty
+    }
+
+    private var pathBinding: Binding<[Route]> {
+        // Do not bind NavigationStack directly to the presentation's path. SwiftUI may write back
+        // during dismissal, so the router must validate the sheet-session ID before mutating it.
+        Binding(
+            get: { presentation.path },
+            set: { router.setDetailsPath($0, presentationID: presentation.id) }
+        )
     }
 
     private func navigate(to route: Route) {

@@ -35,7 +35,7 @@
   - [x] Also send location if first appt
   - [x] Add honorific in message greeting
   - [ ] Make sure SMS is sent from Bitehaus number, not personal
-- [ ] Widget
+- [x] Widget
 - [ ] Shortcut to create appointment
 - [ ] End of day reminders (maybe location-fenced?) to mark all appointments complete/cancelled, record payments (or indicate "no payment"), etc
   - [ ] Indicators/flags on appointment cards to indicate whether they're processed or not
@@ -54,11 +54,11 @@ Refactors:
 
 Bugs:
 - [x] Remove timeline sheet clearance for details sheet - anyway it's modal now!
-- [ ] Opening appointment details via widget opens on today/existing selected date rather than appt date
-- [ ] Simplify Router behaviour - newly-triggered actions are always more critical/time-sensitive compared to whatever was on-screen - interrupting is better than queueing the request
+- [ ] Colors: https://developer.apple.com/design/human-interface-guidelines/color
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
 - [ ] Fitted sheet still resizes upon scroll, in patient edit sheet. Other sheets are fine (but they also don't have scrollable contents at the moment, I think, not sure).
-- [ ] When switching to a different date, selected appointment sheet should be dismissed (record a UX invariant: never show appointment details for date X on the schedule for date Y, to prevent user confusion). However, if navigation within sheet is used to go from appointment on date X -> patient -> appointment on date Y, then instead jump to date Y in schedule but keep the date X appointment in navigation history - and switch back to the date X schedule when navigating back to that appointment. In other words, bind the date strip to selected appointment at all times - and dismiss the sheet if the date is changed by selecting on the date strip directly.
+- [x] When switching to a different date, selected appointment sheet should be dismissed (record a UX invariant: never show appointment details for date X on the schedule for date Y, to prevent user confusion). However, if widget OR navigation within sheet (OR any other mechanism) is used to open appointment on date Y, then instead jump to date Y in schedule but keep the date X appointment in navigation history - and switch back to the date X schedule when navigating back to that appointment. In other words, bind the date strip to selected appointment at all times - and dismiss the sheet if the date is changed by selecting on the date strip directly.
+- [x] Simplify Router behaviour - newly-triggered actions are always more critical/time-sensitive compared to whatever was on-screen - interrupting is better than queueing the request
 - [ ] Appointment cards in patient details should have a chevron
 
 Observations from in-hand testing:
@@ -109,9 +109,10 @@ Nice to haves:
 - [ ] Clinic dashboard - appointments, patient records, and payments
 
 ## M3: Reduce dependency on paper forms in clinic
-- [ ] Add "Notes" in appointment view
+- [ ] Add "Notes" in appointment view (inspiration: Bear app on iPad/iPhone)
 - [ ] View all Notes on appointment/patient detail pages
 - [ ] Scan OPD form with camera, including notes
+  - [ ] Use on-device Gemma/edge models? https://youtu.be/-TiET_K-E_g
 - [ ] iPad app to view and edit patient records/notes in larger size
 
 ## M3.1: Implant tracking

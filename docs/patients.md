@@ -16,8 +16,8 @@ This document captures the deliberate constraints an agent is likely to break if
 - In patient details, keep the navigation title as `Patient Details` while the name in the summary card remains visible. Switch to the patient's display name when that name leaves the scroll viewport; this title state must not affect navigation or scroll position.
 - Contact import only prefills a blank patient name and never overwrites an existing one. It removes the bookkeeping prefixes `Patient `, `Website Lead `, and `Lead ` from imported names. A `Patient Called ` contact must not prefill a name because that label represents an unknown caller rather than a patient identity.
 - Patient creation and editing share one form, but editing updates the existing row in place. Preserve the patient ID and creation timestamp; only mutable details and the update timestamp change.
-- Editing from a details flow temporarily suspends that complete modal session. After saving or cancelling, restore the same details root and navigation path without changing the underlying selected tab or tab navigation paths.
-- Dismiss the details sheet before presenting the editor so two sheets never compete. If the patient disappears before save, keep the editor open and report that it is unavailable.
+- Editing from a details flow permanently replaces that modal session. Dismiss details before presenting the editor so sheets never compete, and do not restore the interrupted root or navigation history afterward.
+- If the patient disappears before save, keep the editor open and report that it is unavailable.
 
 ## Do Not Reintroduce
 

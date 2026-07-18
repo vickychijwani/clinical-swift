@@ -27,6 +27,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - If date, duration, time selection, or availability reconciliation moves the draft appointment, request a timeline scroll to reveal the new preview position. Manual timeline browsing should be the only way the draft card goes off-screen.
 - Horizontal day paging owns date navigation only. Timeline coordinate policy, break expansion, and programmatic vertical scrolling must continue to derive from `TimelineScale` for the day being rendered.
 - Horizontal day paging renders and loads beyond the immediately adjacent day so a second swipe can begin before the first page animation commits. Keep the pager radius and schedule query window in sync; otherwise fast swipes can land on an empty placeholder for a day whose appointments have not been loaded yet.
+- Never render appointment details for date X over a schedule showing date Y. A visible appointment route must align the Schedule tab and selected day before rendering its details; changing the day directly dismisses the complete details flow instead of leaving contradictory context on screen.
 
 ## Do Not Reintroduce
 

@@ -1,4 +1,5 @@
 import AppIntents
+import Dependencies
 import Foundation
 import SQLiteData
 import Testing
@@ -82,7 +83,7 @@ struct AppIntentsTests {
             }
         }
 
-        let router = Router()
+        let router = makeRouter()
         let actions = ClinicalAppActions(router: router, database: database)
 
         let singleMatch = try await actions.findPatient(phoneNumbers: ["98201 44533"])
@@ -105,5 +106,13 @@ struct AppIntentsTests {
         let database = try DatabaseQueue(configuration: configuration)
         try migrateDatabase(database)
         return database
+    }
+
+    private func makeRouter() -> Router {
+        withDependencies {
+            $0.calendar = Calendar(identifier: .gregorian)
+        } operation: {
+            Router()
+        }
     }
 }
