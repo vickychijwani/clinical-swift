@@ -17,7 +17,7 @@ nonisolated struct AppointmentCalendarEventLink: Equatable, Sendable {
 
 nonisolated struct AppointmentCalendarClient: Sendable {
     var requestFullAccess: @MainActor @Sendable () async throws -> Bool
-    var resolveTargetCalendar: @MainActor @Sendable () -> Bool
+    var resolveTargetCalendar: @MainActor @Sendable () async -> Bool
     var replaceEvent:
         @MainActor @Sendable (
             _ existingLink: AppointmentCalendarEventLink,
@@ -32,21 +32,20 @@ nonisolated struct AppointmentCalendarClient: Sendable {
 }
 
 extension AppointmentCalendarClient {
-    @MainActor
-    static func live() -> Self {
+    nonisolated static func live() -> Self {
         let adapter = AppointmentEventKitAdapter()
         return Self(
             requestFullAccess: {
                 try await adapter.requestFullAccess()
             },
             resolveTargetCalendar: {
-                adapter.resolveTargetCalendar()
+                await adapter.resolveTargetCalendar()
             },
             replaceEvent: { link, payload in
-                try adapter.replaceEvent(link: link, payload: payload)
+                try await adapter.replaceEvent(link: link, payload: payload)
             },
             deleteEvent: { link, appointmentID, fallbackStart in
-                try adapter.deleteEvent(
+                try await adapter.deleteEvent(
                     link: link,
                     appointmentID: appointmentID,
                     fallbackStart: fallbackStart
@@ -56,10 +55,9 @@ extension AppointmentCalendarClient {
     }
 }
 
-@MainActor
-private final class AppointmentEventKitAdapter {
-    private static let targetCalendarTitle = "Bitehaus Debug"
-    private static let recoverySearchRadius: TimeInterval = 24 * 60 * 60
+private actor AppointmentEventKitAdapter {
+    private nonisolated static let targetCalendarTitle = "Bitehaus Debug"
+    private nonisolated static let recoverySearchRadius: TimeInterval = 24 * 60 * 60
 
     private let eventStore = EKEventStore()
     private var targetCalendar: EKCalendar?

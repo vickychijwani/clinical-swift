@@ -2,11 +2,11 @@
 
 ## Summary
 
-Implement one-way, near-real-time synchronization from Clinical to the first writable calendar titled exactly `Bitehaus`.
+Implement one-way, near-real-time synchronization from Clinical to the first writable calendar titled exactly `Bitehaus Debug`.
 
 Request full Calendar access on launch with:
 
-> Clinical needs Calendar access to create, update, and remove Bitehaus appointment events.
+> Clinical needs Calendar access to create, update, and remove Bitehaus Debug appointment events.
 
 Full access remains necessary because the app must enumerate calendars and later locate/delete managed events. [Apple EventKit access documentation](https://developer.apple.com/documentation/eventkit/accessing-the-event-store)
 
@@ -31,7 +31,7 @@ Enumerating the device’s calendars once per launch or activation is a negligib
 - Document this table as device-local integration metadata that must be excluded from future CloudKit/database synchronization.
 - Add a main-actor `AppointmentCalendarSyncCoordinator`, retained by `ClinicalApp.swift`, which:
   - Requests full access on launch.
-  - Resolves `Bitehaus` on launch and every activation without persistent target caching.
+  - Resolves `Bitehaus Debug` on launch and every activation without persistent target caching.
   - Observes pending sync records and drains them serially immediately after committed writes.
   - Retries retained work on later activations after permission, calendar, EventKit, or process failures.
   - Never rolls back or reports appointment operations as failed because Calendar synchronization failed.
@@ -42,6 +42,8 @@ Enumerating the device’s calendars once per launch or activation is a negligib
 - Introduce a dependency-injected Calendar client with two operations:
   - `replaceEvent`: locate and delete the previous managed event, then create its replacement.
   - `deleteEvent`: remove the managed event if it exists.
+- Own the EventKit store on a dedicated actor so its synchronous enumeration, recovery searches,
+  removals, and saves never block the main actor.
 - Event payload:
   - Title: current patient display name.
   - Start: appointment start.
@@ -57,7 +59,7 @@ Enumerating the device’s calendars once per launch or activation is a negligib
 - If creation succeeds but database state is not updated, the retained pending record uses the URL marker to adopt the already-correct event instead of producing a duplicate.
 - If deletion succeeds but recreation fails, retain the pending record; the next retry sees the old event missing and creates the replacement.
 - Ignore Calendar-side edits until the next relevant Clinical change. At that point replacement restores Clinical’s data; a manually deleted event is recreated.
-- If no writable `Bitehaus` calendar exists, keep pending records and log the failure. If multiple matches exist, use EventKit’s first returned writable exact-title match for that activation.
+- If no writable `Bitehaus Debug` calendar exists, keep pending records and log the failure. If multiple matches exist, use EventKit’s first returned writable exact-title match for that activation.
 
 Accepted tradeoff: delete-and-recreate is not atomic and discards Calendar-side alarms, attendees, attachments, or manual customizations whenever Clinical next changes that event. It may also retrigger calendar-server notifications. Durable pending state and URL-marker recovery mitigate missing or duplicate events but cannot preserve those customizations.
 

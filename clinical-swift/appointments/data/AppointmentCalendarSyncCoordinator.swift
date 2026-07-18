@@ -61,10 +61,10 @@ final class AppointmentCalendarSyncCoordinator {
             return
         }
 
-        guard calendarClient.resolveTargetCalendar() else {
+        guard await calendarClient.resolveTargetCalendar() else {
             isReady = false
             appointmentCalendarSyncLogger.error(
-                "No writable Calendar titled Bitehaus is available"
+                "No writable Calendar titled Bitehaus Debug is available"
             )
             return
         }

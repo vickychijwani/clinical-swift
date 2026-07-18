@@ -5,10 +5,12 @@ This document captures the invariants for the one-way EventKit integration.
 ## Ownership and Target
 
 - Clinical is the source of truth. Calendar changes never write back into the app.
-- Events belong to the first writable calendar whose title is exactly `Bitehaus`. Resolve that
+- Events belong to the first writable calendar whose title is exactly `Bitehaus Debug`. Resolve that
   calendar from EventKit on every app activation; do not persist its identifier or offer a picker.
 - Full Calendar access is required because the app must enumerate calendars and manage previously
   created events.
+- The EventKit store belongs to a dedicated actor. Calendar enumeration, recovery searches, and
+  writes are synchronous EventKit operations and must not run on the main actor.
 - Calendar-side edits are left alone until the corresponding appointment or patient changes in
   Clinical. That change replaces the managed event with Clinical's current values.
 
@@ -34,7 +36,7 @@ This document captures the invariants for the one-way EventKit integration.
 - The migration does not enqueue existing appointments. A pre-existing appointment enters Calendar
   only after a later relevant Clinical change.
 - Debug sample appointments are removed from the outbox in their seeding transaction; demonstration
-  data must never reach the device owner's real Bitehaus calendar.
+  data must never reach the device owner's `Bitehaus Debug` calendar.
 - The app observes committed outbox changes while running and retries pending rows on later
   activations. Calendar failures never roll back appointment data.
 - A revision guards suspended EventKit work from clearing a newer database change. Event identifiers

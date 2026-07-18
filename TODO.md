@@ -44,7 +44,7 @@
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
 - [ ] Basic dark mode support - check if Monu’s phone has it enabled - contrast is terrible
-- [ ] Change `targetCalendarTitle` to “Bitehaus” before release
+- [ ] Change the `Bitehaus Debug` target calendar to `Bitehaus` before release
 - [ ] Universal search - next to tab bar - search for patients, appointments, payments, search by phone number - entrypoint for several other features
   - [ ] Share recent call / contact to create Patient
   - [ ] Share recent call / contact to open patient details (or show search results if multiple, e.g., family members) associated with that phone number

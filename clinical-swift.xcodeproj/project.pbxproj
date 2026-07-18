@@ -669,7 +669,7 @@
 				);
 				INFOPLIST_KEY_CFBundleDisplayName = Clinical;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Clinical needs Calendar access to create, update, and remove Bitehaus appointment events.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Clinical needs Calendar access to create, update, and remove Bitehaus Debug appointment events.";
 				INFOPLIST_KEY_NSContactsUsageDescription = "Clinical uses Contacts data to keep contact names and phone numbers in sync.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -716,7 +716,7 @@
 				);
 				INFOPLIST_KEY_CFBundleDisplayName = Clinical;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Clinical needs Calendar access to create, update, and remove Bitehaus appointment events.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Clinical needs Calendar access to create, update, and remove Bitehaus Debug appointment events.";
 				INFOPLIST_KEY_NSContactsUsageDescription = "Clinical uses Contacts data to keep contact names and phone numbers in sync.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

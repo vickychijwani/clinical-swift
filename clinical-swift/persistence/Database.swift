@@ -351,7 +351,7 @@ nonisolated private let databaseLogger = Logger(
                     .execute(db)
 
                     // Debug seed rows demonstrate the UI; they are not clinic appointments and
-                    // must never be exported into the device owner's Bitehaus calendar.
+                    // must never be exported into the device owner's Bitehaus Debug calendar.
                     try AppointmentCalendarSyncRecord
                         .where { $0.appointmentID.eq(appointment.id) }
                         .delete()
