@@ -2,10 +2,10 @@ import SwiftUI
 
 struct ViewPatientView: View {
     @Environment(Router.self) private var router
-    @State private var isPatientNameVisible = true
 
     let details: PatientDetails
     let appointments: [Appointment]
+    let onNameVisibilityChange: @MainActor @Sendable (Bool) -> Void
     let onSelectAppointment: @MainActor @Sendable (Appointment.ID) -> Void
 
     var body: some View {
@@ -13,9 +13,7 @@ struct ViewPatientView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 PatientSummaryView(
                     item: details,
-                    onNameVisibilityChange: { isPatientNameVisible in
-                        self.isPatientNameVisible = isPatientNameVisible
-                    }
+                    onNameVisibilityChange: onNameVisibilityChange
                 )
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -48,26 +46,10 @@ struct ViewPatientView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color("AppBackground"))
-        .navigationTitle(
-            PatientDetailsNavigationTitle.text(
-                patientDisplayName: details.patient.displayName,
-                isNameVisible: isPatientNameVisible
-            )
-        )
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Edit Patient", systemImage: "pencil", action: editPatient)
-                    .labelStyle(.iconOnly)
-            }
-        }
     }
 
     private func scheduleAppointment() {
         router.requestAppointmentBooking(for: details.patient)
-    }
-
-    private func editPatient() {
-        router.requestPatientEdit(details.patient)
     }
 }
 
@@ -84,15 +66,6 @@ private struct PatientActionsView: View {
             }
             .buttonStyle(.glassProminent)
         }
-    }
-}
-
-nonisolated enum PatientDetailsNavigationTitle {
-    // Display patient name in nav title when the name field is almost entirely off-screen (1% visible)
-    static let nameVisibilityThreshold = 0.01
-
-    static func text(patientDisplayName: String, isNameVisible: Bool) -> String {
-        isNameVisible ? "Patient Details" : patientDisplayName
     }
 }
 
@@ -116,6 +89,7 @@ nonisolated enum PatientDetailsNavigationTitle {
                 ViewPatientView(
                     details: item,
                     appointments: [],
+                    onNameVisibilityChange: { _ in },
                     onSelectAppointment: { _ in }
                 )
             }

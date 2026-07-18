@@ -10,6 +10,7 @@ This document captures the app-level presentation rules that must remain consist
 - Replacing one active details destination with another may reuse the stable sheet session for responsiveness, but it must replace the root and clear modal history. This intentionally supersedes the new-presentation-identity rule for external links in the implemented details-sheet specification; root replacement still preserves its user-facing requirement that the external destination starts with an xmark and no prior history.
 - Details navigation history belongs to the details presentation. Every push, pop, and root replacement must pass through router-owned mutation so route-specific invariants cannot be bypassed by a writable navigation path.
 - Appointment routes may open immediately from an ID. Until the appointment record resolves and the Schedule tab is showing the same calendar day, render neutral sheet content rather than contradictory appointment details.
+- Keep each details destination's navigation title and toolbar attached to its stable route view, outside loading, alignment, and unavailable-content branches. Covered routes may remain mounted by `NavigationStack`; withdrawing their navigation preferences during a push can leave stale chrome when the user navigates back.
 - External schedule and list destinations interrupt any app-level presentation before changing the underlying tab or selection.
 
 ## Do Not Reintroduce

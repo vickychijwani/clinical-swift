@@ -25,11 +25,7 @@ struct AppointmentDetailsView: View {
                 // The appointment date is unknown until this record resolves. Keep the sheet
                 // neutral until the router has aligned the Schedule tab and day; rendering sooner
                 // would show details for date X over a schedule displaying date Y.
-                if router.scheduleIsAligned(
-                    with: details.appointment.start,
-                    appointmentID: details.appointment.id,
-                    presentationID: presentationID
-                ) {
+                if canRender(details) {
                     AppointmentDetailsContent(
                         model: model,
                         onSelectPatient: onSelectPatient
@@ -53,11 +49,58 @@ struct AppointmentDetailsView: View {
                 ProgressView()
             }
         }
+        .navigationTitle("Appointment")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let details = model.details, model.showsMessagingAction {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(
+                        "Send Appointment Confirmation",
+                        systemImage: "arrow.up.message"
+                    ) {
+                        router.requestAppointmentMessage(details)
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
+        }
+        .alert(
+            "Unable to update appointment",
+            isPresented: Binding(
+                get: { model.errorMessage != nil },
+                set: { if !$0 { model.dismissError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                model.dismissError()
+            }
+        } message: {
+            Text(model.errorMessage ?? "")
+        }
         .task {
             _ = try? await model.load()
             guard !Task.isCancelled else { return }
             hasResolvedInitialDetails = true
         }
+    }
+
+    private func canRender(_ details: AppointmentDetails) -> Bool {
+        let appointmentID = details.appointment.id
+        guard
+            router.isCurrentDetailsRoute(
+                .appointment(appointmentID),
+                presentationID: presentationID
+            )
+        else {
+            // A covered route must keep its resolved content and navigation preferences mounted.
+            return true
+        }
+
+        return router.scheduleIsAligned(
+            with: details.appointment.start,
+            appointmentID: appointmentID,
+            presentationID: presentationID
+        )
     }
 }
 
@@ -116,34 +159,6 @@ private struct AppointmentDetailsContent: View {
                     description: Text("This appointment no longer exists.")
                 )
             }
-        }
-        .navigationTitle("Appointment")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if let details = model.details, model.showsMessagingAction {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(
-                        "Send Appointment Confirmation",
-                        systemImage: "arrow.up.message"
-                    ) {
-                        router.requestAppointmentMessage(details)
-                    }
-                    .labelStyle(.iconOnly)
-                }
-            }
-        }
-        .alert(
-            "Unable to update appointment",
-            isPresented: Binding(
-                get: { model.errorMessage != nil },
-                set: { if !$0 { model.dismissError() } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                model.dismissError()
-            }
-        } message: {
-            Text(model.errorMessage ?? "")
         }
     }
 

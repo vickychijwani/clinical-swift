@@ -117,9 +117,10 @@ final class Router {
         // Appointment records resolve asynchronously. Require both the sheet session and its
         // current route to match so a late result cannot change the tab or date after navigation.
         guard
-            let detailsPresentation,
-            detailsPresentation.id == presentationID,
-            detailsPresentation.currentRoute == .appointment(appointmentID)
+            isCurrentDetailsRoute(
+                .appointment(appointmentID),
+                presentationID: presentationID
+            )
         else { return }
 
         selectedTab = .schedule
@@ -133,12 +134,23 @@ final class Router {
     ) -> Bool {
         guard
             selectedTab == .schedule,
-            let detailsPresentation,
-            detailsPresentation.id == presentationID,
-            detailsPresentation.currentRoute == .appointment(appointmentID)
+            isCurrentDetailsRoute(
+                .appointment(appointmentID),
+                presentationID: presentationID
+            )
         else { return false }
 
         return calendar.isDate(appointmentDate, inSameDayAs: selectedScheduleDate)
+    }
+
+    func isCurrentDetailsRoute(
+        _ route: Route,
+        presentationID: DetailsPresentation.ID
+    ) -> Bool {
+        guard let detailsPresentation, detailsPresentation.id == presentationID else {
+            return false
+        }
+        return detailsPresentation.currentRoute == route
     }
 
     func requestAppointmentEdit(_ details: AppointmentDetails) {
