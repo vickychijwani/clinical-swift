@@ -8,6 +8,7 @@ struct ClinicalApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var router: Router
     private let widgetTimelineInvalidator: WidgetTimelineInvalidator
+    private let appointmentCalendarSyncCoordinator: AppointmentCalendarSyncCoordinator
 
     init() {
         let router = Router()
@@ -19,6 +20,11 @@ struct ClinicalApp: App {
 
         _router = State(initialValue: router)
         widgetTimelineInvalidator = WidgetTimelineInvalidator(database: database)
+        appointmentCalendarSyncCoordinator = AppointmentCalendarSyncCoordinator(
+            database: database,
+            calendarClient: .live(),
+            contactClient: .liveValue
+        )
         AppDependencyManager.shared.add(
             dependency: ClinicalAppActions(router: router, database: database)
         )
@@ -37,6 +43,9 @@ struct ClinicalApp: App {
                     ContentView(router: router)
                 #endif
             }
+            .task {
+                await appointmentCalendarSyncCoordinator.activate()
+            }
             .onChange(of: scenePhase) { _, scenePhase in
                 // The live writer opts into these notifications in
                 // ClinicalSharedDatabase.openWriter.
@@ -49,6 +58,9 @@ struct ClinicalApp: App {
                         name: Database.resumeNotification,
                         object: nil
                     )
+                    Task {
+                        await appointmentCalendarSyncCoordinator.activate()
+                    }
                 case .background:
                     NotificationCenter.default.post(
                         name: Database.suspendNotification,

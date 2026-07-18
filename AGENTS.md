@@ -18,6 +18,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfre
 - Test structure, dependency overrides, and async database access: `docs/testing.md`
 - WidgetKit, App Group database access, timeline refresh, exact-fit layout, and widget routing: `docs/widgets.md`
 - App-level presentation ownership, details navigation, and interruption policy: `docs/routing.md`
+- One-way EventKit appointment sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 

@@ -46,6 +46,10 @@ func appDatabase(seedSamples: Bool = false) throws -> any DatabaseWriter {
 }
 
 func migrateDatabase(_ database: any DatabaseWriter) throws {
+    try databaseMigrator().migrate(database)
+}
+
+func databaseMigrator() -> DatabaseMigrator {
     var migrator = DatabaseMigrator()
     #if DEBUG
         migrator.eraseDatabaseOnSchemaChange = true
@@ -156,7 +160,141 @@ func migrateDatabase(_ database: any DatabaseWriter) throws {
         .execute(db)
     }
 
-    try migrator.migrate(database)
+    migrator.registerMigration("Create appointment Calendar sync outbox") { db in
+        try #sql(
+            """
+            CREATE TABLE "appointmentCalendarSync" (
+              "appointmentID" TEXT PRIMARY KEY NOT NULL,
+              "eventIdentifier" TEXT,
+              "eventStart" TEXT,
+              "needsSync" INTEGER NOT NULL CHECK ("needsSync" IN (0, 1)),
+              "revision" INTEGER NOT NULL,
+              "createdAt" TEXT NOT NULL,
+              "updatedAt" TEXT NOT NULL
+            ) STRICT
+            """
+        )
+        .execute(db)
+
+        try #sql(
+            """
+            CREATE TRIGGER "queue_appointment_calendar_sync_after_insert"
+            AFTER INSERT ON "appointments"
+            BEGIN
+              INSERT INTO "appointmentCalendarSync" (
+                "appointmentID", "eventIdentifier", "eventStart", "needsSync",
+                "revision", "createdAt", "updatedAt"
+              ) VALUES (
+                NEW."id", NULL, NULL, 1, 1,
+                strftime('%Y-%m-%d %H:%M:%f', 'now'),
+                strftime('%Y-%m-%d %H:%M:%f', 'now')
+              )
+              ON CONFLICT("appointmentID") DO UPDATE SET
+                "needsSync" = 1,
+                "revision" = "appointmentCalendarSync"."revision" + 1,
+                "updatedAt" = strftime('%Y-%m-%d %H:%M:%f', 'now');
+            END
+            """
+        )
+        .execute(db)
+
+        try #sql(
+            """
+            CREATE TRIGGER "queue_appointment_calendar_sync_after_schedule_update"
+            AFTER UPDATE OF "patientID", "start", "durationMinutes" ON "appointments"
+            WHEN OLD."patientID" IS NOT NEW."patientID"
+              OR OLD."start" IS NOT NEW."start"
+              OR OLD."durationMinutes" IS NOT NEW."durationMinutes"
+            BEGIN
+              INSERT INTO "appointmentCalendarSync" (
+                "appointmentID", "eventIdentifier", "eventStart", "needsSync",
+                "revision", "createdAt", "updatedAt"
+              ) VALUES (
+                NEW."id", NULL, NULL, 1, 1,
+                strftime('%Y-%m-%d %H:%M:%f', 'now'),
+                strftime('%Y-%m-%d %H:%M:%f', 'now')
+              )
+              ON CONFLICT("appointmentID") DO UPDATE SET
+                "needsSync" = 1,
+                "revision" = "appointmentCalendarSync"."revision" + 1,
+                "updatedAt" = strftime('%Y-%m-%d %H:%M:%f', 'now');
+            END
+            """
+        )
+        .execute(db)
+
+        try #sql(
+            """
+            CREATE TRIGGER "queue_appointment_calendar_sync_after_cancellation"
+            AFTER UPDATE OF "status" ON "appointments"
+            WHEN NEW."status" = 'cancelled' AND OLD."status" IS NOT NEW."status"
+            BEGIN
+              INSERT INTO "appointmentCalendarSync" (
+                "appointmentID", "eventIdentifier", "eventStart", "needsSync",
+                "revision", "createdAt", "updatedAt"
+              ) VALUES (
+                NEW."id", NULL, NULL, 1, 1,
+                strftime('%Y-%m-%d %H:%M:%f', 'now'),
+                strftime('%Y-%m-%d %H:%M:%f', 'now')
+              )
+              ON CONFLICT("appointmentID") DO UPDATE SET
+                "needsSync" = 1,
+                "revision" = "appointmentCalendarSync"."revision" + 1,
+                "updatedAt" = strftime('%Y-%m-%d %H:%M:%f', 'now');
+            END
+            """
+        )
+        .execute(db)
+
+        try #sql(
+            """
+            CREATE TRIGGER "queue_appointment_calendar_sync_after_delete"
+            AFTER DELETE ON "appointments"
+            BEGIN
+              INSERT INTO "appointmentCalendarSync" (
+                "appointmentID", "eventIdentifier", "eventStart", "needsSync",
+                "revision", "createdAt", "updatedAt"
+              ) VALUES (
+                OLD."id", NULL, NULL, 1, 1,
+                strftime('%Y-%m-%d %H:%M:%f', 'now'),
+                strftime('%Y-%m-%d %H:%M:%f', 'now')
+              )
+              ON CONFLICT("appointmentID") DO UPDATE SET
+                "needsSync" = 1,
+                "revision" = "appointmentCalendarSync"."revision" + 1,
+                "updatedAt" = strftime('%Y-%m-%d %H:%M:%f', 'now');
+            END
+            """
+        )
+        .execute(db)
+
+        try #sql(
+            """
+            CREATE TRIGGER "queue_appointment_calendar_sync_after_patient_update"
+            AFTER UPDATE OF "name", "phone" ON "patients"
+            WHEN OLD."name" IS NOT NEW."name" OR OLD."phone" IS NOT NEW."phone"
+            BEGIN
+              INSERT INTO "appointmentCalendarSync" (
+                "appointmentID", "eventIdentifier", "eventStart", "needsSync",
+                "revision", "createdAt", "updatedAt"
+              )
+              SELECT
+                "id", NULL, NULL, 1, 1,
+                strftime('%Y-%m-%d %H:%M:%f', 'now'),
+                strftime('%Y-%m-%d %H:%M:%f', 'now')
+              FROM "appointments"
+              WHERE "patientID" = NEW."id" AND "status" != 'cancelled'
+              ON CONFLICT("appointmentID") DO UPDATE SET
+                "needsSync" = 1,
+                "revision" = "appointmentCalendarSync"."revision" + 1,
+                "updatedAt" = strftime('%Y-%m-%d %H:%M:%f', 'now');
+            END
+            """
+        )
+        .execute(db)
+    }
+
+    return migrator
 }
 
 nonisolated private let databaseLogger = Logger(
@@ -211,6 +349,13 @@ nonisolated private let databaseLogger = Logger(
                         record
                     }
                     .execute(db)
+
+                    // Debug seed rows demonstrate the UI; they are not clinic appointments and
+                    // must never be exported into the device owner's Bitehaus calendar.
+                    try AppointmentCalendarSyncRecord
+                        .where { $0.appointmentID.eq(appointment.id) }
+                        .delete()
+                        .execute(db)
                 }
             }
         }

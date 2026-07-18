@@ -24,6 +24,11 @@ General invariants:
 - The live database resides in the `group.in.bitehaus.clinical` App Group so the WidgetKit
   extension can read it. The app remains the only migration and write owner; extensions open a
   coordinated read-only pool and never create or migrate the database.
+- `appointmentCalendarSync` is device-local integration metadata even though it lives beside the
+  app's domain tables so database triggers can enqueue Calendar work transactionally. Never include
+  it in future CloudKit or other cross-device sync: EventKit identifiers belong to one device's
+  event store. Its missing appointment foreign key is deliberate so deletion work survives patient
+  cascade deletion.
 - Shared database connections use persistent WAL mode and `NSFileCoordinator`. Do not replace this
   with an uncoordinated read-only connection: read-only processes cannot recreate missing WAL/SHM
   sidecars, and cross-process opening has additional file-locking constraints.

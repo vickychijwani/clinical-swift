@@ -39,11 +39,12 @@
 - [ ] Shortcut to create appointment
 - [ ] End of day reminders (maybe location-fenced?) to mark all appointments complete/cancelled, record payments (or indicate "no payment"), etc
   - [ ] Indicators/flags on appointment cards to indicate whether they're processed or not
-- [ ] Calendar sync for CarPlay + my visibility - but remove Calendar widget from home screen to ensure app adoption
+- [x] Calendar sync for CarPlay + my visibility - but remove Calendar widget from home screen to ensure app adoption
 - [ ] Block off time ranges (e.g., travelling, holiday, etc) OR sync to Calendar
 - [ ] Add local + cloud logging for release builds (see Logger example in Database.swift)
 - [ ] Patient data backups? This system will be a critical dependency for the clinic!
 - [ ] Basic dark mode support - check if Monu’s phone has it enabled - contrast is terrible
+- [ ] Change `targetCalendarTitle` to “Bitehaus” before release
 - [ ] Universal search - next to tab bar - search for patients, appointments, payments, search by phone number - entrypoint for several other features
   - [ ] Share recent call / contact to create Patient
   - [ ] Share recent call / contact to open patient details (or show search results if multiple, e.g., family members) associated with that phone number
