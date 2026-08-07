@@ -58,7 +58,7 @@ Bugs:
 - [ ] Colors: https://developer.apple.com/design/human-interface-guidelines/color
 - [x] Make it impossible to dismiss sheets with unsaved forms (or ask for discard confirmation)
 - [ ] Fitted sheet still resizes upon scroll, in patient edit sheet. Other sheets are fine (but they also don't have scrollable contents at the moment, I think, not sure).
-- [x] When switching to a different date, selected appointment sheet should be dismissed (record a UX invariant: never show appointment details for date X on the schedule for date Y, to prevent user confusion). However, if widget OR navigation within sheet (OR any other mechanism) is used to open appointment on date Y, then instead jump to date Y in schedule but keep the date X appointment in navigation history - and switch back to the date X schedule when navigating back to that appointment. In other words, bind the date strip to selected appointment at all times - and dismiss the sheet if the date is changed by selecting on the date strip directly.
+- [x] UX invariant: Never show appointment details for date X on the schedule for date Y, to prevent user confusion.
 - [x] Simplify Router behaviour - newly-triggered actions are always more critical/time-sensitive compared to whatever was on-screen - interrupting is better than queueing the request
 - [ ] Appointment cards in patient details should have a chevron
 
