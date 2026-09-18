@@ -98,12 +98,12 @@ Nice to haves:
 - [ ] Record ad-hoc incoming (radiographic fee, Dr. Chaitra, etc)
 - [ ] Chart of cash flow per month
 - [ ] Chart of new and repeat patients per month
+- [ ] Automatically read incoming/outgoing transaction notifications using Shortcuts notif automation or Gmail API? You can even create a simple Google Workspace MCP server [directly with Google Apps Script](https://github.com/tanaikech/MCPApp)! Show a card like "Review detected payments" and let user select which ones should be recorded, edit them in-line, or dismiss
 
 Nice to haves:
 - [ ] For each outgoing payment, ask "Is this an operating expense or an investment?" (find better words understood by Monu) - useful for calculating net vs op. profit and margin
 - [ ] "You have untagged expenses" - tag each expense entity once (e.g., an outgoing payment with entity = "Shruti" could be tagged as "Op Ex" + "Salary")
 - [ ] Have a lightweight cards-based UI - predict the likely category of a new expense entity using Apple Foundation Models etc (e.g., on 30/06 we added "Assistants salary" in Bitehaus Finances, instead of names like "Shruti"), and let the user tap a checkmark to accept it, or edit the category and then accept it.
-- [ ] Automatically read incoming/outgoing transaction notifications from Gmail? You can even create a simple Google Workspace MCP server [directly with Google Apps Script](https://github.com/tanaikech/MCPApp)! Show a card like "Review detected payments" and let user select which ones should be recorded, edit them in-line, or dismiss
 - [ ] Photo(s) of bills for outgoing payments (note: there may be more than 1)
 - [ ] Auto-populate outgoing payment from bill photo
 
