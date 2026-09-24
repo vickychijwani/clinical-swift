@@ -7,9 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		B2000000000000000000000C /* ClinicalWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ClinicalWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		B2000000000000000000000F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0292FE0000000000005 /* GRDB */; };
-		B20000000000000000000010 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02B2FE0000000000005 /* Dependencies */; };
 		8BE2A01C2FE0000000000005 /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A01E2FE0000000000005 /* SQLiteData */; };
 		8BE2A01D2FE0000000000005 /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0202FE0000000000005 /* SQLiteData */; };
 		8BE2A0392FE0000000000005 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0292FE0000000000005 /* GRDB */; };
@@ -28,16 +25,12 @@
 		8BE2A0462FE0000000000005 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0362FE0000000000005 /* Perception */; };
 		8BE2A0472FE0000000000005 /* Sharing in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0372FE0000000000005 /* Sharing */; };
 		8BE2A0482FE0000000000005 /* StructuredQueriesSQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */; };
+		B2000000000000000000000C /* ClinicalWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ClinicalWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B2000000000000000000000F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0292FE0000000000005 /* GRDB */; };
+		B20000000000000000000010 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02B2FE0000000000005 /* Dependencies */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		B2000000000000000000000D /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 79438C3B2FD2D07100C0E6EF /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = B20000000000000000000004;
-			remoteInfo = ClinicalWidgetExtension;
-		};
 		8BE2A0152FE0000000000005 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 79438C3B2FD2D07100C0E6EF /* Project object */;
@@ -51,6 +44,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 79438C422FD2D07100C0E6EF;
 			remoteInfo = "clinical-swift";
+		};
+		B2000000000000000000000D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 79438C3B2FD2D07100C0E6EF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B20000000000000000000004;
+			remoteInfo = ClinicalWidgetExtension;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -69,20 +69,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		B20000000000000000000001 /* ClinicalWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClinicalWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		79438C432FD2D07100C0E6EF /* clinical-swift.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "clinical-swift.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		8BE2A0172FE0000000000005 /* clinical-swiftTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "clinical-swiftTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000001 /* clinical-swiftUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "clinical-swiftUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000001 /* ClinicalWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClinicalWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		C10000000000000000000001 /* Exceptions for "clinical-swift" folder in "clinical-swift" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 79438C422FD2D07100C0E6EF /* clinical-swift */;
-		};
 		B20000000000000000000011 /* Exceptions for "ClinicalWidget" folder in "ClinicalWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -90,22 +83,16 @@
 			);
 			target = B20000000000000000000004 /* ClinicalWidgetExtension */;
 		};
+		C10000000000000000000001 /* Exceptions for "clinical-swift" folder in "clinical-swift" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 79438C422FD2D07100C0E6EF /* clinical-swift */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B20000000000000000000002 /* ClinicalShared */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ClinicalShared;
-			sourceTree = "<group>";
-		};
-		B20000000000000000000003 /* ClinicalWidget */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B20000000000000000000011 /* Exceptions for "ClinicalWidget" folder in "ClinicalWidgetExtension" target */,
-			);
-			path = ClinicalWidget;
-			sourceTree = "<group>";
-		};
 		79438C452FD2D07100C0E6EF /* clinical-swift */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -124,18 +111,22 @@
 			path = "clinical-swiftUITests";
 			sourceTree = "<group>";
 		};
+		B20000000000000000000002 /* ClinicalShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ClinicalShared;
+			sourceTree = "<group>";
+		};
+		B20000000000000000000003 /* ClinicalWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B20000000000000000000011 /* Exceptions for "ClinicalWidget" folder in "ClinicalWidgetExtension" target */,
+			);
+			path = ClinicalWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		B20000000000000000000006 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				B2000000000000000000000F /* GRDB in Frameworks */,
-				B20000000000000000000010 /* Dependencies in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		79438C402FD2D07100C0E6EF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -175,6 +166,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B20000000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2000000000000000000000F /* GRDB in Frameworks */,
+				B20000000000000000000010 /* Dependencies in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -204,31 +204,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		B20000000000000000000004 /* ClinicalWidgetExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = B20000000000000000000008 /* Build configuration list for PBXNativeTarget "ClinicalWidgetExtension" */;
-			buildPhases = (
-				B20000000000000000000005 /* Sources */,
-				B20000000000000000000006 /* Frameworks */,
-				B20000000000000000000007 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				B20000000000000000000002 /* ClinicalShared */,
-				B20000000000000000000003 /* ClinicalWidget */,
-			);
-			name = ClinicalWidgetExtension;
-			packageProductDependencies = (
-				8BE2A0292FE0000000000005 /* GRDB */,
-				8BE2A02B2FE0000000000005 /* Dependencies */,
-			);
-			productName = ClinicalWidgetExtension;
-			productReference = B20000000000000000000001 /* ClinicalWidgetExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 		79438C422FD2D07100C0E6EF /* clinical-swift */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 79438C502FD2D07300C0E6EF /* Build configuration list for PBXNativeTarget "clinical-swift" */;
@@ -318,6 +293,31 @@
 			productReference = A10000000000000000000001 /* clinical-swiftUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		B20000000000000000000004 /* ClinicalWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B20000000000000000000008 /* Build configuration list for PBXNativeTarget "ClinicalWidgetExtension" */;
+			buildPhases = (
+				B20000000000000000000005 /* Sources */,
+				B20000000000000000000006 /* Frameworks */,
+				B20000000000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B20000000000000000000002 /* ClinicalShared */,
+				B20000000000000000000003 /* ClinicalWidget */,
+			);
+			name = ClinicalWidgetExtension;
+			packageProductDependencies = (
+				8BE2A0292FE0000000000005 /* GRDB */,
+				8BE2A02B2FE0000000000005 /* Dependencies */,
+			);
+			productName = ClinicalWidgetExtension;
+			productReference = B20000000000000000000001 /* ClinicalWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -328,14 +328,6 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
-					B20000000000000000000004 = {
-						CreatedOnToolsVersion = 26.4.1;
-						SystemCapabilities = {
-							com.apple.ApplicationGroups.iOS = {
-								enabled = 1;
-							};
-						};
-					};
 					79438C422FD2D07100C0E6EF = {
 						CreatedOnToolsVersion = 26.4.1;
 						SystemCapabilities = {
@@ -351,6 +343,14 @@
 					A10000000000000000000008 = {
 						CreatedOnToolsVersion = 26.4.1;
 						TestTargetID = 79438C422FD2D07100C0E6EF;
+					};
+					B20000000000000000000004 = {
+						CreatedOnToolsVersion = 26.4.1;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -388,13 +388,6 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		B20000000000000000000007 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		79438C412FD2D07100C0E6EF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -416,16 +409,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-/* End PBXResourcesBuildPhase section */
-
-/* Begin PBXSourcesBuildPhase section */
-		B20000000000000000000005 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
+		B20000000000000000000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
 		79438C3F2FD2D07100C0E6EF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -447,14 +440,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B20000000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		B2000000000000000000000E /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = B20000000000000000000004 /* ClinicalWidgetExtension */;
-			targetProxy = B2000000000000000000000D /* PBXContainerItemProxy */;
-		};
 		8BE2A0162FE0000000000005 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 79438C422FD2D07100C0E6EF /* clinical-swift */;
@@ -465,77 +460,14 @@
 			target = 79438C422FD2D07100C0E6EF /* clinical-swift */;
 			targetProxy = A10000000000000000000006 /* PBXContainerItemProxy */;
 		};
+		B2000000000000000000000E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B20000000000000000000004 /* ClinicalWidgetExtension */;
+			targetProxy = B2000000000000000000000D /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		B20000000000000000000009 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = AppBackground;
-				CODE_SIGN_ENTITLEMENTS = ClinicalWidget/ClinicalWidget.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = WM7GP7FBL7;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = ClinicalWidget/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = in.bitehaus.clinical.widget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "WIDGET_EXTENSION $(inherited)";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		B2000000000000000000000A /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = AppBackground;
-				CODE_SIGN_ENTITLEMENTS = ClinicalWidget/ClinicalWidget.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = WM7GP7FBL7;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = ClinicalWidget/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = in.bitehaus.clinical.widget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "WIDGET_EXTENSION $(inherited)";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 		79438C4E2FD2D07300C0E6EF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -662,8 +594,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "clinical-swift/clinical-swift.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CODE_SIGN_ENTITLEMENTS = clinical-swift/clinical-swift.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WM7GP7FBL7;
 				ENABLE_PREVIEWS = YES;
@@ -692,8 +624,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "clinical-swift/clinical-swift.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CODE_SIGN_ENTITLEMENTS = clinical-swift/clinical-swift.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WM7GP7FBL7;
 				ENABLE_PREVIEWS = YES;
@@ -823,18 +755,77 @@
 			};
 			name = Release;
 		};
+		B20000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = AppBackground;
+				CODE_SIGN_ENTITLEMENTS = ClinicalWidget/ClinicalWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WM7GP7FBL7;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ClinicalWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = in.bitehaus.clinical.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "WIDGET_EXTENSION $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B2000000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = AppBackground;
+				CODE_SIGN_ENTITLEMENTS = ClinicalWidget/ClinicalWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WM7GP7FBL7;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ClinicalWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = in.bitehaus.clinical.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "WIDGET_EXTENSION $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		B20000000000000000000008 /* Build configuration list for PBXNativeTarget "ClinicalWidgetExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				B20000000000000000000009 /* Debug */,
-				B2000000000000000000000A /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		79438C3E2FD2D07100C0E6EF /* Build configuration list for PBXProject "clinical-swift" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -867,6 +858,15 @@
 			buildConfigurations = (
 				A1000000000000000000000A /* Debug */,
 				A1000000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B20000000000000000000008 /* Build configuration list for PBXNativeTarget "ClinicalWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B20000000000000000000009 /* Debug */,
+				B2000000000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

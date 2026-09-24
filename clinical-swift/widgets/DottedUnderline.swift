@@ -29,7 +29,7 @@ private struct DottedUnderline: ViewModifier {
     }
 }
 
-private struct Line: Shape {
+private nonisolated struct Line: Shape {
     func path(in rect: CGRect) -> Path {
         Path { path in
             path.move(to: CGPoint(x: rect.minX, y: rect.midY))
