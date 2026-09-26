@@ -36,7 +36,7 @@
   - [x] Add honorific in message greeting
   - [ ] Make sure SMS is sent from Bitehaus number, not personal
 - [x] Widget
-- [ ] Shortcut to create appointment
+- [x] Shortcut to create appointment
 - [ ] End of day reminders (maybe location-fenced?) to mark all appointments complete/cancelled, record payments (or indicate "no payment"), etc
   - [ ] Indicators/flags on appointment cards to indicate whether they're processed or not
 - [x] Calendar sync for CarPlay + my visibility - but remove Calendar widget from home screen to ensure app adoption
@@ -69,7 +69,7 @@ Observations from in-hand testing:
 Nice to haves:
 - [x] Toolbar for Complete/Cancel/Call/WhatsApp buttons
 - [x] Action Sheets for Complete/Cancel/Discard prompts
-- [ ] Quick-add patient button in appointment booking isn't intuitive - should be shown as a search result
+- [x] Quick-add patient button in appointment booking isn't intuitive - should be shown as a search result
 - [ ] First non-cancelled appointment should default to 15 min
 - [ ] Warning in appointment booking for time in past
 - [ ] Fun animated greetings with draw + gradient symbol animations

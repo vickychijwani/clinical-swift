@@ -271,14 +271,6 @@ private struct AppointmentBookingPatientSelectionStep: View {
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.secondary)
                     }
-
-                    Button("New", systemImage: "plus") {
-                        createPatient()
-                    }
-                    .labelStyle(.titleAndIcon)
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.small)
                 }
                 .padding(10)
                 .background(.background)
@@ -295,6 +287,16 @@ private struct AppointmentBookingPatientSelectionStep: View {
                                 .padding(.leading, 56)
                                 .padding(.trailing, 24)
                         }
+                    }
+
+                    if let name = searchText.nilIfBlank {
+                        if !patientItems.isEmpty {
+                            Divider()
+                                .padding(.leading, 56)
+                                .padding(.trailing, 24)
+                        }
+
+                        AppointmentBookingCreatePatientRow(name: name, create: createPatient)
                     }
                 }
                 .background(.background)
@@ -314,6 +316,38 @@ private struct AppointmentBookingPatientRow: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct AppointmentBookingCreatePatientRow: View {
+    let name: String
+    let create: () -> Void
+
+    var body: some View {
+        Button(action: create) {
+            HStack(spacing: 12) {
+                Image(systemName: "plus")
+                    .font(.headline.pointSize(13))
+                    .bold()
+                    .foregroundStyle(.green)
+                    .frame(width: 34, height: 34)
+                    .background(.green.opacity(0.16))
+                    .clipShape(.circle)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Add new patient")
+                        .styleBodyBold()
+
+                    Text("Name: \(name)")
+                        .styleCaption()
+                        .lineLimit(2)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }
