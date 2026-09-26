@@ -35,6 +35,7 @@ General invariants:
 
 - Domain structs remain separate from database records. `Patient` and `Appointment` are UI-facing values; `PatientRecord` and `AppointmentRecord` define the SQLite boundary.
 - Typed read selections should nest complete record values alongside aggregates or joined records. This keeps query projections aligned with table schemas and avoids duplicating record construction field by field.
+- Query builders passed to SQLiteData async fetch APIs must return `some Statement<...> & Sendable`. This makes the opaque statement's conformance safe to use across SQLiteData's concurrent boundary under the app's default MainActor isolation.
 - StructuredQueries expressions can overwhelm Swift's type checker after a join. Apply single-table filtering, grouping, and ordering before the join when semantics allow, and use one named intermediate query to establish the simpler generic type.
 - `collate` requires a non-optional string expression. For nullable text, use `column.ifnull("").collate(...)`; prefer `ifnull` over the heavily overloaded query `??` operator to reduce compiler work.
 - Every record table has standard `createdAt` and `updatedAt` fields.

@@ -27,7 +27,7 @@ nonisolated struct AppointmentPatientSelection: Identifiable, Sendable {
 
 nonisolated func querySchedule(
     selectedDate: Date
-) -> some Statement<AppointmentPatientSelection> {
+) -> some Statement<AppointmentPatientSelection> & Sendable {
     let calendar = Calendar.autoupdatingCurrent
     let start = selectedDate.startOfDay(using: calendar)
     let endExclusive = calendar.date(byAdding: .day, value: 1, to: start) ?? start
@@ -38,7 +38,7 @@ nonisolated func querySchedule(
 nonisolated func queryScheduleWindow(
     centeredOn selectedDate: Date,
     dayRadius: Int
-) -> some Statement<AppointmentPatientSelection> {
+) -> some Statement<AppointmentPatientSelection> & Sendable {
     let calendar = Calendar.autoupdatingCurrent
     let dayRadius = max(dayRadius, 1)
     let center = selectedDate.startOfDay(using: calendar)
@@ -51,7 +51,7 @@ nonisolated func queryScheduleWindow(
 nonisolated private func scheduleAppointmentsQuery(
     start: Date,
     endExclusive: Date
-) -> some Statement<AppointmentPatientSelection> {
+) -> some Statement<AppointmentPatientSelection> & Sendable {
     return
         AppointmentRecord
         .where { $0.start >= start }
@@ -69,7 +69,7 @@ nonisolated private func scheduleAppointmentsQuery(
 
 nonisolated func appointmentDetailsQuery(
     id: Appointment.ID
-) -> some Statement<AppointmentPatientSelection> {
+) -> some Statement<AppointmentPatientSelection> & Sendable {
     AppointmentRecord
         .where { $0.id.eq(id) }
         .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
@@ -84,7 +84,7 @@ nonisolated func appointmentDetailsQuery(
 
 nonisolated func patientTimelineAppointmentsQuery(
     patientID: Patient.ID
-) -> some Statement<AppointmentRecord> {
+) -> some Statement<AppointmentRecord> & Sendable {
     AppointmentRecord
         .where { $0.patientID.eq(patientID) }
         .where {
@@ -99,7 +99,7 @@ nonisolated func patientTimelineAppointmentsQuery(
 
 nonisolated func earliestVisibleAppointmentQuery(
     patientID: Patient.ID
-) -> some Statement<AppointmentRecord> {
+) -> some Statement<AppointmentRecord> & Sendable {
     AppointmentRecord
         .where { $0.patientID.eq(patientID) }
         .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }

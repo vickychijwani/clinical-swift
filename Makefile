@@ -1,11 +1,16 @@
 SHELL := /bin/bash
 
+XCODE_DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
+export DEVELOPER_DIR := $(XCODE_DEVELOPER_DIR)
+
 PROJECT := clinical-swift.xcodeproj
 SCHEME := clinical-swift
 UNIT_TEST_SCHEME := clinical-swift-UnitTests
 UI_TEST_SCHEME := clinical-swift-UITests
 CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
+SIMULATOR_OS ?= 27.0
+SIMULATOR_ID ?= $(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun simctl list devices --json 2>/dev/null | python3 -c 'import json, sys; devices=json.load(sys.stdin)["devices"]; ios=[d for runtime, items in devices.items() if runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-") for d in items]; running=[d for d in ios if d["state"] == "Booted"]; runtime="iOS-" + "-".join("$(SIMULATOR_OS)".split(".")); fallback=[d for key, items in devices.items() if key.endswith(runtime) for d in items if d["name"] == "$(SIMULATOR)"]; choices=running or fallback; print(choices[0]["udid"] if choices else "")' 2>/dev/null)
 BUNDLE_ID := in.bitehaus.clinical
 APP_NAME := Clinical
 TEAM_ID := WM7GP7FBL7
@@ -32,7 +37,7 @@ BACKUP_ARCHIVE_SCRIPT := $(CURDIR)/scripts/backup_archive_to_github.sh
 NEXT_BUILD_NUMBER_SCRIPT := $(CURDIR)/scripts/next_app_store_build_number.swift
 TRIGGER_XCODE_CLOUD_BUILD_SCRIPT := $(CURDIR)/scripts/trigger_xcode_cloud_build.swift
 
-DESTINATION := platform=iOS Simulator,name=$(SIMULATOR),OS=latest
+DESTINATION := platform=iOS Simulator,id=$(SIMULATOR_ID)
 ARCHIVE_DESTINATION := generic/platform=iOS
 XCBEAUTIFY := xcbeautify -q --disable-logging
 XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
@@ -52,12 +57,13 @@ UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)"
 
 .DEFAULT_GOAL := build-and-run
 
-.PHONY: help diagnose prepare check-tools check-app-store-connect-tools check-github-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
+.PHONY: help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-github-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
 
 help:
 	@printf "%s\n" \
 		"Targets:" \
-		"  make                  Build, install, and run on $(SIMULATOR)" \
+		"  make                  Build, install, and run on the running iOS simulator" \
+		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when none is running" \
 		"  make build            Build the app" \
 		"  make test             Run unit tests" \
 		"  make ui-test          Run UI tests" \
@@ -76,12 +82,12 @@ help:
 		"  make remove-archive     Remove the latest local archive" \
 		"  BUILD_NUMBER=N          Override automatic build-number selection" \
 		"" \
-		"Simulator and maintenance:" \
-		"  make install          Build and install on $(SIMULATOR)" \
+		"Device Hub and maintenance:" \
+		"  make install          Build and install on the selected iOS simulator" \
 		"  make run              Launch the installed app" \
 		"  make resolve-packages Resolve Swift package dependencies" \
 		"  make diagnose         Print tool and project settings" \
-		"  make uninstall        Remove the app from the booted simulator" \
+		"  make uninstall        Remove the app from the selected iOS simulator" \
 		"  make clean            Remove local build outputs"
 
 diagnose:
@@ -90,7 +96,9 @@ diagnose:
 	@printf "Unit tests:    %s\n" "$(UNIT_TEST_SCHEME)"
 	@printf "UI tests:      %s\n" "$(UI_TEST_SCHEME)"
 	@printf "Configuration: %s\n" "$(CONFIGURATION)"
-	@printf "Simulator:     %s\n" "$(SIMULATOR)"
+	@printf "Xcode tools:   %s\n" "$(DEVELOPER_DIR)"
+	@printf "Fallback:      %s (iOS %s)\n" "$(SIMULATOR)" "$(SIMULATOR_OS)"
+	@printf "Target ID:     %s\n" "$(SIMULATOR_ID)"
 	@printf "Destination:   %s\n" "$(DESTINATION)"
 	@printf "App path:      %s\n" "$(APP_PATH)"
 	@printf "Bundle ID:     %s\n" "$(BUNDLE_ID)"
@@ -98,7 +106,7 @@ diagnose:
 	@printf "ASC issuer ID: %s\n" "$(ASC_ISSUER_ID)"
 	@printf "Cloud workflow: %s\n" "$(XCODE_CLOUD_WORKFLOW_ID)"
 	@printf "xcodebuild:    %s\n" "$$(xcrun --find xcodebuild)"
-	@printf "xcbeautify:    %s\n" "$$(command -v $(XCBEAUTIFY))"
+	@printf "xcbeautify:    %s\n" "$$(command -v $(firstword $(XCBEAUTIFY)))"
 
 prepare:
 	@mkdir -p "$(DERIVED_DATA)" "$(SOURCE_PACKAGES)" "$(MODULE_CACHE)" "$(TMPDIR_PATH)" "$(LOG_DIR)" "$(ARCHIVE_DIR)" "$(EXPORT_DIR)" "$(RELEASE_ASSETS_DIR)"
@@ -106,7 +114,11 @@ prepare:
 check-tools:
 	@command -v xcodebuild >/dev/null
 	@command -v xcrun >/dev/null
-	@command -v $(XCBEAUTIFY) >/dev/null || { echo "xcbeautify is required. Install it with: brew install xcbeautify"; exit 1; }
+	@command -v $(firstword $(XCBEAUTIFY)) >/dev/null || { echo "xcbeautify is required. Install it with: brew install xcbeautify"; exit 1; }
+	@test -d "$(DEVELOPER_DIR)" || { echo "Xcode developer directory not found: $(DEVELOPER_DIR)"; exit 1; }
+
+check-simulator:
+	@test -n "$(SIMULATOR_ID)" || { echo "No running iOS simulator was found, and fallback $(SIMULATOR) (iOS $(SIMULATOR_OS)) is unavailable."; exit 1; }
 
 check-app-store-connect-tools:
 	@command -v xcrun >/dev/null
@@ -139,14 +151,14 @@ resolve-packages: check-tools prepare
 		-resolvePackageDependencies \
 		2>&1 | tee "$(LOG_DIR)/resolve-packages.log" | $(XCBEAUTIFY)
 
-build: check-tools prepare
+build: check-tools check-simulator prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
 		$(XCODEBUILD_FLAGS) \
 		build \
 		2>&1 | tee "$(LOG_DIR)/build.log" | $(XCBEAUTIFY)
 
-test: check-tools prepare
+test: check-tools check-simulator prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
 		$(UNIT_TEST_FLAGS) \
@@ -158,7 +170,7 @@ test: check-tools prepare
 	fi; \
 	exit $$status
 
-ui-test: check-tools prepare
+ui-test: check-tools check-simulator prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
 		$(UI_TEST_FLAGS) \
@@ -253,22 +265,21 @@ release-testflight: check-tools check-github-tools prepare
 	$(MAKE) --no-print-directory backup-archive-with-build-number BUILD_NUMBER="$$number" && \
 	$(MAKE) --no-print-directory remove-archive-with-build-number BUILD_NUMBER="$$number"
 
-boot: check-tools
-	@xcrun simctl boot "$(SIMULATOR)" >/dev/null 2>&1 || true
-	@xcrun simctl bootstatus "$(SIMULATOR)" -b
-	@open -a Simulator
+boot: check-tools check-simulator
+	@xcrun simctl boot "$(SIMULATOR_ID)" >/dev/null 2>&1 || true
+	@xcrun simctl bootstatus "$(SIMULATOR_ID)" -b
 
 install: build boot
 	@test -d "$(APP_PATH)" || { echo "Missing built app at $(APP_PATH)"; exit 1; }
-	@xcrun simctl install booted "$(APP_PATH)"
+	@xcrun simctl install "$(SIMULATOR_ID)" "$(APP_PATH)"
 
-run: check-tools boot
-	@xcrun simctl launch booted "$(BUNDLE_ID)"
+run: check-tools check-simulator boot
+	@xcrun simctl launch "$(SIMULATOR_ID)" "$(BUNDLE_ID)"
 
 build-and-run: install run
 
-uninstall: check-tools boot
-	@xcrun simctl uninstall booted "$(BUNDLE_ID)" || true
+uninstall: check-tools check-simulator boot
+	@xcrun simctl uninstall "$(SIMULATOR_ID)" "$(BUNDLE_ID)" || true
 
 clean:
 	@rm -rf "$(BUILD_DIR)"
