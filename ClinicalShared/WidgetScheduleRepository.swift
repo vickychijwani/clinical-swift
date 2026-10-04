@@ -5,7 +5,35 @@ import GRDB
 nonisolated struct WidgetScheduleSection: Identifiable, Sendable {
     let date: Date
     let isToday: Bool
-    let appointments: [Appointment]
+    let items: [TimelineItem]
+
+    init(date: Date, isToday: Bool, items: [TimelineItem]) {
+        self.date = date
+        self.isToday = isToday
+        self.items = items.sorted(by: TimelineItem.ordered)
+    }
+
+    init(date: Date, isToday: Bool, appointments: [Appointment]) {
+        self.init(date: date, isToday: isToday, items: appointments.map(TimelineItem.appointment))
+    }
+
+    var appointments: [Appointment] {
+        items.compactMap {
+            guard case .appointment(let appointment) = $0 else { return nil }
+            return appointment
+        }
+    }
+
+    func overflowText(hiddenCount: Int) -> String {
+        let appointmentOnly = items.suffix(hiddenCount).allSatisfy {
+            if case .appointment = $0 { return true }
+            return false
+        }
+        if appointmentOnly {
+            return hiddenCount == 1 ? "1 more appointment" : "\(hiddenCount) more appointments"
+        }
+        return hiddenCount == 1 ? "1 more item" : "\(hiddenCount) more items"
+    }
 
     var id: Date { date }
 }
@@ -22,14 +50,14 @@ nonisolated struct WidgetScheduleSnapshot: Sendable {
                 to: calendar.startOfDay(for: generatedAt)
             ) ?? generatedAt.addingTimeInterval(60 * 60)
 
-        let nextAppointmentEnd =
+        let nextItemEnd =
             sections
-            .flatMap(\.appointments)
+            .flatMap(\.items)
             .map { $0.end(using: calendar) }
             .filter { $0 > generatedAt }
             .min()
 
-        return min(nextAppointmentEnd ?? nextMidnight, nextMidnight)
+        return min(nextItemEnd ?? nextMidnight, nextMidnight)
     }
 }
 
@@ -57,7 +85,7 @@ nonisolated struct WidgetScheduleRepository: Sendable {
         let startValue = Self.databaseDateString(today)
         let endValue = Self.databaseDateString(endExclusive)
 
-        let appointments = try database.read { database in
+        let items: [TimelineItem] = try database.read { database in
             let rows = try Row.fetchAll(
                 database,
                 // This is a raw SQL query because making it type-safe would require moving Record
@@ -83,7 +111,32 @@ nonisolated struct WidgetScheduleRepository: Sendable {
                 ]
             )
 
-            return try rows.map(Self.appointment(from:))
+            let appointments = try rows.map(Self.appointment(from:)).map(TimelineItem.appointment)
+            // A widget can open the old schema before the app has run its new migration.
+            let blocks: [TimelineItem]
+            if try database.tableExists("unavailableTimes") {
+                blocks = try Row.fetchAll(
+                    database,
+                    sql: """
+                        SELECT id, label, start, durationMinutes FROM unavailableTimes
+                        WHERE start >= ? AND start < ?
+                        """,
+                    arguments: [startValue, endValue]
+                ).map { row in
+                    let rawID: String = row["id"]
+                    guard let id = UUID(uuidString: rawID) else {
+                        throw WidgetScheduleRepositoryError.invalidUnavailableTimeRow
+                    }
+                    return .unavailableTime(
+                        UnavailableTime(
+                            id: id, label: row["label"], start: row["start"],
+                            durationMinutes: row["durationMinutes"]
+                        ))
+                }
+            } else {
+                blocks = []
+            }
+            return (appointments + blocks).sorted(by: TimelineItem.ordered)
         }
         .filter { $0.end(using: calendar) > now }
 
@@ -91,14 +144,14 @@ nonisolated struct WidgetScheduleRepository: Sendable {
             guard let date = calendar.date(byAdding: .day, value: dayOffset, to: today) else {
                 return nil
             }
-            let sectionAppointments = appointments.filter {
+            let sectionItems = items.filter {
                 calendar.isDate($0.start, inSameDayAs: date)
             }
 
             return WidgetScheduleSection(
                 date: date,
                 isToday: dayOffset == 0,
-                appointments: sectionAppointments
+                items: sectionItems
             )
         }
 
@@ -141,4 +194,5 @@ nonisolated struct WidgetScheduleRepository: Sendable {
 
 nonisolated enum WidgetScheduleRepositoryError: Error, Equatable, Sendable {
     case invalidAppointmentRow
+    case invalidUnavailableTimeRow
 }

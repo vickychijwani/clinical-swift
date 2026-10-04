@@ -15,14 +15,14 @@ struct WidgetLayoutPlannerTests {
         #expect(plan.sections[0].sourceIndex == 0)
         #expect(
             plan.sections[0].rows == [
-                .appointment(0),
-                .appointment(1),
-                .appointment(2),
-                .appointment(3),
-                .appointment(4),
-                .appointment(5),
-                .appointment(6),
-                .appointment(7),
+                .item(0),
+                .item(1),
+                .item(2),
+                .item(3),
+                .item(4),
+                .item(5),
+                .item(6),
+                .item(7),
             ])
         #expect(plan.rowHeight == 27)
         #expect(plan.contentHeight == 300)
@@ -36,13 +36,13 @@ struct WidgetLayoutPlannerTests {
         )
 
         #expect(plan.sections.map(\.sourceIndex) == [0, 1])
-        #expect(plan.sections[0].rows == [.appointment(0), .appointment(1)])
+        #expect(plan.sections[0].rows == [.item(0), .item(1)])
         #expect(
             plan.sections[1].rows == [
-                .appointment(0),
-                .appointment(1),
-                .appointment(2),
-                .appointment(3),
+                .item(0),
+                .item(1),
+                .item(2),
+                .item(3),
                 .overflow(hiddenCount: 2),
             ])
         #expect(plan.contentHeight == 300)
@@ -78,7 +78,7 @@ struct WidgetLayoutPlannerTests {
             return WidgetScheduleSection(
                 date: date,
                 isToday: offset == 0,
-                appointments: appointments
+                items: appointments.map(TimelineItem.appointment)
             )
         }
     }

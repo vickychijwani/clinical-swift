@@ -22,6 +22,8 @@ This document captures the deliberate constraints an agent is likely to break wh
 - While editing, render one draft preview and omit the persisted version of that appointment. Keeping both would duplicate the appointment and make availability suggestions treat it as its own conflict.
 - Opening an existing appointment for editing must preserve its saved time exactly. Automatic prefilling remains creation and subsequent date or duration change behavior, not edit initialization behavior.
 - Saving an edit updates the existing appointment identity and preserves its status and creation timestamp. Schedule refreshes and selects the saved date before the editor closes.
+- Unavailable time blocks are display data - they must never enter appointment availability inputs, nor use appointment availability to determine start time. Suggestions, manual selection, and appointment saving are identical with or without blocks.
+- Appointment and block overlaps are valid and require no confirmation. Other doctors can still work while the clinic owner is unavailable.
 
 ## Do Not Reintroduce
 

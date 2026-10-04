@@ -10,7 +10,7 @@ struct TimelineLayoutTests {
     @Test func nonOverlappingAppointmentsUseFullWidth() throws {
         let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
-        let layouts = engine.layout(appointments: [
+        let layouts = engine.layout(items: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
             appointment(id: secondID, startHour: 9, startMinute: 30, duration: 30),
         ])
@@ -27,7 +27,7 @@ struct TimelineLayoutTests {
     @Test func twoAppointmentsWithSameStartSplitIntoTwoColumns() throws {
         let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
-        let layouts = engine.layout(appointments: [
+        let layouts = engine.layout(items: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
             appointment(id: secondID, startHour: 9, startMinute: 0, duration: 30),
         ])
@@ -48,7 +48,7 @@ struct TimelineLayoutTests {
         let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
         let thirdID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
-        let layouts = engine.layout(appointments: [
+        let layouts = engine.layout(items: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
             appointment(id: secondID, startHour: 9, startMinute: 0, duration: 30),
             appointment(id: thirdID, startHour: 9, startMinute: 0, duration: 30),
@@ -75,7 +75,7 @@ struct TimelineLayoutTests {
         let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
         let thirdID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
-        let layouts = engine.layout(appointments: [
+        let layouts = engine.layout(items: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
             appointment(id: secondID, startHour: 9, startMinute: 15, duration: 30),
             appointment(id: thirdID, startHour: 9, startMinute: 30, duration: 30),
@@ -99,7 +99,7 @@ struct TimelineLayoutTests {
     @Test func appointmentsTouchingAtBoundaryDoNotSplitWidth() throws {
         let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
-        let layouts = engine.layout(appointments: [
+        let layouts = engine.layout(items: [
             appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
             appointment(id: secondID, startHour: 9, startMinute: 30, duration: 30),
         ])
@@ -113,7 +113,7 @@ struct TimelineLayoutTests {
 
     @Test func verticalPositionAndHeightUseExistingMinuteMath() throws {
         let id = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
-        let layouts = engine.layout(appointments: [
+        let layouts = engine.layout(items: [
             appointment(id: id, startHour: 9, startMinute: 30, duration: 45)
         ])
 
@@ -142,7 +142,7 @@ struct TimelineLayoutTests {
             startMinute: 0,
             duration: 30
         )
-        let expandedScale = TimelineScale(appointments: [breakAppointment])
+        let expandedScale = TimelineScale(items: [breakAppointment])
 
         #expect(scale.totalHeight == 572)
         #expect(expandedScale.totalHeight == 720)
@@ -177,10 +177,10 @@ struct TimelineLayoutTests {
             duration: 30
         )
 
-        #expect(TimelineScale(appointments: [atBreakStart]).isBreakExpanded)
-        #expect(TimelineScale(appointments: [duringBreak]).isBreakExpanded)
-        #expect(!TimelineScale(appointments: [beforeBreak]).isBreakExpanded)
-        #expect(!TimelineScale(appointments: [atBreakEnd]).isBreakExpanded)
+        #expect(TimelineScale(items: [atBreakStart]).isBreakExpanded)
+        #expect(TimelineScale(items: [duringBreak]).isBreakExpanded)
+        #expect(!TimelineScale(items: [beforeBreak]).isBreakExpanded)
+        #expect(!TimelineScale(items: [atBreakEnd]).isBreakExpanded)
     }
 
     @Test func compactScaleCompressesAppointmentCrossingIntoBreak() throws {
@@ -191,8 +191,8 @@ struct TimelineLayoutTests {
             startMinute: 30,
             duration: 60
         )
-        let appointments = [crossingAppointment]
-        let layouts = engine(for: appointments).layout(appointments: appointments)
+        let items = [crossingAppointment]
+        let layouts = engine(for: items).layout(items: items)
         let layout = try layout(for: id, in: layouts)
 
         #expect(layout.rect.minY == 210)
@@ -208,8 +208,8 @@ struct TimelineLayoutTests {
             duration: 45,
             status: .draft
         )
-        let appointments = [breakAppointment]
-        let layouts = engine(for: appointments).layout(appointments: appointments)
+        let items = [breakAppointment]
+        let layouts = engine(for: items).layout(items: items)
         let layout = try layout(for: id, in: layouts)
 
         #expect(layout.rect.minY == 300)
@@ -219,11 +219,11 @@ struct TimelineLayoutTests {
     @Test func overlappingAppointmentsWithinBreakUseColumns() throws {
         let firstID = UUID()
         let secondID = UUID()
-        let appointments = [
+        let items = [
             appointment(id: firstID, startHour: 14, startMinute: 0, duration: 30),
             appointment(id: secondID, startHour: 14, startMinute: 0, duration: 30),
         ]
-        let layouts = engine(for: appointments).layout(appointments: appointments)
+        let layouts = engine(for: items).layout(items: items)
 
         #expect(try layout(for: firstID, in: layouts).rect.width == contentWidth / 2)
         #expect(try layout(for: secondID, in: layouts).rect.width == contentWidth / 2)
@@ -236,7 +236,7 @@ struct TimelineLayoutTests {
             startMinute: 0,
             duration: 30
         )
-        let expandedScale = TimelineScale(appointments: [breakAppointment])
+        let expandedScale = TimelineScale(items: [breakAppointment])
 
         #expect(scale.hourMarkers.map(\.hour) == [9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21])
         #expect(expandedScale.hourMarkers.map(\.hour) == Array(9...21))
@@ -249,7 +249,7 @@ struct TimelineLayoutTests {
             startMinute: 0,
             duration: 30
         )
-        let expandedScale = TimelineScale(appointments: [breakAppointment])
+        let expandedScale = TimelineScale(items: [breakAppointment])
 
         #expect(!scale.showsTime(TimeOfDay(14, 30)))
         #expect(expandedScale.showsTime(TimeOfDay(14, 30)))
@@ -262,10 +262,10 @@ struct TimelineLayoutTests {
         )
     }
 
-    private func engine(for appointments: [Appointment]) -> TimelineLayoutEngine {
+    private func engine(for items: [TimelineItem]) -> TimelineLayoutEngine {
         TimelineLayoutEngine(
             availableWidth: availableWidth,
-            scale: TimelineScale(appointments: appointments)
+            scale: TimelineScale(items: items)
         )
     }
 
@@ -274,7 +274,7 @@ struct TimelineLayoutTests {
     }
 
     private var scale: TimelineScale {
-        TimelineScale(appointments: [])
+        TimelineScale(items: [])
     }
 
     private func appointment(
@@ -283,21 +283,23 @@ struct TimelineLayoutTests {
         startMinute: Int,
         duration: Int,
         status: Appointment.Status = .scheduled
-    ) -> Appointment {
-        Appointment(
-            id: id,
-            patientName: "Patient",
-            start: Date(timeIntervalSinceReferenceDate: 804_600_000)
-                .setTime(startHour, startMinute),
-            durationMinutes: duration,
-            status: status
+    ) -> TimelineItem {
+        .appointment(
+            Appointment(
+                id: id,
+                patientName: "Patient",
+                start: Date(timeIntervalSinceReferenceDate: 804_600_000)
+                    .setTime(startHour, startMinute),
+                durationMinutes: duration,
+                status: status
+            )
         )
     }
 
     private func layout(
         for id: UUID,
-        in layouts: [AppointmentLayoutInfo]
-    ) throws -> AppointmentLayoutInfo {
-        try #require(layouts.first { $0.id == id })
+        in layouts: [TimelineItemLayoutInfo]
+    ) throws -> TimelineItemLayoutInfo {
+        try #require(layouts.first { $0.id == .appointment(id) })
     }
 }

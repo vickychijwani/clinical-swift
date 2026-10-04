@@ -4,6 +4,7 @@ nonisolated enum ClinicalURL: Equatable, Sendable {
     case bookAppointment
     case appointment(Appointment.ID)
     case schedule(ScheduleDay)
+    case unavailableTime(UUID)
 
     init?(_ url: URL) {
         guard
@@ -34,6 +35,12 @@ nonisolated enum ClinicalURL: Equatable, Sendable {
             }
             self = .appointment(id)
 
+        case "unavailable-times":
+            guard url.query == nil else { return nil }
+            let parts = url.path.split(separator: "/")
+            guard parts.count == 1, let id = UUID(uuidString: String(parts[0])) else { return nil }
+            self = .unavailableTime(id)
+
         case "schedule":
             guard url.path.isEmpty || url.path == "/" else { return nil }
             guard
@@ -63,6 +70,9 @@ nonisolated enum ClinicalURL: Equatable, Sendable {
             components.path = "/book"
         case .appointment(let id):
             components.host = "appointments"
+            components.path = "/\(id.uuidString.lowercased())"
+        case .unavailableTime(let id):
+            components.host = "unavailable-times"
             components.path = "/\(id.uuidString.lowercased())"
         case .schedule(let day):
             components.host = "schedule"

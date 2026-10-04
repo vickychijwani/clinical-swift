@@ -1,14 +1,14 @@
 import SwiftUI
 
 struct Timeline: View {
-    let appointments: [Appointment]
+    let items: [TimelineItem]
     let scale: TimelineScale
 
     /// Properties for rendering the "Now" marker line.
     let showsNowMarker: Bool
     var previewNowMarker: Date? = nil
-    var appointmentInteractionsEnabled = true
-    var onSelectAppointment: (Appointment) -> Void = { _ in }
+    var itemInteractionsEnabled = true
+    var onSelectItem: (TimelineItem) -> Void = { _ in }
 
     static let metrics = TimelineMetrics(
         hourHeight: 60,
@@ -39,7 +39,7 @@ struct Timeline: View {
                 availableWidth: geometry.size.width,
                 scale: scale
             )
-            let layouts = engine.layout(appointments: appointments)
+            let layouts = engine.layout(items: items)
 
             ZStack(alignment: .topLeading) {
                 TimelineBreakView(
@@ -54,27 +54,27 @@ struct Timeline: View {
 
                 ForEach(layouts) { layout in
                     Button {
-                        onSelectAppointment(layout.appointment)
+                        onSelectItem(layout.item)
                     } label: {
-                        AppointmentCard(appt: layout.appointment)
+                        ScheduleItemCard(item: layout.item)
+                            .frame(width: layout.rect.width, height: layout.rect.height)
+                            // Keep clipped text within the card's tap area.
+                            // Regression tests: testLongNameDoesNotStealTapFromRightAppointment()
+                            // and testMixedThreeColumnCardsKeepSeparateTapAreas().
+                            .contentShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
+                            .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
+                            .overlay {
+                                if case .appointment = layout.item {
+                                    RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                                        .strokeBorder(.gray.opacity(0.15))
+                                        .allowsHitTesting(false)
+                                }
+                            }
                     }
                     .buttonStyle(.plain)
-                    .allowsHitTesting(appointmentInteractionsEnabled)
-                    .frame(
-                        width: layout.rect.width,
-                        height: layout.rect.height,
-                        alignment: .topLeading
-                    )
-                    // Clipped text can otherwise remain tappable beyond the card edge.
-                    // Regression test: testLongNameDoesNotStealTapFromRightAppointment()
-                    .contentShape(.rect(cornerRadius: 8))
-                    // Used by UI tests
-                    .accessibilityIdentifier("appointment-\(layout.appointment.id.uuidString)")
-                    .clipShape(.rect(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(.gray.opacity(0.15))
-                    )
+                    .allowsHitTesting(itemInteractionsEnabled)
+                    // UI tests use the item type and ID to select each card.
+                    .accessibilityIdentifier(layout.item.id.sortKey)
                     .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
 
@@ -102,11 +102,13 @@ struct Timeline: View {
     }
 }
 
-func sampleTimeline(appointments: [Appointment] = sampleAppointments) -> some View {
-    let scale = TimelineScale(appointments: appointments)
+func sampleTimeline(
+    items: [TimelineItem] = sampleAppointments.map(TimelineItem.appointment)
+) -> some View {
+    let scale = TimelineScale(items: items)
 
     return Timeline(
-        appointments: appointments,
+        items: items,
         scale: scale,
         showsNowMarker: true,
         previewNowMarker: Date.now.setTime(9, 30)
@@ -120,12 +122,14 @@ func sampleTimeline(appointments: [Appointment] = sampleAppointments) -> some Vi
 
 #Preview("Expanded break") {
     sampleTimeline(
-        appointments: sampleAppointments + [
-            Appointment(
-                patientName: "Draft appointment",
-                start: Date.now.setTime(14, 0),
-                durationMinutes: 45,
-                status: .draft
+        items: sampleAppointments.map(TimelineItem.appointment) + [
+            .appointment(
+                Appointment(
+                    patientName: "Draft appointment",
+                    start: Date.now.setTime(14, 0),
+                    durationMinutes: 45,
+                    status: .draft
+                )
             )
         ]
     )

@@ -294,6 +294,91 @@ func databaseMigrator() -> DatabaseMigrator {
         .execute(db)
     }
 
+    migrator.registerMigration("Create unavailable time table") { db in
+        try db.execute(
+            sql:
+                """
+                CREATE TABLE "unavailableTimes" (
+                  "id" TEXT PRIMARY KEY NOT NULL ON CONFLICT REPLACE DEFAULT (uuid()),
+                  "label" TEXT,
+                  "start" TEXT NOT NULL,
+                  "durationMinutes" INTEGER NOT NULL CHECK ("durationMinutes" > 0),
+                  "createdAt" TEXT NOT NULL,
+                  "updatedAt" TEXT NOT NULL
+                ) STRICT;
+                CREATE INDEX "idx_unavailableTimes_start" ON "unavailableTimes"("start");
+                """
+        )
+    }
+
+    migrator.registerMigration("Create unavailable time Calendar sync outbox") { db in
+        try db.execute(
+            sql:
+                """
+                CREATE TABLE "unavailableTimeCalendarSync" (
+                  "unavailableTimeID" TEXT PRIMARY KEY NOT NULL,
+                  "eventIdentifier" TEXT,
+                  "eventStart" TEXT,
+                  "needsSync" INTEGER NOT NULL CHECK ("needsSync" IN (0, 1)),
+                  "revision" INTEGER NOT NULL,
+                  "createdAt" TEXT NOT NULL,
+                  "updatedAt" TEXT NOT NULL
+                ) STRICT;
+                CREATE TRIGGER "queue_unavailable_time_calendar_sync_after_insert"
+                AFTER INSERT ON "unavailableTimes"
+                BEGIN
+                  INSERT INTO "unavailableTimeCalendarSync" (
+                    "unavailableTimeID", "eventIdentifier", "eventStart", "needsSync",
+                    "revision", "createdAt", "updatedAt"
+                  ) VALUES (
+                    NEW."id", NULL, NULL, 1, 1,
+                    strftime('%Y-%m-%d %H:%M:%f', 'now'),
+                    strftime('%Y-%m-%d %H:%M:%f', 'now')
+                  )
+                  ON CONFLICT("unavailableTimeID") DO UPDATE SET
+                    "needsSync" = 1,
+                    "revision" = "unavailableTimeCalendarSync"."revision" + 1,
+                    "updatedAt" = strftime('%Y-%m-%d %H:%M:%f', 'now');
+                END;
+                CREATE TRIGGER "queue_unavailable_time_calendar_sync_after_update"
+                AFTER UPDATE OF "label", "start", "durationMinutes" ON "unavailableTimes"
+                WHEN OLD."label" IS NOT NEW."label"
+                  OR OLD."start" IS NOT NEW."start"
+                  OR OLD."durationMinutes" IS NOT NEW."durationMinutes"
+                BEGIN
+                  INSERT INTO "unavailableTimeCalendarSync" (
+                    "unavailableTimeID", "eventIdentifier", "eventStart", "needsSync",
+                    "revision", "createdAt", "updatedAt"
+                  ) VALUES (
+                    NEW."id", NULL, NULL, 1, 1,
+                    strftime('%Y-%m-%d %H:%M:%f', 'now'),
+                    strftime('%Y-%m-%d %H:%M:%f', 'now')
+                  )
+                  ON CONFLICT("unavailableTimeID") DO UPDATE SET
+                    "needsSync" = 1,
+                    "revision" = "unavailableTimeCalendarSync"."revision" + 1,
+                    "updatedAt" = strftime('%Y-%m-%d %H:%M:%f', 'now');
+                END;
+                CREATE TRIGGER "queue_unavailable_time_calendar_sync_after_delete"
+                AFTER DELETE ON "unavailableTimes"
+                BEGIN
+                  INSERT INTO "unavailableTimeCalendarSync" (
+                    "unavailableTimeID", "eventIdentifier", "eventStart", "needsSync",
+                    "revision", "createdAt", "updatedAt"
+                  ) VALUES (
+                    OLD."id", NULL, NULL, 1, 1,
+                    strftime('%Y-%m-%d %H:%M:%f', 'now'),
+                    strftime('%Y-%m-%d %H:%M:%f', 'now')
+                  )
+                  ON CONFLICT("unavailableTimeID") DO UPDATE SET
+                    "needsSync" = 1,
+                    "revision" = "unavailableTimeCalendarSync"."revision" + 1,
+                    "updatedAt" = strftime('%Y-%m-%d %H:%M:%f', 'now');
+                END;
+                """
+        )
+    }
+
     return migrator
 }
 
@@ -331,6 +416,15 @@ nonisolated private let databaseLogger = Logger(
                         patient.name.map { ($0, patient.id) }
                     }
                 )
+
+                let block = UnavailableTimeRecord(
+                    id: UUID(), label: "Travel", start: Date.now.setTime(11, 0),
+                    durationMinutes: 60, createdAt: .now, updatedAt: .now
+                )
+                try UnavailableTimeRecord.insert { block }.execute(db)
+                try UnavailableTimeCalendarSyncRecord
+                    .where { $0.unavailableTimeID.eq(block.id) }
+                    .delete().execute(db)
 
                 for appointment in sampleAppointments {
                     guard let patientID = patientIDsByName[appointment.patientName] else {

@@ -12,7 +12,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
         let fixture = try insertFixture(into: database)
         let calendarRecorder = CalendarClientRecorder()
         let contactRecorder = ContactNameRecorder(name: "Aarav Mobile")
-        let coordinator = AppointmentCalendarSyncCoordinator(
+        let coordinator = CalendarSyncCoordinator(
             database: database,
             calendarClient: calendarRecorder.client,
             contactClient: contactRecorder.client
@@ -22,7 +22,6 @@ struct AppointmentCalendarSyncCoordinatorTests {
 
         let replacement = try #require(calendarRecorder.replacements.first)
         #expect(replacement.link.eventIdentifier == nil)
-        #expect(replacement.payload.appointmentID == fixture.appointmentID)
         #expect(replacement.payload.title == "Aarav Mehta")
         #expect(replacement.payload.start == fixture.start)
         #expect(replacement.payload.end == fixture.start.addingTimeInterval(30 * 60))
@@ -45,7 +44,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
         let fixture = try insertFixture(into: database)
         let calendarRecorder = CalendarClientRecorder()
         calendarRecorder.targetAvailable = false
-        let coordinator = AppointmentCalendarSyncCoordinator(
+        let coordinator = CalendarSyncCoordinator(
             database: database,
             calendarClient: calendarRecorder.client,
             contactClient: ContactNameRecorder(name: nil).client
@@ -71,7 +70,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
         }
         let calendarRecorder = CalendarClientRecorder()
         let contactRecorder = ContactNameRecorder(name: "Unused Contact")
-        let coordinator = AppointmentCalendarSyncCoordinator(
+        let coordinator = CalendarSyncCoordinator(
             database: database,
             calendarClient: calendarRecorder.client,
             contactClient: contactRecorder.client
@@ -88,7 +87,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
         let fixture = try insertFixture(into: database)
         let calendarRecorder = CalendarClientRecorder()
         calendarRecorder.replacementError = CalendarClientRecorderError.writeFailed
-        let coordinator = AppointmentCalendarSyncCoordinator(
+        let coordinator = CalendarSyncCoordinator(
             database: database,
             calendarClient: calendarRecorder.client,
             contactClient: ContactNameRecorder(name: nil).client
@@ -120,7 +119,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
                 .execute(db)
         }
         let calendarRecorder = CalendarClientRecorder()
-        let coordinator = AppointmentCalendarSyncCoordinator(
+        let coordinator = CalendarSyncCoordinator(
             database: database,
             calendarClient: calendarRecorder.client,
             contactClient: ContactNameRecorder(name: nil).client
@@ -130,7 +129,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
 
         let deletion = try #require(calendarRecorder.deletions.first)
         #expect(deletion.link.eventIdentifier == "existing-event")
-        #expect(deletion.appointmentID == fixture.appointmentID)
+        #expect(deletion.markerURL == ClinicalURL.appointment(fixture.appointmentID).url)
         #expect(deletion.fallbackStart == fixture.start)
         #expect(try fetchSyncRecord(fixture.appointmentID, from: database) == nil)
     }
@@ -143,7 +142,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
             try PatientRecord.find(fixture.patientID).delete().execute(db)
         }
         let calendarRecorder = CalendarClientRecorder()
-        let coordinator = AppointmentCalendarSyncCoordinator(
+        let coordinator = CalendarSyncCoordinator(
             database: database,
             calendarClient: calendarRecorder.client,
             contactClient: ContactNameRecorder(name: nil).client
@@ -172,7 +171,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
         }
         let calendarRecorder = CalendarClientRecorder()
         let contactRecorder = ContactNameRecorder(name: "Current Contact")
-        let coordinator = AppointmentCalendarSyncCoordinator(
+        let coordinator = CalendarSyncCoordinator(
             database: database,
             calendarClient: calendarRecorder.client,
             contactClient: contactRecorder.client
@@ -195,7 +194,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
         return database
     }
 
-    private func activate(_ coordinator: AppointmentCalendarSyncCoordinator) async {
+    private func activate(_ coordinator: CalendarSyncCoordinator) async {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
 
@@ -273,13 +272,13 @@ struct AppointmentCalendarSyncCoordinatorTests {
 @MainActor
 private final class CalendarClientRecorder {
     struct Replacement {
-        let link: AppointmentCalendarEventLink
-        let payload: AppointmentCalendarEventPayload
+        let link: CalendarEventLink
+        let payload: CalendarEventPayload
     }
 
     struct Deletion {
-        let link: AppointmentCalendarEventLink
-        let appointmentID: Appointment.ID
+        let link: CalendarEventLink
+        let markerURL: URL
         let fallbackStart: Date?
     }
 
@@ -290,8 +289,8 @@ private final class CalendarClientRecorder {
     private(set) var replacements: [Replacement] = []
     private(set) var deletions: [Deletion] = []
 
-    var client: AppointmentCalendarClient {
-        AppointmentCalendarClient(
+    var client: CalendarClient {
+        CalendarClient(
             requestFullAccess: {
                 self.accessGranted
             },
@@ -304,16 +303,16 @@ private final class CalendarClientRecorder {
                 if let replacementError = self.replacementError {
                     throw replacementError
                 }
-                return AppointmentCalendarEventLink(
+                return CalendarEventLink(
                     eventIdentifier: "event-\(self.replacements.count)",
                     eventStart: payload.start
                 )
             },
-            deleteEvent: { link, appointmentID, fallbackStart in
+            deleteEvent: { link, markerURL, fallbackStart in
                 self.deletions.append(
                     Deletion(
                         link: link,
-                        appointmentID: appointmentID,
+                        markerURL: markerURL,
                         fallbackStart: fallbackStart
                     )
                 )

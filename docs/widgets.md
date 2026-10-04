@@ -13,27 +13,38 @@ This document captures the cross-process and layout constraints for Clinical wid
   records, or create an empty replacement database when the shared database is unavailable.
 - Both processes coordinate opening the database with `NSFileCoordinator`. Persistent WAL mode is
   required because a read-only extension cannot recreate missing WAL or shared-memory sidecars.
-- The app observes committed changes to `appointments` and `patients` at the database boundary and
-  asks WidgetKit to reload the schedule timeline. Do not scatter reload calls across individual save
-  paths.
+- The app observes committed changes to `appointments`, `patients`, and `unavailableTimes` at the
+  database boundary and asks WidgetKit to reload the schedule timeline. Do not scatter reload calls
+  across individual save paths.
 
 ## Timeline invariants
 
 - Timeline entries are snapshots, not a second storage cache. Each reload queries the shared
   database and maps records into immutable widget read models.
-- The schedule refreshes at the earlier of the next visible appointment end or local midnight.
-  Database commits request an additional reload.
+- The schedule refreshes at the earlier of the next eligible item end or local midnight. Database
+  commits request an additional reload.
 - The widget query owns its cancellation and end-time filters. Views receive only eligible,
-  chronologically ordered appointments.
+  chronologically ordered schedule items.
 
 ## Layout and interaction
 
 - Widget dates are a consecutive prefix of today, tomorrow, and the following date. A later date is
   never substituted for an empty earlier date.
-- Every earlier visible section is complete. Only the final visible section may replace hidden
-  appointments with an overflow row.
+- Every earlier visible section is complete. Only the final visible section may replace hidden items
+  with an overflow row.
 - `WidgetLayoutPlanner` is the single owner of capacity and row-height arithmetic. Keep those rules
   out of SwiftUI view conditionals so exact-fit behavior remains unit-testable.
-- Widget appointment rows reuse `AppointmentCard` at the planner-provided frame and compose the
-  widget accent stripe around it. Do not fork a second appointment-card implementation.
+- Widget appointment and block rows use the same adaptive card layout as the app at the
+  planner-provided frame. Keep the accent stripe outside the shared layout so it does not appear on
+  app cards.
 - Widget URLs remain thin adapters over `ClinicalURL` and router-owned external navigation.
+
+## Unavailable time
+
+- Widget sections expose `TimelineItem` values only. Use the same API in tests and previews; an
+  appointment-only view of a section can hide blocks from its consumer.
+- Hidden counts include both types. Use appointment wording only when every hidden item is an
+  appointment. Otherwise use “1 more item” or “N more items”. Empty sections use “No more
+  appointments today” or “No appointments”; keep the Sunday message.
+- Refresh at the earlier of the next eligible item end and local midnight. Observe committed block
+  changes as well as appointment and patient changes to request reloads.

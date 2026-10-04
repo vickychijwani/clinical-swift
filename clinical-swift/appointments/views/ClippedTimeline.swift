@@ -113,4 +113,5 @@ struct ClippedTimeline<Content: View>: View {
     }
 }
 
-private let sampleTimelineScale = TimelineScale(appointments: sampleAppointments)
+private let sampleTimelineScale = TimelineScale(
+    items: sampleAppointments.map(TimelineItem.appointment))

@@ -4,6 +4,7 @@
 
     struct AppointmentHitboxUITestView: View {
         @State private var selectedAppointment: Appointment?
+        @State private var selectedBlock: UnavailableTime?
 
         private static let leftAppointmentID = UUID(
             uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
@@ -36,17 +37,50 @@
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Timeline(
-                    appointments: Self.appointments,
-                    scale: TimelineScale(appointments: Self.appointments),
+                    items: Self.items,
+                    scale: TimelineScale(items: Self.items),
                     showsNowMarker: false,
-                    onSelectAppointment: { selectedAppointment = $0 }
+                    onSelectItem: { item in
+                        switch item {
+                        case .appointment(let appointment):
+                            selectedBlock = nil
+                            selectedAppointment = appointment
+                        case .unavailableTime(let block):
+                            selectedAppointment = nil
+                            selectedBlock = block
+                        }
+                    }
                 )
                 .frame(width: 300)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
 
+        private static var items: [TimelineItem] {
+            guard CommandLine.arguments.contains("--ui-testing-mixed-hitboxes") else {
+                return appointments.map(TimelineItem.appointment)
+            }
+            return [
+                .appointment(appointments[0]),
+                .unavailableTime(
+                    UnavailableTime(
+                        id: leftAppointmentID,
+                        label: String(repeating: "Long block label ", count: 10),
+                        start: appointments[0].start, durationMinutes: 60
+                    )),
+                .unavailableTime(
+                    UnavailableTime(
+                        id: rightAppointmentID, label: "Travel",
+                        start: appointments[0].start, durationMinutes: 60
+                    )),
+            ]
+        }
+
         private var selectionStatus: String {
+            if let selectedBlock {
+                return selectedBlock.id == Self.leftAppointmentID
+                    ? "Selected middle block" : "Selected right block"
+            }
             guard let selectedAppointment else {
                 return "No appointment selected"
             }

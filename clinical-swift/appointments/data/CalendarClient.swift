@@ -1,39 +1,49 @@
 import EventKit
 import Foundation
 
-nonisolated struct AppointmentCalendarEventPayload: Equatable, Sendable {
-    let appointmentID: Appointment.ID
+nonisolated struct CalendarEventPayload: Equatable, Sendable {
     let title: String
     let start: Date
     let end: Date
     let notes: String
     let url: URL
+
+    func matchesEvent(
+        title: String?, start: Date?, end: Date?, notes: String?, url: URL?
+    ) -> Bool {
+        title == self.title
+            && start?.isApproximatelyEqual(to: self.start) == true
+            && end?.isApproximatelyEqual(to: self.end) == true
+            // Accept absent notes when the payload has empty notes.
+            && (notes ?? "") == self.notes
+            && url == self.url
+    }
 }
 
-nonisolated struct AppointmentCalendarEventLink: Equatable, Sendable {
+nonisolated struct CalendarEventLink: Equatable, Sendable {
     let eventIdentifier: String?
     let eventStart: Date?
 }
 
-nonisolated struct AppointmentCalendarClient: Sendable {
+nonisolated struct CalendarClient: Sendable {
     var requestFullAccess: @MainActor @Sendable () async throws -> Bool
     var resolveTargetCalendar: @MainActor @Sendable () async -> Bool
     var replaceEvent:
         @MainActor @Sendable (
-            _ existingLink: AppointmentCalendarEventLink,
-            _ payload: AppointmentCalendarEventPayload
-        ) async throws -> AppointmentCalendarEventLink
+            _ existingLink: CalendarEventLink,
+            _ payload: CalendarEventPayload
+        ) async throws -> CalendarEventLink
     var deleteEvent:
         @MainActor @Sendable (
-            _ existingLink: AppointmentCalendarEventLink,
-            _ appointmentID: Appointment.ID,
+            _ existingLink: CalendarEventLink,
+            _ markerURL: URL,
             _ fallbackStart: Date?
         ) async throws -> Void
 }
 
-extension AppointmentCalendarClient {
+extension CalendarClient {
     nonisolated static func live() -> Self {
-        let adapter = AppointmentEventKitAdapter()
+        let adapter = EventKitAdapter()
         return Self(
             requestFullAccess: {
                 try await adapter.requestFullAccess()
@@ -44,10 +54,10 @@ extension AppointmentCalendarClient {
             replaceEvent: { link, payload in
                 try await adapter.replaceEvent(link: link, payload: payload)
             },
-            deleteEvent: { link, appointmentID, fallbackStart in
+            deleteEvent: { link, markerURL, fallbackStart in
                 try await adapter.deleteEvent(
                     link: link,
-                    appointmentID: appointmentID,
+                    markerURL: markerURL,
                     fallbackStart: fallbackStart
                 )
             }
@@ -55,7 +65,7 @@ extension AppointmentCalendarClient {
     }
 }
 
-private actor AppointmentEventKitAdapter {
+private actor EventKitAdapter {
     private nonisolated static let targetCalendarTitle = "Bitehaus Debug"
     private nonisolated static let recoverySearchRadius: TimeInterval = 24 * 60 * 60
 
@@ -79,11 +89,11 @@ private actor AppointmentEventKitAdapter {
     }
 
     func replaceEvent(
-        link: AppointmentCalendarEventLink,
-        payload: AppointmentCalendarEventPayload
-    ) throws -> AppointmentCalendarEventLink {
+        link: CalendarEventLink,
+        payload: CalendarEventPayload
+    ) throws -> CalendarEventLink {
         guard let targetCalendar else {
-            throw AppointmentCalendarClientError.targetCalendarUnavailable
+            throw CalendarClientError.targetCalendarUnavailable
         }
 
         let managedEvents = managedEvents(
@@ -100,7 +110,7 @@ private actor AppointmentEventKitAdapter {
             where duplicate.calendarItemIdentifier != matchingEvent.calendarItemIdentifier {
                 try eventStore.remove(duplicate, span: .thisEvent)
             }
-            return AppointmentCalendarEventLink(
+            return CalendarEventLink(
                 eventIdentifier: matchingEvent.eventIdentifier,
                 eventStart: payload.start
             )
@@ -122,26 +132,22 @@ private actor AppointmentEventKitAdapter {
         try eventStore.save(event, span: .thisEvent)
 
         guard let eventIdentifier = event.eventIdentifier else {
-            throw AppointmentCalendarClientError.missingSavedEventIdentifier
+            throw CalendarClientError.missingSavedEventIdentifier
         }
-        return AppointmentCalendarEventLink(
+        return CalendarEventLink(
             eventIdentifier: eventIdentifier,
             eventStart: payload.start
         )
     }
 
     func deleteEvent(
-        link: AppointmentCalendarEventLink,
-        appointmentID: Appointment.ID,
+        link: CalendarEventLink,
+        markerURL: URL,
         fallbackStart: Date?
     ) throws {
         guard let targetCalendar else {
-            throw AppointmentCalendarClientError.targetCalendarUnavailable
+            throw CalendarClientError.targetCalendarUnavailable
         }
-        guard let markerURL = ClinicalURL.appointment(appointmentID).url else {
-            throw AppointmentCalendarClientError.invalidMarkerURL
-        }
-
         let managedEvents = managedEvents(
             eventIdentifier: link.eventIdentifier,
             markerURL: markerURL,
@@ -183,19 +189,18 @@ private actor AppointmentEventKitAdapter {
 
     private func matches(
         _ event: EKEvent,
-        payload: AppointmentCalendarEventPayload,
+        payload: CalendarEventPayload,
         targetCalendar: EKCalendar
     ) -> Bool {
         event.calendar.calendarIdentifier == targetCalendar.calendarIdentifier
-            && event.title == payload.title
-            && event.startDate.isApproximatelyEqual(to: payload.start)
-            && event.endDate.isApproximatelyEqual(to: payload.end)
-            && event.notes == payload.notes
-            && event.url == payload.url
+            && payload.matchesEvent(
+                title: event.title, start: event.startDate, end: event.endDate,
+                notes: event.notes, url: event.url
+            )
     }
 }
 
-nonisolated private enum AppointmentCalendarClientError: Error, Sendable {
+nonisolated private enum CalendarClientError: Error, Sendable {
     case targetCalendarUnavailable
     case missingSavedEventIdentifier
     case invalidMarkerURL

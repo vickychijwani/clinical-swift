@@ -70,12 +70,17 @@ struct WidgetScheduleRepositoryTests {
 
         #expect(snapshot.sections.count == 3)
         #expect(
-            snapshot.sections[0].appointments.map(\.id) == [
-                inProgress.id, completedButStillRunning.id,
+            snapshot.sections[0].items.map(\.id) == [
+                .appointment(inProgress.id), .appointment(completedButStillRunning.id),
             ])
-        #expect(snapshot.sections[0].appointments[1].patientName == Patient.unknownDisplayName)
-        #expect(snapshot.sections[1].appointments.map(\.id) == [tomorrow.id])
-        #expect(snapshot.sections[2].appointments.isEmpty)
+        let unknownItem = try #require(snapshot.sections[0].items.last)
+        guard case .appointment(let unknownAppointment) = unknownItem else {
+            Issue.record("Expected an appointment for the unknown patient")
+            return
+        }
+        #expect(unknownAppointment.patientName == Patient.unknownDisplayName)
+        #expect(snapshot.sections[1].items.map(\.id) == [.appointment(tomorrow.id)])
+        #expect(snapshot.sections[2].items.isEmpty)
     }
 
     @Test func nextRefreshIsTheEarlierOfAppointmentEndAndMidnight() throws {
@@ -95,7 +100,7 @@ struct WidgetScheduleRepositoryTests {
                 WidgetScheduleSection(
                     date: calendar.startOfDay(for: now),
                     isToday: true,
-                    appointments: [appointment]
+                    items: [.appointment(appointment)]
                 )
             ]
         )

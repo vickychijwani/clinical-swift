@@ -5,14 +5,15 @@ This document captures the deliberate constraints an agent is likely to break if
 ## Invariants
 
 - `TimelineScale` is the sole source of vertical coordinates. Appointment cards, hour markers, the break background, the now marker, clipped previews, and programmatic scrolling must all use the same scale value.
-- The break has two cohesive presentations. It is normally compressed into a compact row; it expands to the normal minute scale when a visible appointment starts within the half-open break range.
+- The break has two cohesive presentations. It is normally compressed into a compact row; it expands to the normal minute scale when a visible appointment or block starts within the half-open break range.
 - Expansion is based on appointment start time, not interval intersection. An appointment that begins before the break and crosses into it stays on the compact scale so the timeline does not expand unexpectedly.
 - Compact break minutes map proportionally into the compact row. Do not collapse every break time onto one coordinate because crossing appointments still need a meaningful height.
 - `TimelineLayoutEngine` may use `TimelineScale`, but it must not contain break-specific branches. The scale owns discontinuity policy while the engine owns appointment overlap columns and rectangles.
 - `Bitehaus` is the single source of truth for opening, closing, and break boundaries. `Timeline` and `TimelineScale` must read those values directly so rendering and scrolling cannot drift onto different schedules.
 - `TimelineBreakView` is presentational only. In compact mode it shows the striped break label; in expanded mode it keeps the striped background and accessibility meaning but removes visible break text.
-- Up to three simultaneous appointments may split the content width. Overlap grouping uses actual appointment times even when the break is compact.
+- Up to three simultaneous schedule items may split the content width. Overlap grouping uses actual times even when the break is compact.
 - Appointment time text must remain visible in narrow overlap columns. Patient names may clip at the trailing card edge because the time is the non-negotiable scheduling cue.
+- Appointments and unavailable-time blocks share one adaptive card layout. Keep their appearance values together, and apply content opacity only to text and symbols so the surface and border stay visible. Keep status animation and item actions outside the shared layout.
 - The now marker is presentation-only and must not affect appointment layout, hit testing, scrolling, or accessibility focus.
 - The now marker should update approximately once per minute. Minute-level accuracy is enough for this scale and avoids unnecessary redraws or timer work.
 - Hide the now marker during a compact break because that time is not displayed at full scale; show it normally when the break expands.
@@ -28,6 +29,12 @@ This document captures the deliberate constraints an agent is likely to break if
 - Horizontal day paging owns date navigation only. Timeline coordinate policy, break expansion, and programmatic vertical scrolling must continue to derive from `TimelineScale` for the day being rendered.
 - Horizontal day paging renders and loads beyond the immediately adjacent day so a second swipe can begin before the first page animation commits. Keep the pager radius and schedule query window in sync; otherwise fast swipes can land on an empty placeholder for a day whose appointments have not been loaded yet.
 - Never render appointment details for date X over a schedule showing date Y. A visible appointment route must align the Schedule tab and selected day before rendering its details; changing the day directly dismisses the complete details flow instead of leaving contradictory context on screen.
+
+### Invariants for mixed schedule items
+
+- Timeline rendering, scale, and layout accept `TimelineItem` only. Keep tests and previews on this API so they check the same path as the app.
+- The timeline reports the selected `TimelineItem` through one callback. Schedule owns the action for each item type. This keeps navigation and editor presentation out of the timeline.
+- One active editor session supplies the preview, selected date, and scroll requests. Keep the concrete models separate: only appointments use availability updates, and unavailable-time editors prevent date changes during saving or deletion.
 
 ## Do Not Reintroduce
 

@@ -20,7 +20,7 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfre
 - Test structure, dependency overrides, and async database access: `docs/testing.md`
 - WidgetKit, App Group database access, timeline refresh, exact-fit layout, and widget routing: `docs/widgets.md`
 - App-level presentation ownership, details navigation, and interruption policy: `docs/routing.md`
-- One-way EventKit appointment sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
+- One-way EventKit appointment and unavailable-time sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
 
@@ -110,6 +110,8 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - Prefer readable dates parsed with standard strategies, such as ISO-8601 strings, over custom `DateComponents` fixture builders.
 - Override registered dependencies with `withDependencies` so production APIs do not acquire test-only parameters.
 - Add code comments and documentation comments as needed.
+- When changing or moving code, preserve existing comments that still apply and move them with the code. Update comments when behavior, names, or test references change. Remove a comment only when its purpose no longer applies or an equivalent comment replaces it. Before finishing, check deleted comments in the diff so that design decisions and regression explanations are not lost.
+- The repository Stop hook checks for missing or rewritten Swift comments. Resolve each finding before recording a review; do not record a review only to pass the hook. See `.codex/hooks/README.md` for the check and review commands.
 - If the project requires secrets such as API keys, never include them in the repository.
 - If the project uses Localizable.xcstrings, prefer to add user-facing strings using symbol keys (e.g. helloWorld) in the string catalog with `extractionState` set to "manual", accessing them via generated symbols such as  `Text(.helloWorld)`. Offer to translate new keys into all languages supported by the project.
 

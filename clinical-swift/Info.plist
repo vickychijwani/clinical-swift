@@ -36,7 +36,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Clinical needs Calendar access to create, update, and remove Bitehaus Debug appointment events.</string>
+	<string>Clinical needs Calendar access to create, update, and remove Bitehaus Debug appointment and blocked events.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Clinical uses Contacts data to keep contact names and phone numbers in sync.</string>
 	<key>UIApplicationSceneManifest</key>

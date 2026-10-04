@@ -47,6 +47,21 @@ struct ContentView: View {
                 }
         }
         .environment(router)
+        .task(id: router.unavailableTimeNavigationRequest?.id) {
+            guard let request = router.unavailableTimeNavigationRequest else { return }
+            await router.resolveUnavailableTime(request)
+        }
+        .alert(
+            "Unavailable Time",
+            isPresented: Binding(
+                get: { router.navigationErrorMessage != nil },
+                set: { if !$0 { router.navigationErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { router.navigationErrorMessage = nil }
+        } message: {
+            Text(router.navigationErrorMessage ?? "")
+        }
         .onOpenURL { url in
             router.open(url)
         }

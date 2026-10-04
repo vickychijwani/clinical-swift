@@ -7,6 +7,14 @@ import SQLiteData
     @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @FetchAll(AppointmentPatientSelection.none) private var appointmentRows
 
+    @ObservationIgnored @FetchAll(UnavailableTimeRecord.none) private var unavailableTimeRows
+
+    func unavailableTimes(for date: Date) -> [UnavailableTime] {
+        unavailableTimeRows.map(\.unavailableTime).filter {
+            calendar.isDate($0.start, inSameDayAs: date)
+        }
+    }
+
     func appointments(for date: Date) -> [Appointment] {
         let selectedDate = date.startOfDay(using: calendar)
         return
@@ -21,6 +29,9 @@ import SQLiteData
 
     func loadVisibleDays(centeredOn date: Date, dayRadius: Int) async throws {
         let centerDate = date.startOfDay(using: calendar)
+        try await $unavailableTimeRows.load(
+            unavailableTimesQuery(centeredOn: centerDate, dayRadius: dayRadius)
+        )
         try await $appointmentRows.load(
             queryScheduleWindow(centeredOn: centerDate, dayRadius: dayRadius)
         )

@@ -1,12 +1,12 @@
 import SwiftUI
 
 extension View {
-    func styleAppointmentTime() -> some View {
+    func styleAppointmentTime(color: Color? = nil) -> some View {
         modifier(
             AppTextStyleModifier(
                 font: .system(size: 12, weight: .semibold)
                     .monospacedDigit(),
-                color: Color(red: 0.46, green: 0.49, blue: 0.47),
+                color: color ?? Color(red: 0.46, green: 0.49, blue: 0.47),
                 tracking: 0.4
             )
         )

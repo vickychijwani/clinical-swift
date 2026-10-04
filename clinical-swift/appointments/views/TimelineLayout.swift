@@ -50,11 +50,11 @@ struct TimelineScale {
 
     let breakPresentation: BreakPresentation
 
-    init(appointments: [Appointment]) {
+    init(items: [TimelineItem]) {
         breakPresentation =
-            appointments.contains { appointment in
+            items.contains { item in
                 (Bitehaus.break.start..<Bitehaus.break.end).contains(
-                    appointment.start.timeOfDay
+                    item.start.timeOfDay
                 )
             } ? .expanded : .compact
     }
@@ -127,14 +127,14 @@ struct TimelineLayoutEngine {
     let scale: TimelineScale
 
     func layout(
-        appointments: [Appointment]
-    ) -> [AppointmentLayoutInfo] {
-        overlappingGroups(for: appointments).flatMap { group in
+        items: [TimelineItem]
+    ) -> [TimelineItemLayoutInfo] {
+        overlappingGroups(for: items).flatMap { group in
             layout(group: group)
         }
     }
 
-    private func layout(group: [Appointment]) -> [AppointmentLayoutInfo] {
+    private func layout(group: [TimelineItem]) -> [TimelineItemLayoutInfo] {
         let assignments = columnAssignments(for: group)
         let columnCount = max(
             assignments.map(\.column).max().map { $0 + 1 } ?? 1,
@@ -143,16 +143,16 @@ struct TimelineLayoutEngine {
         let width = cardWidth(columnCount: columnCount)
 
         return assignments.map { assignment in
-            let appt = assignment.appointment
+            let item = assignment.item
             let rect = CGRect(
                 x: cardX(column: assignment.column, columnWidth: width),
-                y: cardY(for: appt),
+                y: cardY(for: item),
                 width: width,
-                height: cardHeight(for: appt)
+                height: cardHeight(for: item)
             )
-            return AppointmentLayoutInfo(
-                id: appt.id,
-                appointment: appt,
+            return TimelineItemLayoutInfo(
+                id: item.id,
+                item: item,
                 rect: rect
             )
         }
@@ -171,11 +171,11 @@ struct TimelineLayoutEngine {
         return max((cardWidth - spacing) / CGFloat(columnCount), 0)
     }
 
-    private func cardHeight(for appt: Appointment) -> CGFloat {
+    private func cardHeight(for item: TimelineItem) -> CGFloat {
         max(
             scale.height(
-                from: appt.start.timeOfDay,
-                to: appt.start.timeOfDay + appt.durationMinutes
+                from: item.start.timeOfDay,
+                to: item.start.timeOfDay + item.durationMinutes
             )
                 // 2x to account for top and bottom clearance both
                 - Timeline.metrics.verticalCardMargin * 2,
@@ -188,31 +188,31 @@ struct TimelineLayoutEngine {
             + CGFloat(column) * (columnWidth + Timeline.metrics.overlapColumnSpacing)
     }
 
-    private func cardY(for appt: Appointment) -> CGFloat {
-        return scale.yOffset(for: appt.start.timeOfDay)
+    private func cardY(for item: TimelineItem) -> CGFloat {
+        return scale.yOffset(for: item.start.timeOfDay)
             + Timeline.metrics.verticalCardMargin
     }
 
     private func overlappingGroups(
-        for appointments: [Appointment]
-    ) -> [[Appointment]] {
-        let sortedAppointments = appointments.sorted(by: appointmentSort)
-        var groups: [[Appointment]] = []
-        var currentGroup: [Appointment] = []
+        for items: [TimelineItem]
+    ) -> [[TimelineItem]] {
+        let sortedItems = items.sorted(by: itemSort)
+        var groups: [[TimelineItem]] = []
+        var currentGroup: [TimelineItem] = []
         var currentGroupEndMinute: Int?
 
-        for appointment in sortedAppointments {
-            let startMinute = startMinute(for: appointment)
-            let endMinute = endMinute(for: appointment)
+        for item in sortedItems {
+            let startMinute = startMinute(for: item)
+            let endMinute = endMinute(for: item)
 
             if let groupEndMinute = currentGroupEndMinute,
                 startMinute >= groupEndMinute
             {
                 groups.append(currentGroup)
-                currentGroup = [appointment]
+                currentGroup = [item]
                 currentGroupEndMinute = endMinute
             } else {
-                currentGroup.append(appointment)
+                currentGroup.append(item)
                 currentGroupEndMinute = max(currentGroupEndMinute ?? endMinute, endMinute)
             }
         }
@@ -225,13 +225,13 @@ struct TimelineLayoutEngine {
     }
 
     private func columnAssignments(
-        for appointments: [Appointment]
-    ) -> [AppointmentColumnAssignment] {
+        for items: [TimelineItem]
+    ) -> [TimelineItemColumnAssignment] {
         var columnEndMinutes: [Int] = []
 
-        return appointments.map { appointment in
-            let startMinute = startMinute(for: appointment)
-            let endMinute = endMinute(for: appointment)
+        return items.map { item in
+            let startMinute = startMinute(for: item)
+            let endMinute = endMinute(for: item)
             let column: Int
 
             if let reusableColumn = columnEndMinutes.firstIndex(where: {
@@ -247,16 +247,16 @@ struct TimelineLayoutEngine {
                 columnEndMinutes[column] = max(columnEndMinutes[column], endMinute)
             }
 
-            return AppointmentColumnAssignment(
-                appointment: appointment,
+            return TimelineItemColumnAssignment(
+                item: item,
                 column: column
             )
         }
     }
 
-    private func appointmentSort(
-        lhs: Appointment,
-        rhs: Appointment
+    private func itemSort(
+        lhs: TimelineItem,
+        rhs: TimelineItem
     ) -> Bool {
         let lhsStart = startMinute(for: lhs)
         let rhsStart = startMinute(for: rhs)
@@ -270,28 +270,28 @@ struct TimelineLayoutEngine {
             return lhsEnd < rhsEnd
         }
 
-        return lhs.id.uuidString < rhs.id.uuidString
+        return lhs.id.sortKey < rhs.id.sortKey
     }
 
-    private func startMinute(for appointment: Appointment) -> Int {
-        appointment.start.timeOfDay.minutes(since: Bitehaus.opening)
+    private func startMinute(for item: TimelineItem) -> Int {
+        item.start.timeOfDay.minutes(since: Bitehaus.opening)
     }
 
-    private func endMinute(for appointment: Appointment) -> Int {
-        startMinute(for: appointment) + appointment.durationMinutes
+    private func endMinute(for item: TimelineItem) -> Int {
+        startMinute(for: item) + item.durationMinutes
     }
 
     private static let maximumOverlappingColumns = 3
 }
 
-struct AppointmentLayoutInfo: Identifiable {
-    let id: UUID
-    let appointment: Appointment
+struct TimelineItemLayoutInfo: Identifiable {
+    let id: TimelineItem.ID
+    let item: TimelineItem
     let rect: CGRect
 }
 
-private struct AppointmentColumnAssignment {
-    let appointment: Appointment
+private struct TimelineItemColumnAssignment {
+    let item: TimelineItem
     let column: Int
 }
 

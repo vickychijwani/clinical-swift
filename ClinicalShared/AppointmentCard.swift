@@ -4,88 +4,19 @@ struct AppointmentCard: View {
     let appt: Appointment
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(style.background)
-
-            cardContent
-                .padding(.horizontal, 8)
-                .frame(
-                    maxWidth: .infinity,
-                    maxHeight: .infinity,
-                    alignment: .topLeading
-                )
-                .clipped()
-                .opacity(style.contentOpacity)
-
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(style.stroke, style: style.strokeStyle)
-        }
-        .clipShape(.rect(cornerRadius: 8))
-        .animation(.easeInOut(duration: 0.2), value: appt.status)
+        ScheduleCard(start: appt.start, label: appt.patientName, appearance: appearance)
+            .animation(.easeInOut(duration: 0.2), value: appt.status)
     }
 
-    private var cardContent: some View {
-        ViewThatFits(in: .vertical) {
-            // Preferred: vertical layout when there's enough height
-            VStack(alignment: .leading, spacing: 2) {
-                Color.clear.frame(height: 4)
-                timeText
-                patientNameText
-                Spacer(minLength: 0)
-            }
-
-            // Fallback vertical layout with slightly less spacing
-            VStack(alignment: .leading) {
-                Spacer(minLength: 0)
-                timeText
-                patientNameText
-                Spacer(minLength: 0)
-            }
-
-            // Fallback: horizontal layout when vertical doesn't fit
-            VStack {
-                Spacer(minLength: 0)
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    timeText
-                    patientNameText
-                }
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private var timeText: some View {
-        HStack(spacing: 2) {
-            Image(systemName: statusPresentation.systemImage)
-            Text(appt.start.formatted(.dateTime.hour().minute()))
-        }
-        .styleAppointmentTime()
-        .layoutPriority(1)
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private var statusPresentation: AppointmentStatusPresentation {
-        AppointmentStatusPresentation(status: appt.status)
-    }
-
-    private var patientNameText: some View {
-        Text(appt.patientName)
-            .styleBodyBold()
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-            .minimumScaleFactor(0.5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .clipped()
-    }
-
-    private var style: Style {
-        switch appt.status {
+    private var appearance: ScheduleCard.Appearance {
+        let systemImage = AppointmentStatusPresentation(status: appt.status).systemImage
+        return switch appt.status {
         case .draft:
-            Style(
+            ScheduleCard.Appearance(
+                systemImage: systemImage,
                 background: Color.accentColor.opacity(0.08),
-                stroke: Color.accentColor.opacity(0.5),
-                strokeStyle: StrokeStyle(
+                border: Color.accentColor.opacity(0.5),
+                borderStyle: StrokeStyle(
                     lineWidth: 3,
                     lineCap: .round,
                     dash: [5, 10]
@@ -94,36 +25,32 @@ struct AppointmentCard: View {
             )
 
         case .scheduled:
-            Style(
+            ScheduleCard.Appearance(
+                systemImage: systemImage,
                 background: .white,
-                stroke: .gray.opacity(0.15),
-                strokeStyle: StrokeStyle(lineWidth: 2),
+                border: .gray.opacity(0.15),
+                borderStyle: StrokeStyle(lineWidth: 2),
                 contentOpacity: 1
             )
 
         case .completed:
-            Style(
+            ScheduleCard.Appearance(
+                systemImage: systemImage,
                 background: Color(red: 0.95, green: 0.95, blue: 0.95),
-                stroke: .gray.opacity(0.1),
-                strokeStyle: StrokeStyle(lineWidth: 2),
+                border: .gray.opacity(0.1),
+                borderStyle: StrokeStyle(lineWidth: 2),
                 contentOpacity: 0.6
             )
 
         case .cancelled:
-            Style(
+            ScheduleCard.Appearance(
+                systemImage: systemImage,
                 background: .clear,
-                stroke: .clear,
-                strokeStyle: StrokeStyle(lineWidth: 0),
+                border: .clear,
+                borderStyle: StrokeStyle(lineWidth: 0),
                 contentOpacity: 0
             )
         }
-    }
-
-    private struct Style {
-        let background: Color
-        let stroke: Color
-        let strokeStyle: StrokeStyle
-        let contentOpacity: Double
     }
 }
 

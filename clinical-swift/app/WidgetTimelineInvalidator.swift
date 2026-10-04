@@ -6,12 +6,18 @@ import WidgetKit
 final class WidgetTimelineInvalidator {
     private let observation: AnyDatabaseCancellable
 
-    init(database: any DatabaseWriter) {
+    init(
+        database: any DatabaseWriter,
+        reload: @escaping @Sendable () -> Void = {
+            WidgetCenter.shared.reloadTimelines(ofKind: ClinicalWidgetConstants.scheduleKind)
+        }
+    ) {
         // This is independent of GRDB's suspension notifications: those manage the writer's locks,
         // while this observation turns relevant committed changes into WidgetKit timeline reloads.
         observation = DatabaseRegionObservation(
             tracking: Table("appointments"),
-            Table("patients")
+            Table("patients"),
+            Table("unavailableTimes")
         )
         .start(
             in: database,
@@ -19,13 +25,11 @@ final class WidgetTimelineInvalidator {
                 widgetLogger.error("Widget database observation failed: \(error)")
             },
             onChange: { _ in
-                WidgetCenter.shared.reloadTimelines(
-                    ofKind: ClinicalWidgetConstants.scheduleKind
-                )
+                reload()
             }
         )
 
-        WidgetCenter.shared.reloadTimelines(ofKind: ClinicalWidgetConstants.scheduleKind)
+        reload()
     }
 }
 

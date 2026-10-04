@@ -47,4 +47,70 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         // The tap is outside every card, so the previous right-card selection must remain.
         XCTAssertEqual(selectionStatus.label, "Selected right appointment")
     }
+    @MainActor
+    func testMixedThreeColumnCardsKeepSeparateTapAreas() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-appointment-hitboxes", "--ui-testing-mixed-hitboxes"]
+        app.launch()
+        let status = app.staticTexts["selection-status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        let appointment = app.buttons["appointment-00000000-0000-0000-0000-000000000001"]
+        let middle = app.buttons["unavailable-time-00000000-0000-0000-0000-000000000001"]
+        let right = app.buttons["unavailable-time-00000000-0000-0000-0000-000000000002"]
+        XCTAssertTrue(right.waitForExistence(timeout: 5))
+        middle.tap()
+        XCTAssertEqual(status.label, "Selected middle block")
+        right.tap()
+        XCTAssertEqual(status.label, "Selected right block")
+        app.coordinate(withNormalizedOffset: .zero).withOffset(
+            CGVector(
+                dx: right.frame.maxX + 24 - app.frame.minX,
+                dy: right.frame.midY - app.frame.minY
+            )
+        ).tap()
+        XCTAssertEqual(status.label, "Selected right block")
+        appointment.tap()
+        XCTAssertEqual(status.label, "Selected left appointment")
+    }
+    @MainActor
+    func testUnavailableTimeEditorKeepsDateSelectionAndConfirmsDiscard() {
+        let app = XCUIApplication()
+        app.launch()
+        let action = app.buttons["Unavailable Time"]
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        action.tap()
+        let label = app.textFields["Optional label"]
+        XCTAssertTrue(label.waitForExistence(timeout: 5))
+        let calendar = Calendar.current
+        let offset = calendar.component(.weekday, from: .now) == 1 ? 1 : -1
+        guard let alternateDate = calendar.date(byAdding: .day, value: offset, to: .now) else {
+            XCTFail("The adjacent date is missing.")
+            return
+        }
+        let dateButton = app.buttons[
+            alternateDate.formatted(.dateTime.weekday(.wide).month(.wide).day().year())]
+        XCTAssertTrue(dateButton.exists)
+        dateButton.tap()
+        XCTAssertTrue((dateButton.value as? String)?.contains("Selected") == true)
+        label.tap()
+        label.typeText("Draft travel")
+        app.buttons["Cancel"].tap()
+        let discard = app.buttons["Discard Changes"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        if app.buttons["Keep Editing"].exists {
+            app.buttons["Keep Editing"].tap()
+        } else {
+            // Native popovers use an outside-tap region for cancellation.
+            app.otherElements["PopoverDismissRegion"].tap()
+        }
+        XCTAssertEqual(label.value as? String, "Draft travel")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Unavailable time editor"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        discard.tap()
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+    }
 }

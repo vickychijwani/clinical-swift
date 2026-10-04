@@ -56,7 +56,7 @@ nonisolated struct DiagonalStripePattern: Shape {
 
 #Preview {
     TimelineBreakView(
-        scale: TimelineScale(appointments: []),
+        scale: TimelineScale(items: []),
         availableWidth: 390
     )
     .frame(width: 390, height: Timeline.metrics.compactBreakHeight)

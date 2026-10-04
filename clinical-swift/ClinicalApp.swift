@@ -8,7 +8,7 @@ struct ClinicalApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var router: Router
     private let widgetTimelineInvalidator: WidgetTimelineInvalidator
-    private let appointmentCalendarSyncCoordinator: AppointmentCalendarSyncCoordinator
+    private let calendarSyncCoordinator: CalendarSyncCoordinator
 
     init() {
         let router = Router()
@@ -20,7 +20,7 @@ struct ClinicalApp: App {
 
         _router = State(initialValue: router)
         widgetTimelineInvalidator = WidgetTimelineInvalidator(database: database)
-        appointmentCalendarSyncCoordinator = AppointmentCalendarSyncCoordinator(
+        calendarSyncCoordinator = CalendarSyncCoordinator(
             database: database,
             calendarClient: .live(),
             contactClient: .liveValue
@@ -44,7 +44,7 @@ struct ClinicalApp: App {
                 #endif
             }
             .task {
-                await appointmentCalendarSyncCoordinator.activate()
+                await calendarSyncCoordinator.activate()
             }
             .onChange(of: scenePhase) { _, scenePhase in
                 // The live writer opts into these notifications in
@@ -59,7 +59,7 @@ struct ClinicalApp: App {
                         object: nil
                     )
                     Task {
-                        await appointmentCalendarSyncCoordinator.activate()
+                        await calendarSyncCoordinator.activate()
                     }
                 case .background:
                     NotificationCenter.default.post(

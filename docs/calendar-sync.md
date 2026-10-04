@@ -1,4 +1,4 @@
-# Appointment Calendar Sync
+# Calendar Sync
 
 This document captures the invariants for the one-way EventKit integration.
 
@@ -44,6 +44,15 @@ This document captures the invariants for the one-way EventKit integration.
 - The table is device-local integration state. Exclude it from any future CloudKit or other
   cross-device database synchronization because EventKit identifiers are local to a device's event
   store.
+
+## Unavailable-time delivery
+
+- A block event is timed. Its title is `Blocked: <label>` or `Blocked` without a label. Its marker is `clinical://unavailable-times/<UUID>`.
+- Block insert, actual label/start/duration change, and deletion queue work transactionally in `unavailableTimeCalendarSync`. Timestamp-only and unchanged-field updates do not queue work. Seed transactions remove sample block delivery rows.
+- Keep source type and UUID separate. Read pending work in order for each source, and process appointments before blocks on each pass. One item failure must not stop other work.
+- A revision guards every suspended replacement and deletion. If a newer change arrives during replacement, retain the new event link without clearing pending work. Delete an outbox row only if its revision still matches.
+- Permission, target, write, or link-persistence failures leave work pending for a later activation. They cannot roll back block data or turn a successful editor save into a form error.
+- Both outboxes belong to this device and must not join future cross-device sync.
 
 ## Replacement Trade-off
 

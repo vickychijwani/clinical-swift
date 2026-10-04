@@ -1,5 +1,6 @@
 import Dependencies
 import Foundation
+import SQLiteData
 
 enum AppTab: Hashable {
     case schedule
@@ -16,7 +17,15 @@ enum Route: Hashable {
 final class Router {
     @ObservationIgnored @Dependency(\.calendar) private var calendar
 
-    var selectedTab: AppTab = .schedule  // Home screen is Schedule tab
+    // Schedule is the home screen.
+    var selectedTab: AppTab = .schedule {
+        didSet {
+            if oldValue != selectedTab {
+                unavailableTimeNavigationRequest = nil
+                navigationErrorMessage = nil
+            }
+        }
+    }
     var schedulePath: [Route] = []
     var patientsPath: [Route] = []
     var paymentsPath: [Route] = []
@@ -28,6 +37,9 @@ final class Router {
     // Invariant: the app has exactly one app-root presentation intent. Independent optional sheet
     // state can make multiple hosts present at once or resurrect an older flow after interruption.
     private(set) var activePresentation: AppPresentation?
+    private(set) var unavailableTimeNavigationRequest: UnavailableTimeNavigationRequest?
+    var navigationErrorMessage: String?
+
     private(set) var patientSearchRequest: PatientSearchRequest?
 
     // SwiftUI cannot replace an already-presented sheet in one state change. Keep only the newest
@@ -57,6 +69,29 @@ final class Router {
         return request
     }
 
+    var unavailableTimeEditorRequest: UnavailableTimeEditorRequest? {
+        guard case .unavailableTimeEditor(let request) = activePresentation else { return nil }
+        return request
+    }
+
+    func requestUnavailableTimeCreation() {
+        selectedTab = .schedule
+        requestPresentation(.unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create)))
+    }
+
+    func requestUnavailableTimeEdit(_ block: UnavailableTime) {
+        selectedTab = .schedule
+        selectedScheduleDate = calendar.startOfDay(for: block.start)
+        requestPresentation(
+            .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .edit(block))))
+    }
+
+    func finishScheduleEditor(_ presentationID: UUID, date: Date) {
+        guard activePresentation?.id == presentationID else { return }
+        selectedScheduleDate = calendar.startOfDay(for: date)
+        discardActivePresentation()
+    }
+
     var appointmentMessageRequest: AppointmentMessageRequest? {
         guard case .appointmentMessage(let request) = activePresentation else { return nil }
         return request
@@ -68,6 +103,8 @@ final class Router {
     }
 
     func presentDetails(_ root: Route) {
+        unavailableTimeNavigationRequest = nil
+        navigationErrorMessage = nil
         if let detailsPresentation, dismissingPresentationID == nil {
             // A new selection behind the visible details sheet replaces its content in place. Keep
             // the session ID stable so SwiftUI does not perform an unnecessary sheet handoff.
@@ -98,6 +135,8 @@ final class Router {
     }
 
     func selectScheduleDate(_ date: Date) {
+        unavailableTimeNavigationRequest = nil
+        navigationErrorMessage = nil
         let normalizedDate = date.startOfDay(using: calendar)
         guard !calendar.isDate(normalizedDate, inSameDayAs: selectedScheduleDate) else { return }
 
@@ -213,8 +252,46 @@ final class Router {
             openAppointment(id: id)
         case .schedule(let day):
             openExternalSchedule(day)
+        case .unavailableTime(let id):
+            openUnavailableTime(id)
         }
         return true
+    }
+
+    func openUnavailableTime(_ id: UUID) {
+        selectedTab = .schedule
+        discardAllPresentations()
+        patientSearchRequest = nil
+        navigationErrorMessage = nil
+        unavailableTimeNavigationRequest = UnavailableTimeNavigationRequest(blockID: id)
+    }
+
+    func resolveUnavailableTime(_ request: UnavailableTimeNavigationRequest) async {
+        @Dependency(\.defaultDatabase) var database
+        do {
+            let id = request.blockID
+            let block = try await database.read { db in
+                try UnavailableTimeRecord.find(id).fetchOne(db)?.unavailableTime
+            }
+            completeUnavailableTimeNavigation(request, block: block)
+        } catch {
+            guard unavailableTimeNavigationRequest?.id == request.id else { return }
+            unavailableTimeNavigationRequest = nil
+            navigationErrorMessage = "The unavailable time could not be loaded."
+        }
+    }
+
+    func completeUnavailableTimeNavigation(
+        _ request: UnavailableTimeNavigationRequest, block: UnavailableTime?
+    ) {
+        guard unavailableTimeNavigationRequest?.id == request.id else { return }
+        unavailableTimeNavigationRequest = nil
+        guard let block, block.id == request.blockID else {
+            navigationErrorMessage = "This unavailable time no longer exists."
+            return
+        }
+        selectedTab = .schedule
+        selectedScheduleDate = calendar.startOfDay(for: block.start)
     }
 
     func openAppointment(id: Appointment.ID) {
@@ -278,6 +355,8 @@ final class Router {
     }
 
     private func requestPresentation(_ presentation: AppPresentation) {
+        unavailableTimeNavigationRequest = nil
+        navigationErrorMessage = nil
         // App-root actions are latest-wins interruptions. Do not queue multiple sheets or restore
         // the interrupted presentation after the replacement ends; its transient state is stale.
         patientSearchRequest = nil
@@ -310,6 +389,8 @@ final class Router {
     }
 
     private func discardAllPresentations() {
+        unavailableTimeNavigationRequest = nil
+        navigationErrorMessage = nil
         // External non-sheet destinations supersede both the visible sheet and any replacement
         // already waiting for its dismissal to complete.
         replacementPresentation = nil
@@ -347,6 +428,7 @@ enum AppPresentation {
     case appointmentEdit(AppointmentEditRequest)
     case appointmentMessage(AppointmentMessageRequest)
     case patientEdit(PatientEditRequest)
+    case unavailableTimeEditor(UnavailableTimeEditorRequest)
 
     var id: UUID {
         switch self {
@@ -359,6 +441,8 @@ enum AppPresentation {
         case .appointmentMessage(let request):
             request.id
         case .patientEdit(let request):
+            request.id
+        case .unavailableTimeEditor(let request):
             request.id
         }
     }
@@ -459,4 +543,14 @@ nonisolated struct PatientSearchRequest: Identifiable, Equatable, Sendable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
     }
+}
+
+nonisolated struct UnavailableTimeEditorRequest: Identifiable, Sendable {
+    let id = UUID()
+    let purpose: UnavailableTimeEditorPurpose
+}
+
+nonisolated struct UnavailableTimeNavigationRequest: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    let blockID: UUID
 }

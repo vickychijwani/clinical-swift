@@ -2,7 +2,7 @@ import Dependencies
 import Foundation
 
 struct AppointmentBookingDraft: Equatable, Sendable {
-    static let durationOptions = [15, 30, 45, 60, 90, 120]
+    static let durationOptions = ScheduleDurationSection.options
 
     @Dependency(\.calendar) private var calendar
 

@@ -21,7 +21,7 @@ nonisolated struct WidgetLayoutConfiguration: Equatable, Sendable {
 }
 
 nonisolated enum WidgetPlannedRow: Equatable, Sendable {
-    case appointment(Int)
+    case item(Int)
     case empty
     case overflow(hiddenCount: Int)
 }
@@ -93,7 +93,8 @@ nonisolated struct WidgetLayoutPlanner: Sendable {
 
         let fallback = WidgetPlannedSection(
             sourceIndex: 0,
-            rows: [.empty]
+            rows: sections[0].items.isEmpty
+                ? [.empty] : [.overflow(hiddenCount: sections[0].items.count)]
         )
         let contentHeight = min(
             availableHeight,
@@ -121,24 +122,24 @@ nonisolated struct WidgetLayoutPlanner: Sendable {
     }
 
     private func completeRows(for section: WidgetScheduleSection) -> [WidgetPlannedRow] {
-        guard !section.appointments.isEmpty else { return [.empty] }
-        return section.appointments.indices.map(WidgetPlannedRow.appointment)
+        guard !section.items.isEmpty else { return [.empty] }
+        return section.items.indices.map(WidgetPlannedRow.item)
     }
 
     private func lastSectionRowOptions(
         for section: WidgetScheduleSection
     ) -> [[WidgetPlannedRow]] {
-        guard !section.appointments.isEmpty else { return [[.empty]] }
+        guard !section.items.isEmpty else { return [[.empty]] }
 
         return stride(
-            from: section.appointments.count,
+            from: section.items.count,
             through: 0,
             by: -1
         ).map { visibleCount in
-            let visibleRows = (0..<visibleCount).map(WidgetPlannedRow.appointment)
-            guard visibleCount < section.appointments.count else { return visibleRows }
+            let visibleRows = (0..<visibleCount).map(WidgetPlannedRow.item)
+            guard visibleCount < section.items.count else { return visibleRows }
             return visibleRows + [
-                .overflow(hiddenCount: section.appointments.count - visibleCount)
+                .overflow(hiddenCount: section.items.count - visibleCount)
             ]
         }
     }
