@@ -5,12 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "git diff --name-only -- '*.swift' | xargs -r xcrun swift-format format --in-place",
-            "timeout": 30
+            "command": "/bin/sh \"$(git rev-parse --show-toplevel)/.codex/hooks/stop.sh\"",
+            "timeout": 60,
+            "statusMessage": "Checking format and comment preservation"
           }
         ]
       }
     ]
   }
 }
-
