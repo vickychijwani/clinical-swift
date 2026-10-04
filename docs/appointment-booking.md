@@ -11,6 +11,8 @@ This document captures the deliberate constraints an agent is likely to break wh
 - Existing appointments must not restrict manual time selection or saving. Multiple doctors may be available even when the selected interval is occupied.
 - Scheduling inputs inherit the normal appointment-read policy: cancelled rows are excluded before slot suggestions are calculated. Do not make each availability consumer remember to filter them.
 - Patient selection uses a stable full-height sheet so search results and the keyboard do not resize it.
+- Booking patients are ordered by the later of patient creation and the latest appointment start at or before the query's current time. Include scheduled and completed appointments; exclude cancelled and future appointments from this sort date. This supports follow-up booking without giving distant future appointments priority. Patient edits do not increase recency.
+- Refresh the booking patient query's time boundary when patient selection opens or the app returns to the foreground. Database observation updates patient and appointment changes between these refreshes; typing does not change the time boundary.
 - Show patient creation as the last search result for any nonblank search, even when patients match. Empty and whitespace-only searches show no creation result.
 - Appointment details fit the sheet to their content so the schedule remains visible. Only this step allows interaction with the schedule behind the sheet.
 - The booking sheet is not manually resizable or swipe-dismissible. Explicit toolbar actions keep step changes and discard confirmation intentional.

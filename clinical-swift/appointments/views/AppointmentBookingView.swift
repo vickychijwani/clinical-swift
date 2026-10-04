@@ -4,8 +4,10 @@ import SwiftUI
 
 struct AppointmentBookingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @Dependency(\.date.now) private var now
 
-    @FetchAll(patientListRowsQuery())
+    @FetchAll
     private var patientRows: [PatientDetailsSelection]
 
     @Bindable var model: AppointmentBookingModel
@@ -48,6 +50,14 @@ struct AppointmentBookingView: View {
         .presentationBackgroundInteraction(
             bookingStep == .details ? .enabled : .disabled
         )
+        // Refresh when the app returns: an appointment may now be in the past.
+        // Skip this when the app is inactive or patient selection is closed.
+        .task(id: scenePhase == .active && bookingStep == .selectPatient) {
+            guard scenePhase == .active, bookingStep == .selectPatient else { return }
+            // Refresh the time boundary on entry, then let database observation keep rows current.
+            // Search text changes must not restart the query or change its time boundary.
+            _ = try? await $patientRows.load(appointmentBookingPatientRowsQuery(now: now))
+        }
     }
 
     private var hasUnsavedChanges: Bool {
