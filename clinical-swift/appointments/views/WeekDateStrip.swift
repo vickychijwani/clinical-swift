@@ -51,6 +51,8 @@ struct WeekDateStrip: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $visiblePage)
         .scrollIndicators(.hidden)
+        // Let the glass shadow extend below the strip without changing its layout height.
+        .scrollClipDisabled()
         .frame(height: displayMode.stripHeight)
         .onAppear(perform: normalizeSelection)
         .onChange(of: visiblePage) {
@@ -169,6 +171,8 @@ private struct WeekDatePage: View {
     let displayMode: WeekDateStripDisplayMode
     let selectDate: (Date) -> Void
 
+    @Namespace private var selectionGlass
+
     var body: some View {
         HStack(spacing: 8) {
             ForEach(weekStart.weekDates(using: calendar), id: \.self) { date in
@@ -177,12 +181,31 @@ private struct WeekDatePage: View {
                     isSelected: date.isSameDayAs(selectedDate),
                     isToday: date.isSameDayAs(today),
                     displayMode: displayMode,
+                    selectionGlass: selectionGlass,
                     selectDate: selectDate
                 )
                 .frame(maxWidth: .infinity)
             }
         }
+        .background {
+            if selectedDate.startOfWeek(using: calendar).isSameDayAs(weekStart) {
+                // Keep one glass view alive so date changes move it instead of fading separate effects.
+                Color.clear
+                    .frame(width: 44, height: displayMode.cellMinHeight)
+                    .glassEffect(
+                        .regular.tint(
+                            selectedDate.isSameDayAs(today) ? .accentColor.opacity(0.2) : nil
+                        )
+                        .interactive(),
+                        in: .rect(cornerRadius: displayMode.cornerRadius, style: .continuous)
+                    )
+                    .matchedGeometryEffect(
+                        id: selectedDate, in: selectionGlass, properties: .position, isSource: false
+                    )
+            }
+        }
         .padding(.horizontal, displayMode.stripHzPadding)
+        .animation(.bouncy(duration: 0.35), value: selectedDate)
     }
 }
 
@@ -191,6 +214,7 @@ private struct DateStripCell: View {
     let isSelected: Bool
     let isToday: Bool
     let displayMode: WeekDateStripDisplayMode
+    let selectionGlass: Namespace.ID
     let selectDate: (Date) -> Void
 
     var body: some View {
@@ -225,15 +249,7 @@ private struct DateStripCell: View {
             .contentShape(
                 .rect(cornerRadius: displayMode.cornerRadius, style: .continuous)
             )
-            .background {
-                if isSelected {
-                    ZStack {
-                        Color("AppBackground")
-                        Color.primary.opacity(0.06)
-                    }
-                }
-            }
-            .clipShape(.rect(cornerRadius: displayMode.cornerRadius, style: .continuous))
+            .matchedGeometryEffect(id: date, in: selectionGlass, properties: .position)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)

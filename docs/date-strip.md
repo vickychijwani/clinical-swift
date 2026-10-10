@@ -10,6 +10,9 @@ This document captures the deliberate constraints an agent is likely to break if
 - Displayed and selected dates should be normalized to the calendar start of day. Compare day identity with calendar APIs, not raw `Date` equality.
 - A single completed swipe may advance at most one calendar week. If the strip uses a three-page paging window, commit the selected page after scrolling becomes idle before recentering.
 - Today styling is independent from selection. When today is visible, both its weekday and date number should use the accent color.
+- The selected date uses interactive Liquid Glass with the existing continuous rounded rectangle shape and corner radius. Tint the glass with the accent color only when today is selected. Unselected dates have no glass effect.
+- Within each week, keep one glass view alive and use matched geometry to move it between date positions. Replacing a separate glass view in each cell can fade the selection out and in. Keep this animation inside the week page so it does not animate paging or recentering.
+- Do not clip the date strip scroll view to its bounds. The glass shadow extends below the strip and needs to remain visible above the timeline.
 - External day-navigation controls, such as a paged schedule, may drive `selectedDate`. The strip must follow those changes across week boundaries instead of treating its own scroll state as authoritative.
 
 ## Do Not Reintroduce
