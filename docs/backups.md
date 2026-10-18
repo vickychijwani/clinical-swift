@@ -77,10 +77,16 @@ Settings does not clear it. The router rejects Settings while an editor is activ
 ## Restore boundaries
 
 See [assisted restore](patient-data-restore.md) for the internal invocation. Restore
-runs before live pools open. A shared process lock covers the full lifetime of app
-and widget pools. An exclusive restore lock fails while a reader still owns the
-old database. Retry after the extension releases it; file coordination alone does
-not close a pool. An installed journal needs no exclusive lock for normal startup,
+runs before live app pools open. Process-local access records reject replacement
+while a writer or scoped read remains in use. Do not hold a `flock` for a pool's
+lifetime: iOS can terminate a suspended process with `0xdead10cc` even after GRDB
+suspends its SQLite connections.
+
+Widget reads coordinate the full operation, including closing the read pool.
+Restore and rollback use replacement coordination on the same database URL and
+wait for reads in other processes to end. Coordinating only database opening is
+not sufficient: a pool could still use the old database and sidecars during
+replacement. An installed journal needs no replacement access for normal startup,
 because no database files change in that phase.
 
 The journal and original DB/WAL/SHM set remain outside the replaced database.

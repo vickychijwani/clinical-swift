@@ -46,24 +46,27 @@ enum BackupFixture {
     // SQL quote preserves NULL, numeric, and text storage values for every column.
     nonisolated static func contents(_ database: any DatabaseReader) throws -> [String: [[String]]]
     {
-        try database.read { db in
-            let tables = try String.fetchAll(
-                db,
-                sql:
-                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            )
-            var result: [String: [[String]]] = [:]
-            for table in tables {
-                let quotedTable = "\"" + table.replacing("\"", with: "\"\"") + "\""
-                let columns = try db.columns(in: table).map {
-                    "quote(\"" + $0.name.replacing("\"", with: "\"\"") + "\")"
-                }
-                let rows = try Row.fetchAll(
-                    db, sql: "SELECT " + columns.joined(separator: ",") + " FROM " + quotedTable)
-                result[table] = rows.map { row in (0..<row.count).map { row[$0] as String } }.sorted
-                { $0.lexicographicallyPrecedes($1) }
+        try database.read { try contents($0) }
+    }
+
+    nonisolated static func contents(_ db: Database) throws -> [String: [[String]]] {
+        let tables = try String.fetchAll(
+            db,
+            sql:
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+        var result: [String: [[String]]] = [:]
+        for table in tables {
+            let quotedTable = "\"" + table.replacing("\"", with: "\"\"") + "\""
+            let columns = try db.columns(in: table).map {
+                "quote(\"" + $0.name.replacing("\"", with: "\"\"") + "\")"
             }
-            return result
+            let rows = try Row.fetchAll(
+                db, sql: "SELECT " + columns.joined(separator: ",") + " FROM " + quotedTable)
+            result[table] = rows.map { row in (0..<row.count).map { row[$0] as String } }.sorted {
+                $0.lexicographicallyPrecedes($1)
+            }
         }
+        return result
     }
 }

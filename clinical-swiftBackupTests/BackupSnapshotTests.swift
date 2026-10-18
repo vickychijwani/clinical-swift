@@ -1,3 +1,4 @@
+import Darwin
 import Dependencies
 import Foundation
 import GRDB
@@ -167,21 +168,84 @@ struct BackupSnapshotTests {
         }
     }
 
-    @Test func readerPoolPreventsDatabaseReplacement() throws {
+    @Test func scopedReadPreventsDatabaseReplacement() throws {
         let directory = try BackupFixture.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appending(path: "source.db")
         let writer = try BackupFixture.database(at: url)
         try writer.close()
-        var reader: DatabasePool? = try ClinicalSharedDatabase.openReadOnly(at: url)
-        #expect(reader != nil)
-        #expect(throws: ClinicalSharedDatabaseError.databaseAccessUnavailable) {
-            _ = try ClinicalDatabaseAccess(databaseURL: url, exclusive: true)
+        let count = try ClinicalSharedDatabase.read(at: url) { database in
+            #expect(throws: ClinicalSharedDatabaseError.databaseAccessUnavailable) {
+                try ClinicalDatabaseAccess.withReplacement(at: url) {}
+            }
+            let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM patients")
+            return try #require(count)
         }
-        try reader?.close()
-        reader = nil
-        let access = try ClinicalDatabaseAccess(databaseURL: url, exclusive: true)
-        withExtendedLifetime(access) {}
+        #expect(count == 2)
+        try ClinicalDatabaseAccess.withReplacement(at: url) {}
+    }
+
+    @Test func suspendedWriterHoldsNoFileLockButStillPreventsReplacement() throws {
+        let directory = try BackupFixture.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "source.db")
+        var writer: DatabasePool? = try ClinicalSharedDatabase.openWriter(
+            at: url, configuration: Configuration()
+        ) { database in
+            try database.write { try $0.execute(sql: "CREATE TABLE probe (value INTEGER)") }
+        }
+        defer { NotificationCenter.default.post(name: Database.resumeNotification, object: nil) }
+        try requireNoFileLock(at: url)
+        NotificationCenter.default.post(name: Database.suspendNotification, object: nil)
+        #expect(throws: DatabaseError.self) {
+            try writer?.write { try $0.execute(sql: "INSERT INTO probe VALUES (1)") }
+        }
+        try requireNoFileLock(at: url)
+        #expect(throws: ClinicalSharedDatabaseError.databaseAccessUnavailable) {
+            try ClinicalDatabaseAccess.withReplacement(at: url) {}
+        }
+        NotificationCenter.default.post(name: Database.resumeNotification, object: nil)
+        try writer?.write { try $0.execute(sql: "INSERT INTO probe VALUES (1)") }
+        try writer?.close()
+        writer = nil
+        try ClinicalDatabaseAccess.withReplacement(at: url) {}
+    }
+
+    @Test func failedReadAndReplacementReleaseAccess() throws {
+        enum Failure: Error { case expected }
+        let directory = try BackupFixture.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "source.db")
+        #expect(try ClinicalSharedDatabase.read(at: url) { _ in true } == nil)
+        let writer = try BackupFixture.database(at: url)
+        try writer.close()
+        #expect(throws: Failure.self) {
+            try ClinicalSharedDatabase.read(at: url) { _ in throw Failure.expected }
+        }
+        #expect(throws: Failure.self) {
+            try ClinicalDatabaseAccess.withReplacement(at: url) { throw Failure.expected }
+        }
+        #expect(try ClinicalSharedDatabase.read(at: url) { _ in true } == true)
+        try ClinicalDatabaseAccess.withReplacement(at: url) {
+            #expect(throws: ClinicalSharedDatabaseError.databaseAccessUnavailable) {
+                try ClinicalSharedDatabase.read(at: url) { _ in true }
+            }
+            #expect(throws: ClinicalSharedDatabaseError.databaseAccessUnavailable) {
+                try ClinicalSharedDatabase.openWriter(at: url, configuration: Configuration()) {
+                    _ in
+                }
+            }
+        }
+    }
+
+    private func requireNoFileLock(at databaseURL: URL) throws {
+        // An old lock file can remain after an update. No pool may keep it locked.
+        let lockURL = databaseURL.appendingPathExtension("access-lock")
+        let descriptor = open(
+            lockURL.path(percentEncoded: false), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        try #require(descriptor >= 0)
+        defer { close(descriptor) }
+        #expect(flock(descriptor, LOCK_EX | LOCK_NB) == 0)
     }
 
     @Test(arguments: [false, true])
@@ -234,22 +298,20 @@ struct BackupSnapshotTests {
         #expect(pending.manifestFileID == "saved-json-id")
         try BackupFiles.validate(
             pending.snapshot(in: movedStore), supportedMigrations: databaseMigrator().migrations)
-        var reader = try ClinicalSharedDatabase.openReadOnly(at: movedURL)
-        #expect(throws: ClinicalSharedDatabaseError.databaseAccessUnavailable) {
-            try movedRestore.installOrResume()
+        _ = try ClinicalSharedDatabase.read(at: movedURL) { _ in
+            #expect(throws: ClinicalSharedDatabaseError.databaseAccessUnavailable) {
+                try movedRestore.installOrResume()
+            }
         }
-        try reader?.close()
-        reader = nil
         try movedRestore.installOrResume()
 
-        // A completed install must permit startup while a widget holds its shared reader lock.
-        reader = try ClinicalSharedDatabase.openReadOnly(at: movedURL)
-        let restored = try BackupFixture.contents(#require(reader))
-        #expect(restored["patients"] == captured["patients"])
-        try movedRestore.installOrResume()
-        #expect(try BackupFixture.contents(#require(reader)) == restored)
-        try reader?.close()
-        reader = nil
+        // A completed install must permit startup during a widget read.
+        _ = try ClinicalSharedDatabase.read(at: movedURL) { database in
+            let restored = try BackupFixture.contents(database)
+            #expect(restored["patients"] == captured["patients"])
+            try movedRestore.installOrResume()
+            #expect(try BackupFixture.contents(database) == restored)
+        }
         let savedJournal = try String(contentsOf: movedRestore.journalURL, encoding: .utf8)
         #expect(!savedJournal.contains(app.path(percentEncoded: false)))
         #expect(!savedJournal.contains("replacementURL"))

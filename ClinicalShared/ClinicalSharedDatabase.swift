@@ -78,42 +78,52 @@ nonisolated enum ClinicalSharedDatabase {
         return databasePool
     }
 
-    static func openReadOnly(
+    /// Return values only. The read connection closes before file coordination ends.
+    static func read<Value>(
         at databaseURL: URL,
-        fileManager: FileManager = .default
-    ) throws -> DatabasePool? {
+        fileManager: FileManager = .default,
+        _ fetch: (Database) throws -> Value
+    ) throws -> Value? {
         guard fileManager.fileExists(atPath: databaseURL.path(percentEncoded: false)) else {
             return nil
         }
 
+        let access = try ClinicalDatabaseAccess(databaseURL: databaseURL)
+        defer { withExtendedLifetime(access) {} }
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinationError: NSError?
-        var databasePool: DatabasePool?
-        var openingError: Error?
-
+        var result: Result<Value?, any Error>?
         coordinator.coordinate(
             readingItemAt: databaseURL,
             options: .withoutChanges,
             error: &coordinationError
         ) { coordinatedURL in
-            do {
+            result = Result {
+                // Restore can remove the file while this read waits for coordination.
+                guard fileManager.fileExists(atPath: coordinatedURL.path(percentEncoded: false))
+                else {
+                    return nil
+                }
                 var configuration = Configuration()
                 configuration.readonly = true
-                let access = try ClinicalDatabaseAccess(databaseURL: coordinatedURL)
-                configuration.prepareDatabase { _ in withExtendedLifetime(access) {} }
-                databasePool = try DatabasePool(
+                let database = try DatabasePool(
                     path: coordinatedURL.path(percentEncoded: false),
                     configuration: configuration
                 )
-            } catch {
-                openingError = error
+                do {
+                    let value = try database.read(fetch)
+                    try database.close()
+                    return value
+                } catch {
+                    try? database.close()
+                    throw error
+                }
             }
         }
 
-        if let error = openingError ?? coordinationError {
-            throw error
-        }
-        return databasePool
+        if let coordinationError { throw coordinationError }
+        guard let result else { throw ClinicalSharedDatabaseError.coordinationProducedNoDatabase }
+        return try result.get()
     }
 }
 

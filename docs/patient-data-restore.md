@@ -75,10 +75,11 @@ queues eligible links, including previously successful rows. All historical
 records and excluded link evidence remain in SQLite. Records without a saved
 Calendar link or pending entry stay outside Calendar recovery.
 
-Before replacement, an exclusive file lock excludes app/widget pools. If a widget
-still holds a reader, startup stops safely. Retry after the reader exits. The
-journal preserves the original DB/WAL/SHM set before a same-filesystem atomic
-rename installs the standalone replacement. It adopts the restored dataset and
+Before replacement, process-local access records exclude live app pools. File
+coordination waits for each widget read to close its pool. No pool keeps a
+separate file lock while suspended. A failed coordination stops startup safely;
+keep the journal and retry. The journal preserves the original DB/WAL/SHM set
+before a same-filesystem atomic rename installs the standalone replacement. It adopts the restored dataset and
 clears old pending-upload references. Do not manually rearrange files around an
 unresolved journal.
 

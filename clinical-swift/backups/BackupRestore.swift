@@ -47,7 +47,7 @@ nonisolated extension BackupRestoreJournal {
     }
 }
 
-/// Invoke only before opening live pools. The lock also excludes readers in widget processes.
+/// Invoke only before opening live pools. File coordination also excludes reads in widget processes.
 @MainActor
 struct BackupRestore {
     @Dependency(\.calendar) private var calendar
@@ -116,60 +116,61 @@ struct BackupRestore {
         }
         if journal.phase == .installed { return }
         guard journal.phase != .rolledBack else { throw BackupError.restoreInProgress }
-        let access = try ClinicalDatabaseAccess(databaseURL: databaseURL, exclusive: true)
-        defer { withExtendedLifetime(access) {} }
-        let manager = FileManager.default
-        let parent = databaseURL.deletingLastPathComponent()
-        let recovery = journal.directory(in: store)
-        let rollback = recovery.appending(path: "original")
-        if journal.phase == .prepared {
-            try BackupFiles.createDirectory(rollback)
-            // Originals remain untouched until the complete rollback set is durable.
-            for name in journal.originalFiles {
-                let saved = rollback.appending(path: name)
-                if manager.fileExists(atPath: saved.path(percentEncoded: false)) {
-                    try manager.removeItem(at: saved)
+        try ClinicalDatabaseAccess.withReplacement(at: databaseURL) {
+            let manager = FileManager.default
+            let parent = databaseURL.deletingLastPathComponent()
+            let recovery = journal.directory(in: store)
+            let rollback = recovery.appending(path: "original")
+            if journal.phase == .prepared {
+                try BackupFiles.createDirectory(rollback)
+                // Originals remain untouched until the complete rollback set is durable.
+                for name in journal.originalFiles {
+                    let saved = rollback.appending(path: name)
+                    if manager.fileExists(atPath: saved.path(percentEncoded: false)) {
+                        try manager.removeItem(at: saved)
+                    }
+                    try manager.copyItem(at: parent.appending(path: name), to: saved)
+                    try BackupFiles.protect(saved)
+                    try BackupFiles.makeDurable(saved)
                 }
-                try manager.copyItem(at: parent.appending(path: name), to: saved)
-                try BackupFiles.protect(saved)
-                try BackupFiles.makeDurable(saved)
+                journal.phase = .savedOriginal
+                try BackupFiles.save(journal, to: journalURL)
             }
-            journal.phase = .savedOriginal
+            // The installation file is on the live database's filesystem for atomic rename.
+            let install = parent.appending(path: "clinical-restore-install.db")
+            if manager.fileExists(atPath: install.path(percentEncoded: false)) {
+                try manager.removeItem(at: install)
+            }
+            try manager.copyItem(at: recovery.appending(path: "replacement.db"), to: install)
+            try BackupFiles.protect(install)
+            try BackupFiles.makeDurable(install)
+            for suffix in ["-wal", "-shm"] {
+                let url = URL(filePath: databaseURL.path(percentEncoded: false) + suffix)
+                if manager.fileExists(atPath: url.path(percentEncoded: false)) {
+                    try manager.removeItem(at: url)
+                }
+            }
+            if rename(install.path(percentEncoded: false), databaseURL.path(percentEncoded: false))
+                != 0
+            {
+                throw BackupError.invalidSnapshot
+            }
+            try BackupFiles.makeDurable(databaseURL)
+            var state = BackupState()
+            state.restored = true
+            state.datasetID = journal.manifest.datasetID
+            state.accountID = journal.previousBackupState.accountID
+            state.accountEmail = journal.previousBackupState.accountEmail
+            state.rootFolderID = journal.previousBackupState.rootFolderID
+            // Resolve the restored dataset folder explicitly on the next backup opportunity.
+            if journal.previousBackupState.datasetID == state.datasetID {
+                state.datasetFolderID = journal.previousBackupState.datasetFolderID
+            }
+            try store.save(state)
+            journal.phase = .installed
             try BackupFiles.save(journal, to: journalURL)
+            WidgetCenter.shared.reloadAllTimelines()
         }
-        // The installation file is on the live database's filesystem for atomic rename.
-        let install = parent.appending(path: "clinical-restore-install.db")
-        if manager.fileExists(atPath: install.path(percentEncoded: false)) {
-            try manager.removeItem(at: install)
-        }
-        try manager.copyItem(at: recovery.appending(path: "replacement.db"), to: install)
-        try BackupFiles.protect(install)
-        try BackupFiles.makeDurable(install)
-        for suffix in ["-wal", "-shm"] {
-            let url = URL(filePath: databaseURL.path(percentEncoded: false) + suffix)
-            if manager.fileExists(atPath: url.path(percentEncoded: false)) {
-                try manager.removeItem(at: url)
-            }
-        }
-        if rename(install.path(percentEncoded: false), databaseURL.path(percentEncoded: false)) != 0
-        {
-            throw BackupError.invalidSnapshot
-        }
-        try BackupFiles.makeDurable(databaseURL)
-        var state = BackupState()
-        state.restored = true
-        state.datasetID = journal.manifest.datasetID
-        state.accountID = journal.previousBackupState.accountID
-        state.accountEmail = journal.previousBackupState.accountEmail
-        state.rootFolderID = journal.previousBackupState.rootFolderID
-        // Resolve the restored dataset folder explicitly on the next backup opportunity.
-        if journal.previousBackupState.datasetID == state.datasetID {
-            state.datasetFolderID = journal.previousBackupState.datasetFolderID
-        }
-        try store.save(state)
-        journal.phase = .installed
-        try BackupFiles.save(journal, to: journalURL)
-        WidgetCenter.shared.reloadAllTimelines()
     }
 
     func rollBack() throws {
@@ -179,30 +180,30 @@ struct BackupRestore {
             try FileManager.default.removeItem(at: journalURL)
             return
         }
-        let access = try ClinicalDatabaseAccess(databaseURL: databaseURL, exclusive: true)
-        defer { withExtendedLifetime(access) {} }
-        // Persist rollback intent before touching the installed file set.
-        journal.phase = .rollingBack
-        try BackupFiles.save(journal, to: journalURL)
-        let manager = FileManager.default
-        for suffix in ["", "-wal", "-shm"] {
-            let destination = URL(filePath: databaseURL.path(percentEncoded: false) + suffix)
-            if manager.fileExists(atPath: destination.path(percentEncoded: false)) {
-                try manager.removeItem(at: destination)
+        try ClinicalDatabaseAccess.withReplacement(at: databaseURL) {
+            // Persist rollback intent before touching the installed file set.
+            journal.phase = .rollingBack
+            try BackupFiles.save(journal, to: journalURL)
+            let manager = FileManager.default
+            for suffix in ["", "-wal", "-shm"] {
+                let destination = URL(filePath: databaseURL.path(percentEncoded: false) + suffix)
+                if manager.fileExists(atPath: destination.path(percentEncoded: false)) {
+                    try manager.removeItem(at: destination)
+                }
+                if journal.originalFiles.contains(destination.lastPathComponent) {
+                    try manager.copyItem(
+                        at: journal.directory(in: store).appending(path: "original").appending(
+                            path: destination.lastPathComponent),
+                        to: destination)
+                    try BackupFiles.protect(destination)
+                    try BackupFiles.makeDurable(destination)
+                }
             }
-            if journal.originalFiles.contains(destination.lastPathComponent) {
-                try manager.copyItem(
-                    at: journal.directory(in: store).appending(path: "original").appending(
-                        path: destination.lastPathComponent),
-                    to: destination)
-                try BackupFiles.protect(destination)
-                try BackupFiles.makeDurable(destination)
-            }
+            try store.save(journal.previousBackupState)
+            journal.phase = .rolledBack
+            try BackupFiles.save(journal, to: journalURL)
+            WidgetCenter.shared.reloadAllTimelines()
         }
-        try store.save(journal.previousBackupState)
-        journal.phase = .rolledBack
-        try BackupFiles.save(journal, to: journalURL)
-        WidgetCenter.shared.reloadAllTimelines()
     }
 
     func finalize(confirmed: Bool) throws {

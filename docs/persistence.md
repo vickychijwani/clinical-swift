@@ -43,6 +43,9 @@ General invariants:
 - Shared database connections use persistent WAL mode and `NSFileCoordinator`. Do not replace this
   with an uncoordinated read-only connection: read-only processes cannot recreate missing WAL/SHM
   sidecars, and cross-process opening has additional file-locking constraints.
+  Widget reads keep coordination until the read pool closes. Restore and rollback
+  coordinate replacement on the same URL. Pool lifetime guards are process-local;
+  an OS file lock held across suspension can cause a `0xdead10cc` termination.
 
 - Domain structs remain separate from database records. `Patient` and `Appointment` are UI-facing
   values; `PatientRecord` and `AppointmentRecord` define the SQLite boundary.

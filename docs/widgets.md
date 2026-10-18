@@ -51,9 +51,14 @@ This document captures the cross-process and layout constraints for Clinical wid
 
 ## Restore access
 
-Every read pool holds the shared database access lock for its lifetime. Restore
-requires an exclusive lock before replacing the database and sidecars. Release
-pools promptly when a widget read finishes. A failed lock or temporary missing
-database uses the existing unavailable-data path. Reload timelines after restore
-or rollback; cached snapshots do not prove that the new database was read. See
-[backup invariants](backups.md).
+Coordinate each complete read on the shared database URL. Open, query, and close
+the read pool before coordination ends; return values, not a live connection.
+Restore and rollback coordinate replacement on that same URL, so they wait until
+other processes finish reading the old database and sidecars. A process-local
+access record also rejects replacement during a read in the same process.
+
+Do not keep a `flock` for the pool's lifetime. GRDB suspension does not release a
+separate file lock, and iOS can terminate a suspended process that holds one.
+A temporary missing database uses the existing unavailable-data path. Reload
+timelines after restore or rollback; cached snapshots do not prove that the new
+database was read. See [backup invariants](backups.md).

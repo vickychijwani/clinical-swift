@@ -70,75 +70,26 @@ nonisolated struct WidgetScheduleRepository: Sendable {
     }
 
     func snapshot(at now: Date) throws -> WidgetScheduleSnapshot? {
-        guard let database = try ClinicalSharedDatabase.openReadOnly(at: databaseURL) else {
-            return nil
+        try ClinicalSharedDatabase.read(at: databaseURL) { database in
+            try snapshot(in: database, at: now)
         }
-        return try snapshot(in: database, at: now)
     }
 
     func snapshot(
         in database: any DatabaseReader,
         at now: Date
     ) throws -> WidgetScheduleSnapshot {
+        try database.read { try snapshot(in: $0, at: now) }
+    }
+
+    private func snapshot(in database: Database, at now: Date) throws -> WidgetScheduleSnapshot {
         let today = calendar.startOfDay(for: now)
         let endExclusive = calendar.date(byAdding: .day, value: 3, to: today) ?? today
         let startValue = Self.databaseDateString(today)
         let endValue = Self.databaseDateString(endExclusive)
 
-        let items: [TimelineItem] = try database.read { database in
-            let rows = try Row.fetchAll(
-                database,
-                // This is a raw SQL query because making it type-safe would require moving Record
-                // types into the shared target and adding SQLite to the widget target.
-                sql: """
-                    SELECT
-                      appointments.id AS appointmentID,
-                      appointments.start,
-                      appointments.durationMinutes,
-                      appointments.status,
-                      patients.name AS patientName
-                    FROM appointments
-                    JOIN patients ON patients.id = appointments.patientID
-                    WHERE appointments.status <> ?
-                      AND appointments.start >= ?
-                      AND appointments.start < ?
-                    ORDER BY appointments.start ASC
-                    """,
-                arguments: [
-                    Appointment.Status.cancelled.rawValue,
-                    startValue,
-                    endValue,
-                ]
-            )
-
-            let appointments = try rows.map(Self.appointment(from:)).map(TimelineItem.appointment)
-            // A widget can open the old schema before the app has run its new migration.
-            let blocks: [TimelineItem]
-            if try database.tableExists("unavailableTimes") {
-                blocks = try Row.fetchAll(
-                    database,
-                    sql: """
-                        SELECT id, label, start, durationMinutes FROM unavailableTimes
-                        WHERE start >= ? AND start < ?
-                        """,
-                    arguments: [startValue, endValue]
-                ).map { row in
-                    let rawID: String = row["id"]
-                    guard let id = UUID(uuidString: rawID) else {
-                        throw WidgetScheduleRepositoryError.invalidUnavailableTimeRow
-                    }
-                    return .unavailableTime(
-                        UnavailableTime(
-                            id: id, label: row["label"], start: row["start"],
-                            durationMinutes: row["durationMinutes"]
-                        ))
-                }
-            } else {
-                blocks = []
-            }
-            return (appointments + blocks).sorted(by: TimelineItem.ordered)
-        }
-        .filter { $0.end(using: calendar) > now }
+        let items = try items(in: database, startValue: startValue, endValue: endValue)
+            .filter { $0.end(using: calendar) > now }
 
         let sections = (0..<3).compactMap { dayOffset -> WidgetScheduleSection? in
             guard let date = calendar.date(byAdding: .day, value: dayOffset, to: today) else {
@@ -156,6 +107,62 @@ nonisolated struct WidgetScheduleRepository: Sendable {
         }
 
         return WidgetScheduleSnapshot(generatedAt: now, sections: sections)
+    }
+
+    private func items(in database: Database, startValue: String, endValue: String) throws
+        -> [TimelineItem]
+    {
+        let rows = try Row.fetchAll(
+            database,
+            // This is a raw SQL query because making it type-safe would require moving Record
+            // types into the shared target and adding SQLite to the widget target.
+            sql: """
+                SELECT
+                  appointments.id AS appointmentID,
+                  appointments.start,
+                  appointments.durationMinutes,
+                  appointments.status,
+                  patients.name AS patientName
+                FROM appointments
+                JOIN patients ON patients.id = appointments.patientID
+                WHERE appointments.status <> ?
+                  AND appointments.start >= ?
+                  AND appointments.start < ?
+                ORDER BY appointments.start ASC
+                """,
+            arguments: [
+                Appointment.Status.cancelled.rawValue,
+                startValue,
+                endValue,
+            ]
+        )
+
+        let appointments = try rows.map(Self.appointment(from:)).map(TimelineItem.appointment)
+        // A widget can open the old schema before the app has run its new migration.
+        let blocks: [TimelineItem]
+        if try database.tableExists("unavailableTimes") {
+            blocks = try Row.fetchAll(
+                database,
+                sql: """
+                    SELECT id, label, start, durationMinutes FROM unavailableTimes
+                    WHERE start >= ? AND start < ?
+                    """,
+                arguments: [startValue, endValue]
+            ).map { row in
+                let rawID: String = row["id"]
+                guard let id = UUID(uuidString: rawID) else {
+                    throw WidgetScheduleRepositoryError.invalidUnavailableTimeRow
+                }
+                return .unavailableTime(
+                    UnavailableTime(
+                        id: id, label: row["label"], start: row["start"],
+                        durationMinutes: row["durationMinutes"]
+                    ))
+            }
+        } else {
+            blocks = []
+        }
+        return (appointments + blocks).sorted(by: TimelineItem.ordered)
     }
 
     private static func appointment(from row: Row) throws -> Appointment {
