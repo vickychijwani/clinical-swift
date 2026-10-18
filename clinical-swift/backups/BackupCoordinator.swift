@@ -66,26 +66,6 @@ final class BackupCoordinator {
             state.accountEmail = tokens.email
             state.retryAfter = nil
             try store.save(state)
-            #if INTERNAL_BACKUP_CHECK
-                if store.directory.lastPathComponent == "ClinicalBackupCheck" {
-                    // Only an explicit internal build can export isolated test credentials.
-                    var exported = tokens
-                    #if DEBUG || targetEnvironment(simulator)
-                        let releaseOnDevice = false
-                    #else
-                        let releaseOnDevice = true
-                    #endif
-                    exported.deviceCheck = BackupDeviceCheck(
-                        clientID: request.configuration.clientID,
-                        callbackScheme: request.configuration.callbackScheme,
-                        checkedAt: now, releaseOnDevice: releaseOnDevice
-                    )
-                    try BackupFiles.save(
-                        exported,
-                        to: URL.documentsDirectory.appending(path: "backup-check-credentials.json"))
-                    return
-                }
-            #endif
             await opportunity()
         } catch {
             state.problem = error.localizedDescription
@@ -95,10 +75,6 @@ final class BackupCoordinator {
 
     @discardableResult
     func opportunity() async -> Bool {
-        #if INTERNAL_BACKUP_CHECK
-            // Authentication setup must not schedule or capture a separate empty dataset.
-            if store.directory.lastPathComponent == "ClinicalBackupCheck" { return false }
-        #endif
         if let work { return await work.value }
         let task = Task { await self.perform() }
         work = task
@@ -269,9 +245,6 @@ final class BackupCoordinator {
     }
 
     func scheduleBackground() {
-        #if INTERNAL_BACKUP_CHECK
-            if store.directory.lastPathComponent == "ClinicalBackupCheck" { return }
-        #endif
         guard state.accountID != nil else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundIdentifier)
         let request = BGProcessingTaskRequest(identifier: Self.backgroundIdentifier)

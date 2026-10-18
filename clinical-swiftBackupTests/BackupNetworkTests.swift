@@ -1,3 +1,4 @@
+import Dependencies
 import Foundation
 import Synchronization
 import Testing
@@ -43,6 +44,127 @@ struct BackupNetworkTests {
         configuration.timeoutIntervalForResource = 5
         return URLSession(configuration: configuration)
     }
+
+    #if INTERNAL_BACKUP_CHECK
+        @Test func testAuthorizationExportsOnlyTheSelectedTestAccount() async throws {
+            let directory = try BackupFixture.directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let clinic = BackupKeychain(
+                service: "in.bitehaus.clinical.backups.unit-clinic-" + UUID().uuidString)
+            let check = BackupKeychain(
+                service: "in.bitehaus.clinical.backups.unit-check-" + UUID().uuidString)
+            defer {
+                clinic.remove()
+                check.remove()
+            }
+            try clinic.save(
+                GoogleBackupTokens(
+                    accountID: "clinic", email: "clinic@example.invalid", clientID: "client",
+                    accessToken: "clinic-access", refreshToken: "clinic-refresh",
+                    expiresAt: .distantFuture))
+            let account = GoogleBackupAccount(session: authorizationSession(), keychain: check)
+            let credentialsURL = directory.appending(path: "credentials.json")
+            let authorization = BackupCheckAuthorization(
+                account: account, credentialsURL: credentialsURL)
+            await withDependencies {
+                $0.date.now = BackupFixture.capturedAt
+            } operation: {
+                await authorization.connect(authenticate: authorizationCallback)
+            }
+            let exported = try BackupFiles.load(GoogleBackupTokens.self, from: credentialsURL)
+            let configuration = try GoogleBackupConfiguration.live()
+            #expect(authorization.email == "test@example.invalid")
+            #expect(authorization.problem == nil)
+            #expect(!authorization.isConnecting)
+            #expect(exported.accountID == "test")
+            #expect(exported.refreshToken == "test-refresh")
+            #expect(exported.deviceCheck?.clientID == configuration.clientID)
+            #expect(exported.deviceCheck?.callbackScheme == configuration.callbackScheme)
+            #expect(exported.deviceCheck?.checkedAt == BackupFixture.capturedAt)
+            #expect(exported.deviceCheck?.releaseOnDevice == false)
+            #expect(try check.load().accountID == "test")
+            #expect(try clinic.load().accountID == "clinic")
+            #expect(try clinic.load().refreshToken == "clinic-refresh")
+
+            let request = try GoogleAuthorizationRequest(configuration: configuration)
+            await #expect(throws: BackupError.accountChanged) {
+                try await GoogleBackupAccount(session: authorizationSession(), keychain: clinic)
+                    .complete(
+                        request, callback: authorizationCallback(request),
+                        expectedAccountID: "clinic")
+            }
+            #expect(try clinic.load().accountID == "clinic")
+        }
+
+        @Test func cancelledTestAuthorizationDoesNotExportCredentials() async throws {
+            let directory = try BackupFixture.directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let check = BackupKeychain(
+                service: "in.bitehaus.clinical.backups.unit-check-" + UUID().uuidString)
+            defer { check.remove() }
+            let credentialsURL = directory.appending(path: "credentials.json")
+            let authorization = BackupCheckAuthorization(
+                account: GoogleBackupAccount(
+                    session: session { _ in
+                        Issue.record("Cancelled sign-in must not make a network request.")
+                        throw BackupError.authorizationRequired
+                    }, keychain: check), credentialsURL: credentialsURL)
+            await authorization.connect { _ in throw CancellationError() }
+            #expect(authorization.email == nil)
+            #expect(authorization.problem != nil)
+            #expect(!authorization.isConnecting)
+            #expect(
+                !FileManager.default.fileExists(atPath: credentialsURL.path(percentEncoded: false)))
+            #expect(throws: BackupError.authorizationRequired) { try check.load() }
+        }
+
+        @Test func testAuthorizationReportsExportFailure() async throws {
+            let directory = try BackupFixture.directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let check = BackupKeychain(
+                service: "in.bitehaus.clinical.backups.unit-check-" + UUID().uuidString)
+            defer { check.remove() }
+            // An existing directory cannot be replaced with a credential file.
+            let authorization = BackupCheckAuthorization(
+                account: GoogleBackupAccount(session: authorizationSession(), keychain: check),
+                credentialsURL: directory)
+            await withDependencies {
+                $0.date.now = BackupFixture.capturedAt
+            } operation: {
+                await authorization.connect(authenticate: authorizationCallback)
+            }
+            #expect(authorization.email == nil)
+            #expect(authorization.problem != nil)
+            #expect(!authorization.isConnecting)
+        }
+
+        private func authorizationSession() -> URLSession {
+            session { request in
+                switch request.url?.path {
+                case "/token":
+                    (
+                        200,
+                        Data(
+                            #"{"access_token":"test-access","refresh_token":"test-refresh","expires_in":3600}"#
+                                .utf8)
+                    )
+                case "/v1/userinfo":
+                    (200, Data(#"{"sub":"test","email":"test@example.invalid"}"#.utf8))
+                default:
+                    throw BackupError.authorizationRequired
+                }
+            }
+        }
+
+        private func authorizationCallback(_ request: GoogleAuthorizationRequest) throws -> URL {
+            var callback = URLComponents(string: request.configuration.redirectURI)
+            callback?.queryItems = [
+                URLQueryItem(name: "state", value: request.state),
+                URLQueryItem(name: "code", value: "test-code"),
+            ]
+            return try #require(callback?.url)
+        }
+    #endif
 
     @Test func uploadAcceptsOnlyMatchingStoredBytes() async throws {
         let directory = try BackupFixture.directory()

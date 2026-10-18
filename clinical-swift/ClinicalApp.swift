@@ -15,19 +15,18 @@ struct ClinicalApp: App {
     init() {
         let router = Router()
         _router = State(initialValue: router)
+        #if INTERNAL_BACKUP_CHECK
+            if BackupCheckAuthorization.isRequested {
+                // Authentication setup must not schedule or capture a separate empty dataset.
+                _backups = State(initialValue: nil)
+                widgetTimelineInvalidator = nil
+                calendarSyncCoordinator = nil
+                startupError = nil
+                return
+            }
+        #endif
         do {
-            var store = BackupStateStore.live()
-            var backupKeychain = BackupKeychain()
-            var authorizeCheck = false
-            #if INTERNAL_BACKUP_CHECK
-                authorizeCheck = CommandLine.arguments.contains("--backup-check-authorize")
-                if authorizeCheck {
-                    store = BackupStateStore(
-                        directory: URL.applicationSupportDirectory.appending(
-                            path: "ClinicalBackupCheck"))
-                    backupKeychain = BackupKeychain(service: "in.bitehaus.clinical.backups.check")
-                }
-            #endif
+            let store = BackupStateStore.live()
             let restore = try BackupRestore(
                 store: store, databaseURL: ClinicalSharedDatabase.databaseURL())
             #if INTERNAL_RECOVERY
@@ -43,33 +42,20 @@ struct ClinicalApp: App {
                     atPath: restore.journalURL.path(percentEncoded: false))
             }
             let database: any DatabaseWriter = try prepareDependencies {
-                let database: any DatabaseWriter
-                if authorizeCheck {
-                    let isolated = try DatabaseQueue()
-                    try databaseMigrator(allowDebugErasure: false).migrate(isolated)
-                    database = isolated
-                } else {
-                    database = try appDatabase(
-                        seedSamples: !hasJournal,
-                        recoverySafe: hasJournal || ((try? store.load().restored) ?? true)
-                    )
-                }
+                let database = try appDatabase(
+                    seedSamples: !hasJournal,
+                    recoverySafe: hasJournal || ((try? store.load().restored) ?? true)
+                )
                 $0.defaultDatabase = database
                 return database
             }
-            let backups = BackupCoordinator(
-                database: database, store: store,
-                account: GoogleBackupAccount(keychain: backupKeychain))
-            if authorizeCheck { router.requestSettings() }
+            let backups = BackupCoordinator(database: database, store: store)
             _backups = State(initialValue: backups)
-            if !hasJournal, !authorizeCheck { backups.registerBackgroundTask() }
+            if !hasJournal { backups.registerBackgroundTask() }
             widgetTimelineInvalidator = WidgetTimelineInvalidator(database: database)
-            calendarSyncCoordinator =
-                authorizeCheck
-                ? nil
-                : CalendarSyncCoordinator(
-                    database: database, calendarClient: .live(), contactClient: .liveValue
-                )
+            calendarSyncCoordinator = CalendarSyncCoordinator(
+                database: database, calendarClient: .live(), contactClient: .liveValue
+            )
             startupError = nil
             AppDependencyManager.shared.add(
                 dependency: ClinicalAppActions(router: router, database: database)
@@ -103,6 +89,12 @@ struct ClinicalApp: App {
                         #endif
                     }
                     .environment(backups)
+                } else {
+                    #if INTERNAL_BACKUP_CHECK
+                        if BackupCheckAuthorization.isRequested {
+                            BackupCheckAuthorizationView()
+                        }
+                    #endif
                 }
             }
             .task {
@@ -112,6 +104,7 @@ struct ClinicalApp: App {
                 await calendarSyncCoordinator?.activate()
             }
             .onChange(of: scenePhase) { _, scenePhase in
+                guard backups != nil else { return }
                 // The live writer opts into these notifications in
                 // ClinicalSharedDatabase.openWriter.
                 // TODO: Revisit this when building iPad/Mac support

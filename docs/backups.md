@@ -108,8 +108,13 @@ reconciles the same IDs, downloads the exact remote pair, removes upload staging
 and compares every row and field. Missing credentials and infrastructure failures
 are failures, not skips. Cleanup deletes only the UUID folder created by that run.
 
-Set up credentials once with `make backup-authorize`. Complete Google sign-in in
-Simulator, then run `make backup-export-credentials`. The default destination is
+Set up credentials once with `make backup-authorize`. The internal authorization
+screen opens before clinic data or recovery state is accessed. It uses a separate
+Keychain service and the production Google sign-in code. It does not create a
+database or start backup, Calendar, widget, or App Intent services. Test account
+selection does not change the clinic account binding. Legacy `ClinicalBackupCheck`
+state is no longer used. Complete Google sign-in in Simulator, then run
+`make backup-export-credentials`. The default destination is
 `~/.config/clinical-backups/check-credentials.json`, mode 600. Keep this file private.
 Override its path with `CLINICAL_BACKUP_CHECK_CREDENTIALS`. Revoke this grant when
 retiring the runner. Ordinary builds cannot export credentials or invoke recovery.
@@ -134,8 +139,9 @@ container to the private runner path, with mode 600. The internal build records
 whether authorization ran on a physical device in Release. This is generated
 from the actual native session; a manually marked checklist cannot satisfy it.
 Changing the client ID or callback scheme requires fresh device evidence.
-The custom setting adds conditions only to the app target, so widget and package
-conditions remain intact. Do not override compilation conditions for every target.
+The custom setting adds conditions only to the app and backup-test targets, so
+widget and package conditions remain intact. Do not override compilation
+conditions for every target.
 
 Check reconnect on that device as well. Routine Drive checks force token refresh.
 Simulator credentials can run the independent Drive check, but cannot allow

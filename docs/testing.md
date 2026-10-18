@@ -13,6 +13,10 @@ This document captures testing rules that are easy to miss under strict Swift co
 - `make backup-drive-check` selects only `BackupDriveTests`. Missing credentials fail the command. See [backup setup and release rules](backups.md).
 - `make release-verify` runs both in sequence in Release. Upload recipes enforce it before export; do not replace the gate with an earlier result from a different source tree.
 - Ordinary `make test` keeps backup tests out of its build graph.
+- Set `CLINICAL_INTERNAL_CONDITIONS=INTERNAL_BACKUP_CHECK` for the backup scheme to
+  include internal authorization tests. They use synthetic OAuth responses and
+  separate Keychain entries. They check credential export, account isolation,
+  cancellation, and export failures without a Google session.
 
 ## Async Database Access
 
