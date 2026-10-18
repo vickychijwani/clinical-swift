@@ -11,4 +11,4 @@ printf '%s' "$CLINICAL_BACKUP_CHECK_CREDENTIALS_BASE64" | base64 --decode > "$cr
 unset CLINICAL_BACKUP_CHECK_CREDENTIALS_BASE64
 simulator_id="$(xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for key,items in devices.items() if "iOS" in key for d in items if d["name"].startswith("iPhone")))')"
 xcrun simctl boot "$simulator_id" || true
-make release-verify CONFIGURATION=Release SIMULATOR_ID="$simulator_id" CLINICAL_BACKUP_CHECK_CREDENTIALS="$credential_file"
+make release-verify CONFIGURATION=Release SIMULATOR_ID="$simulator_id" CLINICAL_BACKUP_CHECK_CREDENTIALS="$credential_file" XCBEAUTIFY=cat

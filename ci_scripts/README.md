@@ -13,6 +13,10 @@ missing credential, device evidence, failed check, or changed candidate stops th
 archive. `ci_post_xcodebuild.sh` rechecks the source fingerprint before distribution.
 Local results cannot authorize another cloud branch or checkout.
 
+The cloud script sets `XCBEAUTIFY=cat` to keep plain build logs. The runner does
+not need `xcbeautify`. This setting also applies to the nested Make commands;
+failed builds and tests still stop the archive.
+
 The existing post-clone script configures macro trust. Configure secrets and test
 runner access before enabling distribution. Cloud credentials and an actual cloud
 archive have not been verified in this implementation session.
