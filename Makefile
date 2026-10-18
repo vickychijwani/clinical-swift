@@ -7,6 +7,8 @@ PROJECT := clinical-swift.xcodeproj
 SCHEME := clinical-swift
 UNIT_TEST_SCHEME := clinical-swift-UnitTests
 UI_TEST_SCHEME := clinical-swift-UITests
+BACKUP_TEST_SCHEME := clinical-swift-Backups
+CLINICAL_BACKUP_CHECK_CREDENTIALS ?= $(HOME)/.config/clinical-backups/check-credentials.json
 CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
 SIMULATOR_OS ?= 27.0
@@ -54,10 +56,11 @@ XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
 XCODEBUILD_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
 UNIT_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO
 UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)"
+BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO ENABLE_TESTABILITY=YES
 
 .DEFAULT_GOAL := build-and-run
 
-.PHONY: help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-github-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
+.PHONY: backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-github-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
 
 help:
 	@printf "%s\n" \
@@ -66,6 +69,11 @@ help:
 		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when none is running" \
 		"  make build            Build the app" \
 		"  make test             Run unit tests" \
+		"  make backup-test      Run local backup safety tests (no network)" \
+		"  make backup-drive-check  Verify a synthetic backup through real Drive" \
+		"  make release-verify   Run required Release backup and device checks" \
+		"  make backup-authorize  Open internal Google test-account setup" \
+		"  make backup-export-credentials  Save test credentials outside the repo" \
 		"  make ui-test          Run UI tests" \
 		"" \
 		"Xcode Cloud:" \
@@ -154,7 +162,7 @@ resolve-packages: check-tools prepare
 build: check-tools check-simulator prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
-		$(XCODEBUILD_FLAGS) \
+		$(XCODEBUILD_FLAGS) $(EXTRA_BUILD_FLAGS) \
 		build \
 		2>&1 | tee "$(LOG_DIR)/build.log" | $(XCBEAUTIFY)
 
@@ -169,6 +177,35 @@ test: check-tools check-simulator prepare
 		awk '/recorded an issue/{ issue = 1 } issue { print } issue && /^✘ Test .* failed after/{ issue = 0 }' "$(LOG_DIR)/test.log"; \
 	fi; \
 	exit $$status
+
+backup-test: check-tools check-simulator prepare
+	@set -o pipefail; $(XCODEBUILD_ENV) xcodebuild $(BACKUP_TEST_FLAGS) \
+		-skip-testing:clinical-swiftBackupTests/BackupDriveTests test \
+		2>&1 | tee "$(LOG_DIR)/backup-test.log" | $(XCBEAUTIFY)
+
+backup-drive-check: check-tools check-simulator prepare
+	@test -r "$(CLINICAL_BACKUP_CHECK_CREDENTIALS)" || { echo "Missing Drive check credentials. Run make backup-authorize, sign in, then make backup-export-credentials."; exit 1; }
+	@set -o pipefail; $(XCODEBUILD_ENV) xcodebuild $(BACKUP_TEST_FLAGS) \
+		CLINICAL_BACKUP_CHECK_CREDENTIALS="$(CLINICAL_BACKUP_CHECK_CREDENTIALS)" \
+		-only-testing:clinical-swiftBackupTests/BackupDriveTests test \
+		2>&1 | tee "$(LOG_DIR)/backup-drive-check.log" | $(XCBEAUTIFY)
+
+backup-authorize: check-tools check-simulator prepare
+	@$(MAKE) --no-print-directory build CONFIGURATION=Release EXTRA_BUILD_FLAGS='"CLINICAL_INTERNAL_CONDITIONS=INTERNAL_BACKUP_CHECK"'
+	@xcrun simctl install "$(SIMULATOR_ID)" "$(DERIVED_DATA)/Build/Products/Release-iphonesimulator/$(SCHEME).app"
+	@xcrun simctl terminate "$(SIMULATOR_ID)" "$(BUNDLE_ID)" >/dev/null 2>&1 || true
+	@xcrun simctl launch "$(SIMULATOR_ID)" "$(BUNDLE_ID)" --backup-check-authorize
+
+backup-export-credentials: check-simulator
+	@CLINICAL_BACKUP_CHECK_CREDENTIALS="$(CLINICAL_BACKUP_CHECK_CREDENTIALS)" scripts/export_backup_check_credentials.sh "$(SIMULATOR_ID)"
+
+# Keep the checks inside one recipe so make -j cannot run them concurrently.
+release-verify: prepare
+	@python3 scripts/backup_candidate.py capture "$(BUILD_DIR)/backup-candidate.json"
+	@$(MAKE) --no-print-directory backup-test CONFIGURATION=Release
+	@$(MAKE) --no-print-directory backup-drive-check CONFIGURATION=Release
+	@python3 scripts/backup_candidate.py check "$(BUILD_DIR)/backup-candidate.json"
+	@python3 scripts/check_backup_device.py "$(CLINICAL_BACKUP_CHECK_CREDENTIALS)"
 
 ui-test: check-tools check-simulator prepare
 	@set -o pipefail; \
@@ -187,6 +224,7 @@ archive-with-build-number: check-tools check-build-number prepare
 	archive_count="$$(find "$(ARCHIVE_DIR)" -maxdepth 1 -type d -name '*.xcarchive' | wc -l | tr -d '[:space:]')"; \
 	printf "Archive storage: %s\nAvailable disk:  %s\nOld archives:    %s\n" "$(ARCHIVE_DIR)" "$$available" "$$archive_count"
 	@if [[ -f "$(LATEST_ARCHIVE_FILE)" ]] && [[ "$$(< "$(LATEST_ARCHIVE_FILE)")" == "$(BUILD_NUMBER)" ]]; then rm -f "$(LATEST_ARCHIVE_FILE)"; fi
+	@python3 scripts/backup_candidate.py capture "$(ARCHIVE_PATH).candidate.json"
 	@rm -rf "$(ARCHIVE_PATH)"
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
@@ -202,6 +240,7 @@ archive-with-build-number: check-tools check-build-number prepare
 		CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" \
 		archive \
 		2>&1 | tee "$(LOG_DIR)/archive-$(BUILD_NUMBER).log" | $(XCBEAUTIFY)
+	@python3 scripts/backup_candidate.py attest "$(ARCHIVE_PATH)" "$(ARCHIVE_PATH).candidate.json"
 	@printf '%s\n' "$(BUILD_NUMBER)" > "$(LATEST_ARCHIVE_FILE).tmp"
 	@mv "$(LATEST_ARCHIVE_FILE).tmp" "$(LATEST_ARCHIVE_FILE)"
 
@@ -229,6 +268,9 @@ upload-testflight: check-tools prepare
 
 upload-testflight-with-build-number: check-tools check-build-number prepare
 	@test -d "$(ARCHIVE_PATH)" || { echo "Missing archive at $(ARCHIVE_PATH)"; exit 1; }
+	@python3 scripts/backup_candidate.py verify-archive "$(ARCHIVE_PATH)"
+	@$(MAKE) --no-print-directory release-verify CONFIGURATION=Release
+	@python3 scripts/backup_candidate.py verify-archive "$(ARCHIVE_PATH)"
 	@rm -rf "$(EXPORT_PATH)"
 	@mkdir -p "$(EXPORT_PATH)"
 	@set -o pipefail; \

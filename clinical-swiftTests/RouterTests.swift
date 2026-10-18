@@ -6,6 +6,15 @@ import Testing
 
 @MainActor
 struct RouterTests {
+    @Test func settingsDoesNotReplaceAnActiveEditor() throws {
+        let router = makeRouter()
+        router.requestAppointmentBooking()
+        let editorID = try #require(router.appointmentBookingRequest?.id)
+        router.requestSettings()
+        #expect(router.settingsRequest == nil)
+        #expect(router.appointmentBookingRequest?.id == editorID)
+    }
+
     @Test func detailsHistoryPreservesRepeatedRoutes() throws {
         let router = makeRouter()
         let patientID = UUID()

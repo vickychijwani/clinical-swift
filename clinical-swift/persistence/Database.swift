@@ -3,7 +3,8 @@ import GRDB
 import OSLog
 import SQLiteData
 
-func appDatabase(seedSamples: Bool = false) throws -> any DatabaseWriter {
+func appDatabase(seedSamples: Bool = false, recoverySafe: Bool = false) throws -> any DatabaseWriter
+{
     @Dependency(\.context) var context
     var configuration = Configuration()
     configuration.foreignKeysEnabled = true
@@ -28,7 +29,7 @@ func appDatabase(seedSamples: Bool = false) throws -> any DatabaseWriter {
         database = try ClinicalSharedDatabase.openWriter(
             at: ClinicalSharedDatabase.databaseURL(),
             configuration: configuration,
-            setup: migrateDatabase
+            setup: { try databaseMigrator(allowDebugErasure: !recoverySafe).migrate($0) }
         )
     } else {
         database = try defaultDatabase(configuration: configuration)
@@ -37,7 +38,7 @@ func appDatabase(seedSamples: Bool = false) throws -> any DatabaseWriter {
     databaseLogger.debug("open '\(database.path)'")
 
     #if DEBUG
-        if seedSamples, context != .test {
+        if seedSamples, !recoverySafe, context != .test {
             try database.seedSampleDataIfNeeded()
         }
     #endif
@@ -49,10 +50,10 @@ func migrateDatabase(_ database: any DatabaseWriter) throws {
     try databaseMigrator().migrate(database)
 }
 
-func databaseMigrator() -> DatabaseMigrator {
+func databaseMigrator(allowDebugErasure: Bool = true) -> DatabaseMigrator {
     var migrator = DatabaseMigrator()
     #if DEBUG
-        migrator.eraseDatabaseOnSchemaChange = true
+        migrator.eraseDatabaseOnSchemaChange = allowDebugErasure
     #endif
 
     migrator.registerMigration("Create patient and appointment tables") { db in

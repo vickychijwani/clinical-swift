@@ -2,6 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>GoogleBackupClientID</key>
+	<string>544293571126-htgh9g6j8vh8v2io1qjojh4vnkenmt93.apps.googleusercontent.com</string>
+	<key>GoogleBackupCallbackScheme</key>
+	<string>com.googleusercontent.apps.544293571126-htgh9g6j8vh8v2io1qjojh4vnkenmt93</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>in.bitehaus.clinical.backup</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -28,6 +40,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>clinical</string>
+				<string>com.googleusercontent.apps.544293571126-htgh9g6j8vh8v2io1qjojh4vnkenmt93</string>
 			</array>
 		</dict>
 	</array>

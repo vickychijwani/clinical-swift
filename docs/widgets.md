@@ -48,3 +48,12 @@ This document captures the cross-process and layout constraints for Clinical wid
   appointments today” or “No appointments”; keep the Sunday message.
 - Refresh at the earlier of the next eligible item end and local midnight. Observe committed block
   changes as well as appointment and patient changes to request reloads.
+
+## Restore access
+
+Every read pool holds the shared database access lock for its lifetime. Restore
+requires an exclusive lock before replacing the database and sidecars. Release
+pools promptly when a widget read finishes. A failed lock or temporary missing
+database uses the existing unavailable-data path. Reload timelines after restore
+or rollback; cached snapshots do not prove that the new database was read. See
+[backup invariants](backups.md).

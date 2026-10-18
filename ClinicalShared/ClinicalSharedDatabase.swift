@@ -24,7 +24,9 @@ nonisolated enum ClinicalSharedDatabase {
         configuration: Configuration,
         setup: @MainActor (DatabasePool) throws -> Void
     ) throws -> DatabasePool {
+        let access = try ClinicalDatabaseAccess(databaseURL: databaseURL)
         var configuration = configuration
+        configuration.prepareDatabase { _ in withExtendedLifetime(access) {} }
         // ClinicalApp posts the matching GRDB suspend and resume notifications as its scene phase
         // changes, preventing this writable pool from acquiring locks while the app is suspended.
         configuration.observesSuspensionNotifications = true
@@ -57,7 +59,7 @@ nonisolated enum ClinicalSharedDatabase {
         ) { coordinatedURL in
             do {
                 let openedDatabasePool = try DatabasePool(
-                    path: coordinatedURL.path(),
+                    path: coordinatedURL.path(percentEncoded: false),
                     configuration: configuration
                 )
                 try setup(openedDatabasePool)
@@ -80,7 +82,9 @@ nonisolated enum ClinicalSharedDatabase {
         at databaseURL: URL,
         fileManager: FileManager = .default
     ) throws -> DatabasePool? {
-        guard fileManager.fileExists(atPath: databaseURL.path()) else { return nil }
+        guard fileManager.fileExists(atPath: databaseURL.path(percentEncoded: false)) else {
+            return nil
+        }
 
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinationError: NSError?
@@ -95,8 +99,10 @@ nonisolated enum ClinicalSharedDatabase {
             do {
                 var configuration = Configuration()
                 configuration.readonly = true
+                let access = try ClinicalDatabaseAccess(databaseURL: coordinatedURL)
+                configuration.prepareDatabase { _ in withExtendedLifetime(access) {} }
                 databasePool = try DatabasePool(
-                    path: coordinatedURL.path(),
+                    path: coordinatedURL.path(percentEncoded: false),
                     configuration: configuration
                 )
             } catch {
@@ -114,4 +120,5 @@ nonisolated enum ClinicalSharedDatabase {
 nonisolated enum ClinicalSharedDatabaseError: Error, Equatable, Sendable {
     case appGroupUnavailable
     case coordinationProducedNoDatabase
+    case databaseAccessUnavailable
 }

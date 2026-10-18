@@ -104,3 +104,11 @@ General invariants:
   display rows.
 - Deleting a patient cascade deletes their appointments.
 - Debug sample data is seed data only for fresh debug databases. Release databases start empty.
+
+## Backup and restore
+
+Use the SQLite backup API for a live snapshot; copying only the database omits
+committed WAL data. Keep backup state outside SQLite. Restore must run before live
+pools open, hold an exclusive app/widget access lock, preserve the original sidecar
+set, and resolve its journal before startup. Disable debug erasure and seeding for
+recovered data. See [backup invariants](backups.md).

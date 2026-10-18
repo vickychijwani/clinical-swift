@@ -47,6 +47,13 @@ struct ContentView: View {
                 }
         }
         .environment(router)
+        .sheet(
+            item: presentationBinding(get: { router.settingsRequest }),
+            onDismiss: router.presentationDidDismiss
+        ) { request in
+            BackupSettingsView()
+                .onAppear { router.presentationDidAppear(request.id) }
+        }
         .task(id: router.unavailableTimeNavigationRequest?.id) {
             guard let request = router.unavailableTimeNavigationRequest else { return }
             await router.resolveUnavailableTime(request)
@@ -96,8 +103,15 @@ struct ContentView: View {
 }
 
 #Preview {
-    let _ = try! prepareDependencies {
-        $0.defaultDatabase = try appDatabase(seedSamples: true)
+    let database = try! prepareDependencies {
+        let database = try appDatabase(seedSamples: true)
+        $0.defaultDatabase = database
+        return database
     }
     ContentView(router: Router())
+        .environment(
+            BackupCoordinator(
+                database: database,
+                store: BackupStateStore(
+                    directory: .temporaryDirectory.appending(path: UUID().uuidString))))
 }

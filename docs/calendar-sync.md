@@ -63,3 +63,29 @@ marker recovery avoids duplicates after a creation succeeds before the link is p
 Replacement intentionally discards Calendar-side alarms, attendees, attachments, and other manual
 customizations. Use in-place event updates instead if preserving those properties becomes a future
 requirement.
+
+## Backup recovery
+
+The snapshot is authoritative for its linked records. Fix the cutoff at the local
+start of day seven calendar days before recovery. Queue restored items with saved
+links or pending work whose end is at or after the cutoff, including previously
+synced rows and future items. Do not add records that have no saved Calendar row;
+they can be pre-integration data or samples deliberately excluded from Calendar.
+Deleted sources use their last-synced start; older or unknown tombstones
+stay stored but do not replay. Preserve link hints and every historical record.
+
+A private recovery table retains that cutoff until each revision succeeds.
+Recheck source eligibility before delivery, since a newer edit can move an item
+outside the window. Validate URL marker, target calendar, and cutoff even for a
+direct event ID. Shared marker indexes query from the cutoff through ten years
+ahead, extended through every linked/source date. Each EventKit query covers at
+most three years. An event moved beyond both bounds with a changed identifier can
+be missed. Query access failure must remain pending, never become an empty match.
+EventKit's synchronous query API has no separate server-error result.
+
+Reuse replacement/deletion and revision guards. An empty successful search permits
+creation. A failed item does not stop other items; activations and event-store
+changes retry it. Delivery yields between batches. Newer Calendar values are
+replaced with snapshot values. Delayed iCloud visibility can leave a duplicate.
+Events created only after capture and unrelated events remain untouched. Calendar
+has no full rollback engine in this feature.

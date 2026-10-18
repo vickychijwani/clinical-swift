@@ -102,6 +102,17 @@ final class Router {
         return request
     }
 
+    var settingsRequest: SettingsRequest? {
+        guard case .settings(let request) = activePresentation else { return nil }
+        return request
+    }
+
+    func requestSettings() {
+        // Settings must not discard an editor or replace another active sheet.
+        guard activePresentation == nil, dismissingPresentationID == nil else { return }
+        requestPresentation(.settings(SettingsRequest()))
+    }
+
     func presentDetails(_ root: Route) {
         unavailableTimeNavigationRequest = nil
         navigationErrorMessage = nil
@@ -423,6 +434,7 @@ final class Router {
 /// The mutually exclusive app-root flows. Sheet hosts expose individual cases as computed values,
 /// but this enum remains the sole source of presentation truth.
 enum AppPresentation {
+    case settings(SettingsRequest)
     case details(DetailsPresentation)
     case appointmentBooking(AppointmentBookingRequest)
     case appointmentEdit(AppointmentEditRequest)
@@ -432,6 +444,8 @@ enum AppPresentation {
 
     var id: UUID {
         switch self {
+        case .settings(let request):
+            request.id
         case .details(let presentation):
             presentation.id
         case .appointmentBooking(let request):
@@ -447,6 +461,10 @@ enum AppPresentation {
         }
     }
 
+}
+
+nonisolated struct SettingsRequest: Identifiable, Sendable {
+    let id = UUID()
 }
 
 @MainActor @Observable

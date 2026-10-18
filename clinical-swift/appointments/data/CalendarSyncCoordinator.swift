@@ -1,3 +1,4 @@
+import EventKit
 import Foundation
 import GRDB
 import OSLog
@@ -15,6 +16,7 @@ final class CalendarSyncCoordinator {
     private var isReady = false
     private var isDraining = false
     private var drainRequested = false
+    private var eventChanges: Task<Void, Never>?
 
     init(
         database: any DatabaseWriter,
@@ -41,7 +43,15 @@ final class CalendarSyncCoordinator {
                 }
             }
         )
+        eventChanges = Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .EKEventStoreChanged) {
+                guard !Task.isCancelled else { return }
+                await self?.activate()
+            }
+        }
     }
+
+    deinit { eventChanges?.cancel() }
 
     func activate() async {
         guard !isActivating else { return }
@@ -91,6 +101,16 @@ final class CalendarSyncCoordinator {
         let records: [CalendarSyncWork]
         do {
             records = try await database.read { db in
+                var recoveryCutoffs: [String: Date] = [:]
+                if try db.tableExists("clinicalCalendarRecovery") {
+                    for row in try Row.fetchAll(
+                        db, sql: "SELECT source, sourceID, cutoff FROM clinicalCalendarRecovery")
+                    {
+                        let source: String = row["source"]
+                        let id: String = row["sourceID"]
+                        recoveryCutoffs[source + ":" + id] = row["cutoff"]
+                    }
+                }
                 let appointments =
                     try AppointmentCalendarSyncRecord
                     .where { $0.needsSync.eq(true) }
@@ -100,7 +120,10 @@ final class CalendarSyncCoordinator {
                         CalendarSyncWork(
                             source: .appointment($0.appointmentID),
                             link: CalendarEventLink(
-                                eventIdentifier: $0.eventIdentifier, eventStart: $0.eventStart),
+                                eventIdentifier: $0.eventIdentifier, eventStart: $0.eventStart,
+                                recoveryCutoff: recoveryCutoffs[
+                                    "appointmentCalendarSync:"
+                                        + $0.appointmentID.uuidString.lowercased()]),
                             revision: $0.revision
                         )
                     }
@@ -113,7 +136,10 @@ final class CalendarSyncCoordinator {
                         CalendarSyncWork(
                             source: .unavailableTime($0.unavailableTimeID),
                             link: CalendarEventLink(
-                                eventIdentifier: $0.eventIdentifier, eventStart: $0.eventStart),
+                                eventIdentifier: $0.eventIdentifier, eventStart: $0.eventStart,
+                                recoveryCutoff: recoveryCutoffs[
+                                    "unavailableTimeCalendarSync:"
+                                        + $0.unavailableTimeID.uuidString.lowercased()]),
                             revision: $0.revision
                         )
                     }
@@ -126,7 +152,9 @@ final class CalendarSyncCoordinator {
             return
         }
 
-        for record in records {
+        for (index, record) in records.enumerated() {
+            if index.isMultiple(of: 64) { await Task.yield() }
+            guard !Task.isCancelled else { return }
             do {
                 try await process(record)
             } catch {
@@ -155,6 +183,29 @@ final class CalendarSyncCoordinator {
                     return .replaceBlock(block)
                 }
                 return .remove(fallbackStart: nil)
+            }
+        }
+
+        if let cutoff = record.link.recoveryCutoff {
+            let table =
+                switch record.source {
+                case .appointment: "appointments"
+                case .unavailableTime: "unavailableTimes"
+                }
+            let sourceIsEligible = try await database.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql:
+                        "SELECT julianday(start) + durationMinutes / 1440.0 >= julianday(?) FROM \(table) WHERE id = ?",
+                    arguments: [cutoff, record.source.uuid.uuidString.lowercased()])
+            }
+            let eligible =
+                sourceIsEligible.map { $0 == 1 }
+                ?? (record.link.eventStart.map { $0 >= cutoff } ?? false)
+            if !eligible {
+                // A newer edit can move a restored row outside the fixed recovery window.
+                try await save(record.link, for: record)
+                return
             }
         }
 
@@ -250,6 +301,17 @@ final class CalendarSyncCoordinator {
                     record.revision, updatedAt, record.source.uuid.uuidString.lowercased(),
                 ]
             )
+            if try db.tableExists("clinicalCalendarRecovery") {
+                try db.execute(
+                    sql: """
+                        DELETE FROM clinicalCalendarRecovery WHERE source = ? AND sourceID = ?
+                        AND EXISTS (SELECT 1 FROM \(record.source.table) WHERE \(record.source.keyColumn) = ? AND needsSync = 0)
+                        """,
+                    arguments: [
+                        record.source.table, record.source.uuid.uuidString.lowercased(),
+                        record.source.uuid.uuidString.lowercased(),
+                    ])
+            }
         }
     }
 
@@ -260,6 +322,11 @@ final class CalendarSyncCoordinator {
                     "DELETE FROM \"\(record.source.table)\" WHERE \"\(record.source.keyColumn)\" = ? AND revision = ?",
                 arguments: [record.source.uuid.uuidString.lowercased(), record.revision]
             )
+            if db.changesCount > 0, try db.tableExists("clinicalCalendarRecovery") {
+                try db.execute(
+                    sql: "DELETE FROM clinicalCalendarRecovery WHERE source = ? AND sourceID = ?",
+                    arguments: [record.source.table, record.source.uuid.uuidString.lowercased()])
+            }
         }
     }
 }

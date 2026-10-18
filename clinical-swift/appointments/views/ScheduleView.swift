@@ -50,6 +50,10 @@ struct ScheduleView: View {
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                BackupSettingsButton()
+            }
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            ToolbarItem(placement: .topBarTrailing) {
                 if !editorIsActive {
                     Button("Unavailable Time", systemImage: "nosign") {
                         router.requestUnavailableTimeCreation()
@@ -457,10 +461,19 @@ private struct TimelineTopScrollFade: View {
 }
 
 #Preview {
-    let _ = try! prepareDependencies {
-        $0.defaultDatabase = try appDatabase(seedSamples: true)
+    let database = try! prepareDependencies {
+        let database = try appDatabase(seedSamples: true)
+        $0.defaultDatabase = database
+        return database
     }
     NavigationStack {
         ScheduleView()
     }
+    .environment(
+        BackupCoordinator(
+            database: database,
+            store: BackupStateStore(
+                directory: .temporaryDirectory.appending(path: UUID().uuidString)))
+    )
+    .environment(Router())
 }

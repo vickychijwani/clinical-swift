@@ -27,6 +27,10 @@ struct PatientsView: View {
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                BackupSettingsButton()
+            }
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("Add", systemImage: "plus") {
                     router.requestPatientCreation()
                 }
@@ -55,10 +59,19 @@ struct PatientsView: View {
 }
 
 #Preview {
-    let _ = try! prepareDependencies {
-        $0.defaultDatabase = try appDatabase(seedSamples: true)
+    let database = try! prepareDependencies {
+        let database = try appDatabase(seedSamples: true)
+        $0.defaultDatabase = database
+        return database
     }
     NavigationStack {
         PatientsView()
     }
+    .environment(
+        BackupCoordinator(
+            database: database,
+            store: BackupStateStore(
+                directory: .temporaryDirectory.appending(path: UUID().uuidString)))
+    )
+    .environment(Router())
 }

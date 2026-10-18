@@ -23,6 +23,7 @@ nonisolated struct CalendarEventPayload: Equatable, Sendable {
 nonisolated struct CalendarEventLink: Equatable, Sendable {
     let eventIdentifier: String?
     let eventStart: Date?
+    var recoveryCutoff: Date? = nil
 }
 
 nonisolated struct CalendarClient: Sendable {
@@ -71,6 +72,7 @@ private actor EventKitAdapter {
 
     private let eventStore = EKEventStore()
     private var targetCalendar: EKCalendar?
+    private var recoveryIndexes: [Date: RecoveryEventIndex] = [:]
 
     func requestFullAccess() async throws -> Bool {
         let granted = try await eventStore.requestFullAccessToEvents()
@@ -81,6 +83,7 @@ private actor EventKitAdapter {
     }
 
     func resolveTargetCalendar() -> Bool {
+        recoveryIndexes.removeAll()
         eventStore.refreshSourcesIfNecessary()
         targetCalendar = eventStore.calendars(for: .event).first {
             $0.title == Self.targetCalendarTitle && $0.allowsContentModifications
@@ -96,11 +99,11 @@ private actor EventKitAdapter {
             throw CalendarClientError.targetCalendarUnavailable
         }
 
-        let managedEvents = managedEvents(
+        let managedEvents = try managedEvents(
             eventIdentifier: link.eventIdentifier,
             markerURL: payload.url,
             fallbackStarts: [link.eventStart, payload.start].compactMap { $0 },
-            targetCalendar: targetCalendar
+            targetCalendar: targetCalendar, recoveryCutoff: link.recoveryCutoff
         )
 
         if let matchingEvent = managedEvents.first(where: {
@@ -110,6 +113,7 @@ private actor EventKitAdapter {
             where duplicate.calendarItemIdentifier != matchingEvent.calendarItemIdentifier {
                 try eventStore.remove(duplicate, span: .thisEvent)
             }
+            updateRecoveryIndexes(removing: managedEvents, adding: matchingEvent)
             return CalendarEventLink(
                 eventIdentifier: matchingEvent.eventIdentifier,
                 eventStart: payload.start
@@ -130,6 +134,7 @@ private actor EventKitAdapter {
         event.notes = payload.notes
         event.url = payload.url
         try eventStore.save(event, span: .thisEvent)
+        updateRecoveryIndexes(removing: managedEvents, adding: event)
 
         guard let eventIdentifier = event.eventIdentifier else {
             throw CalendarClientError.missingSavedEventIdentifier
@@ -148,29 +153,62 @@ private actor EventKitAdapter {
         guard let targetCalendar else {
             throw CalendarClientError.targetCalendarUnavailable
         }
-        let managedEvents = managedEvents(
+        let managedEvents = try managedEvents(
             eventIdentifier: link.eventIdentifier,
             markerURL: markerURL,
             fallbackStarts: [link.eventStart, fallbackStart].compactMap { $0 },
-            targetCalendar: targetCalendar
+            targetCalendar: targetCalendar, recoveryCutoff: link.recoveryCutoff
         )
         for event in managedEvents {
             try eventStore.remove(event, span: .thisEvent)
         }
+        updateRecoveryIndexes(removing: managedEvents, adding: nil)
     }
 
     private func managedEvents(
         eventIdentifier: String?,
         markerURL: URL,
         fallbackStarts: [Date],
-        targetCalendar: EKCalendar
-    ) -> [EKEvent] {
+        targetCalendar: EKCalendar,
+        recoveryCutoff: Date?
+    ) throws -> [EKEvent] {
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+            throw CalendarClientError.accessUnavailable
+        }
         var eventsByIdentifier: [String: EKEvent] = [:]
 
         if let eventIdentifier,
-            let event = eventStore.event(withIdentifier: eventIdentifier)
+            let event = eventStore.event(withIdentifier: eventIdentifier),
+            event.url == markerURL,
+            event.calendar.calendarIdentifier == targetCalendar.calendarIdentifier,
+            recoveryCutoff.map({ event.endDate >= $0 }) != false
         {
             eventsByIdentifier[event.calendarItemIdentifier] = event
+        }
+
+        if let cutoff = recoveryCutoff {
+            // EventKit limits each query to four years. Share one index across recovered rows.
+            let horizon = CalendarRecoveryWindow.horizon(knownStarts: fallbackStarts, now: .now)
+            var index = recoveryIndexes[cutoff] ?? RecoveryEventIndex(end: cutoff)
+            while index.end < horizon {
+                let end = CalendarRecoveryWindow.queryEnd(from: index.end, through: horizon)
+                let predicate = eventStore.predicateForEvents(
+                    withStart: index.end, end: end, calendars: [targetCalendar])
+                for event in eventStore.events(matching: predicate) {
+                    if let url = event.url, event.endDate >= cutoff {
+                        index.events[url, default: [:]][event.calendarItemIdentifier] = event
+                    }
+                }
+                index.end = end
+            }
+            recoveryIndexes[cutoff] = index
+            for event in index.events[markerURL]?.values ?? [String: EKEvent]().values {
+                eventsByIdentifier[event.calendarItemIdentifier] = event
+            }
+            guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+                throw CalendarClientError.accessUnavailable
+            }
+            return Array(eventsByIdentifier.values)
         }
 
         for start in Set(fallbackStarts) {
@@ -184,7 +222,31 @@ private actor EventKitAdapter {
             }
         }
 
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+            throw CalendarClientError.accessUnavailable
+        }
         return Array(eventsByIdentifier.values)
+    }
+
+    private struct RecoveryEventIndex {
+        var end: Date
+        var events: [URL: [String: EKEvent]] = [:]
+    }
+
+    private func updateRecoveryIndexes(removing events: [EKEvent], adding event: EKEvent?) {
+        for cutoff in Array(recoveryIndexes.keys) {
+            guard var index = recoveryIndexes[cutoff] else { continue }
+            for removed in events {
+                if let url = removed.url {
+                    index.events[url]?[removed.calendarItemIdentifier] = nil
+                }
+            }
+            if let event, let url = event.url, event.endDate >= cutoff, event.startDate < index.end
+            {
+                index.events[url, default: [:]][event.calendarItemIdentifier] = event
+            }
+            recoveryIndexes[cutoff] = index
+        }
     }
 
     private func matches(
@@ -204,10 +266,22 @@ nonisolated private enum CalendarClientError: Error, Sendable {
     case targetCalendarUnavailable
     case missingSavedEventIdentifier
     case invalidMarkerURL
+    case accessUnavailable
 }
 
 nonisolated extension Date {
     fileprivate func isApproximatelyEqual(to other: Date) -> Bool {
         abs(timeIntervalSince(other)) < 1
+    }
+}
+
+nonisolated enum CalendarRecoveryWindow {
+    static func horizon(knownStarts: [Date], now: Date) -> Date {
+        max(knownStarts.max() ?? now, now.addingTimeInterval(10 * 366 * 86_400))
+            .addingTimeInterval(86_400)
+    }
+
+    static func queryEnd(from start: Date, through horizon: Date) -> Date {
+        min(start.addingTimeInterval(3 * 365 * 86_400), horizon)
     }
 }
