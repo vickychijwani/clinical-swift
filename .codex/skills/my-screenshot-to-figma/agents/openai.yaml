@@ -1,0 +1,4 @@
+interface:
+  display_name: "Screenshot to Clinical Figma"
+  short_description: "Reproduce screenshots in the Clinical Figma file"
+  default_prompt: "Use $my-screenshot-to-figma to reproduce this screenshot as an editable draft in the existing Clinical Figma file."
