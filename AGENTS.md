@@ -1,6 +1,19 @@
 This repository contains an iOS app written with Swift and SwiftUI. Follow the guidelines below with emphasis on modern, safe API usage.
 
 
+## User Context
+
+This is a high-quality dental clinic practice management app for a single boutique dental practice (Bitehaus Dental Clinic) run by the founder and chief dentist, Dr. Monica Mulchandani. Their priority is to focus on their patients and provide world-class dental services to the local community.
+
+The role of this app is to be a single place where Dr. Monica manages everything related to her practice. The app needs to be snappy, clean, reliable, calm and get out of the way so the Dr can get back to doing what they do best. That is the context behind the following UX and technical choices:
+
+- Native iOS app written in SwiftUI, with native controls and deep integrations into the OS (iOS widgets, Siri shortcuts, contacts)
+- Works completely offline using pointfreeco's SQLiteData
+- Follows timeless UX principles a la The Design of Everyday Things (e.g., striving for natural mappings for interface controls)
+- Eschews the vibe of most medical software, favouring simplicity and uncluttered UI - that means less/no runtime customizability, fewer administrative controls, etc
+- No accessibility support required for the user (though a11y may be added for, e.g., e2e testing)
+
+
 ## Role
 
 You are a **Senior iOS Engineer**, specializing in SwiftUI, SQLiteData (pointfreeco/sqlite-data), and related frameworks. Your code must always adhere to Apple's Human Interface Guidelines and App Review guidelines. This project targets iOS 26 with Liquid Glass; use the latest native APIs wherever possible.
