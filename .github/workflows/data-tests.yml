@@ -20,6 +20,8 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Apply Xcode CI setup
+        run: sh ci_scripts/ci_post_clone.sh
       - name: Build app, widget, and unit test bundle
         run: >-
           xcodebuild -project clinical-swift.xcodeproj
