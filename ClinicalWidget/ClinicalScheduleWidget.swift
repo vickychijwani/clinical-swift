@@ -94,6 +94,17 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
             )
         }
 
+        let appointmentItems = appointments.map(TimelineItem.appointment)
+        let blockItems: [TimelineItem] = (0..<blockCount).map { index in
+            let block = UnavailableTime(
+                label: index == 0 ? "Travel" : nil,
+                start: today.addingTimeInterval(Double(11 * 60 + index * 60) * 60),
+                durationMinutes: 60
+            )
+            return .unavailableTime(block)
+        }
+        let todayItems = appointmentItems + blockItems
+
         let sections = (0..<3).compactMap { offset -> WidgetScheduleSection? in
             guard let sectionDate = calendar.date(byAdding: .day, value: offset, to: today) else {
                 return nil
@@ -101,17 +112,7 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
             return WidgetScheduleSection(
                 date: sectionDate,
                 isToday: offset == 0,
-                items: offset == 0
-                    ? appointments.map(TimelineItem.appointment)
-                        + (0..<blockCount).map { index in
-                            .unavailableTime(
-                                UnavailableTime(
-                                    label: index == 0 ? "Travel" : nil,
-                                    start: today.addingTimeInterval(
-                                        Double(11 * 60 + index * 60) * 60),
-                                    durationMinutes: 60
-                                ))
-                        } : []
+                items: offset == 0 ? todayItems : []
             )
         }
 
