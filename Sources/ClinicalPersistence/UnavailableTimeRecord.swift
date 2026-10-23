@@ -16,7 +16,7 @@ public nonisolated struct UnavailableTimeRecord: Identifiable, Equatable, Sendab
     }
 
     public init(
-        id: UUID, label: String?, start: Date, durationMinutes: Int, createdAt: Date,
+        id: UUID, label: String? = nil, start: Date, durationMinutes: Int, createdAt: Date,
         updatedAt: Date
     ) {
         self.id = id
@@ -58,7 +58,8 @@ public nonisolated struct UnavailableTimeCalendarSyncRecord: Equatable, Sendable
     public var updatedAt: Date
 
     public init(
-        unavailableTimeID: UUID, eventIdentifier: String?, eventStart: Date?, needsSync: Bool,
+        unavailableTimeID: UUID, eventIdentifier: String? = nil, eventStart: Date? = nil,
+        needsSync: Bool,
         revision: Int, createdAt: Date, updatedAt: Date
     ) {
         self.unavailableTimeID = unavailableTimeID

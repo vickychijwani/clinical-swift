@@ -16,7 +16,8 @@ public nonisolated struct AppointmentCalendarSyncRecord: Equatable, Sendable {
     public var updatedAt: Date
 
     public init(
-        appointmentID: Appointment.ID, eventIdentifier: String?, eventStart: Date?, needsSync: Bool,
+        appointmentID: Appointment.ID, eventIdentifier: String? = nil, eventStart: Date? = nil,
+        needsSync: Bool,
         revision: Int, createdAt: Date, updatedAt: Date
     ) {
         self.appointmentID = appointmentID
