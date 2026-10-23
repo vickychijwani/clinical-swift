@@ -28,6 +28,7 @@ let package = Package(
                 .product(name: "SQLiteData", package: "sqlite-data"),
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Dependencies", package: "swift-dependencies"),
+                .product(name: "StructuredQueriesSQLite", package: "swift-structured-queries"),
             ]
         ),
         .testTarget(
