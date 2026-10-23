@@ -4,7 +4,19 @@ This document captures testing rules that are easy to miss under strict Swift co
 
 ## Test Commands
 
+- `make data-test` (or `swift test` from the repository root) runs the existing
+  model and persistence tests without an app host, simulator, or Xcode. Use Swift
+  6.2 or later. Linux needs SQLite headers and libraries (`libsqlite3-dev` on
+  Debian/Ubuntu). `SWIFT` selects the toolchain and `SWIFT_TEST_FLAGS` passes extra
+  SwiftPM flags when needed.
+- The package tests use public imports so missing exports fail compilation at the
+  same boundary used by the app. Their default actor isolation remains MainActor.
+  App editor and debug-seeding tests remain in the Xcode test bundle because their
+  owners stay in the app.
 - `make test` uses the shared unit-test scheme and must not build or run the UI-test target. Parallel Xcode test runners are disabled for this command so it can use the selected simulator directly instead of creating a simulator clone.
+- `make test` also runs `make data-test` so extracting tests does not remove them
+  from the normal verification command. Linux package tests do not replace the
+  iOS app/widget build and integration tests.
 - `make ui-test` uses the separate shared UI-test scheme. Keep unit and UI targets in their respective schemes so selecting one kind of test does not build the other bundle.
 
 ## Backup checks

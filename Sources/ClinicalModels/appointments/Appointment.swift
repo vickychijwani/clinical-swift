@@ -1,24 +1,24 @@
 import Dependencies
 import Foundation
 
-nonisolated struct Appointment: Identifiable, Sendable {
+public struct Appointment: Identifiable, Sendable {
     @Dependency(\.calendar) private var calendar
 
-    let id: UUID
-    let patientName: String
-    let start: Date
-    let durationMinutes: Int
-    let status: Status
+    public let id: UUID
+    public let patientName: String
+    public let start: Date
+    public let durationMinutes: Int
+    public let status: Status
 
-    var end: Date {
+    public var end: Date {
         end(using: calendar)
     }
 
-    func end(using calendar: Calendar) -> Date {
+    public func end(using calendar: Calendar) -> Date {
         calendar.date(byAdding: .minute, value: durationMinutes, to: start) ?? start
     }
 
-    init(
+    public init(
         id: UUID = UUID(),
         patientName: String,
         start: Date,
@@ -32,24 +32,24 @@ nonisolated struct Appointment: Identifiable, Sendable {
         self.status = status
     }
 
-    nonisolated enum Status: String, Sendable {
+    public nonisolated enum Status: String, Sendable {
         case draft  // Never stored in DB; only for previews
         case scheduled
         case completed
         case cancelled
 
-        init?(storageValue: String) {
+        public init?(storageValue: String) {
             guard let status = Self(rawValue: storageValue), status != .draft else {
                 return nil
             }
             self = status
         }
 
-        var persistedValue: String? {
+        public var persistedValue: String? {
             self == .draft ? nil : rawValue
         }
 
-        func validateTransition(to requestedStatus: Status) throws {
+        public func validateTransition(to requestedStatus: Status) throws {
             guard self != .draft, requestedStatus != .draft else {
                 throw AppointmentStatusTransitionError.transientStatus
             }
@@ -68,7 +68,7 @@ nonisolated struct Appointment: Identifiable, Sendable {
     }
 }
 
-nonisolated enum AppointmentStatusTransitionError: Error, Equatable, Sendable {
+public nonisolated enum AppointmentStatusTransitionError: Error, Equatable, Sendable {
     case transientStatus
     case invalidTransition(
         current: Appointment.Status,

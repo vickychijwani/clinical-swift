@@ -1,7 +1,7 @@
 import Foundation
 
-nonisolated enum PhoneNumber {
-    static func normalizedE164(_ value: String?) -> String? {
+public nonisolated enum PhoneNumber {
+    public static func normalizedE164(_ value: String?) -> String? {
         guard let value = value?.nilIfBlank else { return nil }
 
         let digits = value.filter { $0.isASCII && $0.isNumber }
@@ -30,7 +30,7 @@ nonisolated enum PhoneNumber {
         return "+\(internationalDigits)"
     }
 
-    static func formattedForDisplay(_ value: String?) -> String? {
+    public static func formattedForDisplay(_ value: String?) -> String? {
         guard let number = normalizedE164(value) else { return nil }
 
         if number.hasPrefix("+91"), number.count == 13 {
@@ -49,7 +49,7 @@ nonisolated enum PhoneNumber {
         return number
     }
 
-    static func whatsAppDigits(_ value: String?) -> String? {
+    public static func whatsAppDigits(_ value: String?) -> String? {
         guard let number = normalizedE164(value) else { return nil }
         return number.filter(\.isNumber)
     }

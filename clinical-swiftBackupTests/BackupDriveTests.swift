@@ -1,3 +1,4 @@
+import ClinicalPersistence
 import Foundation
 import GRDB
 import Testing

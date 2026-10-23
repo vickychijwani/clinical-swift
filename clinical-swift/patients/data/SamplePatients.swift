@@ -1,3 +1,4 @@
+import ClinicalModels
 import Foundation
 
 let samplePatients: [Patient] = [

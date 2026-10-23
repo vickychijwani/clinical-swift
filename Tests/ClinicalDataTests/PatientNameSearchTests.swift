@@ -1,6 +1,6 @@
+import ClinicalModels
+import ClinicalPersistence
 import Testing
-
-@testable import clinical_swift
 
 struct PatientNameSearchTests {
     @Test func matchesPrefixOfAnyNameWord() {

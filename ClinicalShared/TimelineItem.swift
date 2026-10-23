@@ -1,3 +1,4 @@
+import ClinicalModels
 import Foundation
 
 nonisolated enum TimelineItem: Identifiable, Sendable {

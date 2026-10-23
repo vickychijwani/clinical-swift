@@ -1,7 +1,7 @@
+import ClinicalModels
+import ClinicalPersistence
 import Foundation
 import Testing
-
-@testable import clinical_swift
 
 struct PatientTests {
     @Test func requiresNameOrPhoneOnValidate() {

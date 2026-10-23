@@ -1,4 +1,6 @@
 import AppIntents
+import ClinicalModels
+import ClinicalPersistence
 import Dependencies
 import Foundation
 import SQLiteData

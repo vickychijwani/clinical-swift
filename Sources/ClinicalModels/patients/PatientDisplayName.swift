@@ -1,9 +1,9 @@
 import Foundation
 
-nonisolated enum PatientDisplayName {
-    static let unknown = "Unknown Patient"
+public nonisolated enum PatientDisplayName {
+    public static let unknown = "Unknown Patient"
 
-    static func resolve(_ name: String?) -> String {
+    public static func resolve(_ name: String?) -> String {
         guard
             let name,
             !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

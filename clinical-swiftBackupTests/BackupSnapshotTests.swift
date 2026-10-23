@@ -1,3 +1,4 @@
+import ClinicalPersistence
 import Darwin
 import Dependencies
 import Foundation

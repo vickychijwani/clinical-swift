@@ -1,14 +1,15 @@
+import ClinicalModels
 import Foundation
 import SQLiteData
 
 @Selection
-nonisolated struct PatientDetailsSelection: Identifiable, Sendable {
-    let patientRecord: PatientRecord
-    let nextAppointmentDate: Date?
+public nonisolated struct PatientDetailsSelection: Identifiable, Sendable {
+    public let patientRecord: PatientRecord
+    public let nextAppointmentDate: Date?
 
-    var id: Patient.ID { patientRecord.id }
+    public var id: Patient.ID { patientRecord.id }
 
-    var details: PatientDetails {
+    public var details: PatientDetails {
         PatientDetails(
             patient: Patient(patientRecord),
             nextAppointmentDate: nextAppointmentDate
@@ -16,7 +17,7 @@ nonisolated struct PatientDetailsSelection: Identifiable, Sendable {
     }
 }
 
-nonisolated func patientListRowsQuery(
+public nonisolated func patientListRowsQuery(
     now: Date = .now
 ) -> some Statement<PatientDetailsSelection> {
     let orderedPatients =
@@ -45,7 +46,7 @@ nonisolated func patientListRowsQuery(
         }
 }
 
-nonisolated func patientDetailsQuery(
+public nonisolated func patientDetailsQuery(
     id: Patient.ID,
     now: Date = .now
 ) -> some Statement<PatientDetailsSelection> {
@@ -65,7 +66,7 @@ nonisolated func patientDetailsQuery(
         }
 }
 
-nonisolated func appointmentBookingPatientRowsQuery(
+public nonisolated func appointmentBookingPatientRowsQuery(
     now: Date
 ) -> some Statement<PatientDetailsSelection> & Sendable {
     let cutoff: Date? = now

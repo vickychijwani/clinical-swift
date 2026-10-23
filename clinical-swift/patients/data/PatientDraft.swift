@@ -1,3 +1,4 @@
+import ClinicalModels
 import Foundation
 
 nonisolated struct PatientDraft: Equatable, Sendable {

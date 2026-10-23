@@ -1,7 +1,7 @@
 import Foundation
 
-nonisolated enum PatientNameSearch {
-    static func matches(
+public nonisolated enum PatientNameSearch {
+    public static func matches(
         _ name: String?,
         searchText: String,
         locale: Locale = .autoupdatingCurrent

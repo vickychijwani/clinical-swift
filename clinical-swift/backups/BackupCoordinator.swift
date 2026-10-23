@@ -1,4 +1,5 @@
 import BackgroundTasks
+import ClinicalPersistence
 import Dependencies
 import Foundation
 import GRDB

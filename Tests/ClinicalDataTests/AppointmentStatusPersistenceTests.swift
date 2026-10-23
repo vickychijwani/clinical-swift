@@ -1,8 +1,8 @@
+import ClinicalModels
+import ClinicalPersistence
 import Foundation
 import SQLiteData
 import Testing
-
-@testable import clinical_swift
 
 struct AppointmentStatusPersistenceTests {
     @Test func statusUpdateAdvancesTimestampAndSelfTransitionIsIdempotent() async throws {
@@ -211,8 +211,7 @@ struct AppointmentStatusPersistenceTests {
     }
 
     private func testDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
+        let configuration = clinicalDatabaseConfiguration()
         let database = try DatabaseQueue(configuration: configuration)
         try migrateDatabase(database)
         return database

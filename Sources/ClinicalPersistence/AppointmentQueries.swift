@@ -1,14 +1,15 @@
+import ClinicalModels
 import Foundation
 import SQLiteData
 
 @Selection
-nonisolated struct AppointmentPatientSelection: Identifiable, Sendable {
-    let appointmentRecord: AppointmentRecord
-    let patientRecord: PatientRecord
+public nonisolated struct AppointmentPatientSelection: Identifiable, Sendable {
+    public let appointmentRecord: AppointmentRecord
+    public let patientRecord: PatientRecord
 
-    var id: Appointment.ID { appointmentRecord.id }
+    public var id: Appointment.ID { appointmentRecord.id }
 
-    var details: AppointmentDetails? {
+    public var details: AppointmentDetails? {
         let patient = Patient(patientRecord)
         guard
             let appointment = appointmentRecord.appointment(
@@ -25,7 +26,7 @@ nonisolated struct AppointmentPatientSelection: Identifiable, Sendable {
     }
 }
 
-nonisolated func querySchedule(
+public nonisolated func querySchedule(
     selectedDate: Date
 ) -> some Statement<AppointmentPatientSelection> & Sendable {
     let calendar = Calendar.autoupdatingCurrent
@@ -35,7 +36,7 @@ nonisolated func querySchedule(
     return scheduleAppointmentsQuery(start: start, endExclusive: endExclusive)
 }
 
-nonisolated func queryScheduleWindow(
+public nonisolated func queryScheduleWindow(
     centeredOn selectedDate: Date,
     dayRadius: Int
 ) -> some Statement<AppointmentPatientSelection> & Sendable {
@@ -67,7 +68,7 @@ nonisolated private func scheduleAppointmentsQuery(
         }
 }
 
-nonisolated func appointmentDetailsQuery(
+public nonisolated func appointmentDetailsQuery(
     id: Appointment.ID
 ) -> some Statement<AppointmentPatientSelection> & Sendable {
     AppointmentRecord
@@ -82,7 +83,7 @@ nonisolated func appointmentDetailsQuery(
         }
 }
 
-nonisolated func patientTimelineAppointmentsQuery(
+public nonisolated func patientTimelineAppointmentsQuery(
     patientID: Patient.ID
 ) -> some Statement<AppointmentRecord> & Sendable {
     AppointmentRecord
@@ -94,15 +95,15 @@ nonisolated func patientTimelineAppointmentsQuery(
             ])
         }
         .order { ($0.start.desc(), $0.createdAt.desc(), $0.id.desc()) }
-        .selectStar()
+        .select { $0 }
 }
 
-nonisolated func earliestVisibleAppointmentQuery(
+public nonisolated func earliestVisibleAppointmentQuery(
     patientID: Patient.ID
 ) -> some Statement<AppointmentRecord> & Sendable {
     AppointmentRecord
         .where { $0.patientID.eq(patientID) }
         .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
         .order { ($0.start.asc(), $0.createdAt.asc(), $0.id.asc()) }
-        .selectStar()
+        .select { $0 }
 }

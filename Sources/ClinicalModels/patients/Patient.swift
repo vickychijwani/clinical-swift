@@ -1,20 +1,20 @@
 import Foundation
 
-nonisolated struct Patient: Identifiable, Hashable, Sendable {
-    static let unknownDisplayName = PatientDisplayName.unknown
+public nonisolated struct Patient: Identifiable, Hashable, Sendable {
+    public static let unknownDisplayName = PatientDisplayName.unknown
 
-    let id: UUID
-    let name: String?
-    let phone: String?
-    let dob: Date?
-    let gender: Gender?
-    let createdDate: Date
+    public let id: UUID
+    public let name: String?
+    public let phone: String?
+    public let dob: Date?
+    public let gender: Gender?
+    public let createdDate: Date
 
-    enum ValidationError: Error, Equatable {
+    public enum ValidationError: Error, Equatable {
         case missingNameAndPhone
     }
 
-    init(
+    public init(
         id: UUID = UUID(),
         name: String?,
         phone: String? = nil,
@@ -33,15 +33,15 @@ nonisolated struct Patient: Identifiable, Hashable, Sendable {
         self.createdDate = createdDate
     }
 
-    var displayName: String {
+    public var displayName: String {
         PatientDisplayName.resolve(name)
     }
 
-    var isUnknown: Bool {
+    public var isUnknown: Bool {
         name == nil
     }
 
-    func validate() throws {
+    public func validate() throws {
         let normalizedName = name?.nilIfBlank
         let normalizedPhone = PhoneNumber.normalizedE164(phone)
         guard normalizedName != nil || normalizedPhone != nil else {
@@ -49,7 +49,9 @@ nonisolated struct Patient: Identifiable, Hashable, Sendable {
         }
     }
 
-    func age(on referenceDate: Date = .now, calendar: Calendar = .autoupdatingCurrent) -> Int? {
+    public func age(on referenceDate: Date = .now, calendar: Calendar = .autoupdatingCurrent)
+        -> Int?
+    {
         guard let dob else {
             return nil
         }
@@ -63,7 +65,7 @@ nonisolated struct Patient: Identifiable, Hashable, Sendable {
         return years
     }
 
-    var firstNameWithHonorific: String? {
+    public var firstNameWithHonorific: String? {
         guard
             let name = name?.nilIfBlank,
             let firstName = name.split(whereSeparator: \.isWhitespace).first.map(String.init)
@@ -78,12 +80,12 @@ nonisolated struct Patient: Identifiable, Hashable, Sendable {
     }
 }
 
-nonisolated enum Gender: Hashable, Sendable {
+public nonisolated enum Gender: Hashable, Sendable {
     case female
     case male
     case other
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .female:
             "F"
@@ -94,7 +96,7 @@ nonisolated enum Gender: Hashable, Sendable {
         }
     }
 
-    var honorific: String? {
+    public var honorific: String? {
         switch self {
         case .female:
             "Ms."

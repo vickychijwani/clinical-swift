@@ -1,0 +1,28 @@
+name: Model and persistence tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    container: swift:6.2.3-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SQLite development files
+        run: apt-get update && apt-get install -y libsqlite3-dev
+      - name: Test package
+        run: swift test --disable-automatic-resolution
+
+  ios-build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app, widget, and unit test bundle
+        run: >-
+          xcodebuild -project clinical-swift.xcodeproj
+          -scheme clinical-swift-UnitTests
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO build-for-testing

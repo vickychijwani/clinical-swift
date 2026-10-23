@@ -1,15 +1,16 @@
+import ClinicalModels
 import Foundation
 import SQLiteData
 
 @Table("appointments")
-nonisolated struct AppointmentRecord: Identifiable, Sendable {
-    let id: UUID
-    var patientID: PatientRecord.ID
-    var start: Date
-    var durationMinutes: Int
-    var status: String
-    var createdAt: Date
-    var updatedAt: Date
+public nonisolated struct AppointmentRecord: Identifiable, Sendable {
+    public let id: UUID
+    public var patientID: PatientRecord.ID
+    public var start: Date
+    public var durationMinutes: Int
+    public var status: String
+    public var createdAt: Date
+    public var updatedAt: Date
 
     private init(
         id: UUID,
@@ -29,7 +30,7 @@ nonisolated struct AppointmentRecord: Identifiable, Sendable {
         self.updatedAt = updatedAt
     }
 
-    static func persisted(
+    public static func persisted(
         id: UUID,
         patientID: PatientRecord.ID,
         start: Date,
@@ -53,7 +54,7 @@ nonisolated struct AppointmentRecord: Identifiable, Sendable {
         )
     }
 
-    nonisolated func appointment(patientName: String) -> Appointment? {
+    public nonisolated func appointment(patientName: String) -> Appointment? {
         guard let status = Appointment.Status(storageValue: status) else {
             return nil
         }

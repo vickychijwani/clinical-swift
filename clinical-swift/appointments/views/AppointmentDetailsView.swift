@@ -1,3 +1,4 @@
+import ClinicalModels
 import SQLiteData
 import SwiftUI
 

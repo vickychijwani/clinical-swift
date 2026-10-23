@@ -1,17 +1,18 @@
+import ClinicalModels
 import Foundation
 import SQLiteData
 
 @Table("patients")
-nonisolated struct PatientRecord: Identifiable, Sendable {
-    let id: UUID
-    var name: String?
-    var phone: String?
-    var dob: Date?
-    var gender: String?
-    var createdAt: Date
-    var updatedAt: Date
+public nonisolated struct PatientRecord: Identifiable, Sendable {
+    public let id: UUID
+    public var name: String?
+    public var phone: String?
+    public var dob: Date?
+    public var gender: String?
+    public var createdAt: Date
+    public var updatedAt: Date
 
-    init(
+    public init(
         id: UUID,
         name: String?,
         phone: String?,
@@ -29,7 +30,7 @@ nonisolated struct PatientRecord: Identifiable, Sendable {
         self.updatedAt = updatedAt
     }
 
-    init(_ patient: Patient, now: Date = .now) {
+    public init(_ patient: Patient, now: Date = .now) {
         self.init(
             id: patient.id,
             name: patient.name,
@@ -43,7 +44,7 @@ nonisolated struct PatientRecord: Identifiable, Sendable {
 }
 
 extension Patient {
-    nonisolated init(_ record: PatientRecord) {
+    public nonisolated init(_ record: PatientRecord) {
         self.init(
             id: record.id,
             name: record.name,
@@ -56,7 +57,7 @@ extension Patient {
 }
 
 extension Gender {
-    nonisolated init?(storageValue: String) {
+    public nonisolated init?(storageValue: String) {
         switch storageValue {
         case Self.female.storageValue:
             self = .female
@@ -69,7 +70,7 @@ extension Gender {
         }
     }
 
-    nonisolated var storageValue: String {
+    public nonisolated var storageValue: String {
         switch self {
         case .female:
             "female"

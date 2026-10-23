@@ -1,3 +1,4 @@
+import ClinicalModels
 nonisolated struct AppointmentStatusPresentation: Equatable, Sendable {
     let label: String
     let systemImage: String

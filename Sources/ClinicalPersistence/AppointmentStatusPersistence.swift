@@ -1,8 +1,9 @@
+import ClinicalModels
 import Foundation
 import SQLiteData
 
 extension DatabaseWriter {
-    nonisolated func updateAppointmentStatus(
+    public nonisolated func updateAppointmentStatus(
         id: Appointment.ID,
         to requestedStatus: Appointment.Status,
         at updatedAt: Date
@@ -52,13 +53,13 @@ extension DatabaseWriter {
     }
 }
 
-nonisolated enum AppointmentStatusUpdateError: Error, Equatable, Sendable {
+public nonisolated enum AppointmentStatusUpdateError: Error, Equatable, Sendable {
     case unavailable
     case invalidStoredStatus(String)
     case transition(AppointmentStatusTransitionError)
 }
 
-nonisolated enum AppointmentStatusUpdateResult: Equatable, Sendable {
+public nonisolated enum AppointmentStatusUpdateResult: Equatable, Sendable {
     case updated
     case unchanged
 }

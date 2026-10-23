@@ -1,3 +1,4 @@
+import ClinicalModels
 import Foundation
 
 struct PatientSection: Identifiable, Hashable {

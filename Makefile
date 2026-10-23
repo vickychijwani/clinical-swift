@@ -1,5 +1,8 @@
 SHELL := /bin/bash
 
+SWIFT ?= swift
+SWIFT_TEST_FLAGS ?=
+
 XCODE_DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR := $(XCODE_DEVELOPER_DIR)
 
@@ -60,6 +63,10 @@ BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" 
 
 .DEFAULT_GOAL := build-and-run
 
+.PHONY: data-test
+data-test:
+	@$(SWIFT) test $(SWIFT_TEST_FLAGS)
+
 .PHONY: backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-github-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
 
 help:
@@ -69,6 +76,7 @@ help:
 		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when none is running" \
 		"  make build            Build the app" \
 		"  make test             Run unit tests" \
+		"  make data-test        Run model and persistence tests without Xcode" \
 		"  make backup-test      Run local backup safety tests (no network)" \
 		"  make backup-drive-check  Verify a synthetic backup through real Drive" \
 		"  make release-verify   Run required Release backup and device checks" \
@@ -167,6 +175,7 @@ build: check-tools check-simulator prepare
 		2>&1 | tee "$(LOG_DIR)/build.log" | $(XCBEAUTIFY)
 
 test: check-tools check-simulator prepare
+	@$(MAKE) --no-print-directory data-test
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
 		$(UNIT_TEST_FLAGS) \

@@ -1,9 +1,9 @@
+import ClinicalModels
+import ClinicalPersistence
 import Dependencies
 import Foundation
 import SQLiteData
 import Testing
-
-@testable import clinical_swift
 
 struct AppointmentBookingPatientQueryTests {
     @Test func mixesRecentVisitsAndPatientCreationWithoutDuplicateRows() throws {
@@ -18,15 +18,19 @@ struct AppointmentBookingPatientQueryTests {
         let appointments = try [
             appointment(1, patientID: patients[0].id, start: "2026-09-01T09:00:00Z"),
             appointment(2, patientID: patients[1].id, start: "2026-10-04T09:00:00Z"),
-            appointment(3, patientID: patients[1].id, start: "2026-09-20T09:00:00Z",
-                        status: .completed),
-            appointment(4, patientID: patients[2].id, start: "2026-10-05T08:30:00Z",
-                        status: .cancelled),
+            appointment(
+                3, patientID: patients[1].id, start: "2026-09-20T09:00:00Z",
+                status: .completed),
+            appointment(
+                4, patientID: patients[2].id, start: "2026-10-05T08:30:00Z",
+                status: .cancelled),
             appointment(5, patientID: patients[2].id, start: "2026-12-01T09:00:00Z"),
-            appointment(6, patientID: patients[2].id, start: "2026-11-01T09:00:00Z",
-                        status: .completed),
-            appointment(7, patientID: patients[3].id, start: "2026-09-20T09:00:00Z",
-                        status: .completed),
+            appointment(
+                6, patientID: patients[2].id, start: "2026-11-01T09:00:00Z",
+                status: .completed),
+            appointment(
+                7, patientID: patients[3].id, start: "2026-09-20T09:00:00Z",
+                status: .completed),
         ]
         try database.write { db in
             for patient in patients.reversed() {
@@ -50,7 +54,8 @@ struct AppointmentBookingPatientQueryTests {
         let listRows = try database.read { db in
             try patientListRowsQuery(now: now).fetchAll(db)
         }
-        #expect(listRows.map(\.id) == [patients[3].id, patients[2].id, patients[1].id, patients[0].id])
+        #expect(
+            listRows.map(\.id) == [patients[3].id, patients[2].id, patients[1].id, patients[0].id])
     }
 
     @Test func equalRecencyUsesNameAndIDWithUnnamedPatientsLast() throws {
@@ -71,8 +76,11 @@ struct AppointmentBookingPatientQueryTests {
         let rows = try database.read { db in
             try appointmentBookingPatientRowsQuery(now: now).fetchAll(db)
         }
-        #expect(rows.map(\.id) == [patients[1].id, patients[2].id, patients[0].id,
-                                 patients[3].id, patients[4].id])
+        #expect(
+            rows.map(\.id) == [
+                patients[1].id, patients[2].id, patients[0].id,
+                patients[3].id, patients[4].id,
+            ])
     }
 
     @Test func timeBoundaryAndUpcomingMetadataUseIndependentFilters() throws {
@@ -84,10 +92,12 @@ struct AppointmentBookingPatientQueryTests {
         ]
         let appointments = try [
             appointment(1, patientID: patients[0].id, start: "2026-10-05T09:00:00Z"),
-            appointment(2, patientID: patients[1].id, start: "2026-10-05T09:00:01Z",
-                        status: .completed),
-            appointment(3, patientID: patients[1].id, start: "2026-10-05T09:00:02Z",
-                        status: .cancelled),
+            appointment(
+                2, patientID: patients[1].id, start: "2026-10-05T09:00:01Z",
+                status: .completed),
+            appointment(
+                3, patientID: patients[1].id, start: "2026-10-05T09:00:02Z",
+                status: .cancelled),
             appointment(4, patientID: patients[1].id, start: "2026-10-07T09:00:00Z"),
             appointment(5, patientID: patients[1].id, start: "2026-10-06T09:00:00Z"),
         ]
@@ -182,8 +192,7 @@ struct AppointmentBookingPatientQueryTests {
     }
 
     private func makeDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
+        let configuration = clinicalDatabaseConfiguration()
         let database = try DatabaseQueue(configuration: configuration)
         try migrateDatabase(database)
         return database
