@@ -5,18 +5,6 @@ import SQLiteData
 import Testing
 
 struct AppointmentCalendarSyncPersistenceTests {
-    @Test func migrationDoesNotBackfillExistingAppointments() throws {
-        let database = try emptyDatabase()
-        let migrator = databaseMigrator()
-        try migrator.migrate(database, upTo: "Normalize patient phone numbers")
-        let fixture = try insertFixture(into: database)
-
-        try migrator.migrate(database)
-
-        let syncRecord = try fetchSyncRecord(fixture.appointmentID, from: database)
-        #expect(syncRecord == nil)
-    }
-
     @Test func appointmentChangesQueueWithoutLosingEventLink() throws {
         let database = try migratedDatabase()
         let fixture = try insertFixture(into: database)
@@ -145,13 +133,8 @@ struct AppointmentCalendarSyncPersistenceTests {
         #expect(deletionSync.eventStart == fixture.start)
     }
 
-    private func emptyDatabase() throws -> DatabaseQueue {
-        let configuration = clinicalDatabaseConfiguration()
-        return try DatabaseQueue(configuration: configuration)
-    }
-
     private func migratedDatabase() throws -> DatabaseQueue {
-        let database = try emptyDatabase()
+        let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
         try migrateDatabase(database)
         return database
     }

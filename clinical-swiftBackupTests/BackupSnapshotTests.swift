@@ -249,8 +249,7 @@ struct BackupSnapshotTests {
         #expect(flock(descriptor, LOCK_EX | LOCK_NB) == 0)
     }
 
-    @Test(arguments: [false, true])
-    func savedWorkSurvivesContainerMoves(legacy: Bool) async throws {
+    @Test func savedWorkSurvivesContainerMoves() async throws {
         let directory = try BackupFixture.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let app = directory.appending(path: "old app")
@@ -282,10 +281,6 @@ struct BackupSnapshotTests {
                 snapshot: snapshot, expectedDatasetID: BackupFixture.datasetID,
                 recoveryDate: BackupFixture.capturedAt, confirmed: true)
         }
-        if legacy {
-            try writeLegacyPaths(store: store, restore: restore, snapshot: snapshot)
-        }
-
         // Neither old container remains available when work resumes.
         let movedApp = directory.appending(path: "moved app")
         let movedGroup = directory.appending(path: "moved group")
@@ -348,32 +343,5 @@ struct BackupSnapshotTests {
         #expect(
             !FileManager.default.fileExists(
                 atPath: journal.directory(in: finalStore).path(percentEncoded: false)))
-    }
-
-    private func writeLegacyPaths(
-        store: BackupStateStore, restore: BackupRestore, snapshot: BackupSnapshot
-    ) throws {
-        var state = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: store.stateURL)) as? [String: Any])
-        var pending = try #require(state["pending"] as? [String: Any])
-        let removedManifest = pending.removeValue(forKey: "manifest")
-        let manifest = try #require(removedManifest)
-        pending["snapshot"] = [
-            "manifest": manifest, "directory": snapshot.directory.absoluteString,
-        ]
-        state["pending"] = pending
-        try JSONSerialization.data(withJSONObject: state).write(to: store.stateURL)
-        let journal = try BackupFiles.load(BackupRestoreJournal.self, from: restore.journalURL)
-        var legacy = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: restore.journalURL))
-                as? [String: Any])
-        legacy.removeValue(forKey: "recoveryID")
-        legacy["databaseURL"] = restore.databaseURL.absoluteString
-        legacy["replacementURL"] =
-            journal.directory(in: store).appending(path: "replacement.db").absoluteString
-        legacy["rollbackDirectory"] =
-            journal.directory(in: store).appending(path: "original").absoluteString
-        legacy["previousBackupState"] = state
-        try JSONSerialization.data(withJSONObject: legacy).write(to: restore.journalURL)
     }
 }

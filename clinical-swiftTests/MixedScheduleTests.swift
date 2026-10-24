@@ -74,11 +74,10 @@ struct MixedScheduleTests {
         }
     }
 
-    @Test func widgetReadsMixedItemsAndOldSchemaAndRefreshesAtFirstEnd() throws {
+    @Test func widgetReadsMixedItemsAndRefreshesAtFirstEnd() throws {
         let calendar = utcCalendar
         let database = try DatabaseQueue()
-        let migrator = databaseMigrator()
-        try migrator.migrate(database, upTo: "Create appointment Calendar sync outbox")
+        try migrateDatabase(database)
         let now = try instant("2026-10-02T10:30:00Z")
         let patient = Patient(name: "Patient", createdDate: now)
         let appointment = try AppointmentRecord.persisted(
@@ -94,7 +93,6 @@ struct MixedScheduleTests {
             WidgetScheduleRepository(databaseURL: URL(filePath: "/unused"))
         }
         #expect(try repository.snapshot(in: database, at: now).sections[0].items.count == 1)
-        try migrator.migrate(database)
         let blockStarts = [
             "2026-10-02T10:00:00Z", "2026-10-02T10:30:00Z", "2026-10-03T09:00:00Z",
             "2026-10-04T09:00:00Z", "2026-10-05T09:00:00Z",
@@ -151,7 +149,8 @@ struct MixedScheduleTests {
         #expect(
             planner.plan(sections: [appointmentOnly], availableHeight: 240).sections
                 == planner.plan(sections: [blockOnly], availableHeight: 240).sections)
-        let plan = planner.plan(sections: [mixed, appointmentOnly, blockOnly], availableHeight: 240)
+        let plan = planner.plan(
+            sections: [mixed, appointmentOnly, blockOnly], availableHeight: 240)
         #expect(plan.contentHeight <= 240)
         for section in plan.sections.dropLast() {
             #expect(

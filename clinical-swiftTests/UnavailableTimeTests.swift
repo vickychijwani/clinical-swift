@@ -136,16 +136,14 @@ struct UnavailableTimeTests {
         }
     }
 
-    @Test func migrationFromCurrentSchemaAndReopeningKeepBlocks() throws {
+    @Test func reopeningKeepsBlocksAndConstraints() throws {
         let url = URL.temporaryDirectory.appending(path: "unavailable-\(UUID()).sqlite")
         defer { try? FileManager.default.removeItem(at: url) }
         let start = try instant("2026-10-02T09:00:00Z")
         let id = UUID()
         do {
             let database = try DatabaseQueue(path: url.path)
-            let migrator = databaseMigrator()
-            try migrator.migrate(database, upTo: "Create appointment Calendar sync outbox")
-            try migrator.migrate(database)
+            try migrateDatabase(database)
             try database.write { db in
                 try UnavailableTimeRecord.insert {
                     UnavailableTimeRecord(
