@@ -7,10 +7,6 @@ the hook compiles its checker into the worktree's Git metadata. Later runs reuse
 that executable until the checker source or compiler changes. The macOS SDK is
 selected through Xcode, without a fixed SDK version.
 
-`check_comments.py` is a compatibility launcher for existing chats that already
-loaded the earlier hook command. It forwards to the Swift checker. The saved
-hook configuration does not use it, so new clones do not require Python.
-
 The check compares HEAD with the current working tree, including staged changes,
 deleted files, moved code, and new Swift files. Unchanged comment text can move
 between changed files without a finding. Whitespace changes are ignored. Inline

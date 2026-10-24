@@ -39,11 +39,10 @@ Update the capture log in `screenshots/README.md` when you're done.
 
 ## Check and deliver
 
-Use the bundled Python from `load_workspace_dependencies` when Pillow is absent.
-Run the helper without reading its source:
+Run the Swift helper with the Xcode toolchain:
 
 ```sh
-"$PYTHON" .codex/skills/my-screenshots/scripts/check_images.py screenshots \
+xcrun swift -O -Xfrontend -parse-as-library .codex/skills/my-screenshots/scripts/check_images.swift screenshots \
   --sheets build/screenshot-capture/contact-sheets \
   --report build/screenshot-capture/images.json
 ```
