@@ -44,6 +44,7 @@ App-specific guides:
 - WidgetKit, App Group database access, timeline refresh, exact-fit layout, and widget routing: `docs/widgets.md`
 - App-level presentation ownership, details navigation, and interruption policy: `docs/routing.md`
 - One-way EventKit appointment and unavailable-time sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
+- Financial entries, current balances, dated reports, and derived coverage: `docs/payments.md`
 - Patient data backups, Google account binding, release checks, and assisted restore: `docs/backups.md`
 
 Keep the documentation map and the documents it points to up-to-date when changing the related architecture.

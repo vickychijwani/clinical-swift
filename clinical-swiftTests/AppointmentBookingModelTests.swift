@@ -380,6 +380,56 @@ struct AppointmentBookingModelTests {
         #expect(!didCallSave)
     }
 
+    @Test func chargedAppointmentKeepsPatientAndReportsEditFailure() async throws {
+        let database = try testDatabase()
+        let calendar = gregorianCalendar
+        let now = try Date("2026-10-24T09:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Aarav Mehta", createdDate: now)
+        let other = Patient(name: "Anjali Desai", createdDate: now)
+        let appointment = Appointment(
+            patientName: patient.displayName,
+            start: now.setTime(10, 0, using: calendar), durationMinutes: 30, status: .scheduled)
+        try await withDependencies {
+            $0.date.now = now
+            $0.calendar = calendar
+            $0.defaultDatabase = database
+        } operation: {
+            try await database.write { db in
+                try PatientRecord.insert { PatientRecord(patient, now: now) }.execute(db)
+                try PatientRecord.insert { PatientRecord(other, now: now) }.execute(db)
+                let record = try AppointmentRecord.persisted(
+                    id: appointment.id, patientID: patient.id,
+                    start: appointment.start, durationMinutes: 30, status: .scheduled,
+                    createdAt: now, updatedAt: now)
+                try AppointmentRecord.insert { record }.execute(db)
+                let charge = AccountEntry(
+                    kind: .charge, amount: 500, entryDate: now,
+                    createdDate: now, patientID: patient.id, appointmentID: appointment.id)
+                try saveAccountEntries(AccountEntryBatch(inserts: [charge]), in: db)
+            }
+            var didSave = false
+            let model = AppointmentBookingModel(
+                editing: AppointmentDetails(appointment: appointment, patient: patient)
+            ) { _ in didSave = true }
+            model.draft.selectedPatient = other
+            #expect(await model.saveAppointment() == false)
+            #expect(
+                model.saveErrorMessage
+                    == "This appointment has charges. Remove its linked charges before changing the patient."
+            )
+            #expect(!didSave)
+            let saved = try await database.read {
+                try AppointmentRecord.find(appointment.id).fetchOne($0)
+            }
+            #expect(saved?.patientID == patient.id)
+            // A charge must not prevent a schedule edit for the same patient.
+            model.draft.selectedPatient = patient
+            model.selectStart(now.setTime(11, 0, using: calendar))
+            #expect(await model.saveAppointment())
+            #expect(didSave)
+        }
+    }
+
     private var gregorianCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

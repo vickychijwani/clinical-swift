@@ -177,6 +177,8 @@ import SQLiteData
                         throw AppointmentEditingError.unavailable
                     }
 
+                    try validateAppointmentPatientChange(
+                        id: appointmentID, patientID: patientID, in: db)
                     try AppointmentRecord.find(appointmentID)
                         .update {
                             $0.patientID = patientID
@@ -192,7 +194,9 @@ import SQLiteData
             return true
         } catch {
             saveErrorMessage =
-                if error is AppointmentEditingError {
+                if let error = error as? AccountEntryError, error == .appointmentHasCharges {
+                    "This appointment has charges. Remove its linked charges before changing the patient."
+                } else if error is AppointmentEditingError {
                     "This appointment can no longer be edited."
                 } else {
                     "The appointment could not be saved."

@@ -337,5 +337,9 @@ public func databaseMigrator(allowDebugErasure: Bool = true) -> DatabaseMigrator
         )
     }
 
+    migrator.registerMigration("Create financial ledger and patient balances") { db in
+        try createAccountEntrySchema(db)
+    }
+
     return migrator
 }

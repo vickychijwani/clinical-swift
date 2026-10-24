@@ -27,6 +27,11 @@ This document captures the deliberate constraints an agent is likely to break wh
 - Unavailable time blocks are display data - they must never enter appointment availability inputs, nor use appointment availability to determine start time. Suggestions, manual selection, and appointment saving are identical with or without blocks.
 - Appointment and block overlaps are valid and require no confirmation. Other doctors can still work while the clinic owner is unavailable.
 
+- An appointment with linked charges cannot change patient or be physically deleted. Check the
+  stored references in the appointment write transaction and report the rejection. SQLite guards
+  protect the same rule for direct writes. Schedule edits for the same patient remain valid.
+  Cancellation keeps charges; a correction requires a separate financial action. See [payments](payments.md).
+
 ## Do Not Reintroduce
 
 - Do not turn the prefill preference for empty intervals into a hard availability rule. Visiting doctors make overlapping bookings valid even though they are not the default preference.

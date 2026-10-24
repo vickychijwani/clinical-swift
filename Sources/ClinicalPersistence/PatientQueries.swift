@@ -6,22 +6,30 @@ import SQLiteData
 public nonisolated struct PatientDetailsSelection: Identifiable, Sendable {
     public let patientRecord: PatientRecord
     public let nextAppointmentDate: Date?
+    public let currentBalance: Int
 
     public var id: Patient.ID { patientRecord.id }
 
     public var details: PatientDetails {
         PatientDetails(
             patient: Patient(patientRecord),
-            nextAppointmentDate: nextAppointmentDate
+            nextAppointmentDate: nextAppointmentDate,
+            currentBalance: currentBalance
         )
     }
 }
 
 public nonisolated func patientListRowsQuery(
-    now: Date = .now
-) -> some Statement<PatientDetailsSelection> {
+    now: Date = .now,
+    owingOnly: Bool = false
+) -> some Statement<PatientDetailsSelection> & Sendable {
     let orderedPatients =
         PatientRecord
+        .where { patient in
+            if owingOnly {
+                patient.id.in(PatientBalanceRecord.where { $0.balance > 0 }.select { $0.id })
+            }
+        }
         .group(by: \.id)
         .order { patient in
             (
@@ -38,10 +46,14 @@ public nonisolated func patientListRowsQuery(
                 && appointment.start >= now
                 && appointment.status.eq(Appointment.Status.scheduled.rawValue)
         }
-        .select { patient, appointment in
+        .leftJoin(PatientBalanceRecord.all) { patient, _, balance in
+            patient.id.eq(balance.id)
+        }
+        .select { patient, appointment, balance in
             PatientDetailsSelection.Columns(
                 patientRecord: patient,
-                nextAppointmentDate: appointment.start.min()
+                nextAppointmentDate: appointment.start.min(),
+                currentBalance: balance.balance.ifnull(0)
             )
         }
 }
@@ -58,10 +70,14 @@ public nonisolated func patientDetailsQuery(
                 && appointment.start >= now
                 && appointment.status.eq(Appointment.Status.scheduled.rawValue)
         }
-        .select { patient, appointment in
+        .leftJoin(PatientBalanceRecord.all) { patient, _, balance in
+            patient.id.eq(balance.id)
+        }
+        .select { patient, appointment, balance in
             PatientDetailsSelection.Columns(
                 patientRecord: patient,
-                nextAppointmentDate: appointment.start.min()
+                nextAppointmentDate: appointment.start.min(),
+                currentBalance: balance.balance.ifnull(0)
             )
         }
 }
@@ -101,13 +117,17 @@ public nonisolated func appointmentBookingPatientRowsQuery(
                 patient.id.asc()
             )
         }
-        .select { patient, appointment in
+        .leftJoin(PatientBalanceRecord.all) { patient, _, balance in
+            patient.id.eq(balance.id)
+        }
+        .select { patient, appointment, balance in
             PatientDetailsSelection.Columns(
                 patientRecord: patient,
                 nextAppointmentDate: appointment.start.min(
                     filter: appointment.start >= cutoff
                         && appointment.status.eq(Appointment.Status.scheduled.rawValue)
-                )
+                ),
+                currentBalance: balance.balance.ifnull(0)
             )
         }
 }
