@@ -95,6 +95,7 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
         }
 
         let appointmentItems = appointments.map(TimelineItem.appointment)
+        // Samples show a named block first, then the default label for unnamed blocks.
         let blockItems: [TimelineItem] = (0..<blockCount).map { index in
             let block = UnavailableTime(
                 label: index == 0 ? "Travel" : nil,

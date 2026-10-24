@@ -14,18 +14,4 @@ public nonisolated struct AppointmentCalendarSyncRecord: Equatable, Sendable {
     public var revision: Int
     public var createdAt: Date
     public var updatedAt: Date
-
-    public init(
-        appointmentID: Appointment.ID, eventIdentifier: String? = nil, eventStart: Date? = nil,
-        needsSync: Bool,
-        revision: Int, createdAt: Date, updatedAt: Date
-    ) {
-        self.appointmentID = appointmentID
-        self.eventIdentifier = eventIdentifier
-        self.eventStart = eventStart
-        self.needsSync = needsSync
-        self.revision = revision
-        self.createdAt = createdAt
-        self.updatedAt = updatedAt
-    }
 }

@@ -65,7 +65,7 @@ BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" 
 
 .PHONY: data-test
 data-test:
-	@$(SWIFT) test $(SWIFT_TEST_FLAGS)
+	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
 .PHONY: backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-github-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
 

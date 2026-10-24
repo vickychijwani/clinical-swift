@@ -61,10 +61,10 @@ struct PatientTests {
 
     @Test func derivesAgeFromDateOfBirth() throws {
         let calendar = fixedCalendar()
-        let referenceDate = try #require(calendar.date(2026, 6, 10))
-        let birthdayToday = try #require(calendar.date(1990, 6, 10))
-        let birthdayTomorrow = try #require(calendar.date(1990, 6, 11))
-        let futureDateOfBirth = try #require(calendar.date(2027, 6, 10))
+        let referenceDate = try Date("2026-06-10T00:00:00Z", strategy: .iso8601)
+        let birthdayToday = try Date("1990-06-10T00:00:00Z", strategy: .iso8601)
+        let birthdayTomorrow = try Date("1990-06-11T00:00:00Z", strategy: .iso8601)
+        let futureDateOfBirth = try Date("2027-06-10T00:00:00Z", strategy: .iso8601)
 
         let turnsThirtySix = Patient(
             name: "Patient One",

@@ -56,18 +56,4 @@ public nonisolated struct UnavailableTimeCalendarSyncRecord: Equatable, Sendable
     public var revision: Int
     public var createdAt: Date
     public var updatedAt: Date
-
-    public init(
-        unavailableTimeID: UUID, eventIdentifier: String? = nil, eventStart: Date? = nil,
-        needsSync: Bool,
-        revision: Int, createdAt: Date, updatedAt: Date
-    ) {
-        self.unavailableTimeID = unavailableTimeID
-        self.eventIdentifier = eventIdentifier
-        self.eventStart = eventStart
-        self.needsSync = needsSync
-        self.revision = revision
-        self.createdAt = createdAt
-        self.updatedAt = updatedAt
-    }
 }

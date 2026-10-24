@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "ClinicalData",
-    platforms: [.iOS(.v26), .macOS(.v13)],
+    platforms: [.iOS(.v26), .macOS(.v14)],
     products: [
         .library(name: "ClinicalModels", targets: ["ClinicalModels"]),
         .library(name: "ClinicalPersistence", targets: ["ClinicalPersistence"]),
@@ -33,7 +33,12 @@ let package = Package(
         ),
         .testTarget(
             name: "ClinicalDataTests",
-            dependencies: ["ClinicalModels", "ClinicalPersistence"],
+            dependencies: [
+                "ClinicalModels", "ClinicalPersistence",
+                .product(name: "Dependencies", package: "swift-dependencies"),
+                .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "SQLiteData", package: "sqlite-data"),
+            ],
             // Check the public API under the app's default actor isolation.
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),

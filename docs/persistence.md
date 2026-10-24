@@ -21,8 +21,7 @@ adding storage-backed features.
 - Package declarations default to nonisolated execution. Importing them into the
   app does not apply the app target's default MainActor isolation. Keep Sendable
   values and database closures safe across that boundary.
-- Extraction does not change migration names, order, or SQL. Keep the package and
-  Xcode dependency lockfiles aligned when updating shared dependencies. The Linux
+- Keep the package and Xcode dependency lockfiles aligned when updating shared dependencies. The Linux
   lockfile also includes conditional dependencies that Apple builds do not use.
 
 ## Invariants
