@@ -1,4 +1,5 @@
 import AuthenticationServices
+import ClinicalModels
 import SwiftUI
 
 struct BackupSettingsView: View {

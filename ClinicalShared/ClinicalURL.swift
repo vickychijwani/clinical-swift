@@ -1,3 +1,4 @@
+import ClinicalModels
 import Foundation
 
 nonisolated enum ClinicalURL: Equatable, Sendable {

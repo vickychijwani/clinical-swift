@@ -1,3 +1,4 @@
+import ClinicalModels
 import SwiftUI
 
 struct AppointmentCard: View {

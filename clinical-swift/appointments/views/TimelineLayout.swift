@@ -1,3 +1,4 @@
+import ClinicalModels
 /// Layout Engine for Timeline view
 /// Must remain independent of SwiftUI
 

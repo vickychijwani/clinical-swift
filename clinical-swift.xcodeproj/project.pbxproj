@@ -28,6 +28,13 @@
 		B2000000000000000000000C /* ClinicalWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ClinicalWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B2000000000000000000000F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0292FE0000000000005 /* GRDB */; };
 		B20000000000000000000010 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02B2FE0000000000005 /* Dependencies */; };
+		E40000000000000000000100 /* ClinicalModels in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000002 /* ClinicalModels */; };
+		E40000000000000000000101 /* ClinicalPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000003 /* ClinicalPersistence */; };
+		E40000000000000000000110 /* ClinicalModels in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000002 /* ClinicalModels */; };
+		E40000000000000000000111 /* ClinicalPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000003 /* ClinicalPersistence */; };
+		E40000000000000000000120 /* ClinicalModels in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000002 /* ClinicalModels */; };
+		E40000000000000000000121 /* ClinicalPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000003 /* ClinicalPersistence */; };
+		E40000000000000000000130 /* ClinicalModels in Frameworks */ = {isa = PBXBuildFile; productRef = E40000000000000000000002 /* ClinicalModels */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -137,6 +144,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E40000000000000000000101 /* ClinicalPersistence in Frameworks */,
+				E40000000000000000000100 /* ClinicalModels in Frameworks */,
 				8BE2A01C2FE0000000000005 /* SQLiteData in Frameworks */,
 				8BE2A0392FE0000000000005 /* GRDB in Frameworks */,
 				8BE2A03A2FE0000000000005 /* ConcurrencyExtras in Frameworks */,
@@ -153,6 +162,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E40000000000000000000111 /* ClinicalPersistence in Frameworks */,
+				E40000000000000000000110 /* ClinicalModels in Frameworks */,
 				8BE2A01D2FE0000000000005 /* SQLiteData in Frameworks */,
 				8BE2A0412FE0000000000005 /* GRDB in Frameworks */,
 				8BE2A0422FE0000000000005 /* ConcurrencyExtras in Frameworks */,
@@ -169,6 +180,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E40000000000000000000121 /* ClinicalPersistence in Frameworks */,
+				E40000000000000000000120 /* ClinicalModels in Frameworks */,
 				8BE2A01D2FE0000000000005 /* SQLiteData in Frameworks */,
 				8BE2A0412FE0000000000005 /* GRDB in Frameworks */,
 				8BE2A0422FE0000000000005 /* ConcurrencyExtras in Frameworks */,
@@ -192,6 +205,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E40000000000000000000130 /* ClinicalModels in Frameworks */,
 				B2000000000000000000000F /* GRDB in Frameworks */,
 				B20000000000000000000010 /* Dependencies in Frameworks */,
 			);
@@ -248,6 +262,8 @@
 			);
 			name = "clinical-swift";
 			packageProductDependencies = (
+				E40000000000000000000002 /* ClinicalModels */,
+				E40000000000000000000003 /* ClinicalPersistence */,
 				8BE2A01E2FE0000000000005 /* SQLiteData */,
 				8BE2A0292FE0000000000005 /* GRDB */,
 				8BE2A02A2FE0000000000005 /* ConcurrencyExtras */,
@@ -280,6 +296,8 @@
 			);
 			name = "clinical-swiftTests";
 			packageProductDependencies = (
+				E40000000000000000000002 /* ClinicalModels */,
+				E40000000000000000000003 /* ClinicalPersistence */,
 				8BE2A0202FE0000000000005 /* SQLiteData */,
 				8BE2A0312FE0000000000005 /* GRDB */,
 				8BE2A0322FE0000000000005 /* ConcurrencyExtras */,
@@ -312,6 +330,8 @@
 			);
 			name = "clinical-swiftBackupTests";
 			packageProductDependencies = (
+				E40000000000000000000002 /* ClinicalModels */,
+				E40000000000000000000003 /* ClinicalPersistence */,
 				8BE2A0202FE0000000000005 /* SQLiteData */,
 				8BE2A0312FE0000000000005 /* GRDB */,
 				8BE2A0322FE0000000000005 /* ConcurrencyExtras */,
@@ -367,6 +387,7 @@
 			);
 			name = ClinicalWidgetExtension;
 			packageProductDependencies = (
+				E40000000000000000000002 /* ClinicalModels */,
 				8BE2A0292FE0000000000005 /* GRDB */,
 				8BE2A02B2FE0000000000005 /* Dependencies */,
 			);
@@ -420,6 +441,7 @@
 			mainGroup = 79438C3A2FD2D07100C0E6EF;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				E40000000000000000000001 /* XCLocalSwiftPackageReference "." */,
 				8BE2A01F2FE0000000000005 /* XCRemoteSwiftPackageReference "sqlite-data" */,
 				8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */,
 				8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
@@ -1011,6 +1033,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		E40000000000000000000001 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		8BE2A01F2FE0000000000005 /* XCRemoteSwiftPackageReference "sqlite-data" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1087,6 +1116,15 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		E40000000000000000000002 /* ClinicalModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ClinicalModels;
+		};
+		E40000000000000000000003 /* ClinicalPersistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ClinicalPersistence;
+		};
+
 		8BE2A01E2FE0000000000005 /* SQLiteData */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8BE2A01F2FE0000000000005 /* XCRemoteSwiftPackageReference "sqlite-data" */;

@@ -1,3 +1,4 @@
+import ClinicalModels
 import Testing
 
 @testable import clinical_swift

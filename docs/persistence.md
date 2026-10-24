@@ -7,6 +7,22 @@ adding storage-backed features.
 
 - For persistence we use SQLiteData (pointfreeco/sqlite-data)
 - For SQL queries we use StructuredQueries (pointfreeco/swift-structured-queries)
+- The root Swift package separates `ClinicalModels` from `ClinicalPersistence`.
+  Both run on Linux with Swift 6.2 or later. The widget links only the model product.
+  The app and its test bundles import the package products; do not add copies of
+  package source files to Xcode targets.
+- The package owns domain values, record mappings, queries, status writes, and the
+  complete migration sequence. App startup owns App Group access, file coordination,
+  logging, and debug sample seeding. Keep Apple framework imports at that boundary.
+- Start writer configurations with `clinicalDatabaseConfiguration()`. It enables
+  foreign keys and supplies the schema's `uuid()` function on Linux connections.
+  Apple builds retain the system SQLite function. Register functions through
+  `prepareDatabase` so both pool writers and readers receive them.
+- Package declarations default to nonisolated execution. Importing them into the
+  app does not apply the app target's default MainActor isolation. Keep Sendable
+  values and database closures safe across that boundary.
+- Keep the package and Xcode dependency lockfiles aligned when updating shared dependencies. The Linux
+  lockfile also includes conditional dependencies that Apple builds do not use.
 
 ## Invariants
 

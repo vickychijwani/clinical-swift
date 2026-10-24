@@ -1,3 +1,5 @@
+import ClinicalModels
+import ClinicalPersistence
 import Dependencies
 import SQLiteData
 import SwiftUI
