@@ -11,6 +11,8 @@ jobs:
     container: swift:6.2.3-noble
     steps:
       - uses: actions/checkout@v4
+      - name: Trust the container checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install SQLite development files
         run: apt-get update && apt-get install -y libsqlite3-dev
       - name: Check shared package versions
