@@ -33,6 +33,7 @@ Swift and SwiftUI guides:
 
 App-specific guides:
 
+- Package, widget, and display dependency rules and checks: `docs/architecture.md`.
 - Working with SQL / SQLiteData, Linux package boundaries, CloudKit sync, and record/domain boundaries: `docs/persistence.md` (CloudKit / sync stuff should be moved into a separate file when we implement that feature)
 - Assisted patient-data recovery procedure and limits: `docs/patient-data-restore.md` (backup and restore implementation is pending; user-facing screens are deferred)
 - Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`

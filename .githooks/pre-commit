@@ -1,4 +1,7 @@
 #!/bin/sh
+set -eu
+
+sh scripts/check_architecture.sh --staged
 
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.swift')
 
