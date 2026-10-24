@@ -15,7 +15,9 @@ CLINICAL_BACKUP_CHECK_CREDENTIALS ?= $(HOME)/.config/clinical-backups/check-cred
 CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
 SIMULATOR_OS ?= 27.0
-SIMULATOR_ID ?= $(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun simctl list devices --json 2>/dev/null | python3 -c 'import json, sys; devices=json.load(sys.stdin)["devices"]; ios=[d for runtime, items in devices.items() if runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-") for d in items]; running=[d for d in ios if d["state"] == "Booted"]; runtime="iOS-" + "-".join("$(SIMULATOR_OS)".split(".")); fallback=[d for key, items in devices.items() if key.endswith(runtime) for d in items if d["name"] == "$(SIMULATOR)"]; choices=running or fallback; print(choices[0]["udid"] if choices else "")' 2>/dev/null)
+# Select only when needed, then reuse the result within this Make invocation.
+_DEFAULT_SIMULATOR = $(eval _DEFAULT_SIMULATOR := $(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun simctl list devices --json 2>/dev/null | DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" /bin/sh scripts/select_simulator.sh local "$(SIMULATOR)" "$(SIMULATOR_OS)" 2>/dev/null))$(_DEFAULT_SIMULATOR)
+SIMULATOR_ID ?= $(_DEFAULT_SIMULATOR)
 BUNDLE_ID := in.bitehaus.clinical
 APP_NAME := Clinical
 TEAM_ID := WM7GP7FBL7
@@ -42,13 +44,13 @@ BACKUP_ARCHIVE_SCRIPT := $(CURDIR)/scripts/backup_archive_to_github.sh
 NEXT_BUILD_NUMBER_SCRIPT := $(CURDIR)/scripts/next_app_store_build_number.swift
 TRIGGER_XCODE_CLOUD_BUILD_SCRIPT := $(CURDIR)/scripts/trigger_xcode_cloud_build.swift
 
-DESTINATION := platform=iOS Simulator,id=$(SIMULATOR_ID)
+DESTINATION = platform=iOS Simulator,id=$(SIMULATOR_ID)
 ARCHIVE_DESTINATION := generic/platform=iOS
 XCBEAUTIFY := xcbeautify -q --disable-logging
 XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
 RESOLVE_BUILD_NUMBER := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" xcrun swift "$(NEXT_BUILD_NUMBER_SCRIPT)" "$(BUNDLE_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
 TRIGGER_XCODE_CLOUD_BUILD := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" xcrun swift "$(TRIGGER_XCODE_CLOUD_BUILD_SCRIPT)" "$(XCODE_CLOUD_WORKFLOW_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
-XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
+XCODEBUILD_COMMON_FLAGS = -project "$(PROJECT)" \
 	-configuration "$(CONFIGURATION)" \
 	-destination "$(DESTINATION)" \
 	-destination-timeout 60 \
@@ -56,10 +58,10 @@ XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
 	-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
 	-disableAutomaticPackageResolution \
 	-skipPackageUpdates
-XCODEBUILD_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
-UNIT_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO
-UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)"
-BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO ENABLE_TESTABILITY=YES
+XCODEBUILD_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
+UNIT_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO
+UI_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)"
+BACKUP_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO ENABLE_TESTABILITY=YES
 
 .DEFAULT_GOAL := build-and-run
 
@@ -210,11 +212,11 @@ backup-export-credentials: check-simulator
 
 # Keep the checks inside one recipe so make -j cannot run them concurrently.
 release-verify: prepare
-	@python3 scripts/backup_candidate.py capture "$(BUILD_DIR)/backup-candidate.json"
+	@xcrun swift -Xfrontend -parse-as-library scripts/backup_candidate.swift capture "$(BUILD_DIR)/backup-candidate.json"
 	@$(MAKE) --no-print-directory backup-test CONFIGURATION=Release
 	@$(MAKE) --no-print-directory backup-drive-check CONFIGURATION=Release
-	@python3 scripts/backup_candidate.py check "$(BUILD_DIR)/backup-candidate.json"
-	@python3 scripts/check_backup_device.py "$(CLINICAL_BACKUP_CHECK_CREDENTIALS)"
+	@xcrun swift -Xfrontend -parse-as-library scripts/backup_candidate.swift check "$(BUILD_DIR)/backup-candidate.json"
+	@xcrun swift -Xfrontend -parse-as-library scripts/check_backup_device.swift "$(CLINICAL_BACKUP_CHECK_CREDENTIALS)"
 
 ui-test: check-tools check-simulator prepare
 	@set -o pipefail; \
@@ -233,7 +235,7 @@ archive-with-build-number: check-tools check-build-number prepare
 	archive_count="$$(find "$(ARCHIVE_DIR)" -maxdepth 1 -type d -name '*.xcarchive' | wc -l | tr -d '[:space:]')"; \
 	printf "Archive storage: %s\nAvailable disk:  %s\nOld archives:    %s\n" "$(ARCHIVE_DIR)" "$$available" "$$archive_count"
 	@if [[ -f "$(LATEST_ARCHIVE_FILE)" ]] && [[ "$$(< "$(LATEST_ARCHIVE_FILE)")" == "$(BUILD_NUMBER)" ]]; then rm -f "$(LATEST_ARCHIVE_FILE)"; fi
-	@python3 scripts/backup_candidate.py capture "$(ARCHIVE_PATH).candidate.json"
+	@xcrun swift -Xfrontend -parse-as-library scripts/backup_candidate.swift capture "$(ARCHIVE_PATH).candidate.json"
 	@rm -rf "$(ARCHIVE_PATH)"
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
@@ -249,7 +251,7 @@ archive-with-build-number: check-tools check-build-number prepare
 		CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" \
 		archive \
 		2>&1 | tee "$(LOG_DIR)/archive-$(BUILD_NUMBER).log" | $(XCBEAUTIFY)
-	@python3 scripts/backup_candidate.py attest "$(ARCHIVE_PATH)" "$(ARCHIVE_PATH).candidate.json"
+	@xcrun swift -Xfrontend -parse-as-library scripts/backup_candidate.swift attest "$(ARCHIVE_PATH)" "$(ARCHIVE_PATH).candidate.json"
 	@printf '%s\n' "$(BUILD_NUMBER)" > "$(LATEST_ARCHIVE_FILE).tmp"
 	@mv "$(LATEST_ARCHIVE_FILE).tmp" "$(LATEST_ARCHIVE_FILE)"
 
@@ -277,9 +279,9 @@ upload-testflight: check-tools prepare
 
 upload-testflight-with-build-number: check-tools check-build-number prepare
 	@test -d "$(ARCHIVE_PATH)" || { echo "Missing archive at $(ARCHIVE_PATH)"; exit 1; }
-	@python3 scripts/backup_candidate.py verify-archive "$(ARCHIVE_PATH)"
+	@xcrun swift -Xfrontend -parse-as-library scripts/backup_candidate.swift verify-archive "$(ARCHIVE_PATH)"
 	@$(MAKE) --no-print-directory release-verify CONFIGURATION=Release
-	@python3 scripts/backup_candidate.py verify-archive "$(ARCHIVE_PATH)"
+	@xcrun swift -Xfrontend -parse-as-library scripts/backup_candidate.swift verify-archive "$(ARCHIVE_PATH)"
 	@rm -rf "$(EXPORT_PATH)"
 	@mkdir -p "$(EXPORT_PATH)"
 	@set -o pipefail; \

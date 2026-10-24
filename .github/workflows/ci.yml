@@ -35,6 +35,8 @@ jobs:
         run: sh scripts/check_architecture.sh
       - name: Test architecture checker
         run: sh scripts/test_architecture.sh
+      - name: Test repository scripts
+        run: sh scripts/test_scripts.sh
 
   ios-build:
     runs-on: macos-26

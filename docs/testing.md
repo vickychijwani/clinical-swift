@@ -16,6 +16,11 @@ This document captures testing rules that are easy to miss under strict Swift co
 - `make test` uses the shared unit-test scheme and must not build or run the UI-test target. Parallel Xcode test runners are disabled for this command so it can use the selected simulator directly instead of creating a simulator clone.
 - `make test` also runs `make data-test`.
 - `make ui-test` uses the separate shared UI-test scheme. Keep unit and UI targets in their respective schemes so selecting one kind of test does not build the other bundle.
+- `sh scripts/test_scripts.sh` checks the release helpers, simulator selection,
+  screenshot validation, and contact sheets on macOS. It uses the Xcode Swift
+  toolchain and system frameworks, with no package resolution. It also checks
+  command entry points and Make behavior with no Python on PATH. Its credentials
+  and archives are synthetic; it does not authorize a release or contact Drive.
 
 ## Backup checks
 

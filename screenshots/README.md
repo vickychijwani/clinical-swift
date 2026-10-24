@@ -35,11 +35,10 @@ these values from the current checkout or use old simulator container paths.
    new capture. Keep earlier validation labelled as an earlier run.
 
 The skill includes a helper for PNG integrity, dimensions, exact pixel duplicates,
-and contact sheets. Use the Python path from `load_workspace_dependencies` if the
-default Python does not include Pillow:
+and contact sheets. Run it with the Xcode toolchain:
 
 ```sh
-"$PYTHON" .codex/skills/my-screenshots/scripts/check_images.py screenshots \
+xcrun swift -O -Xfrontend -parse-as-library .codex/skills/my-screenshots/scripts/check_images.swift screenshots \
   --sheets build/screenshot-capture/contact-sheets \
   --report build/screenshot-capture/images.json
 ```
