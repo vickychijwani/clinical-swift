@@ -18,8 +18,10 @@ public nonisolated struct PatientLedger: Equatable, Sendable {
 
     public init(entries: [AccountEntry], patientID: UUID, through date: Date? = nil) throws {
         let end = date.map(FinancialDate.nextDay) ?? .distantFuture
-        let entries = entries.filter {
-            $0.patientID == patientID && $0.entryDate < end
+        let entries = try entries.filter {
+            guard $0.patientID == patientID else { return false }
+            try $0.validateValues()
+            return $0.entryDate < end
         }.sorted {
             if $0.entryDate != $1.entryDate { return $0.entryDate < $1.entryDate }
             if $0.createdDate != $1.createdDate { return $0.createdDate < $1.createdDate }
@@ -29,9 +31,6 @@ public nonisolated struct PatientLedger: Equatable, Sendable {
         var received = 0
         var credit = 0
         for entry in entries {
-            guard entry.amount != Int.min, entry.amount != 0,
-                entry.kind == .adjustment || entry.amount > 0
-            else { throw AccountEntryError.invalidAmount }
             let change = try entry.balanceChange
             balance = try addingMoney(balance, change)
             if entry.kind == .receipt { received = try addingMoney(received, entry.amount) }
@@ -86,17 +85,20 @@ public nonisolated struct CashFlow: Equatable, Sendable {
         var totals: [Group: Int] = [:]
         var received = 0
         var paid = 0
-        for entry in entries where entry.kind == .receipt || entry.kind == .expense {
-            guard entry.amount > 0, let category = entry.category else {
-                throw AccountEntryError.invalidFields
+        for entry in entries {
+            try entry.validateValues()
+            let category: AccountEntry.Category
+            switch entry.details {
+            case .receipt(let source, _):
+                category = source.category
+                received = try addingMoney(received, entry.amount)
+            case .expense(let expense, _):
+                category = expense.category
+                paid = try addingMoney(paid, entry.amount)
+            case .charge, .adjustment: continue
             }
             let group = Group(category: category, paymentMethod: entry.paymentMethod)
             totals[group] = try addingMoney(totals[group, default: 0], entry.amount)
-            if entry.kind == .receipt {
-                received = try addingMoney(received, entry.amount)
-            } else {
-                paid = try addingMoney(paid, entry.amount)
-            }
         }
         self.totals = totals
         self.received = received

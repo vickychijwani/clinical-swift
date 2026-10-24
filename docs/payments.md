@@ -1,5 +1,23 @@
 # Payments
 
+## Domain and storage
+
+Keep one account-entry table because all kinds share identity, dates, notes, backup,
+and the create, edit, and delete lifecycle. Patient history, cash reports, and batch
+saves combine kinds. Several tables would also work, but add dispatch and combined
+queries for these few fields. Nullable columns and conditional constraints stay at
+the record boundary. Reads must reject invalid stored combinations.
+
+Swift entries use four explicit cases. A charge carries its patient and optional
+appointment. A receipt carries a patient source or another incoming source. Patient
+sources imply patientFees. Expenses admit only operating and capital categories.
+Adjustments carry only their patient. Kind-specific fields are derived, so a kind
+change must supply the new case's required values. Amounts and dates still need
+validation; writes also check the current date and database references.
+
+This storage choice is separate from derived coverage. Automatic coverage avoids
+manual allocation work. Separate types or tables would not require manual allocation.
+
 ## Ledger and local saves
 
 Account entries are the source for debt, coverage, and cash reports. Amounts are

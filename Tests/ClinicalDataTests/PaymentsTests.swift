@@ -14,10 +14,15 @@ nonisolated enum PaymentsFixture {
     static let appointmentID = UUID()
 
     static func entry(_ kind: AccountEntry.Kind, _ amount: Int, date: Date = now) -> AccountEntry {
-        AccountEntry(
-            kind: kind, amount: amount, entryDate: date, createdDate: now,
-            patientID: kind == .expense ? nil : patientID,
-            category: kind == .receipt ? .patientFees : (kind == .expense ? .rent : nil))
+        let details: AccountEntry.Details
+        switch kind {
+        case .charge: details = .charge(patientID: patientID, appointmentID: nil)
+        case .receipt: details = .receipt(source: .patient(patientID), paymentMethod: nil)
+        case .expense: details = .expense(category: .rent, paymentMethod: nil)
+        case .adjustment: details = .adjustment(patientID: patientID)
+        }
+        return AccountEntry(
+            details: details, amount: amount, entryDate: date, createdDate: now)
     }
 
     static func database() throws -> DatabaseQueue {
@@ -66,82 +71,95 @@ struct PaymentsModelTests {
             let p = PaymentsFixture.patientID
             let a = PaymentsFixture.appointmentID
             // Each row is a valid field combination from the specification.
-            let valid =
+            let details: [AccountEntry.Details] =
                 [
-                    AccountEntry(kind: .charge, amount: 1, patientID: p),
-                    AccountEntry(kind: .charge, amount: 1, patientID: p, appointmentID: a),
-                    AccountEntry(kind: .adjustment, amount: 1, patientID: p),
-                    AccountEntry(kind: .adjustment, amount: -1, patientID: p),
+                    .charge(patientID: p, appointmentID: nil),
+                    .charge(patientID: p, appointmentID: a),
+                    .adjustment(patientID: p),
+                    .receipt(source: .patient(p), paymentMethod: nil),
+                    .receipt(source: .externalConsultations, paymentMethod: nil),
+                    .receipt(source: .referralCommissions, paymentMethod: nil),
+                    .receipt(source: .otherReceipts, paymentMethod: nil),
                 ]
-                + AccountEntry.Category.allCases.map { category in
-                    AccountEntry(
-                        kind: category.group == .incoming ? .receipt : .expense, amount: 1,
-                        patientID: category == .patientFees ? p : nil, category: category)
+                + AccountEntry.ExpenseCategory.allCases.map {
+                    .expense(category: $0, paymentMethod: nil)
                 }
-            for entry in valid {
+            for detail in details {
+                let entry = AccountEntry(details: detail, amount: 1)
                 try entry.validate()
+                let record = AccountEntryRecord(entry, updatedAt: PaymentsFixture.now)
+                #expect(try record.entry() == entry)
                 try database.write { db in
                     try db.inSavepoint {
-                        try AccountEntryRecord.insert {
-                            AccountEntryRecord(entry, updatedAt: PaymentsFixture.now)
-                        }.execute(db)
+                        try AccountEntryRecord.insert { record }.execute(db)
                         return .rollback
                     }
                 }
-                var invalid: [AccountEntry] = []
-                var changed = entry
-                changed.amount = 0
-                invalid.append(changed)
-                if entry.kind != .adjustment {
-                    changed = entry
-                    changed.amount = -1
-                    invalid.append(changed)
+                for amount in [0, Int.min] + (entry.kind == .adjustment ? [] : [-1]) {
+                    var changed = entry
+                    changed.amount = amount
+                    #expect(throws: AccountEntryError.invalidAmount) { try changed.validate() }
+                    #expect(throws: AccountEntryError.invalidAmount) {
+                        try AccountEntryRecord(changed, updatedAt: PaymentsFixture.now).entry()
+                    }
+                    try database.write { db -> Void in
+                        #expect(throws: (any Error).self) {
+                            try AccountEntryRecord.insert {
+                                AccountEntryRecord(changed, updatedAt: PaymentsFixture.now)
+                            }.execute(db)
+                        }
+                    }
                 }
-                changed = entry
-                changed.amount = Int.min
-                invalid.append(changed)
-                changed = entry
+                // Invalid combinations belong at the record boundary, not in domain values.
+                var invalid: [AccountEntryRecord] = []
+                var changed = record
                 changed.patientID = entry.patientID == nil ? p : nil
                 invalid.append(changed)
                 if entry.kind != .charge {
-                    changed = entry
+                    changed = record
                     changed.appointmentID = a
                     invalid.append(changed)
                 }
                 if entry.kind == .charge || entry.kind == .adjustment {
-                    changed = entry
-                    changed.category = .patientFees
+                    changed = record
+                    changed.category = "patientFees"
                     invalid.append(changed)
-                    changed = entry
-                    changed.paymentMethod = .cash
+                    changed = record
+                    changed.paymentMethod = "cash"
                     invalid.append(changed)
                 } else {
-                    changed = entry
+                    changed = record
                     changed.category = nil
                     invalid.append(changed)
-                    changed = entry
-                    changed.category = entry.kind == .expense ? .otherReceipts : .rent
+                    changed = record
+                    changed.category = entry.kind == .expense ? "otherReceipts" : "rent"
                     invalid.append(changed)
                 }
-                for invalidEntry in invalid {
-                    #expect(throws: (any Error).self) { try invalidEntry.validate() }
+                for invalidRecord in invalid {
+                    #expect(throws: AccountEntryError.invalidFields) { try invalidRecord.entry() }
                     try database.write { db -> Void in
                         #expect(throws: (any Error).self) {
-                            try AccountEntryRecord.insert {
-                                AccountEntryRecord(invalidEntry, updatedAt: PaymentsFixture.now)
-                            }.execute(db)
+                            try AccountEntryRecord.insert { invalidRecord }.execute(db)
                         }
                     }
                 }
             }
             for method in AccountEntry.PaymentMethod.allCases {
-                var receipt = PaymentsFixture.entry(.receipt, 1)
-                receipt.paymentMethod = method
-                try receipt.validate()
-                var expense = PaymentsFixture.entry(.expense, 1)
-                expense.paymentMethod = method
-                try expense.validate()
+                for detail in [
+                    AccountEntry.Details.receipt(source: .patient(p), paymentMethod: method),
+                    .expense(category: .rent, paymentMethod: method),
+                ] {
+                    let entry = AccountEntry(details: detail, amount: 1)
+                    try entry.validate()
+                    #expect(
+                        try AccountEntryRecord(entry, updatedAt: PaymentsFixture.now).entry()
+                            == entry)
+                }
             }
+            let negative = AccountEntry(details: .adjustment(patientID: p), amount: -1)
+            #expect(
+                try AccountEntryRecord(negative, updatedAt: PaymentsFixture.now).entry() == negative
+            )
         }
     }
 
@@ -165,8 +183,45 @@ struct PaymentsModelTests {
             }
             #expect(
                 AccountEntry(
-                    kind: .charge, amount: 1, patientID: PaymentsFixture.patientID, note: "  "
+                    details: .charge(patientID: PaymentsFixture.patientID, appointmentID: nil),
+                    amount: 1, note: "  "
                 ).note == nil)
+        }
+    }
+
+    @Test func reportsShareValueChecksWithoutRejectingFutureDates() throws {
+        try PaymentsFixture.run { _ in
+            let patientID = PaymentsFixture.patientID
+            let future = FinancialDate.nextDay(PaymentsFixture.now)
+            let receipt = PaymentsFixture.entry(.receipt, 5, date: future)
+            #expect(throws: AccountEntryError.futureDate) { try receipt.validate() }
+            let report = try CashFlow(entries: [receipt])
+            let ledger = try PatientLedger(entries: [receipt], patientID: patientID)
+            #expect(report.received == 5)
+            #expect(ledger.balance == -5)
+            for amount in [0, -1, Int.min] {
+                var invalid = receipt
+                invalid.amount = amount
+                #expect(throws: AccountEntryError.invalidAmount) { try invalid.validateValues() }
+                #expect(throws: AccountEntryError.invalidAmount) {
+                    try CashFlow(entries: [invalid])
+                }
+                #expect(throws: AccountEntryError.invalidAmount) {
+                    try PatientLedger(entries: [invalid], patientID: patientID)
+                }
+            }
+            var invalidDate = receipt
+            invalidDate.entryDate = Date(timeIntervalSinceReferenceDate: .infinity)
+            #expect(throws: AccountEntryError.invalidFields) { try invalidDate.validateValues() }
+            #expect(throws: AccountEntryError.invalidFields) {
+                try PatientLedger(entries: [invalidDate], patientID: patientID)
+            }
+            #expect(throws: AccountEntryError.invalidFields) {
+                try CashFlow(entries: [invalidDate])
+            }
+            var record = AccountEntryRecord(receipt, updatedAt: PaymentsFixture.now)
+            record.entryDate = invalidDate.entryDate
+            #expect(throws: AccountEntryError.invalidFields) { try record.entry() }
         }
     }
 
@@ -197,11 +252,11 @@ struct PaymentsModelTests {
                 "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002",
             ].map { UUID(uuidString: $0)! }
             let first = AccountEntry(
-                id: ids[0], kind: .charge, amount: 5000, createdDate: PaymentsFixture.now,
-                patientID: p, appointmentID: a)
+                id: ids[0], details: .charge(patientID: p, appointmentID: a), amount: 5000,
+                createdDate: PaymentsFixture.now)
             let second = AccountEntry(
-                id: ids[1], kind: .charge, amount: 2000, createdDate: PaymentsFixture.now,
-                patientID: p, appointmentID: a)
+                id: ids[1], details: .charge(patientID: p, appointmentID: a), amount: 2000,
+                createdDate: PaymentsFixture.now)
             let opening = PaymentsFixture.entry(.adjustment, 1000, date: PaymentsFixture.earlier)
             let receipt = PaymentsFixture.entry(.receipt, 6000)
             let adjustment = PaymentsFixture.entry(.adjustment, -500)
@@ -317,17 +372,18 @@ struct PaymentsPersistenceTests {
                 try PaymentsFixture.save(
                     [charge, receipt, PaymentsFixture.entry(.expense, 12)], in: db)
                 try PaymentsFixture.assertSummary(db)
-                charge.patientID = PaymentsFixture.otherPatientID
+                charge.details = .charge(
+                    patientID: PaymentsFixture.otherPatientID, appointmentID: nil)
                 #expect(throws: AccountEntryError.negativeBalance(PaymentsFixture.patientID)) {
                     try saveAccountEntries(AccountEntryBatch(updates: [charge]), in: db)
                 }
-                receipt.patientID = PaymentsFixture.otherPatientID
+                receipt.details = .receipt(
+                    source: .patient(PaymentsFixture.otherPatientID), paymentMethod: nil)
                 try saveAccountEntries(AccountEntryBatch(updates: [charge, receipt]), in: db)
                 try PaymentsFixture.assertSummary(db)
-                charge.kind = .adjustment
+                charge.details = .adjustment(patientID: PaymentsFixture.otherPatientID)
                 charge.amount = 70
-                receipt.patientID = nil
-                receipt.category = .otherReceipts
+                receipt.details = .receipt(source: .otherReceipts, paymentMethod: nil)
                 try saveAccountEntries(AccountEntryBatch(updates: [charge, receipt]), in: db)
                 try PaymentsFixture.assertSummary(db)
                 #expect(
@@ -370,6 +426,22 @@ struct PaymentsPersistenceTests {
                         patientID: PaymentsFixture.patientID, to: -1, through: PaymentsFixture.now,
                         in: db)
                 }
+                for details in [
+                    AccountEntry.Details.charge(
+                        patientID: PaymentsFixture.patientID, appointmentID: nil),
+                    .receipt(source: .patient(PaymentsFixture.otherPatientID), paymentMethod: nil),
+                    .receipt(source: .otherReceipts, paymentMethod: nil),
+                ] {
+                    let invalid = AccountEntry(details: details, amount: 1)
+                    #expect(throws: AccountEntryError.invalidFields) {
+                        try correctPatientBalance(
+                            patientID: PaymentsFixture.patientID, to: 2000,
+                            through: PaymentsFixture.now, receipt: invalid, in: db)
+                    }
+                    #expect(
+                        try AccountHistoryRequest(patientID: PaymentsFixture.patientID).fetch(db)
+                            .count == history.count)
+                }
                 try PaymentsFixture.assertSummary(db)
             }
         }
@@ -379,9 +451,12 @@ struct PaymentsPersistenceTests {
         try PaymentsFixture.run { database in
             try database.write { db in
                 var charge = PaymentsFixture.entry(.charge, 50)
-                charge.appointmentID = PaymentsFixture.appointmentID
+                charge.details = .charge(
+                    patientID: PaymentsFixture.patientID,
+                    appointmentID: PaymentsFixture.appointmentID)
                 var mismatch = charge
-                mismatch.patientID = PaymentsFixture.otherPatientID
+                mismatch.details = .charge(
+                    patientID: PaymentsFixture.otherPatientID, appointmentID: charge.appointmentID)
                 #expect(throws: AccountEntryError.appointmentPatientMismatch) {
                     try PaymentsFixture.save([mismatch], in: db)
                 }
@@ -391,7 +466,8 @@ struct PaymentsPersistenceTests {
                     }.execute(db)
                 }
                 var second = PaymentsFixture.entry(.charge, 50)
-                second.appointmentID = charge.appointmentID
+                second.details = .charge(
+                    patientID: PaymentsFixture.patientID, appointmentID: charge.appointmentID)
                 try PaymentsFixture.save(
                     [charge, second, PaymentsFixture.entry(.receipt, 100)], in: db)
                 #expect(
@@ -441,12 +517,12 @@ struct PaymentsPersistenceTests {
                     try saveAccountEntries(AccountEntryBatch(deletes: [missing]), in: db)
                 }
                 var charge = PaymentsFixture.entry(.charge, 10)
-                charge.patientID = missing
+                charge.details = .charge(patientID: missing, appointmentID: nil)
                 #expect(throws: AccountEntryError.missingPatient(missing)) {
                     try PaymentsFixture.save([charge], in: db)
                 }
-                charge.patientID = PaymentsFixture.patientID
-                charge.appointmentID = missing
+                charge.details = .charge(
+                    patientID: PaymentsFixture.patientID, appointmentID: missing)
                 #expect(throws: AccountEntryError.missingAppointment(missing)) {
                     try PaymentsFixture.save([charge], in: db)
                 }
@@ -473,22 +549,23 @@ struct PaymentsQueryTests {
                 let end = FinancialDate.nextDay(start)
                 let entries = [
                     AccountEntry(
-                        kind: .receipt, amount: 100, entryDate: start,
-                        category: .externalConsultations, note: "Referral"),
+                        details: .receipt(source: .externalConsultations, paymentMethod: nil),
+                        amount: 100, entryDate: start, note: "Referral"),
                     AccountEntry(
-                        kind: .receipt, amount: 50, entryDate: start,
-                        category: .externalConsultations, note: "Referral", paymentMethod: .upi),
+                        details: .receipt(source: .externalConsultations, paymentMethod: .upi),
+                        amount: 50, entryDate: start, note: "Referral"),
                     AccountEntry(
-                        kind: .expense, amount: 20, entryDate: start, category: .rent,
-                        note: "Monthly", paymentMethod: .cash),
+                        details: .expense(category: .rent, paymentMethod: .cash), amount: 20,
+                        entryDate: start, note: "Monthly"),
                     AccountEntry(
-                        kind: .expense, amount: 200, entryDate: start, category: .equipmentPurchases
-                    ),
+                        details: .expense(category: .equipmentPurchases, paymentMethod: nil),
+                        amount: 200, entryDate: start),
                     AccountEntry(
-                        kind: .receipt, amount: 999, entryDate: end, category: .otherReceipts),
+                        details: .receipt(source: .otherReceipts, paymentMethod: nil), amount: 999,
+                        entryDate: end),
                     AccountEntry(
-                        kind: .receipt, amount: 888, entryDate: start.addingTimeInterval(-1),
-                        category: .otherReceipts),
+                        details: .receipt(source: .otherReceipts, paymentMethod: nil), amount: 888,
+                        entryDate: start.addingTimeInterval(-1)),
                     PaymentsFixture.entry(.adjustment, 500, date: start),
                     PaymentsFixture.entry(.charge, 500, date: start),
                 ]
@@ -641,9 +718,10 @@ struct PaymentsBoundaryTests {
                     $0.date.now = editTime
                 } operation: {
                     let changed = AccountEntry(
-                        id: charge.id, kind: .charge, amount: 200,
-                        entryDate: PaymentsFixture.earlier, createdDate: editTime,
-                        patientID: PaymentsFixture.patientID, note: " \n ")
+                        id: charge.id,
+                        details: .charge(patientID: PaymentsFixture.patientID, appointmentID: nil),
+                        amount: 200, entryDate: PaymentsFixture.earlier, createdDate: editTime,
+                        note: " \n ")
                     try saveAccountEntries(AccountEntryBatch(updates: [changed]), in: db)
                 }
                 let stored = try #require(try AccountEntryRecord.find(charge.id).fetchOne(db))
@@ -698,7 +776,8 @@ struct PaymentsBoundaryTests {
                         createdAt: PaymentsFixture.now, updatedAt: PaymentsFixture.now)
                     try AppointmentRecord.insert { appointment }.execute(db)
                     var charge = PaymentsFixture.entry(.charge, 100)
-                    charge.appointmentID = appointment.id
+                    charge.details = .charge(
+                        patientID: PaymentsFixture.patientID, appointmentID: appointment.id)
                     try PaymentsFixture.save([charge], in: db)
                 }
                 #expect(
@@ -711,8 +790,8 @@ struct PaymentsBoundaryTests {
         try PaymentsFixture.run { _ in
             var first = PaymentsFixture.entry(.charge, 50)
             let second = AccountEntry(
-                kind: .charge, amount: 50, entryDate: PaymentsFixture.now,
-                createdDate: PaymentsFixture.earlier, patientID: PaymentsFixture.patientID)
+                details: .charge(patientID: PaymentsFixture.patientID, appointmentID: nil),
+                amount: 50, entryDate: PaymentsFixture.now, createdDate: PaymentsFixture.earlier)
             let receipt = PaymentsFixture.entry(.receipt, 60)
             let ledger = try PatientLedger(
                 entries: [first, second, receipt], patientID: PaymentsFixture.patientID)
@@ -739,9 +818,8 @@ struct PaymentsBoundaryTests {
                 let receipt = PaymentsFixture.entry(.receipt, 1)
                 try PaymentsFixture.save([receipt], in: db)
                 var negative = receipt
-                negative.kind = .adjustment
+                negative.details = .adjustment(patientID: PaymentsFixture.patientID)
                 negative.amount = -1
-                negative.category = nil
                 try saveAccountEntries(AccountEntryBatch(updates: [negative]), in: db)
                 var positive = negative
                 positive.amount = 1
@@ -771,8 +849,10 @@ struct PaymentsBoundaryTests {
                 // Simulate a partial import whose grouped SUM cannot fit in an integer.
                 let p = PaymentsFixture.otherPatientID
                 try db.execute(sql: "DROP TRIGGER accountEntry_summary_insert")
-                let huge = AccountEntry(kind: .charge, amount: Int.max, patientID: p)
-                let one = AccountEntry(kind: .charge, amount: 1, patientID: p)
+                let huge = AccountEntry(
+                    details: .charge(patientID: p, appointmentID: nil), amount: Int.max)
+                let one = AccountEntry(
+                    details: .charge(patientID: p, appointmentID: nil), amount: 1)
                 for entry in [huge, one] {
                     try AccountEntryRecord.insert {
                         AccountEntryRecord(entry, updatedAt: PaymentsFixture.now)

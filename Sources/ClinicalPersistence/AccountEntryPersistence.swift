@@ -162,10 +162,12 @@ public nonisolated func correctPatientBalance(
         guard !overflow else { throw AccountEntryError.overflow }
         var entries = [
             AccountEntry(
-                kind: .adjustment, amount: difference, entryDate: date, patientID: patientID)
+                details: .adjustment(patientID: patientID), amount: difference, entryDate: date)
         ]
         if let receipt {
-            guard receipt.kind == .receipt, receipt.patientID == patientID else {
+            guard case .receipt(.patient(let receiptPatientID), _) = receipt.details,
+                receiptPatientID == patientID
+            else {
                 throw AccountEntryError.invalidFields
             }
             entries.append(receipt)

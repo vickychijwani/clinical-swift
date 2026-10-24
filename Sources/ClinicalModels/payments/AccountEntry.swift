@@ -68,66 +68,126 @@ public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
         case other = "other"
     }
 
+    public enum ReceiptSource: Hashable, Sendable {
+        case patient(UUID)
+        case externalConsultations, referralCommissions, otherReceipts
+
+        public var category: Category {
+            switch self {
+            case .patient: .patientFees
+            case .externalConsultations: .externalConsultations
+            case .referralCommissions: .referralCommissions
+            case .otherReceipts: .otherReceipts
+            }
+        }
+    }
+
+    public enum ExpenseCategory: String, CaseIterable, Sendable {
+        case rent, staff, consultants, utilities, materials, repairsAndMaintenance
+        case otherOperatingCosts, equipmentPurchases, clinicImprovements
+
+        public var category: Category {
+            switch self {
+            case .rent: .rent
+            case .staff: .staff
+            case .consultants: .consultants
+            case .utilities: .utilities
+            case .materials: .materials
+            case .repairsAndMaintenance: .repairsAndMaintenance
+            case .otherOperatingCosts: .otherOperatingCosts
+            case .equipmentPurchases: .equipmentPurchases
+            case .clinicImprovements: .clinicImprovements
+            }
+        }
+    }
+
+    public enum Details: Hashable, Sendable {
+        case charge(patientID: UUID, appointmentID: UUID?)
+        case receipt(source: ReceiptSource, paymentMethod: PaymentMethod?)
+        case expense(category: ExpenseCategory, paymentMethod: PaymentMethod?)
+        case adjustment(patientID: UUID)
+    }
+
     public let id: UUID
-    public var kind: Kind
+    public var details: Details
     public var amount: Int
     public var entryDate: Date
     public let createdDate: Date
-    public var patientID: UUID?
-    public var appointmentID: UUID?
-    public var category: Category?
     public var note: String?
-    public var paymentMethod: PaymentMethod?
+
+    public var kind: Kind {
+        switch details {
+        case .charge: .charge
+        case .receipt: .receipt
+        case .expense: .expense
+        case .adjustment: .adjustment
+        }
+    }
+
+    public var patientID: UUID? {
+        switch details {
+        case .charge(let id, _), .adjustment(let id), .receipt(.patient(let id), _): id
+        case .receipt, .expense: nil
+        }
+    }
+
+    public var appointmentID: UUID? {
+        if case .charge(_, let id) = details { id } else { nil }
+    }
+
+    public var category: Category? {
+        switch details {
+        case .receipt(let source, _): source.category
+        case .expense(let category, _): category.category
+        case .charge, .adjustment: nil
+        }
+    }
+
+    public var paymentMethod: PaymentMethod? {
+        switch details {
+        case .receipt(_, let method), .expense(_, let method): method
+        case .charge, .adjustment: nil
+        }
+    }
 
     public init(
-        id: UUID = UUID(), kind: Kind, amount: Int, entryDate: Date? = nil,
-        createdDate: Date? = nil, patientID: UUID? = nil, appointmentID: UUID? = nil,
-        category: Category? = nil, note: String? = nil, paymentMethod: PaymentMethod? = nil
+        id: UUID = UUID(), details: Details, amount: Int, entryDate: Date? = nil,
+        createdDate: Date? = nil, note: String? = nil
     ) {
         @Dependency(\.date.now) var now
         self.id = id
-        self.kind = kind
+        self.details = details
         self.amount = amount
         self.entryDate = FinancialDate.day(entryDate ?? now)
         self.createdDate = createdDate ?? now
-        self.patientID = patientID
-        self.appointmentID = appointmentID
-        self.category = category
         self.note = note?.nilIfBlank
-        self.paymentMethod = paymentMethod
     }
 
-    public func validate() throws {
+    /// Reports validate values without a dependency on today's date.
+    public func validateValues() throws {
         guard amount != 0, amount != Int.min, kind == .adjustment || amount > 0 else {
             throw AccountEntryError.invalidAmount
         }
         guard entryDate.timeIntervalSinceReferenceDate.isFinite,
-            FinancialDate.day(entryDate) <= FinancialDate.today
-        else { throw AccountEntryError.futureDate }
-        let valid: Bool
-        switch kind {
-        case .charge:
-            valid = patientID != nil && category == nil && paymentMethod == nil
-        case .adjustment:
-            valid =
-                patientID != nil && appointmentID == nil && category == nil && paymentMethod == nil
-        case .receipt:
-            valid =
-                category?.group == .incoming && appointmentID == nil
-                && ((category == .patientFees) == (patientID != nil))
-        case .expense:
-            valid =
-                patientID == nil && appointmentID == nil && category != nil
-                && category?.group != .incoming
+            createdDate.timeIntervalSinceReferenceDate.isFinite
+        else { throw AccountEntryError.invalidFields }
+    }
+
+    public func validate() throws {
+        try validateValues()
+        guard FinancialDate.day(entryDate) <= FinancialDate.today else {
+            throw AccountEntryError.futureDate
         }
-        guard valid else { throw AccountEntryError.invalidFields }
     }
 
     public var balanceChange: Int {
         get throws {
-            guard amount != Int.min else { throw AccountEntryError.invalidAmount }
-            guard patientID != nil else { return 0 }
-            return kind == .receipt ? -amount : amount
+            try validateValues()
+            switch details {
+            case .charge, .adjustment: return amount
+            case .receipt(.patient, _): return -amount
+            case .receipt, .expense: return 0
+            }
         }
     }
 }

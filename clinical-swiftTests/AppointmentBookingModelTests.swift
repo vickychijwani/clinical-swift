@@ -403,8 +403,8 @@ struct AppointmentBookingModelTests {
                     createdAt: now, updatedAt: now)
                 try AppointmentRecord.insert { record }.execute(db)
                 let charge = AccountEntry(
-                    kind: .charge, amount: 500, entryDate: now,
-                    createdDate: now, patientID: patient.id, appointmentID: appointment.id)
+                    details: .charge(patientID: patient.id, appointmentID: appointment.id),
+                    amount: 500, entryDate: now, createdDate: now)
                 try saveAccountEntries(AccountEntryBatch(inserts: [charge]), in: db)
             }
             var didSave = false

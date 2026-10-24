@@ -46,10 +46,44 @@ public nonisolated struct AccountEntryRecord: Identifiable, Sendable {
             }
             return method
         }
-        return AccountEntry(
-            id: id, kind: kind, amount: amount, entryDate: entryDate,
-            createdDate: createdAt, patientID: patientID, appointmentID: appointmentID,
-            category: category, note: note, paymentMethod: method)
+        let details: AccountEntry.Details
+        switch kind {
+        case .charge:
+            guard let patientID, category == nil, method == nil else {
+                throw AccountEntryError.invalidFields
+            }
+            details = .charge(patientID: patientID, appointmentID: appointmentID)
+        case .adjustment:
+            guard let patientID, appointmentID == nil, category == nil, method == nil else {
+                throw AccountEntryError.invalidFields
+            }
+            details = .adjustment(patientID: patientID)
+        case .receipt:
+            guard appointmentID == nil else { throw AccountEntryError.invalidFields }
+            let source: AccountEntry.ReceiptSource
+            switch (category, patientID) {
+            case (.patientFees, .some(let id)): source = .patient(id)
+            case (.externalConsultations, nil): source = .externalConsultations
+            case (.referralCommissions, nil): source = .referralCommissions
+            case (.otherReceipts, nil): source = .otherReceipts
+            default: throw AccountEntryError.invalidFields
+            }
+            details = .receipt(source: source, paymentMethod: method)
+        case .expense:
+            guard patientID == nil, appointmentID == nil,
+                let category,
+                let expense = AccountEntry.ExpenseCategory(rawValue: category.rawValue)
+            else { throw AccountEntryError.invalidFields }
+            details = .expense(category: expense, paymentMethod: method)
+        }
+        guard entryDate.timeIntervalSinceReferenceDate.isFinite,
+            createdAt.timeIntervalSinceReferenceDate.isFinite
+        else { throw AccountEntryError.invalidFields }
+        let entry = AccountEntry(
+            id: id, details: details, amount: amount, entryDate: entryDate,
+            createdDate: createdAt, note: note)
+        try entry.validateValues()
+        return entry
     }
 }
 
