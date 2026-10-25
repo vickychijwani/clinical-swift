@@ -132,6 +132,15 @@ struct CommentHookTests {
                 try expect(result.isEmpty)
             }
         }
+        test("Snapshot fingerprints are stable across temporary files") {
+            try withFixture { fixture in
+                try fixture.write("App.swift", "let tab = 2\n")
+                let first = try audit(fixture.root)
+                let second = try audit(fixture.root)
+                try expect(!first.fingerprint.isEmpty)
+                try expect(first.fingerprint == second.fingerprint)
+            }
+        }
         test("Missing comment blocks") {
             try withFixture { fixture in
                 try fixture.write("App.swift", "let tab = 1\n")

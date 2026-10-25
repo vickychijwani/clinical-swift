@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 struct Comment: Codable, Equatable {
@@ -162,8 +161,15 @@ func audit(_ root: URL) throws -> (missing: [Comment], fingerprint: String) {
     }
     let encoder = JSONEncoder()
     encoder.outputFormatting = .sortedKeys
-    let digest = SHA256.hash(data: try encoder.encode(snapshot))
-    let fingerprint = digest.map { String(("0" + String($0, radix: 16)).suffix(2)) }.joined()
+    // Use Git so the fingerprint needs no platform-specific crypto module.
+    let directory = FileManager.default.temporaryDirectory.appending(
+        path: "comment-audit-\(UUID())")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appending(path: "snapshot.json")
+    try encoder.encode(snapshot).write(to: file)
+    let fingerprint = try git(root, ["hash-object", "--no-filters", "--", file.path]).text
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     return (missing, fingerprint)
 }
 
