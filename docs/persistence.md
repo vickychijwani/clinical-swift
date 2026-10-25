@@ -48,6 +48,9 @@ and any other sync engines like PowerSync):
 
 General invariants:
 
+- Patient balances are derived, device-local summaries maintained by entry triggers. Exclude them
+  from future sync.
+
 - The live database resides in the `group.in.bitehaus.clinical` App Group so the WidgetKit extension
   can read it. The app remains the only migration and write owner; extensions open a coordinated
   read-only pool and never create or migrate the database.
@@ -121,7 +124,8 @@ General invariants:
 
 - Unknown patients can have `name == nil`; joins should use `Patient.unknownDisplayName` only for
   display rows.
-- Deleting a patient cascade deletes their appointments.
+- Deleting a patient cascade deletes their appointments only when no financial entries reference
+  that patient.
 - Debug sample data is seed data only for fresh debug databases. Release databases start empty.
 
 ## Backup and restore

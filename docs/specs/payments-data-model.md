@@ -1,5 +1,5 @@
 ----
-status: pending
+status: implemented
 ----
 
 # Payments Data Model
@@ -195,7 +195,8 @@ screens must support; payment screens are separate work.
 
 | Alternative | Decision and reason |
 | --- | --- |
-| Separate charge, payment, and allocation objects | One entry type and derived oldest-first coverage avoid allocation management. This gives up manual splits and permanent allocation history, which the clinic does not need. |
+| Separate tables for each entry kind | Keep one table for the shared lifecycle, combined patient history, cash reports, and batch saves. Conditional field constraints stay at the record boundary; four explicit Swift cases carry only the fields each kind needs. Separate tables would also work but add coordination for these few fields. |
+| Manual receipt allocation records | Derive oldest-first coverage to avoid allocation management. This gives up manual splits and permanent allocation history, which the clinic does not need. This choice is independent of the number of entry types or tables. |
 | Split one receipt into appointment-specific payment records | Keep one receipt for the full amount. This avoids grouped edits and duplicate receipt details when a payment covers several appointments. |
 | Store only a current patient balance | Keep entries so the doctor can trace charges, receipts, and corrections. A balance alone loses that context and cannot explain appointment coverage. |
 | Replace adjustments with charge edits | Edit known mistakes directly. Keep adjustments for opening balances and incomplete history so debt corrections do not change unrelated charges or appear as new treatment fees. |

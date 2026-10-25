@@ -124,6 +124,20 @@ struct BackupSnapshotTests {
             let contents = try BackupFixture.contents(restored)
             #expect(contents["patients"] == original["patients"])
             #expect(contents["appointments"] == original["appointments"])
+            #expect(contents["accountEntries"] == original["accountEntries"])
+            #expect(contents["patientBalances"] == original["patientBalances"])
+            let financialState = try restored.read { db in
+                (
+                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM accountEntries"),
+                    try Int.fetchOne(
+                        db,
+                        sql:
+                            "SELECT balance FROM patientBalances WHERE id = '10000000-0000-0000-0000-000000000001'"
+                    )
+                )
+            }
+            #expect(financialState.0 == 4)
+            #expect(financialState.1 == 1000)
             let pending = try restored.read {
                 try String.fetchAll(
                     $0,

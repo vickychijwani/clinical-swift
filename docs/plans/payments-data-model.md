@@ -1,8 +1,8 @@
 # Payments data model implementation plan
 
-Status: ready for implementation. No app code has been changed. The source feature specification
-is [payments data model](../specs/payments-data-model.md), which remains pending until this work is
-implemented.
+Status: implemented. The data layer and required checks are complete. The source feature
+specification is [payments data model](../specs/payments-data-model.md). Durable rules are in
+[payments](../payments.md). Payment screens remain a separate work item.
 
 ## Agreed scope
 
