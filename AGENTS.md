@@ -72,3 +72,4 @@ Files under `docs/specs/` are feature specifications - mutable while in `pending
 - Add code comments and documentation comments as needed. Use short, direct sentences and familiar words. Explain the concrete reason or result, not actions already clear from the code.
 - When changing or moving code, preserve existing comments that still apply and move them with the code. Update comments when behavior, names, or test references change. Remove a comment only when its purpose no longer applies or an equivalent comment replaces it. Before finishing, check deleted comments in the diff so that design decisions and regression explanations are not lost.
 - The repository Stop hook checks for missing or rewritten Swift comments. Resolve each finding before recording a review; do not record a review only to pass the hook. See `.codex/hooks/README.md` for the check and review commands.
+- Use Swift for scripts, not Python.

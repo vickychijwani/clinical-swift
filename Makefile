@@ -39,15 +39,14 @@ ARCHIVE_PATH := $(ARCHIVE_DIR)/$(APP_NAME)-$(BUILD_NUMBER).xcarchive
 EXPORT_PATH := $(EXPORT_DIR)/$(APP_NAME)-$(BUILD_NUMBER)
 TESTFLIGHT_EXPORT_OPTIONS := $(CURDIR)/TestFlightExportOptions.plist
 BACKUP_ARCHIVE_SCRIPT := $(CURDIR)/scripts/backup_archive_to_github.sh
-NEXT_BUILD_NUMBER_SCRIPT := $(CURDIR)/scripts/next_app_store_build_number.swift
-TRIGGER_XCODE_CLOUD_BUILD_SCRIPT := $(CURDIR)/scripts/trigger_xcode_cloud_build.swift
+APP_STORE_CONNECT_SCRIPT := $(CURDIR)/scripts/app_store_connect.swift
 
 DESTINATION := platform=iOS Simulator,id=$(SIMULATOR_ID)
 ARCHIVE_DESTINATION := generic/platform=iOS
 XCBEAUTIFY := xcbeautify -q --disable-logging
 XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
-RESOLVE_BUILD_NUMBER := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" xcrun swift "$(NEXT_BUILD_NUMBER_SCRIPT)" "$(BUNDLE_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
-TRIGGER_XCODE_CLOUD_BUILD := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" xcrun swift "$(TRIGGER_XCODE_CLOUD_BUILD_SCRIPT)" "$(XCODE_CLOUD_WORKFLOW_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
+RESOLVE_BUILD_NUMBER := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" $(SWIFT) "$(APP_STORE_CONNECT_SCRIPT)" next-build-number "$(BUNDLE_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
+TRIGGER_XCODE_CLOUD_BUILD := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" $(SWIFT) "$(APP_STORE_CONNECT_SCRIPT)" trigger-build "$(XCODE_CLOUD_WORKFLOW_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
 XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
 	-configuration "$(CONFIGURATION)" \
 	-destination "$(DESTINATION)" \
@@ -137,7 +136,9 @@ check-simulator:
 	@test -n "$(SIMULATOR_ID)" || { echo "No running iOS simulator was found, and fallback $(SIMULATOR) (iOS $(SIMULATOR_OS)) is unavailable."; exit 1; }
 
 check-app-store-connect-tools:
-	@command -v xcrun >/dev/null
+	@command -v $(firstword $(SWIFT)) >/dev/null
+	@command -v openssl >/dev/null
+	@test -f "$(APP_STORE_CONNECT_SCRIPT)" || { echo "App Store Connect script is missing: $(APP_STORE_CONNECT_SCRIPT)"; exit 1; }
 
 check-github-tools:
 	@command -v gh >/dev/null || { echo "GitHub CLI is required. Install it with: brew install gh"; exit 1; }
@@ -155,7 +156,6 @@ next-build-number: check-app-store-connect-tools
 	printf "Next App Store Connect build number: %s\n" "$$number"
 
 xcode-cloud-build: check-app-store-connect-tools
-	@test -f "$(TRIGGER_XCODE_CLOUD_BUILD_SCRIPT)" || { echo "Xcode Cloud trigger script is missing: $(TRIGGER_XCODE_CLOUD_BUILD_SCRIPT)"; exit 1; }
 	@$(TRIGGER_XCODE_CLOUD_BUILD)
 
 resolve-packages: check-tools prepare
