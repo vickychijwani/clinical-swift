@@ -8,6 +8,9 @@ struct ClinicalApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var router: Router
     @State private var backups: BackupCoordinator?
+    #if DEBUG
+        @State private var bookingSnippets: BookingSnippetStore?
+    #endif
     private let startupError: String?
     private let widgetTimelineInvalidator: WidgetTimelineInvalidator?
     private let calendarSyncCoordinator: CalendarSyncCoordinator?
@@ -60,6 +63,11 @@ struct ClinicalApp: App {
             AppDependencyManager.shared.add(
                 dependency: ClinicalAppActions(router: router, database: database)
             )
+            #if DEBUG
+                let snippets = BookingSnippetStore(database: database)
+                _bookingSnippets = State(initialValue: snippets)
+                AppDependencyManager.shared.add(dependency: snippets)
+            #endif
         } catch {
             _backups = State(initialValue: nil)
             widgetTimelineInvalidator = nil
@@ -81,6 +89,9 @@ struct ClinicalApp: App {
                         #if DEBUG
                             if CommandLine.arguments.contains("--ui-testing-appointment-hitboxes") {
                                 AppointmentHitboxUITestView()
+                            } else if CommandLine.arguments.contains("--booking-snippet-playground")
+                            {
+                                NavigationStack { BookingSnippetPlayground() }
                             } else {
                                 ContentView(router: router)
                             }
@@ -88,6 +99,9 @@ struct ClinicalApp: App {
                             ContentView(router: router)
                         #endif
                     }
+                    #if DEBUG
+                        .environment(bookingSnippets)
+                    #endif
                     .environment(backups)
                 } else {
                     #if INTERNAL_BACKUP_CHECK
