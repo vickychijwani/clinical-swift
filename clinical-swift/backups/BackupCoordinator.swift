@@ -226,15 +226,18 @@ final class BackupCoordinator {
     }
 
     func registerBackgroundTask() {
+        // The launch handler inherits MainActor isolation, so iOS must call it on the main queue.
         BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: Self.backgroundIdentifier, using: nil
+            forTaskWithIdentifier: Self.backgroundIdentifier, using: .main
         ) { [weak self] task in
             Task { @MainActor in
                 guard let self else {
                     task.setTaskCompleted(success: false)
                     return
                 }
-                task.expirationHandler = { [weak self] in Task { @MainActor in self?.cancel() } }
+                task.expirationHandler = { @Sendable [weak self] in
+                    Task { @MainActor in self?.cancel() }
+                }
                 NotificationCenter.default.post(name: Database.resumeNotification, object: nil)
                 let success = await self.opportunity()
                 task.setTaskCompleted(success: success)
