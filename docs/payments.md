@@ -1,101 +1,62 @@
 # Payments
 
-## Domain and storage
+One account-entry table keeps the shared entry lifecycle, patient history, cash
+reports, and combined saves together. Nullable storage fields stay at the record
+boundary; reads must reject invalid combinations. Automatic coverage is a separate
+decision: it avoids manual receipt allocation work for the clinic.
 
-Keep one account-entry table because all kinds share identity, dates, notes, backup,
-and the create, edit, and delete lifecycle. Patient history, cash reports, and batch
-saves combine kinds. Several tables would also work, but add dispatch and combined
-queries for these few fields. Nullable columns and conditional constraints stay at
-the record boundary. Reads must reject invalid stored combinations.
+## Entry types and coverage
 
-Swift entries use four explicit cases. A charge carries its patient and optional
-appointment. A receipt carries a patient source or another incoming source. Patient
-sources imply patientFees. Expenses admit only operating and capital categories.
-Adjustments carry only their patient. Kind-specific fields are derived, so a kind
-change must supply the new case's required values. Amounts and dates still need
-validation; writes also check the current date and database references.
+- A **charge** records treatment fees and increases patient debt. It can link to
+  an appointment.
+- A **receipt** records incoming money. A patient receipt reduces that patient's
+  debt; other receipts record clinic income without changing patient debt.
+- An **expense** records outgoing money, such as rent or equipment costs. It does
+  not change patient debt.
+- An **adjustment** increases or decreases patient debt without recording treatment
+  fees or money received or paid. Use it for opening balances or incomplete history.
 
-This storage choice is separate from derived coverage. Automatic coverage avoids
-manual allocation work. Separate types or tables would not require manual allocation.
+**Coverage** is the part of a charge or positive adjustment met by patient receipts
+and negative adjustments. The app calculates it from the full patient ledger,
+oldest obligation first. For charges of Rs. 3,000 and Rs. 2,000, a Rs. 4,000 receipt
+covers the first charge fully and Rs. 1,000 of the second.
 
-## Ledger and local saves
+**Allocation** assigns a particular receipt to a particular charge. The app does
+not store these links or ask the doctor to manage them. It combines receipts and
+negative adjustments to calculate coverage. Any excess remains unallocated credit.
 
-Account entries are the source for debt, coverage, and cash reports. Amounts are
-whole rupees. Charges, receipts, and expenses must be positive. Adjustments are
-signed and nonzero. Blank notes become nil. An absent payment method is unknown.
+## Financial rules
 
-All local financial writes use the account-entry batch boundary, including edits
-and deletion. It reads old ownership, checks fields and references, applies the
-complete batch, then checks each affected patient's current summary. A patient
-move checks both patients. The final balance must be nonnegative. Intermediate
-credit is allowed, so charge and receipt corrections can succeed together.
-The database-scoped batch uses a savepoint: catching its error in an outer write
-cannot leave partial changes. A future appointment-and-payment action must let
-that error leave its outer transaction so the appointment also rolls back.
-Raw SQL and record writes are not a supported financial mutation API.
+- Amounts are whole rupees. Financial arithmetic must fail on integer overflow.
+  Adjustments change debt without creating treatment fees or cash movements.
+  An unknown payment method does not mean cash. Net cash flow includes capital
+  expenses and is not profit.
+- A complete local save must leave each affected patient's current balance
+  nonnegative, including both patients when an entry moves. Intermediate credit
+  is allowed so related corrections can succeed together. Use the batch write
+  boundary; a caught failure must not leave part of the batch saved. Combined
+  appointment and payment actions must propagate failure to their outer transaction.
+- Historical balances remain signed. A receipt before its charge can create
+  historical credit even when the final current balance is nonnegative. Backdated
+  edits change past reports; creation timestamps are not an edit audit trail.
+- Financial days use the Gregorian calendar in Asia/Kolkata, independent of device
+  settings. Periods include the start day and exclude the end day. A balance through
+  a selected date includes that whole day. Writes reject future clinic days.
+- Known-balance corrections read stored history through the selected date inside
+  the transaction, before adding a paired receipt. Screen state can be stale.
+- Patient receipts belong to patients rather than appointments. Order coverage
+  obligations by financial date, creation time, then UUID string. No appointment
+  payment-status record is stored.
+- Cancellation keeps linked charges. Financial history prevents patient deletion
+  even when settled. Linked charges block appointment deletion and patient changes.
 
-New zero entries are omitted. Editing to zero is an error; use explicit deletion.
-Edits preserve identity and creation time. Duplicate creation must fail rather
-than replace financial history. Known mistakes use entry edits. Opening balances
-and incomplete-history corrections use adjustments so they do not create treatment
-fees or cash. A known-balance correction reads the balance through its selected
-date inside the write, before adding a paired receipt. It cannot use screen state.
-Financial arithmetic must fail on integer overflow.
+## Derived balances
 
-## Dates and reports
+Current summaries are rebuildable, device-local data maintained by entry triggers.
+They allow signed totals for temporary credit and partial imports. Missing means
+zero. Rebuild for repair or imports that bypass triggers, not on each read or launch.
+SQLite snapshots retain these summaries; normal restore does not rebuild them.
 
-Financial dates use the Gregorian calendar in Asia/Kolkata, independent of device
-settings. Store the start of the clinic day with the existing SQLite Date mapping.
-Recording timestamps remain full instants. Normalize before validation; reject
-future clinic dates. Periods include their start day and exclude their end day.
-A balance through a selected date includes that whole clinic day.
-
-Historical balances are signed. A receipt backdated before its charge is valid
-when the final current balance is nonnegative. It can create historical credit;
-do not reject it or change the historical result to zero. Backdated edits change
-past reports. Recording timestamps do not provide an edit audit trail.
-
-Cash reports include receipts and expenses only. Net cash flow includes capital
-expenses and is not profit. Categories determine reporting groups. Notes can
-supply category-scoped suggestions; they are not separate payee records.
-
-## References and coverage
-
-SQLite guards charge ownership as well as the supported write API. A linked charge
-must belong to the appointment's patient. Several charges can link to one
-appointment. Charges can link to any stored appointment status. Cancellation
-keeps charges. Physical deletion and patient reassignment are blocked while
-charges remain linked. A patient with financial history cannot be deleted even
-when the balance is zero. A derived summary alone does not block patient deletion.
-
-Receipts belong to patients, not appointments. A receipt uses patientFees if and
-only if it has a patient. Other incoming categories and all expenses have no
-patient. Charge and adjustment categories and payment methods are absent.
-
-Derive oldest-first coverage from the full patient ledger. Order obligations by
-financial date, creation time, then UUID string. Positive adjustments take their
-place with charges. Receipts and negative adjustments cover these obligations;
-only receipts count as money received. Appointment totals include all linked
-charges. Coverage cannot exceed an obligation. Historical excess coverage remains
-unallocated credit, so outstanding obligations minus that credit equals the
-signed balance. No allocation or appointment payment-status record is stored.
-
-## Summaries, observation, and sync
-
-Entry triggers maintain patientBalances within each transaction. A missing summary
-means zero. Do not constrain summaries to nonnegative values: temporary credit
-and partial future imports need signed totals. Read final summaries for local-save
-validation. Use observed summary joins for current balances and positive-balance
-filters. Join one summary per patient; summing ledger rows across appointments
-would multiply debt. Historical reports and coverage still read entries.
-
-Rebuild summaries transactionally from grouped ledger sums for repair or an import
-that bypasses entry writes. Replace summaries instead of adding to them. Do not
-rebuild on every list read or launch. Entries and summaries share the existing
-SQLite backup and restore snapshot.
-
-Future cross-device sync must exclude summaries and apply entries with triggers
-installed. A new device builds summaries as entries arrive. Do not treat a partial
-initial import as complete or reject receipts whose charges have not arrived.
-Verify the sync engine's trigger behavior and define conflicts before adding sync:
-concurrent offline receipts can produce credit after valid local saves.
+Future sync must exclude summaries and apply entries with triggers installed.
+Verify the sync engine's trigger behavior before adding sync. A partial import can
+contain receipts before charges, and concurrent valid offline saves can create credit.

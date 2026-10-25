@@ -26,7 +26,6 @@ format version 1, dataset and snapshot IDs, whole-second UTC capture time, app
 version, ordered migration IDs, byte count, and SHA-256 of the database bytes.
 
 Financial entries and their trigger-maintained balance summaries use the same SQLite snapshot.
-Do not export them to a separate backup format.
 
 The SQLite backup API captures committed WAL changes consistently. The closed
 snapshot uses DELETE journal mode and opens read-only without sidecars. Integrity,

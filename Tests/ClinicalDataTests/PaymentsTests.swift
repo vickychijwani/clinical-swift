@@ -44,10 +44,16 @@ nonisolated enum PaymentsFixture {
         return database
     }
 
-    static func run(_ operation: (DatabaseQueue) throws -> Void) throws {
+    static func withClock(_ operation: () throws -> Void) throws {
         try withDependencies {
             $0.date.now = now
         } operation: {
+            try operation()
+        }
+    }
+
+    static func run(_ operation: (DatabaseQueue) throws -> Void) throws {
+        try withClock {
             try operation(database())
         }
     }
@@ -164,7 +170,7 @@ struct PaymentsModelTests {
     }
 
     @Test func normalizationMappingAndStoredEnumErrors() throws {
-        try PaymentsFixture.run { _ in
+        try PaymentsFixture.withClock {
             var entry = PaymentsFixture.entry(.charge, 5)
             entry.note = " \n "
             let record = AccountEntryRecord(entry, updatedAt: PaymentsFixture.now)
@@ -190,7 +196,7 @@ struct PaymentsModelTests {
     }
 
     @Test func reportsShareValueChecksWithoutRejectingFutureDates() throws {
-        try PaymentsFixture.run { _ in
+        try PaymentsFixture.withClock {
             let patientID = PaymentsFixture.patientID
             let future = FinancialDate.nextDay(PaymentsFixture.now)
             let receipt = PaymentsFixture.entry(.receipt, 5, date: future)
@@ -245,7 +251,7 @@ struct PaymentsModelTests {
     }
 
     @Test func coverageIncludesAdjustmentsAndUsesDeterministicOrder() throws {
-        try PaymentsFixture.run { _ in
+        try PaymentsFixture.withClock {
             let p = PaymentsFixture.patientID
             let a = PaymentsFixture.appointmentID
             let ids = [
@@ -447,6 +453,32 @@ struct PaymentsPersistenceTests {
         }
     }
 
+    @Test func balanceCorrectionDoesNotCalculateReceiptCoverage() throws {
+        try PaymentsFixture.run { database in
+            try database.write { db in
+                // Total receipts exceed Int.max, but each running balance fits in an integer.
+                for (index, values) in [
+                    (AccountEntry.Kind.charge, Int.max), (.receipt, Int.max),
+                    (.charge, 1), (.receipt, 1),
+                ].enumerated() {
+                    let entry = AccountEntry(
+                        details: PaymentsFixture.entry(values.0, values.1).details,
+                        amount: values.1, entryDate: PaymentsFixture.earlier,
+                        createdDate: PaymentsFixture.now.addingTimeInterval(Double(index)))
+                    try PaymentsFixture.save([entry], in: db)
+                }
+                try correctPatientBalance(
+                    patientID: PaymentsFixture.patientID, to: 1, through: PaymentsFixture.now,
+                    in: db)
+                #expect(
+                    try currentPatientBalance(patientID: PaymentsFixture.patientID, in: db) == 1)
+                let history = try AccountHistoryRequest(patientID: PaymentsFixture.patientID).fetch(
+                    db)
+                #expect(history.filter { $0.kind == .adjustment }.map(\.amount) == [1])
+            }
+        }
+    }
+
     @Test func referenceRulesHoldForRawWritesAndSettledHistory() throws {
         try PaymentsFixture.run { database in
             try database.write { db in
@@ -609,6 +641,11 @@ struct PaymentsQueryTests {
                 }
                 #expect(throws: AccountEntryError.invalidStoredValue("unexpected")) {
                     try AccountHistoryRequest(patientID: PaymentsFixture.patientID).fetch(db)
+                }
+                #expect(throws: AccountEntryError.invalidStoredValue("unexpected")) {
+                    try correctPatientBalance(
+                        patientID: PaymentsFixture.patientID, to: 100,
+                        through: PaymentsFixture.now, in: db)
                 }
             }
         }
@@ -787,7 +824,7 @@ struct PaymentsBoundaryTests {
     }
 
     @Test func pureCoverageChangesWithFinancialDateAndCreationOrder() throws {
-        try PaymentsFixture.run { _ in
+        try PaymentsFixture.withClock {
             var first = PaymentsFixture.entry(.charge, 50)
             let second = AccountEntry(
                 details: .charge(patientID: PaymentsFixture.patientID, appointmentID: nil),
@@ -802,6 +839,34 @@ struct PaymentsBoundaryTests {
                 entries: [first, second, receipt], patientID: PaymentsFixture.patientID)
             #expect(backdated.charges.map(\.entryID) == [first.id, second.id])
             #expect(backdated.charges.map(\.covered) == [50, 10])
+        }
+    }
+
+    @Test func metadataEditsKeepBalanceAtIntegerLimit() throws {
+        try PaymentsFixture.run { database in
+            try database.write { db in
+                var receipt = PaymentsFixture.entry(.receipt, Int.max)
+                try PaymentsFixture.save(
+                    [
+                        PaymentsFixture.entry(.charge, Int.max), receipt,
+                        PaymentsFixture.entry(.charge, Int.max),
+                    ], in: db)
+                let summary = try PatientBalanceRecord.find(PaymentsFixture.patientID).fetchOne(db)
+                // Removing this receipt first would overflow, although its contribution is unchanged.
+                receipt.note = "Updated note"
+                receipt.entryDate = FinancialDate.day(PaymentsFixture.earlier)
+                receipt.details = .receipt(
+                    source: .patient(PaymentsFixture.patientID), paymentMethod: .upi)
+                try saveAccountEntries(AccountEntryBatch(updates: [receipt]), in: db)
+                let stored = try #require(try AccountEntryRecord.find(receipt.id).fetchOne(db))
+                #expect(try stored.entry() == receipt)
+                #expect(
+                    try currentPatientBalance(patientID: PaymentsFixture.patientID, in: db)
+                        == Int.max)
+                let unchanged = try PatientBalanceRecord.find(PaymentsFixture.patientID).fetchOne(
+                    db)
+                #expect(unchanged?.updatedAt == summary?.updatedAt)
+            }
         }
     }
 

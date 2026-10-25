@@ -58,9 +58,14 @@ nonisolated func createAccountEntrySchema(_ db: Database) throws {
         var body = ""
         if oldRow { body += summaryChange(row: "OLD", removing: true) }
         if newRow { body += summaryChange(row: "NEW", removing: false) }
+        // Metadata edits must not remove and reapply an unchanged balance contribution.
+        let condition =
+            event == "UPDATE"
+            ? "WHEN OLD.patientID IS NOT NEW.patientID OR OLD.kind IS NOT NEW.kind OR OLD.amount IS NOT NEW.amount"
+            : ""
         try db.execute(
             sql:
-                "CREATE TRIGGER accountEntry_summary_\(event.lowercased()) AFTER \(event) ON accountEntries BEGIN \(body) END;"
+                "CREATE TRIGGER accountEntry_summary_\(event.lowercased()) AFTER \(event) ON accountEntries \(condition) BEGIN \(body) END;"
         )
     }
     try rebuildPatientBalances(in: db)

@@ -19,10 +19,6 @@ This document captures the deliberate constraints an agent is likely to break if
 - Editing from a details flow permanently replaces that modal session. Dismiss details before presenting the editor so sheets never compete, and do not restore the interrupted root or navigation history afterward.
 - If the patient disappears before save, keep the editor open and report that it is unavailable.
 
-- Current balances belong in observed read models, not Patient. Join one derived summary per
-  patient so appointment rows cannot multiply debt. A missing summary is zero.
-- Financial history blocks patient deletion, including settled history. See [payments](payments.md).
-
 ## Do Not Reintroduce
 
 ## Edge Cases

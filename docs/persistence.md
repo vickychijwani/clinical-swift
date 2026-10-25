@@ -48,12 +48,8 @@ and any other sync engines like PowerSync):
 
 General invariants:
 
-- Financial entries have restrictive patient and appointment references. Charge records deliberately
-  have both keys for patient ledgers and appointment tracing. This accepts the future sharing limit
-  described above. Database guards block appointment patient changes while charges are linked.
 - Patient balances are derived, device-local summaries maintained by entry triggers. Exclude them
-  from future sync. Local financial writes must use the batch boundary and check final summaries;
-  a nonnegative row constraint would reject valid intermediate credit. See [payments](payments.md).
+  from future sync.
 
 - The live database resides in the `group.in.bitehaus.clinical` App Group so the WidgetKit extension
   can read it. The app remains the only migration and write owner; extensions open a coordinated
@@ -129,7 +125,7 @@ General invariants:
 - Unknown patients can have `name == nil`; joins should use `Patient.unknownDisplayName` only for
   display rows.
 - Deleting a patient cascade deletes their appointments only when no financial entries reference
-  that patient. Settled financial history also blocks deletion. See [payments](payments.md).
+  that patient.
 - Debug sample data is seed data only for fresh debug databases. Release databases start empty.
 
 ## Backup and restore

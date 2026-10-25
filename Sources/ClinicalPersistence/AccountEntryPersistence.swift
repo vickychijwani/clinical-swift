@@ -157,8 +157,9 @@ public nonisolated func correctPatientBalance(
         }
         let date = FinancialDate.day(date)
         guard date <= FinancialDate.today else { throw AccountEntryError.futureDate }
-        let ledger = try patientLedger(patientID: patientID, through: date, in: db)
-        let (difference, overflow) = target.subtractingReportingOverflow(ledger.balance)
+        let balance = try AccountHistoryRequest(patientID: patientID, through: date).fetch(db)
+            .reduce(0) { try addingMoney($0, $1.balanceChange) }
+        let (difference, overflow) = target.subtractingReportingOverflow(balance)
         guard !overflow else { throw AccountEntryError.overflow }
         var entries = [
             AccountEntry(
