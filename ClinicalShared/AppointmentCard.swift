@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AppointmentCard: View {
     let appt: Appointment
+    var isAdjusting = false
 
     var body: some View {
         ScheduleCard(start: appt.start, label: appt.patientName, appearance: appearance)
@@ -11,6 +12,13 @@ struct AppointmentCard: View {
 
     private var appearance: ScheduleCard.Appearance {
         let systemImage = AppointmentStatusPresentation(status: appt.status).systemImage
+        if isAdjusting {
+            return ScheduleCard.Appearance(
+                systemImage: systemImage,
+                background: Color.accentColor.opacity(0.12),
+                border: .accentColor.opacity(0.7),
+                borderStyle: StrokeStyle(lineWidth: 2))
+        }
         return switch appt.status {
         case .draft:
             ScheduleCard.Appearance(

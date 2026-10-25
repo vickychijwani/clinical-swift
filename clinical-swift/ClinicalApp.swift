@@ -26,6 +26,25 @@ struct ClinicalApp: App {
             }
         #endif
         do {
+            #if DEBUG
+                // Keep gesture tests away from clinic data and its background integrations.
+                if CommandLine.arguments.contains("--ui-testing-timeline-adjustment") {
+                    let database = try prepareDependencies {
+                        let database = try TimelineAdjustmentUITestView.makeDatabase()
+                        $0.defaultDatabase = database
+                        return database
+                    }
+                    _backups = State(
+                        initialValue: BackupCoordinator(
+                            database: database,
+                            store: BackupStateStore(
+                                directory: .temporaryDirectory.appending(path: UUID().uuidString))))
+                    widgetTimelineInvalidator = nil
+                    calendarSyncCoordinator = nil
+                    startupError = nil
+                    return
+                }
+            #endif
             let store = BackupStateStore.live()
             let restore = try BackupRestore(
                 store: store, databaseURL: ClinicalSharedDatabase.databaseURL())
@@ -79,7 +98,11 @@ struct ClinicalApp: App {
                 } else if let backups {
                     Group {
                         #if DEBUG
-                            if CommandLine.arguments.contains("--ui-testing-appointment-hitboxes") {
+                            if CommandLine.arguments.contains("--ui-testing-timeline-adjustment") {
+                                TimelineAdjustmentUITestView()
+                            } else if CommandLine.arguments.contains(
+                                "--ui-testing-appointment-hitboxes")
+                            {
                                 AppointmentHitboxUITestView()
                             } else {
                                 ContentView(router: router)

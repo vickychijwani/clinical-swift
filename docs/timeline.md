@@ -15,10 +15,11 @@ This document captures the deliberate constraints an agent is likely to break if
 - Appointment time text must remain visible in narrow overlap columns. Patient names may clip at the trailing card edge because the time is the non-negotiable scheduling cue.
 - Appointments and unavailable-time blocks share one adaptive card layout. Keep their appearance values together, and apply content opacity only to text and symbols so the surface and border stay visible. Keep status animation and item actions outside the shared layout.
 - The now marker is presentation-only and must not affect appointment layout, hit testing, scrolling, or accessibility focus.
+- Keep the now marker above every card, including a full-width appointment in direct adjustment mode.
 - The now marker should update approximately once per minute. Minute-level accuracy is enough for this scale and avoids unnecessary redraws or timer work.
 - Hide the now marker during a compact break because that time is not displayed at full scale; show it normally when the break expands.
 - Use `TimeOfDay` for clinic-level schedule boundaries such as opening, closing, and break times. Use `Date` for appointment instances on a specific day.
-- Appointment booking may render a draft appointment in the full schedule for context, but the display timeline is not the time editor. Keep draft time changes in the booking controls until a dedicated interaction model exists.
+- Appointment booking may render a draft appointment in the full schedule for context. Keep its time changes in the booking controls. Direct schedule gestures own a separate preview for a saved appointment and are disabled while a sheet editor is active.
 - Completed appointments remain selectable schedule records but use a persistently muted card treatment so scheduled work retains visual priority. Cancelled appointments never reach timeline layout or rendering.
 - While a booking draft is active, appointment-card interactions should be disabled without disabling timeline scrolling or date-strip selection. This prevents accidental navigation when appointment-card tap actions are added.
 - While booking, leave empty space below the timeline equal to half the visible schedule height so late appointments can scroll above the interactive booking sheet. Do not reserve that clearance for modal appointment or patient details sheets.
@@ -50,4 +51,9 @@ This document captures the deliberate constraints an agent is likely to break if
 - Appointments during or overlapping the break are valid schedule data. Timeline presentation must not be treated as booking validation.
 - A start exactly at break start expands the break; a start exactly at break end does not.
 - The draft appointment participates in break expansion so booking preview coordinates match the saved result.
+- Direct adjustment starts with a hold followed by a drag. A normal tap outside this mode opens details. The selected card exposes start and end handles; each handle keeps the opposite edge fixed. Time changes snap to five minutes. Gesture changes are saved on release, and date changes save the same clock time on the new date.
+- Direct adjustment remains active after release until Done is tapped. The schedule owns this session across date pages. While active, show only the prominent Done toolbar button, hide the tab bar, and ignore all card taps. Selecting a date moves the appointment to that day with the same time and duration; do not reconcile it against slot suggestions, conflicts, or the break.
+- Lay out the selected appointment at the full content width, outside the overlap columns, and render its translucent surface above other cards. Keep its identity stable when it enters this layout so the current touch remains attached to the card.
+- During a direct drag, keep the break compact until the moving edge stays over it for 550 ms. Leaving the compact break cancels that wait. After expansion, collapse the break when the moving appointment leaves it, unless another schedule item starts in the break. Use the shared scale for the inverse time mapping and correct the scroll position when the scale changes so the card stays under the finger.
+- Direct adjustment is available for scheduled appointments outside a sheet editor. Completed appointments keep their normal details action. Overlaps and break times remain valid.
 - If the product later needs multiple breaks or arbitrary unavailable ranges, extend `TimelineScale` to model those discontinuities instead of adding coordinate branches to its consumers.

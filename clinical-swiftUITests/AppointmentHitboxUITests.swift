@@ -101,7 +101,7 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
             app.buttons["Keep Editing"].tap()
         } else {
             // Native popovers use an outside-tap region for cancellation.
-            app.otherElements["PopoverDismissRegion"].tap()
+            app.otherElements["PopoverDismissRegion"].firstMatch.tap()
         }
         XCTAssertEqual(label.value as? String, "Draft travel")
         let screenshot = XCTAttachment(screenshot: app.screenshot())

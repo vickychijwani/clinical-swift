@@ -15,6 +15,7 @@ struct ScheduleView: View {
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
+    @State private var adjustment = TimelineAdjustment()
 
     init() {
         scheduleModel = ScheduleModel()
@@ -36,7 +37,9 @@ struct ScheduleView: View {
                     needsBookingClearance: editorIsActive,
                     itemInteractionsEnabled: !editorIsActive,
                     scrollPosition: scrollPositionBinding(for: date),
-                    onSelectItem: selectItem
+                    onSelectItem: selectItem,
+                    onAdjustAppointment: scheduleModel.adjustAppointment,
+                    adjustment: adjustment
                 )
             }
         }
@@ -49,24 +52,60 @@ struct ScheduleView: View {
                     .day())
         )
         .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbar(adjustment.isActive ? .hidden : .visible, for: .tabBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                BackupSettingsButton()
-            }
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
-            ToolbarItem(placement: .topBarTrailing) {
-                if !editorIsActive {
-                    Button("Unavailable Time", systemImage: "nosign") {
-                        router.requestUnavailableTimeCreation()
+            if adjustment.isActive {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark", role: .confirm) {
+                        adjustment.finish()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glassProminent)
+                    .disabled(adjustment.isDragging || adjustment.isSaving)
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    BackupSettingsButton()
+                }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                ToolbarItem(placement: .topBarTrailing) {
+                    if !editorIsActive {
+                        Button("Unavailable Time", systemImage: "nosign") {
+                            router.requestUnavailableTimeCreation()
+                        }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Display creation buttons only when no schedule editor is active.
+                    if !editorIsActive {
+                        Button("Add", systemImage: "plus") {
+                            router.requestAppointmentBooking()
+                        }
                     }
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                // Display creation buttons only when no schedule editor is active.
-                if !editorIsActive {
-                    Button("Add", systemImage: "plus") {
-                        router.requestAppointmentBooking()
-                    }
+        }
+        .alert(
+            "Could not change appointment",
+            isPresented: Binding(
+                get: { adjustment.errorMessage != nil },
+                set: { if !$0 { adjustment.errorMessage = nil } }
+            )
+        ) {
+            Button("OK") { adjustment.errorMessage = nil }
+        } message: {
+            Text(adjustment.errorMessage ?? "Try again.")
+        }
+        .onChange(of: router.selectedScheduleDate) { _, date in
+            guard let moved = adjustment.selectDate(date) else { return }
+            Task {
+                do {
+                    try await scheduleModel.adjustAppointment(moved)
+                    adjustment.didSave()
+                    scrollToStart(moved.start)
+                } catch {
+                    adjustment.errorMessage = "The appointment could not be saved. Try again."
+                    adjustment.finish()
                 }
             }
         }
@@ -79,6 +118,7 @@ struct ScheduleView: View {
                 editorSession = nil
                 return
             }
+            adjustment.finish()
             editorSession = ScheduleEditorSession(
                 request: request, selectedDate: router.selectedScheduleDate,
                 appointments: scheduleModel.appointments(for: router.selectedScheduleDate)
@@ -167,7 +207,8 @@ struct ScheduleView: View {
         let items =
             scheduleModel.appointments(for: date).map(TimelineItem.appointment)
             + scheduleModel.unavailableTimes(for: date).map(TimelineItem.unavailableTime)
-        return editorSession?.visibleItems(items, for: date) ?? items
+        let adjustedItems = adjustment.items(items, on: date)
+        return editorSession?.visibleItems(adjustedItems, for: date) ?? adjustedItems
     }
 
     private func timelineScale(for date: Date) -> TimelineScale {
@@ -192,6 +233,7 @@ struct ScheduleView: View {
     }
 
     private func selectItem(_ item: TimelineItem) {
+        guard !adjustment.isActive else { return }
         switch item {
         case .appointment(let appointment):
             router.presentDetails(.appointment(appointment.id))
@@ -387,7 +429,7 @@ private struct ScheduleEditorSheet: View {
     }
 }
 
-private struct ScheduleTimelinePage: View {
+struct ScheduleTimelinePage: View {
     let date: Date
     let items: [TimelineItem]
     let calendar: Calendar
@@ -395,6 +437,12 @@ private struct ScheduleTimelinePage: View {
     let itemInteractionsEnabled: Bool
     @Binding var scrollPosition: ScrollPosition
     let onSelectItem: (TimelineItem) -> Void
+    let onAdjustAppointment: (Appointment) async throws -> Void
+    let adjustment: TimelineAdjustment
+    @State private var isDragging = false
+    @State private var scrollY: CGFloat = 0
+    @State private var needsAdjustmentClearance = false
+    @State private var pendingScrollY: CGFloat?
 
     var body: some View {
         ScrollView {
@@ -404,11 +452,23 @@ private struct ScheduleTimelinePage: View {
                     scale: TimelineScale(items: items),
                     showsNowMarker: calendar.isDateInToday(date),
                     itemInteractionsEnabled: itemInteractionsEnabled,
-                    onSelectItem: onSelectItem
+                    onSelectItem: onSelectItem,
+                    onAdjustAppointment: itemInteractionsEnabled ? onAdjustAppointment : nil,
+                    onDraggingChanged: {
+                        isDragging = $0
+                        if $0 { needsAdjustmentClearance = true }
+                    },
+                    onScaleChange: { delta in
+                        guard delta != 0 else { return }
+                        pendingScrollY = max(scrollY + delta, 0)
+                    },
+                    date: date,
+                    adjustment: adjustment
                 )
 
-                if needsBookingClearance {
+                if needsBookingClearance || needsAdjustmentClearance {
                     // Leave room to scroll late appointments above the booking sheet.
+                    // Direct adjustment also needs scroll range to anchor an expanding break.
                     Color.clear
                         .containerRelativeFrame(
                             .vertical,
@@ -418,6 +478,19 @@ private struct ScheduleTimelinePage: View {
                         )
                 }
             }
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.height
+            } action: { _ in
+                guard let pendingScrollY else { return }
+                scrollPosition.scrollTo(y: pendingScrollY)
+                self.pendingScrollY = nil
+            }
+        }
+        .scrollDisabled(isDragging)
+        .onScrollGeometryChange(for: CGFloat.self) {
+            $0.contentOffset.y + $0.contentInsets.top
+        } action: { _, y in
+            scrollY = y
         }
         .modifier(TimelineScrollModifier(scrollPosition: $scrollPosition))
     }

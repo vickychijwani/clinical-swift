@@ -1,0 +1,211 @@
+import ClinicalModels
+import CoreGraphics
+import Dependencies
+import Foundation
+import Testing
+
+@testable import clinical_swift
+
+@MainActor
+struct TimelineAdjustmentTests {
+    private func appointment(hour: Int = 12, minute: Int = 0) throws -> Appointment {
+        Appointment(
+            patientName: "Patient",
+            start: try Date("2026-10-25T00:00:00Z", strategy: .iso8601).setTime(hour, minute),
+            durationMinutes: 30, status: .scheduled)
+    }
+
+    @Test func scaleRoundTripsEveryFiveMinutes() {
+        for presentation in [TimelineScale.BreakPresentation.compact, .expanded] {
+            let scale = TimelineScale(items: [], breakPresentation: presentation)
+            for minute in stride(from: 9 * 60, through: 21 * 60, by: 5) {
+                let time = TimeOfDay(minute / 60, minute % 60)
+                #expect(scale.time(at: scale.yOffset(for: time)) == time)
+            }
+        }
+    }
+
+    @Test func movingSnapsAndKeepsDuration() throws {
+        let appointment = try appointment()
+        let items = [TimelineItem.appointment(appointment)]
+        let model = withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .move, items: items)
+        model.update(translation: 13, items: items)
+        #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
+        #expect(model.preview?.durationMinutes == 30)
+        #expect(model.release()?.start.timeOfDay == TimeOfDay(12, 15))
+    }
+
+    @Test func resizingKeepsTheOtherEdgeAndMinimumDuration() throws {
+        let appointment = try appointment()
+        let items = [TimelineItem.appointment(appointment)]
+        let model = withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .start, items: items)
+        model.update(translation: 12, items: items)
+        #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 10))
+        #expect(model.preview?.durationMinutes == 20)
+        #expect(
+            model.preview?.end(using: .autoupdatingCurrent)
+                == appointment.end(using: .autoupdatingCurrent))
+        model.finish()
+        model.begin(appointment, edge: .end, items: items)
+        model.update(translation: -100, items: items)
+        #expect(model.preview?.start == appointment.start)
+        #expect(model.preview?.durationMinutes == 5)
+    }
+
+    @Test func passingBreakCancelsExpansion() throws {
+        let appointment = try appointment()
+        let items = [TimelineItem.appointment(appointment)]
+        let model = withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .move, items: items)
+        model.update(translation: 76, items: items)
+        #expect(model.hoverRequest != nil)
+        #expect(!model.scale(items).isBreakExpanded)
+        model.update(translation: 105, items: items)
+        #expect(model.hoverRequest == nil)
+        #expect(model.expandBreak(items: items) == 0)
+        #expect(!model.scale(items).isBreakExpanded)
+        #expect(model.preview?.start.timeOfDay == TimeOfDay(16, 15))
+    }
+
+    @Test func dwellExpandsAndExitCollapsesWithoutChangingTime() throws {
+        let appointment = try appointment()
+        let items = [TimelineItem.appointment(appointment)]
+        let model = withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .move, items: items)
+        model.update(translation: 76, items: items)
+        let time = model.preview?.start
+        let correction = model.expandBreak(items: items)
+        #expect(correction > 0)
+        #expect(model.scale(items).isBreakExpanded)
+        #expect(model.preview?.start == time)
+        model.update(translation: 76, items: items)
+        #expect(model.preview?.start == time)
+        model.update(translation: 200, items: items)
+        #expect(!model.scale(items).isBreakExpanded)
+        #expect(model.preview?.start.timeOfDay == TimeOfDay(16, 35))
+    }
+
+    @Test func otherBreakAppointmentsKeepBreakExpanded() throws {
+        let appointment = try appointment(hour: 14)
+        let other = try self.appointment(hour: 15)
+        let items = [appointment, other].map(TimelineItem.appointment)
+        let model = withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .move, items: items)
+        model.update(translation: -100, items: items)
+        #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 20))
+        #expect(model.scale(items).isBreakExpanded)
+    }
+
+    @Test func releaseWithoutMotionDoesNotSave() throws {
+        let appointment = try appointment()
+        let model = withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .move, items: [.appointment(appointment)])
+        #expect(model.release() == nil)
+        #expect(model.selectedID == appointment.id)
+        #expect(!model.isDragging)
+        #expect(!model.isSaving)
+        #expect(model.isActive)
+    }
+
+    @Test func releaseKeepsModeActiveUntilDone() throws {
+        let appointment = try appointment()
+        let items = [TimelineItem.appointment(appointment)]
+        let model = withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .move, items: items)
+        model.update(translation: 15, items: items)
+        #expect(model.release() != nil)
+        model.didSave()
+        #expect(model.isActive)
+        #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
+        model.begin(appointment, edge: .end, items: items)
+        model.update(translation: 10, items: items)
+        #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
+        #expect(model.preview?.durationMinutes == 40)
+        model.finish()
+        #expect(!model.isActive)
+        #expect(model.selectedID == nil)
+    }
+
+    @Test func dateSelectionPreservesTimeAndDurationAndMovesPreviewBetweenDays() throws {
+        let appointment = try appointment(hour: 14)
+        let calendar = Calendar.autoupdatingCurrent
+        let nextDate = appointment.start.date(byAddingDays: 1, using: calendar)
+        let model = withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .move, items: [.appointment(appointment)])
+        _ = model.release()
+        let moved = try #require(model.selectDate(nextDate))
+        #expect(moved.id == appointment.id)
+        #expect(calendar.isDate(moved.start, inSameDayAs: nextDate))
+        #expect(moved.start.timeOfDay == appointment.start.timeOfDay)
+        #expect(moved.durationMinutes == appointment.durationMinutes)
+        #expect(model.items([.appointment(appointment)], on: appointment.start).isEmpty)
+        #expect(model.items([], on: nextDate).map(\.id) == [.appointment(appointment.id)])
+        #expect(model.scale([], on: nextDate).isBreakExpanded)
+        #expect(!model.scale([], on: appointment.start).isBreakExpanded)
+    }
+
+    @Test func floatingCardUsesFullWidthAndLeavesOtherCardsInTheirOwnColumns() throws {
+        let appointment = try appointment()
+        let other = try self.appointment(minute: 15)
+        let items = [appointment, other].map(TimelineItem.appointment)
+        let engine = TimelineLayoutEngine(availableWidth: 400, scale: TimelineScale(items: items))
+        let layouts = engine.layout(items: items, floatingID: .appointment(appointment.id))
+        let floating = try #require(layouts.first { $0.id == .appointment(appointment.id) })
+        let regular = try #require(layouts.first { $0.id == .appointment(other.id) })
+        #expect(floating.rect.width == Timeline.metrics.contentWidth(availableWidth: 400))
+        #expect(floating.rect.minX == Timeline.metrics.contentLeadingInset)
+        #expect(regular.rect.width == floating.rect.width)
+    }
+
+    @Test func dateSelectionKeepsClockTimeAcrossDaylightSavingChange() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "America/New_York"))
+        let start = try Date("2026-10-31T16:00:00Z", strategy: .iso8601)
+        let nextStart = try Date("2026-11-01T17:00:00Z", strategy: .iso8601)
+        let appointment = Appointment(
+            patientName: "Patient", start: start, durationMinutes: 45, status: .scheduled)
+        let model = withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            TimelineAdjustment()
+        }
+        model.begin(appointment, edge: .move, items: [.appointment(appointment)])
+        _ = model.release()
+        #expect(model.selectDate(nextStart)?.start == nextStart)
+        #expect(model.preview?.durationMinutes == 45)
+    }
+}
