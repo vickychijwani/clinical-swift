@@ -24,7 +24,6 @@ Implement overlap-aware appointment layout in the pure `TimelineLayoutEngine`, k
 - Cover staggered overlaps, e.g. A overlaps B, B overlaps C, A does not overlap C, reusing columns while preserving the group’s column width.
 - Cover back-to-back appointments where one ends exactly when another starts; they should not split width.
 - Verify vertical `y` and `height` calculations remain unchanged from the current duration/start-time math.
-- Run `make test` from `/Users/whitesky/code/clinical-swift`; if beautified output hides a failure, inspect `build/logs/test.log`.
 
 ## Assumptions
 
