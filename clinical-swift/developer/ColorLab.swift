@@ -194,23 +194,14 @@ extension View {
         @Entry var colorLab: ColorLab? = nil
     }
 
-    private struct ColorLabRoot: ViewModifier {
-        @State private var lab = ColorLab()
+    struct ColorLabRoot: ViewModifier {
+        @State var lab = ColorLab()
 
         func body(content: Content) -> some View {
             content
                 .environment(\.colorLab, lab)
+                // A root tint also recolors native controls. Apply overrides through app color roles only.
                 .environment(\.appPalette, lab.palette)
-                .modifier(ColorLabAppTint(palette: lab.palette))
-        }
-    }
-
-    struct ColorLabAppTint: ViewModifier {
-        let palette: AppPalette
-
-        func body(content: Content) -> some View {
-            // A default accent is not an explicit tint. Native toolbar buttons choose their own style.
-            content.tint(palette.overrides[.accent])
         }
     }
 

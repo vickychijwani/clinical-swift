@@ -8,6 +8,9 @@ import Testing
 struct ColorLabRenderingTests {
     @Test(arguments: [ColorScheme.light, .dark])
     func defaultsMatchOriginalStyles(scheme: ColorScheme) throws {
+        #expect(
+            try pixels(Rectangle().fill(AppColor.accent), scheme: scheme)
+                == pixels(Rectangle().fill(.tint), scheme: scheme))
         for foreground in [Color.primary, .purple] {
             for role in AppColor.allCases {
                 let original = try pixels(
@@ -21,7 +24,11 @@ struct ColorLabRenderingTests {
 
     #if DEBUG
         @Test(arguments: [ColorScheme.light, .dark])
-        func defaultLabTintLeavesNativeControlsUnchanged(scheme: ColorScheme) throws {
+        func accentOverrideLeavesNativeControlsUnchanged(scheme: ColorScheme) throws {
+            let suite = "ColorLabRenderingTests.\(UUID())"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let lab = ColorLab(defaults: defaults)
             let controls = HStack {
                 Button("Add", systemImage: "plus") {}.buttonStyle(.bordered)
                 Button("Plain", systemImage: "gearshape") {}.buttonStyle(.plain)
@@ -29,13 +36,19 @@ struct ColorLabRenderingTests {
             }
             let original = try pixels(controls, scheme: scheme)
             let palette = try pixels(
-                controls.modifier(ColorLabAppTint(palette: AppPalette())), scheme: scheme)
+                controls.modifier(ColorLabRoot(lab: lab)), scheme: scheme)
             #expect(palette == original)
-            var override = AppPalette()
-            override.overrides[.accent] = .purple
+            let accent = Rectangle().fill(AppColor.accent)
+            let originalAccent = try pixels(accent.modifier(ColorLabRoot(lab: lab)), scheme: scheme)
+            lab.state.colors[.accent] = .system(.purple)
             #expect(
-                try pixels(controls.modifier(ColorLabAppTint(palette: override)), scheme: scheme)
-                    != original)
+                try pixels(controls.modifier(ColorLabRoot(lab: lab)), scheme: scheme) == original)
+            #expect(
+                try pixels(accent.modifier(ColorLabRoot(lab: lab)), scheme: scheme)
+                    != originalAccent)
+            #expect(
+                try pixels(accent.modifier(ColorLabRoot(lab: lab)), scheme: scheme)
+                    == pixels(Rectangle().fill(.purple), scheme: scheme))
         }
     #endif
 

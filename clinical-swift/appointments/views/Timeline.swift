@@ -402,7 +402,7 @@ private struct TimelineAdjustmentHandles: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-            .strokeBorder(.tint, lineWidth: 2)
+            .strokeBorder(AppColor.accent, lineWidth: 2)
             .allowsHitTesting(false)
             .overlay(alignment: .bottom) { durationHandle() }
             .overlay(alignment: .topLeading) {
@@ -423,7 +423,7 @@ private struct TimelineAdjustmentHandles: View {
 
     private func durationHandle() -> some View {
         Capsule()
-            .fill(.tint)
+            .fill(AppColor.accent)
             .frame(width: 22, height: 10)
             .overlay {
                 VStack(spacing: 2) {
