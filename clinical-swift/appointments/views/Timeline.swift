@@ -101,20 +101,24 @@ struct Timeline: View {
                         else { return }
                         onSelectItem(layout.item)
                     } label: {
-                        ScheduleItemCard(item: layout.item, isAdjusting: isSelected(layout.item))
-                            .frame(width: layout.rect.width, height: layout.rect.height)
-                            // Keep clipped text within the card's tap area.
-                            // Regression tests: testLongNameDoesNotStealTapFromRightAppointment()
-                            // and testMixedThreeColumnCardsKeepSeparateTapAreas().
-                            .contentShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
-                            .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
-                            .overlay {
-                                if case .appointment = layout.item {
-                                    RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                                        .strokeBorder(.gray.opacity(0.15))
-                                        .allowsHitTesting(false)
-                                }
+                        ScheduleItemCard(
+                            item: layout.item,
+                            isAdjusting: isSelected(layout.item),
+                            isDeemphasized: adjustment.isActive && !isSelected(layout.item)
+                        )
+                        .frame(width: layout.rect.width, height: layout.rect.height)
+                        // Keep clipped text within the card's tap area.
+                        // Regression tests: testLongNameDoesNotStealTapFromRightAppointment()
+                        // and testMixedThreeColumnCardsKeepSeparateTapAreas().
+                        .contentShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
+                        .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
+                        .overlay {
+                            if case .appointment = layout.item {
+                                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                                    .strokeBorder(.gray.opacity(0.15))
+                                    .allowsHitTesting(false)
                             }
+                        }
                     }
                     .buttonStyle(.plain)
                     .allowsHitTesting(
@@ -372,10 +376,18 @@ private struct TimelineAdjustmentHandles: View {
     private func durationHandle() -> some View {
         Capsule()
             .fill(.tint)
-            .frame(width: 22, height: 5)
+            .frame(width: 22, height: 10)
+            .overlay {
+                VStack(spacing: 2) {
+                    Capsule().frame(width: 12, height: 1)
+                    Capsule().frame(width: 12, height: 1)
+                }
+                .foregroundStyle(.white.opacity(0.65))
+            }
             .frame(width: 44, height: 28)
             .contentShape(.rect)
-            .offset(y: 10)
+            // Half the touch area keeps the grip centered on the card's bottom edge.
+            .offset(y: 14)
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { onDrag(.duration, $0) }

@@ -4,17 +4,33 @@ struct ScheduleCard: View {
     let start: Date
     let label: String
     let appearance: Appearance
+    var isDeemphasized = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                .fill(appearance.background)
+            switch appearance.background {
+            case .color(let color):
+                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                    .fill(color)
+            case .glass:
+                Color.clear
+                    .glassEffect(
+                        .clear.interactive(),
+                        in: .rect(cornerRadius: ScheduleCardStyle.cornerRadius)
+                    )
+                    .background {
+                        RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                            .fill(.ultraThinMaterial)
+                    }
+                    // Keep underlying card edges visible as possible conflict cues.
+                    .opacity(0.55)
+            }
 
             ScheduleCardContent(start: start, label: label, appearance: appearance)
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .clipped()
-                .opacity(appearance.contentOpacity)
+                .opacity(appearance.contentOpacity * (isDeemphasized ? 0.35 : 1))
 
             RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
                 .stroke(appearance.border, style: appearance.borderStyle)
@@ -24,12 +40,17 @@ struct ScheduleCard: View {
 
     struct Appearance {
         let systemImage: String
-        let background: Color
+        let background: Background
         let border: Color
         let borderStyle: StrokeStyle
         var contentOpacity: Double = 1
         var timeColor: Color? = nil
         var labelColor: Color = .primary
+    }
+
+    enum Background {
+        case color(Color)
+        case glass
     }
 }
 
