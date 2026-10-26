@@ -13,10 +13,13 @@ import SQLiteData
     let id = UUID()
     let purpose: AppointmentBookingPurpose
     private let draftAppointmentID: Appointment.ID
+    let adjustment = TimelineAdjustment()
+    var isSelectingPatient: Bool
+    private(set) var isSaving = false
 
     /// Prevent schedule reloads from moving an edited appointment just because its saved time
-    /// overlaps another appointment or crosses a preferred scheduling boundary. Changing the date
-    /// or duration enables normal automatic prefilling again.
+    /// overlaps another appointment or crosses a preferred scheduling boundary. Once timeline
+    /// editing starts, manual choices also stay fixed across date and schedule changes.
     private var automaticallyPrefills: Bool
 
     var selectedDate: Date {
@@ -38,6 +41,7 @@ import SQLiteData
         onSaved: @escaping (Date) -> Void
     ) {
         self.purpose = .create
+        self.isSelectingPatient = selectedPatient == nil
         self.draftAppointmentID = UUID()
         self.automaticallyPrefills = true
         self.selectedDate = selectedDate
@@ -55,6 +59,7 @@ import SQLiteData
     ) {
         let appointment = details.appointment
         self.purpose = .edit(appointment.id)
+        self.isSelectingPatient = false
         self.draftAppointmentID = appointment.id
         self.automaticallyPrefills = false
         self.selectedDate = appointment.start
@@ -72,10 +77,22 @@ import SQLiteData
         Appointment(
             id: draftAppointmentID,
             patientName: draft.selectedPatient?.displayName ?? "<Select a patient>",
-            start: draft.start,
-            durationMinutes: draft.durationMinutes,
+            start: adjustment.preview?.start ?? draft.start,
+            durationMinutes: adjustment.preview?.durationMinutes ?? draft.durationMinutes,
             status: .draft
         )
+    }
+
+    func startTimelineEditing() {
+        automaticallyPrefills = false
+        adjustment.select(draftAppointment)
+    }
+
+    func selectPatient(_ patient: Patient) {
+        draft.selectedPatient = patient
+        searchText = ""
+        adjustment.select(draftAppointment)
+        isSelectingPatient = false
     }
 
     func selectDate(_ selectedDate: Date) {
@@ -86,8 +103,10 @@ import SQLiteData
         }
 
         appointments = []
-        automaticallyPrefills = true
+        automaticallyPrefills = !adjustment.isActive
         self.selectedDate = normalizedDate
+        _ = adjustment.selectDate(normalizedDate)
+        applyTimelinePreview()
     }
 
     func selectStart(_ start: Date) {
@@ -131,6 +150,10 @@ import SQLiteData
     }
 
     func saveAppointment() async -> Bool {
+        guard !isSaving, !adjustment.isDragging else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        applyTimelinePreview()
         do {
             try draft.normalized.validate()
             // Reset error message
@@ -152,7 +175,7 @@ import SQLiteData
             let savedDate = draft.start
             switch purpose {
             case .create:
-                let record = try draft.normalized.makeRecord(now: now)
+                let record = try draft.normalized.makeRecord(id: draftAppointmentID, now: now)
                 try await database.write { db in
                     try AppointmentRecord.insert { record }
                         .execute(db)
@@ -203,6 +226,12 @@ import SQLiteData
                 }
             return false
         }
+    }
+
+    private func applyTimelinePreview() {
+        guard let preview = adjustment.preview else { return }
+        draft.start = preview.start
+        draft.durationMinutes = preview.durationMinutes
     }
 
     private var availability: AppointmentAvailability {

@@ -8,6 +8,35 @@ import Testing
 
 @MainActor
 struct TimelineAdjustmentTests {
+    @Test func doneSavesOnceAndFailureKeepsDraftForRetry() async throws {
+        let appointment = try appointment()
+        let model = withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            TimelineAdjustment()
+        }
+        let items = [TimelineItem.appointment(appointment)]
+        model.begin(appointment, edge: .move, items: items)
+        model.update(translation: 15, items: items)
+        model.release()
+        #expect(!model.isSaving)
+        let preview = model.preview
+        enum SaveError: Error { case failed }
+        await model.save { _ in throw SaveError.failed }
+        #expect(model.preview?.start == preview?.start)
+        #expect(model.preview?.durationMinutes == preview?.durationMinutes)
+        #expect(model.isActive)
+        #expect(!model.isSaving)
+        #expect(model.errorMessage != nil)
+        var saved: [Appointment] = []
+        await model.save { saved.append($0) }
+        await model.save { saved.append($0) }
+        #expect(saved.count == 1)
+        #expect(saved.first?.start == preview?.start)
+        #expect(saved.first?.durationMinutes == preview?.durationMinutes)
+        #expect(!model.isActive)
+    }
+
     private func appointment(hour: Int = 12, minute: Int = 0) throws -> Appointment {
         Appointment(
             patientName: "Patient",
@@ -37,10 +66,12 @@ struct TimelineAdjustmentTests {
         model.update(translation: 13, items: items)
         #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
         #expect(model.preview?.durationMinutes == 30)
-        #expect(model.release()?.start.timeOfDay == TimeOfDay(12, 15))
+        model.release()
+        #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
+        #expect(!model.isSaving)
     }
 
-    @Test func resizingKeepsTheOtherEdgeAndMinimumDuration() throws {
+    @Test func durationHandleKeepsStartAndMinimumDuration() throws {
         let appointment = try appointment()
         let items = [TimelineItem.appointment(appointment)]
         let model = withDependencies {
@@ -48,18 +79,10 @@ struct TimelineAdjustmentTests {
         } operation: {
             TimelineAdjustment()
         }
-        model.begin(appointment, edge: .start, items: items)
-        model.update(translation: 12, items: items)
-        #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 10))
-        #expect(model.preview?.durationMinutes == 20)
-        #expect(
-            model.preview?.end(using: .autoupdatingCurrent)
-                == appointment.end(using: .autoupdatingCurrent))
-        model.finish()
-        model.begin(appointment, edge: .end, items: items)
+        model.begin(appointment, edge: .duration, items: items)
         model.update(translation: -100, items: items)
         #expect(model.preview?.start == appointment.start)
-        #expect(model.preview?.durationMinutes == 5)
+        #expect(model.preview?.durationMinutes == 15)
     }
 
     @Test func passingBreakCancelsExpansion() throws {
@@ -126,7 +149,7 @@ struct TimelineAdjustmentTests {
             TimelineAdjustment()
         }
         model.begin(appointment, edge: .move, items: [.appointment(appointment)])
-        #expect(model.release() == nil)
+        model.release()
         #expect(model.selectedID == appointment.id)
         #expect(!model.isDragging)
         #expect(!model.isSaving)
@@ -143,11 +166,10 @@ struct TimelineAdjustmentTests {
         }
         model.begin(appointment, edge: .move, items: items)
         model.update(translation: 15, items: items)
-        #expect(model.release() != nil)
-        model.didSave()
+        model.release()
         #expect(model.isActive)
         #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
-        model.begin(appointment, edge: .end, items: items)
+        model.begin(appointment, edge: .duration, items: items)
         model.update(translation: 10, items: items)
         #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
         #expect(model.preview?.durationMinutes == 40)
@@ -166,7 +188,7 @@ struct TimelineAdjustmentTests {
             TimelineAdjustment()
         }
         model.begin(appointment, edge: .move, items: [.appointment(appointment)])
-        _ = model.release()
+        model.release()
         let moved = try #require(model.selectDate(nextDate))
         #expect(moved.id == appointment.id)
         #expect(calendar.isDate(moved.start, inSameDayAs: nextDate))
@@ -176,6 +198,7 @@ struct TimelineAdjustmentTests {
         #expect(model.items([], on: nextDate).map(\.id) == [.appointment(appointment.id)])
         #expect(model.scale([], on: nextDate).isBreakExpanded)
         #expect(!model.scale([], on: appointment.start).isBreakExpanded)
+        #expect(!model.isSaving)
     }
 
     @Test func floatingCardUsesFullWidthAndLeavesOtherCardsInTheirOwnColumns() throws {
@@ -204,7 +227,7 @@ struct TimelineAdjustmentTests {
             TimelineAdjustment()
         }
         model.begin(appointment, edge: .move, items: [.appointment(appointment)])
-        _ = model.release()
+        model.release()
         #expect(model.selectDate(nextStart)?.start == nextStart)
         #expect(model.preview?.durationMinutes == 45)
     }

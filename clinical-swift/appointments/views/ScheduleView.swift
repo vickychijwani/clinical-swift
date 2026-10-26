@@ -16,6 +16,29 @@ struct ScheduleView: View {
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
     @State private var adjustment = TimelineAdjustment()
+    @State private var confirmsDiscard = false
+
+    private var bookingModel: AppointmentBookingModel? {
+        guard case .appointment(let model) = editorSession?.editor else { return nil }
+        return model
+    }
+
+    private var activeAdjustment: TimelineAdjustment { bookingModel?.adjustment ?? adjustment }
+
+    private var editorSheet: Binding<ScheduleEditorSession?> {
+        Binding(
+            get: {
+                guard bookingModel?.isSelectingPatient != false else { return nil }
+                return editorSession
+            },
+            set: { value in
+                if let bookingModel {
+                    bookingModel.isSelectingPatient = value != nil
+                } else {
+                    editorSession = value
+                }
+            })
+    }
 
     init() {
         scheduleModel = ScheduleModel()
@@ -34,12 +57,12 @@ struct ScheduleView: View {
                     date: date,
                     items: visibleItems(for: date),
                     calendar: calendar,
-                    needsBookingClearance: editorIsActive,
+                    needsBookingClearance: editorIsActive && bookingModel == nil,
                     itemInteractionsEnabled: !editorIsActive,
                     scrollPosition: scrollPositionBinding(for: date),
                     onSelectItem: selectItem,
-                    onAdjustAppointment: scheduleModel.adjustAppointment,
-                    adjustment: adjustment
+                    allowsAdjustment: bookingModel.map { !$0.isSaving } ?? !editorIsActive,
+                    adjustment: activeAdjustment
                 )
             }
         }
@@ -52,16 +75,37 @@ struct ScheduleView: View {
                     .day())
         )
         .toolbarTitleDisplayMode(.inlineLarge)
-        .toolbar(adjustment.isActive ? .hidden : .visible, for: .tabBar)
+        .toolbar(activeAdjustment.isActive ? .hidden : .visible, for: .tabBar)
         .toolbar {
-            if adjustment.isActive {
+            if activeAdjustment.isActive {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", systemImage: "xmark") { confirmsDiscard = true }
+                        .disabled(
+                            activeAdjustment.isDragging || activeAdjustment.isSaving
+                                || bookingModel?.isSaving == true)
+                }
+                if let bookingModel {
+                    ToolbarItem(placement: .principal) {
+                        Button(bookingModel.draft.selectedPatient?.displayName ?? "Select Patient")
+                        {
+                            bookingModel.isSelectingPatient = true
+                        }
+                        .disabled(bookingModel.isSaving || activeAdjustment.isDragging)
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", systemImage: "checkmark", role: .confirm) {
-                        adjustment.finish()
+                    AsyncButton("Done", systemImage: "checkmark") {
+                        if let bookingModel {
+                            _ = await bookingModel.saveAppointment()
+                        } else {
+                            await adjustment.save(using: scheduleModel.adjustAppointment)
+                        }
                     }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.glassProminent)
-                    .disabled(adjustment.isDragging || adjustment.isSaving)
+                    .disabled(
+                        activeAdjustment.isDragging || activeAdjustment.isSaving
+                            || (bookingModel != nil && bookingModel?.draft.selectedPatient == nil))
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -85,6 +129,28 @@ struct ScheduleView: View {
                 }
             }
         }
+        .confirmationDialog("Discard unsaved appointment?", isPresented: $confirmsDiscard) {
+            Button("Discard Changes", role: .destructive) {
+                if let editorSession {
+                    finishEditor(editorSession.id, date: router.selectedScheduleDate)
+                } else {
+                    adjustment.finish()
+                }
+            }
+        } message: {
+            Text("Your appointment changes have not been saved.")
+        }
+        .alert(
+            "Unable to save appointment",
+            isPresented: Binding(
+                get: { bookingModel?.saveErrorMessage != nil },
+                set: { if !$0 { bookingModel?.saveErrorMessage = nil } }
+            )
+        ) {
+            Button("OK") { bookingModel?.saveErrorMessage = nil }
+        } message: {
+            Text(bookingModel?.saveErrorMessage ?? "")
+        }
         .alert(
             "Could not change appointment",
             isPresented: Binding(
@@ -98,18 +164,15 @@ struct ScheduleView: View {
         }
         .onChange(of: router.selectedScheduleDate) { _, date in
             guard let moved = adjustment.selectDate(date) else { return }
-            Task {
-                do {
-                    try await scheduleModel.adjustAppointment(moved)
-                    adjustment.didSave()
-                    scrollToStart(moved.start)
-                } catch {
-                    adjustment.errorMessage = "The appointment could not be saved. Try again."
-                    adjustment.finish()
-                }
-            }
+            scrollToStart(moved.start)
         }
-        .sheet(item: $editorSession, onDismiss: router.presentationDidDismiss) { session in
+        .sheet(
+            item: editorSheet,
+            onDismiss: {
+                router.presentationDidDismiss(
+                    retainingScheduleEditor: bookingModel == nil ? nil : editorSession?.id)
+            }
+        ) { session in
             ScheduleEditorSheet(session: session)
                 .onAppear { router.presentationDidAppear(session.id) }
         }
@@ -183,7 +246,9 @@ struct ScheduleView: View {
     }
 
     private func selectDate(_ date: Date) {
-        guard editorSession?.allowsDateSelection != false else { return }
+        guard editorSession?.allowsDateSelection != false, !activeAdjustment.isSaving,
+            !activeAdjustment.isDragging
+        else { return }
         let selectedDate = date.startOfDay(using: calendar)
         router.selectScheduleDate(selectedDate)
         editorSession?.selectDate(selectedDate)
@@ -207,8 +272,8 @@ struct ScheduleView: View {
         let items =
             scheduleModel.appointments(for: date).map(TimelineItem.appointment)
             + scheduleModel.unavailableTimes(for: date).map(TimelineItem.unavailableTime)
-        let adjustedItems = adjustment.items(items, on: date)
-        return editorSession?.visibleItems(adjustedItems, for: date) ?? adjustedItems
+        let sessionItems = editorSession?.visibleItems(items, for: date) ?? items
+        return activeAdjustment.items(sessionItems, on: date)
     }
 
     private func timelineScale(for date: Date) -> TimelineScale {
@@ -318,12 +383,14 @@ struct ScheduleEditorSession: Identifiable {
             model.prefillFirstAvailableSlot()
             // Install the model after prefilling slot - to ensure the sheet starts out displaying the
             // pre-selected slot rather than briefly showing the clinic opening time.
+            model.startTimelineEditing()
             editor = .appointment(model)
         case .appointmentEdit(let request):
             // Use the details that were already visible so the editor can start without another read.
             // Saving still validates the current stored appointment before writing.
             let model = AppointmentBookingModel(editing: request.details, onSaved: onFinished)
             model.updateAppointments(appointments, for: selectedDate)
+            model.startTimelineEditing()
             editor = .appointment(model)
         case .unavailableTimeEditor(let request):
             switch request.purpose {
@@ -350,7 +417,7 @@ struct ScheduleEditorSession: Identifiable {
 
     var allowsDateSelection: Bool {
         switch editor {
-        case .appointment: true
+        case .appointment(let model): !model.isSaving
         case .unavailableTime(let model): !model.isWorking
         }
     }
@@ -390,8 +457,7 @@ struct ScheduleEditorSession: Identifiable {
         let editedID: TimelineItem.ID?
         switch editor {
         case .appointment(let model):
-            // Keep the saved appointment visible on other pages until the edit is saved.
-            guard calendar.isDate(selectedDate, inSameDayAs: date) else { return items }
+            // Hide the stored version on every page while its draft moves between dates.
             editedID = model.purpose.editedAppointmentID.map { .appointment($0) }
         case .unavailableTime(let model):
             editedID = model.purpose.editedID.map { .unavailableTime($0) }
@@ -437,7 +503,7 @@ struct ScheduleTimelinePage: View {
     let itemInteractionsEnabled: Bool
     @Binding var scrollPosition: ScrollPosition
     let onSelectItem: (TimelineItem) -> Void
-    let onAdjustAppointment: (Appointment) async throws -> Void
+    let allowsAdjustment: Bool
     let adjustment: TimelineAdjustment
     @State private var isDragging = false
     @State private var scrollY: CGFloat = 0
@@ -453,7 +519,7 @@ struct ScheduleTimelinePage: View {
                     showsNowMarker: calendar.isDateInToday(date),
                     itemInteractionsEnabled: itemInteractionsEnabled,
                     onSelectItem: onSelectItem,
-                    onAdjustAppointment: itemInteractionsEnabled ? onAdjustAppointment : nil,
+                    allowsAdjustment: allowsAdjustment,
                     onDraggingChanged: {
                         isDragging = $0
                         if $0 { needsAdjustmentClearance = true }

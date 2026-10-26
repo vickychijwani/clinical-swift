@@ -3,11 +3,11 @@ import Dependencies
 import Foundation
 import Observation
 
-/// One schedule session owns the preview. Release and date selection write its time;
-/// Done ends the session without opening appointment details.
+/// Gesture release and date selection change only the preview in memory.
+/// Done is the only action that writes these changes to storage.
 @MainActor @Observable
 final class TimelineAdjustment {
-    enum Edge { case move, start, end }
+    enum Edge { case move, duration }
 
     @ObservationIgnored @Dependency(\.calendar) private var calendar
     private(set) var original: Appointment?
@@ -24,6 +24,12 @@ final class TimelineAdjustment {
     var errorMessage: String?
 
     var isActive: Bool { preview != nil }
+
+    func select(_ appointment: Appointment) {
+        guard !isDragging, !isSaving else { return }
+        preview = appointment
+        selectedID = appointment.id
+    }
 
     func items(_ items: [TimelineItem], on date: Date? = nil) -> [TimelineItem] {
         guard let preview else { return items }
@@ -49,7 +55,8 @@ final class TimelineAdjustment {
     }
 
     func begin(_ appointment: Appointment, edge: Edge, items: [TimelineItem]) {
-        guard !isDragging, !isSaving, appointment.status == .scheduled,
+        guard !isDragging, !isSaving,
+            appointment.status == .scheduled || appointment.status == .draft,
             selectedID == nil || selectedID == appointment.id
         else { return }
         let appointment = preview ?? appointment
@@ -59,9 +66,9 @@ final class TimelineAdjustment {
         self.edge = edge
         expanded = TimelineScale(items: items).isBreakExpanded
         let time =
-            edge == .end
-            ? appointment.start.timeOfDay + appointment.durationMinutes
-            : appointment.start.timeOfDay
+            edge == .duration
+            ? TimeOfDay(date: appointment.start, calendar: calendar) + appointment.durationMinutes
+            : TimeOfDay(date: appointment.start, calendar: calendar)
         anchorY = scale(items).yOffset(for: time)
         translation = 0
         isDragging = true
@@ -83,7 +90,8 @@ final class TimelineAdjustment {
             hoverRequest = nil
         }
         if expanded, !overBreak, let preview,
-            !(Bitehaus.break.start..<Bitehaus.break.end).contains(preview.start.timeOfDay)
+            !(Bitehaus.break.start..<Bitehaus.break.end).contains(
+                TimeOfDay(date: preview.start, calendar: calendar))
         {
             expanded = false
             return rebase(from: oldScale, items: items)
@@ -99,17 +107,10 @@ final class TimelineAdjustment {
         return rebase(from: oldScale, items: items)
     }
 
-    func release() -> Appointment? {
+    func release() {
         isDragging = false
         hoverRequest = nil
-        guard let preview, let original,
-            preview.start != original.start || preview.durationMinutes != original.durationMinutes
-        else {
-            original = nil
-            return nil
-        }
-        isSaving = true
-        return preview
+        original = nil
     }
 
     func finish() {
@@ -121,13 +122,22 @@ final class TimelineAdjustment {
         selectedID = nil
     }
 
-    func didSave() {
-        isSaving = false
-        original = nil
+    func save(using save: (Appointment) async throws -> Void) async {
+        guard let preview, !isDragging, !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await save(preview)
+            finish()
+        } catch {
+            errorMessage = "The appointment could not be saved. Try again."
+        }
     }
 
     func selectDate(_ date: Date) -> Appointment? {
-        guard let preview, !calendar.isDate(preview.start, inSameDayAs: date) else { return nil }
+        guard !isSaving, let preview,
+            !calendar.isDate(preview.start, inSameDayAs: date)
+        else { return nil }
         self.preview = Appointment(
             id: preview.id, patientName: preview.patientName,
             start: TimeOfDay(date: preview.start, calendar: calendar).on(
@@ -135,16 +145,15 @@ final class TimelineAdjustment {
             durationMinutes: preview.durationMinutes, status: preview.status)
         hoverRequest = nil
         isDragging = false
-        isSaving = true
         return self.preview
     }
 
     private func rebase(from oldScale: TimelineScale, items: [TimelineItem]) -> CGFloat {
         guard let preview else { return 0 }
         let time =
-            edge == .end
-            ? preview.start.timeOfDay + preview.durationMinutes
-            : preview.start.timeOfDay
+            edge == .duration
+            ? TimeOfDay(date: preview.start, calendar: calendar) + preview.durationMinutes
+            : TimeOfDay(date: preview.start, calendar: calendar)
         let delta = scale(items).yOffset(for: time) - oldScale.yOffset(for: time)
         anchorY += delta
         return delta
@@ -154,8 +163,7 @@ final class TimelineAdjustment {
         guard let original else { return }
         let proposed = scale.time(at: anchorY + translation).totalMinutes
         let snapped = Int((Double(proposed) / 5).rounded()) * 5
-        let originalStart = original.start.timeOfDay.totalMinutes
-        let originalEnd = originalStart + original.durationMinutes
+        let originalStart = TimeOfDay(date: original.start, calendar: calendar).totalMinutes
         let start: Int
         let end: Int
         switch edge {
@@ -164,12 +172,9 @@ final class TimelineAdjustment {
                 max(snapped, Bitehaus.opening.totalMinutes),
                 Bitehaus.closing.totalMinutes - original.durationMinutes)
             end = start + original.durationMinutes
-        case .start:
-            start = min(max(snapped, Bitehaus.opening.totalMinutes), originalEnd - 5)
-            end = originalEnd
-        case .end:
+        case .duration:
             start = originalStart
-            end = min(max(snapped, originalStart + 5), Bitehaus.closing.totalMinutes)
+            end = min(max(snapped, originalStart + 15), Bitehaus.closing.totalMinutes)
         }
         preview = Appointment(
             id: original.id, patientName: original.patientName,

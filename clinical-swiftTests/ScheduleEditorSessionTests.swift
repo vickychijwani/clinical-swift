@@ -70,9 +70,9 @@ struct ScheduleEditorSessionTests {
                 ])
 
             session.selectDate(nextDate)
-            // Preserve each editor's current preview rule on the page for the stored date.
+            // Each editor hides the stored version while its draft is on another date.
             let oldPageIDs = session.visibleItems(items, for: start).map(\.id)
-            #expect(oldPageIDs == (unavailable ? [siblingID] : items.map(\.id)))
+            #expect(oldPageIDs == [siblingID])
             #expect(session.visibleItems([], for: nextDate).map(\.id) == [session.preview.id])
         }
     }

@@ -7,6 +7,27 @@ import Testing
 
 @MainActor
 struct RouterTests {
+    @Test func patientSelectionDismissalRetainsEditorAndAllowsImmediateInterruption() throws {
+        let router = makeRouter()
+        router.requestAppointmentBooking()
+        let id = try #require(router.activePresentation?.id)
+        router.presentationDidAppear(id)
+        router.presentationDidDismiss(retainingScheduleEditor: id)
+        #expect(router.activePresentation?.id == id)
+        router.requestUnavailableTimeCreation()
+        #expect(router.unavailableTimeEditorRequest != nil)
+    }
+
+    @Test func interruptedPatientSelectionDismissalActivatesReplacement() throws {
+        let router = makeRouter()
+        router.requestAppointmentBooking()
+        let id = try #require(router.activePresentation?.id)
+        router.presentationDidAppear(id)
+        router.requestUnavailableTimeCreation()
+        router.presentationDidDismiss(retainingScheduleEditor: id)
+        #expect(router.unavailableTimeEditorRequest != nil)
+    }
+
     @Test func settingsDoesNotReplaceAnActiveEditor() throws {
         let router = makeRouter()
         router.requestAppointmentBooking()

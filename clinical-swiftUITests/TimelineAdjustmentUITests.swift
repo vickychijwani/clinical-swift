@@ -1,6 +1,47 @@
 import XCTest
 
 nonisolated final class TimelineAdjustmentUITests: XCTestCase {
+    @MainActor func testNewBookingUsesTimelineAndSavesWithDone() {
+        let app = launch()
+        app.buttons["Add"].tap()
+        let search = app.textFields["Search patient by name"]
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        search.tap()
+        search.typeText("Test Patient")
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Test Patient")).firstMatch
+            .tap()
+        let handle = app.otherElements["appointment-duration-handle"]
+        XCTAssertTrue(handle.waitForExistence(timeout: 3))
+        XCTAssertFalse(search.exists)
+        XCTAssertFalse(app.otherElements["appointment-start-handle"].exists)
+        let draft = app.buttons.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND NOT (identifier IN %@)", "appointment-",
+                [
+                    "appointment-00000000-0000-0000-0000-00000000000A",
+                    "appointment-00000000-0000-0000-0000-00000000000B",
+                    "appointment-00000000-0000-0000-0000-00000000000C",
+                ])
+        ).firstMatch
+        XCTAssertTrue(draft.exists)
+        let id = draft.identifier
+        let point = draft.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+        point.press(forDuration: 0.1, thenDragTo: point.withOffset(CGVector(dx: 0, dy: 15)))
+        let time = draft.label
+        let durationPoint = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        durationPoint.press(
+            forDuration: 0.1, thenDragTo: durationPoint.withOffset(CGVector(dx: 0, dy: -100)))
+        XCTAssertEqual(draft.value as? String, "15 min")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons[id].exists)
+        XCTAssertEqual(app.buttons[id].value as? String, "15 min")
+        XCTAssertEqual(
+            app.buttons[id].label.components(separatedBy: ",").first,
+            time.components(separatedBy: ",").first)
+        XCTAssertFalse(handle.exists)
+    }
+
     @MainActor private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing-timeline-adjustment"]
@@ -69,20 +110,20 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         attach(app, "Passed the compact break")
     }
 
-    @MainActor func testResizeFromBothHandles() {
+    @MainActor func testDurationHandleKeepsStartAndClampsToFifteenMinutes() {
         let app = launch()
         card(app).press(forDuration: 0.45)
         XCTAssertFalse(app.staticTexts["details-opened"].exists)
-        let end = app.otherElements["appointment-end-handle"]
+        let end = app.otherElements["appointment-duration-handle"]
         XCTAssertTrue(end.waitForExistence(timeout: 3))
         let endPoint = end.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         endPoint.press(forDuration: 0.1, thenDragTo: endPoint.withOffset(CGVector(dx: 0, dy: 17)))
         XCTAssertEqual(savedTime(app), "12:00 PM · 45 min")
-        let start = app.otherElements["appointment-start-handle"]
-        let startPoint = start.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        startPoint.press(
-            forDuration: 0.1, thenDragTo: startPoint.withOffset(CGVector(dx: 0, dy: 10)))
-        XCTAssertEqual(savedTime(app), "12:10 PM · 35 min")
+        XCTAssertFalse(app.otherElements["appointment-start-handle"].exists)
+        let durationPoint = end.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        durationPoint.press(
+            forDuration: 0.1, thenDragTo: durationPoint.withOffset(CGVector(dx: 0, dy: -100)))
+        XCTAssertEqual(savedTime(app), "12:00 PM · 15 min")
         attach(app, "Resized appointment")
     }
 
@@ -121,7 +162,7 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         done.tap()
         XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.tabBars.buttons["Patients"].exists)
-        XCTAssertFalse(app.otherElements["appointment-end-handle"].exists)
+        XCTAssertFalse(app.otherElements["appointment-duration-handle"].exists)
         XCTAssertEqual(card(app).frame.width, originalWidth, accuracy: 1)
     }
 
@@ -148,7 +189,7 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         attach(app, "Adjustment carried to next day")
         app.buttons["Done"].tap()
         XCTAssertEqual(savedTime(app), originalTime)
-        XCTAssertFalse(app.otherElements["appointment-end-handle"].exists)
+        XCTAssertFalse(app.otherElements["appointment-duration-handle"].exists)
     }
 
 }

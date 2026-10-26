@@ -9,6 +9,70 @@ import Testing
 
 @MainActor
 struct AppointmentBookingModelTests {
+    @Test(arguments: [false, true])
+    func timelineChangesStayUnsavedUntilDone(editing: Bool) async throws {
+        let database = try testDatabase()
+        let date = try Date("2026-10-25T12:00:00Z", strategy: .iso8601)
+        let nextDate = try Date("2026-10-26T12:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        let appointment = Appointment(
+            patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+            if editing {
+                let record = try AppointmentRecord.persisted(
+                    id: appointment.id, patientID: patient.id, start: date,
+                    durationMinutes: 30, status: .scheduled, createdAt: date, updatedAt: date)
+                try AppointmentRecord.insert { record }.execute(db)
+            }
+        }
+        try await withDependencies {
+            $0.calendar = gregorianCalendar
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            var savedDate: Date?
+            let model =
+                editing
+                ? AppointmentBookingModel(
+                    editing: AppointmentDetails(appointment: appointment, patient: patient)
+                ) { savedDate = $0 }
+                : AppointmentBookingModel(selectedDate: date, selectedPatient: patient) {
+                    savedDate = $0
+                }
+            model.selectStart(date)
+            model.startTimelineEditing()
+            let draft = model.draftAppointment
+            model.adjustment.begin(draft, edge: .move, items: [.appointment(draft)])
+            model.adjustment.update(translation: 15, items: [.appointment(draft)])
+            model.adjustment.release()
+            model.adjustment.begin(draft, edge: .duration, items: [.appointment(draft)])
+            model.adjustment.update(translation: -100, items: [.appointment(draft)])
+            model.adjustment.release()
+            model.selectDate(nextDate)
+            let conflict = Appointment(
+                patientName: "Other patient", start: nextDate, durationMinutes: 120,
+                status: .scheduled)
+            model.updateAppointments([conflict], for: nextDate)
+            let expectedStart = nextDate.addingTimeInterval(15 * 60)
+            #expect(model.draftAppointment.start == expectedStart)
+            #expect(model.draftAppointment.durationMinutes == 15)
+            #expect(savedDate == nil)
+            let before = try await database.read { try AppointmentRecord.fetchAll($0) }
+            #expect(before.count == (editing ? 1 : 0))
+            #expect(before.first?.start == (editing ? date : nil))
+            #expect(before.first?.durationMinutes == (editing ? 30 : nil))
+
+            #expect(await model.saveAppointment())
+            let after = try await database.read { try AppointmentRecord.fetchAll($0) }
+            #expect(after.count == 1)
+            #expect(after.first?.start == expectedStart)
+            #expect(after.first?.durationMinutes == 15)
+            #expect(after.first?.patientID == patient.id)
+            #expect(savedDate == expectedStart)
+        }
+    }
+
     @Test func dateChangePreservesAvailableClockTime() throws {
         let calendar = gregorianCalendar
         let initialDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)

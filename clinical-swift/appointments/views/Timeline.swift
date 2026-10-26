@@ -10,12 +10,13 @@ struct Timeline: View {
     var previewNowMarker: Date? = nil
     var itemInteractionsEnabled = true
     var onSelectItem: (TimelineItem) -> Void = { _ in }
-    var onAdjustAppointment: ((Appointment) async throws -> Void)? = nil
+    var allowsAdjustment = false
     var onDraggingChanged: (Bool) -> Void = { _ in }
     var onScaleChange: (CGFloat) -> Void = { _ in }
 
     var date: Date = .now
-    @State var adjustment = TimelineAdjustment()
+    // The session owns this reference. View state would keep the previous session's adjustment.
+    var adjustment = TimelineAdjustment()
     @State private var lastDragEnd: ContinuousClock.Instant?
 
     static let metrics = TimelineMetrics(
@@ -59,7 +60,7 @@ struct Timeline: View {
     }
 
     private func timelineContent(now: Date?) -> some View {
-        let scale = onAdjustAppointment == nil ? scale : adjustment.scale(items, on: date)
+        let scale = allowsAdjustment ? adjustment.scale(items, on: date) : scale
         return GeometryReader { geometry in
             let engine = TimelineLayoutEngine(
                 availableWidth: geometry.size.width,
@@ -104,7 +105,11 @@ struct Timeline: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .allowsHitTesting(itemInteractionsEnabled)
+                    .allowsHitTesting(
+                        !adjustment.isSaving
+                            && (itemInteractionsEnabled
+                                || (allowsAdjustment && isSelected(layout.item)))
+                    )
                     // UI tests use the item type and ID to select each card.
                     .accessibilityIdentifier(layout.item.id.sortKey)
                     .accessibilityValue("\(layout.item.durationMinutes) min")
@@ -143,14 +148,14 @@ struct Timeline: View {
                                     onScaleChange(
                                         adjustment.update(
                                             translation: value.translation.height, items: items))
-                                    saveAdjustment()
+                                    releaseAdjustment()
                                 }
                             }
                     )
                     .simultaneousGesture(
                         LongPressGesture(minimumDuration: 0.3)
                             .onEnded { _ in
-                                guard onAdjustAppointment != nil, itemInteractionsEnabled,
+                                guard allowsAdjustment, itemInteractionsEnabled,
                                     case .appointment(let appointment) = layout.item,
                                     appointment.status == .scheduled,
                                     !adjustment.isActive || isSelected(layout.item)
@@ -162,7 +167,8 @@ struct Timeline: View {
                         // Handles sit outside the body gesture so a resize cannot start a move.
                         if case .appointment(let appointment) = layout.item,
                             adjustment.selectedID == appointment.id,
-                            onAdjustAppointment != nil, appointment.status == .scheduled
+                            allowsAdjustment,
+                            appointment.status == .scheduled || appointment.status == .draft
                         {
                             TimelineAdjustmentHandles(
                                 appointment: appointment,
@@ -170,7 +176,7 @@ struct Timeline: View {
                                 onDrag: { edge, value in
                                     drag(appointment, edge: edge, value: value)
                                 },
-                                onEnd: saveAdjustment
+                                onEnd: releaseAdjustment
                             )
                         }
                     }
@@ -201,20 +207,10 @@ struct Timeline: View {
         onScaleChange(adjustment.update(translation: value.translation.height, items: items))
     }
 
-    private func saveAdjustment() {
+    private func releaseAdjustment() {
         guard adjustment.isDragging else { return }
         lastDragEnd = .now
-        guard let appointment = adjustment.release(),
-            let onAdjustAppointment
-        else { return }
-        Task {
-            do { try await onAdjustAppointment(appointment) } catch {
-                adjustment.errorMessage = "The appointment could not be saved. Try again."
-                adjustment.finish()
-                return
-            }
-            adjustment.didSave()
-        }
+        adjustment.release()
     }
 
     private func nowY(for now: Date?) -> CGFloat? {
@@ -223,7 +219,7 @@ struct Timeline: View {
         }
 
         let time = now.timeOfDay
-        let scale = onAdjustAppointment == nil ? scale : adjustment.scale(items, on: date)
+        let scale = allowsAdjustment ? adjustment.scale(items, on: date) : scale
         guard scale.showsTime(time) else {
             return nil
         }
@@ -275,8 +271,7 @@ private struct TimelineAdjustmentHandles: View {
         RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
             .strokeBorder(.tint, lineWidth: 2)
             .allowsHitTesting(false)
-            .overlay(alignment: .topTrailing) { handle(.start) }
-            .overlay(alignment: .bottomTrailing) { handle(.end) }
+            .overlay(alignment: .bottomTrailing) { durationHandle() }
             .overlay(alignment: .topLeading) {
                 if isDragging {
                     Text(
@@ -292,22 +287,21 @@ private struct TimelineAdjustmentHandles: View {
             }
     }
 
-    private func handle(_ edge: TimelineAdjustment.Edge) -> some View {
+    private func durationHandle() -> some View {
         Capsule()
             .fill(.tint)
             .frame(width: 22, height: 5)
             .frame(width: 44, height: 28)
             .contentShape(.rect)
-            .offset(y: edge == .start ? -10 : 10)
+            .offset(y: 10)
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onChanged { onDrag(edge, $0) }
+                    .onChanged { onDrag(.duration, $0) }
                     .onEnded {
-                        onDrag(edge, $0)
+                        onDrag(.duration, $0)
                         onEnd()
                     }
             )
-            .accessibilityIdentifier(
-                edge == .start ? "appointment-start-handle" : "appointment-end-handle")
+            .accessibilityIdentifier("appointment-duration-handle")
     }
 }
