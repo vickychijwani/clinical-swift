@@ -7,6 +7,25 @@ import Testing
 @MainActor
 struct ColorLabRenderingTests {
     @Test(arguments: [ColorScheme.light, .dark])
+    func todayAccentOpacityIsSeparateFromAccentControl(scheme: ColorScheme) throws {
+        var environment = EnvironmentValues()
+        environment.colorScheme = scheme
+        let accent = Color(.sRGB, red: 0.3, green: 0.5, blue: 0.7)
+        var palette = AppPalette(overrides: [.accent: accent.opacity(0.2)])
+        let todayAccent = palette.opaqueAccent(in: environment)
+        #expect(
+            try pixels(Rectangle().fill(todayAccent), scheme: scheme)
+                == pixels(Rectangle().fill(accent), scheme: scheme))
+        palette.todaySelection.highlightOpacity = 0.35
+        #expect(
+            try pixels(
+                Rectangle().fill(todayAccent.opacity(palette.todaySelection.highlightOpacity)),
+                scheme: scheme)
+                == pixels(Rectangle().fill(accent.opacity(0.35)), scheme: scheme))
+        #expect(palette[.accent] == accent.opacity(0.2))
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
     func defaultsMatchOriginalStyles(scheme: ColorScheme) throws {
         #expect(
             try pixels(Rectangle().fill(AppColor.accent), scheme: scheme)

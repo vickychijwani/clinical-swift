@@ -40,10 +40,15 @@ extension View {
         }
 
         var palette: AppPalette {
-            AppPalette(overrides: state.colors.mapValues(\.color))
+            AppPalette(
+                overrides: state.colors.mapValues(\.color),
+                todaySelection: state.todaySelection ?? .init())
         }
 
-        func reset() { state.colors = [:] }
+        func reset() {
+            state.colors = [:]
+            state.todaySelection = nil
+        }
 
         struct SavedState: Codable, Equatable {
             var isEnabled = false
@@ -51,6 +56,7 @@ extension View {
             var position = TimelineTuning.Position(x: 0, y: 0)
             var selected = AppColor.background
             var colors: [AppColor: Selection] = [:]
+            var todaySelection: AppPalette.TodaySelection?
         }
 
         enum Selection: Codable, Equatable {
@@ -273,7 +279,11 @@ extension View {
                         })
                 if lab.state.isExpanded {
                     ScrollView {
-                        ColorLabEditor(lab: lab)
+                        VStack {
+                            ColorLabTodaySelection(lab: lab)
+                            Divider()
+                            ColorLabEditor(lab: lab)
+                        }
                     }
                     .scrollDismissesKeyboard(.interactively)
                     .scrollIndicators(.hidden)
@@ -302,6 +312,33 @@ extension View {
             }
             .offset(x: origin.x, y: origin.y)
             .accessibilityIdentifier("color-lab")
+        }
+    }
+
+    private struct ColorLabTodaySelection: View {
+        @Bindable var lab: ColorLab
+
+        private var selection: Binding<AppPalette.TodaySelection> {
+            Binding(
+                get: { lab.state.todaySelection ?? .init() },
+                set: { lab.state.todaySelection = $0 })
+        }
+
+        var body: some View {
+            VStack(alignment: .leading) {
+                Text("Today selected").bold()
+                Picker("Text color", selection: selection.usesWhiteText) {
+                    Text("White").tag(true)
+                    Text("Black").tag(false)
+                }
+                .pickerStyle(.segmented)
+                ColorLabChannel(
+                    title: "Highlight opacity %",
+                    value: Binding(
+                        get: { selection.wrappedValue.highlightOpacity * 100 },
+                        set: { selection.wrappedValue.highlightOpacity = $0 / 100 }),
+                    range: 0...100)
+            }
         }
     }
 

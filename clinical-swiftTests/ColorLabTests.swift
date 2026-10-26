@@ -44,6 +44,39 @@ import Testing
             #expect(ColorLab(defaults: defaults).state == ColorLab.SavedState())
         }
 
+        @Test func todaySelectionPersistsWhenHiddenAndResetsWithColors() throws {
+            let suite = "ColorLabTests.\(UUID())"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let lab = ColorLab(defaults: defaults)
+            #expect(lab.palette.todaySelection.textColor == .white)
+            #expect(lab.palette.todaySelection.highlightOpacity == 1)
+            lab.state.todaySelection = .init(usesWhiteText: false, highlightOpacity: 0.35)
+            lab.state.isEnabled = false
+            let restored = ColorLab(defaults: defaults)
+            #expect(restored.palette.todaySelection.textColor == .black)
+            #expect(restored.palette.todaySelection.highlightOpacity == 0.35)
+            restored.state.colors[.accent] = .system(.purple)
+            restored.reset()
+            #expect(restored.palette == AppPalette())
+            #expect(ColorLab(defaults: defaults).palette == AppPalette())
+        }
+
+        @Test func savedColorsWithoutTodaySelectionKeepTheirValues() throws {
+            let suite = "ColorLabTests.\(UUID())"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            var state = ColorLab.SavedState()
+            state.isEnabled = true
+            state.colors[.accent] = .system(.purple)
+            // A nil optional is omitted, as in preferences saved before the today controls existed.
+            defaults.set(try JSONEncoder().encode(state), forKey: "developer.colorLab.v1")
+            let restored = ColorLab(defaults: defaults)
+            #expect(restored.state.isEnabled)
+            #expect(restored.palette[.accent] == .purple)
+            #expect(restored.palette.todaySelection == .init())
+        }
+
         @Test func hslRoundTripPreservesChannelsAndOpacity() {
             for red in [0.0, 0.2, 0.7, 1.0] {
                 for green in [0.0, 0.3, 0.8, 1.0] {

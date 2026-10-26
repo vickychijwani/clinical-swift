@@ -166,6 +166,7 @@ private enum WeekPageOffset: Int, CaseIterable, Identifiable {
 
 private struct WeekDatePage: View {
     @Environment(\.appPalette) private var palette
+    @Environment(\.self) private var environment
     let weekStart: Date
     let selectedDate: Date
     let today: Date
@@ -196,7 +197,9 @@ private struct WeekDatePage: View {
                     .frame(width: 44, height: displayMode.cellMinHeight)
                     .glassEffect(
                         .regular.tint(
-                            selectedDate.isSameDayAs(today) ? palette[.accent].opacity(0.2) : nil
+                            selectedDate.isSameDayAs(today)
+                                ? palette.opaqueAccent(in: environment)
+                                    .opacity(palette.todaySelection.highlightOpacity) : nil
                         )
                         .interactive(),
                         in: .rect(cornerRadius: displayMode.cornerRadius, style: .continuous)
@@ -213,6 +216,7 @@ private struct WeekDatePage: View {
 
 private struct DateStripCell: View {
     @Environment(\.appPalette) private var palette
+    @Environment(\.self) private var environment
     let date: Date
     let isSelected: Bool
     let isToday: Bool
@@ -262,7 +266,7 @@ private struct DateStripCell: View {
 
     private var foregroundStyle: Color {
         if isToday {
-            palette[.accent]
+            isSelected ? palette.todaySelection.textColor : palette.opaqueAccent(in: environment)
         } else if isSelected {
             palette[.text]
         } else {

@@ -55,6 +55,21 @@ nonisolated enum AppColor: String, CaseIterable, Codable, Identifiable, ShapeSty
 
 nonisolated struct AppPalette: Equatable {
     var overrides: [AppColor: Color] = [:]
+    var todaySelection = TodaySelection()
+
+    struct TodaySelection: Codable, Equatable {
+        var usesWhiteText = true
+        var highlightOpacity = 1.0
+
+        var textColor: Color { usesWhiteText ? .white : .black }
+    }
+
+    func opaqueAccent(in environment: EnvironmentValues) -> Color {
+        var accent = self[.accent].resolve(in: environment)
+        // Today text and glass tint have their own opacity, separate from the Accent control.
+        accent.opacity = 1
+        return Color(accent)
+    }
 
     subscript(role: AppColor) -> Color {
         if let color = overrides[role] { return color }
