@@ -7,8 +7,10 @@ Release builds have no lab controls and do not load saved lab values.
 
 Color lab shows live changes across app screens and the details, patient edit,
 and appointment message sheets. Drag the header to move it. Collapse keeps its
-header available. Each color supports the native palette, RGB or HSL channels,
-opacity, and named system colors. Numeric fields and sliders edit the same value.
+header available. Each color starts in Hex mode and also supports the native
+palette and RGB or HSL channels. Opacity is available in every mode, including
+Hex. Hex accepts six RGB digits with an optional # prefix. Named system colors
+are also available. Numeric fields and sliders edit the same value.
 Editing a channel converts a system color to a fixed sRGB color. A system choice
 stays semantic until a channel or palette edit replaces it.
 
@@ -21,3 +23,9 @@ stays readable when a test palette has low contrast.
 Native navigation, tab bars, controls, and Liquid Glass keep their system
 materials and state effects. The lab changes their app tint. The widget uses the
 source defaults; app preference changes do not change its separate process.
+
+An empty palette must preserve the original appearance. Do not install the app
+accent as a root tint until it has an explicit override: native toolbar buttons
+choose their own tint. Keep primary, secondary, and tertiary foreground styles
+as inherited styles rather than fixed label colors. Tests compare every default
+against the PR #13 source styles in both light and dark mode.

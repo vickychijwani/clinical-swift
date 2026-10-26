@@ -120,6 +120,30 @@ extension View {
                 alpha = Double(value.opacity)
             }
 
+            var hex: String {
+                "#"
+                    + [red, green, blue].map { channel in
+                        let byte = Int((min(1, max(0, channel)) * 255).rounded())
+                        let digits = String(byte, radix: 16, uppercase: true)
+                        return digits.count == 1 ? "0" + digits : digits
+                    }.joined()
+            }
+
+            init?(hex: String, alpha: Double) {
+                var digits = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+                if digits.hasPrefix("#") { digits.removeFirst() }
+                guard digits.utf8.count == 6,
+                    digits.utf8.allSatisfy({
+                        (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0)
+                    }),
+                    let value = Int(digits, radix: 16)
+                else { return nil }
+                self.init(
+                    red: Double((value >> 16) & 255) / 255,
+                    green: Double((value >> 8) & 255) / 255,
+                    blue: Double(value & 255) / 255, alpha: alpha)
+            }
+
             var hsl: HSL {
                 let high = max(red, green, blue)
                 let low = min(red, green, blue)
@@ -177,8 +201,16 @@ extension View {
             content
                 .environment(\.colorLab, lab)
                 .environment(\.appPalette, lab.palette)
-                .tint(lab.palette[.accent])
-                .foregroundStyle(AppColor.text)
+                .modifier(ColorLabAppTint(palette: lab.palette))
+        }
+    }
+
+    struct ColorLabAppTint: ViewModifier {
+        let palette: AppPalette
+
+        func body(content: Content) -> some View {
+            // A default accent is not an explicit tint. Native toolbar buttons choose their own style.
+            content.tint(palette.overrides[.accent])
         }
     }
 
@@ -285,11 +317,12 @@ extension View {
     private struct ColorLabEditor: View {
         @Bindable var lab: ColorLab
         @Environment(\.self) private var environment
-        @State private var mode = Mode.rgb
+        @State private var mode = Mode.hex
         @State private var hslDraft: ColorLab.HSL?
         @State private var hslSource: ColorLab.RGBA?
 
         private enum Mode: String, CaseIterable {
+            case hex = "Hex"
             case rgb = "RGB"
             case hsl = "HSL"
         }
@@ -343,7 +376,14 @@ extension View {
                     ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                if mode == .rgb {
+                if mode == .hex {
+                    ColorLabHexField(
+                        value: Binding(
+                            get: { rgba },
+                            set: { lab.state.colors[lab.state.selected] = .custom($0) })
+                    )
+                    .id(lab.state.selected)
+                } else if mode == .rgb {
                     ColorLabChannel(title: "Red", value: rgb(\.red), range: 0...255)
                     ColorLabChannel(title: "Green", value: rgb(\.green), range: 0...255)
                     ColorLabChannel(title: "Blue", value: rgb(\.blue), range: 0...255)
@@ -393,6 +433,44 @@ extension View {
                     hslSource = next
                     lab.state.colors[lab.state.selected] = .custom(next)
                 })
+        }
+    }
+
+    private struct ColorLabHexField: View {
+        @Binding var value: ColorLab.RGBA
+        @State private var text = ""
+        @FocusState private var isFocused: Bool
+
+        var body: some View {
+            VStack(alignment: .leading) {
+                TextField(
+                    "#RRGGBB",
+                    text: Binding(
+                        get: { text },
+                        set: { input in
+                            text = input
+                            // Only text entry writes a color. Showing the rounded hex value must not convert a source color.
+                            if let next = ColorLab.RGBA(hex: input, alpha: value.alpha) {
+                                value = next
+                            }
+                        })
+                )
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .keyboardType(.asciiCapable)
+                .monospaced()
+                .focused($isFocused)
+                .submitLabel(.done)
+                .onSubmit { isFocused = false }
+                Text("Use six hex digits. Opacity is separate.")
+                    .foregroundStyle(.secondary)
+            }
+            .onAppear { text = value.hex }
+            .onChange(of: value) { previous, next in
+                // Keep unfinished input while opacity changes. Palette and role changes update the hex value.
+                if previous.hex != next.hex { text = next.hex }
+            }
         }
     }
 

@@ -25,6 +25,7 @@ nonisolated enum AppColor: String, CaseIterable, Codable, Identifiable, ShapeSty
     case unavailableTime = "Unavailable time"
     case unavailableLabel = "Unavailable label"
     case grid = "Timeline lines"
+    case breakStripe = "Break stripes"
     case hour = "Timeline hours"
     case now = "Now marker"
     case success = "Success and avatars"
@@ -37,11 +38,18 @@ nonisolated enum AppColor: String, CaseIterable, Codable, Identifiable, ShapeSty
     var id: Self { self }
 
     func resolve(in environment: EnvironmentValues) -> AnyShapeStyle {
-        if environment.appPalette.overrides[self] == nil {
-            if self == .surface { return AnyShapeStyle(.background) }
-            if self == .tertiaryText { return AnyShapeStyle(.tertiary) }
+        let palette = environment.appPalette
+        if let color = palette.overrides[self] { return AnyShapeStyle(color) }
+        // Preserve the original hierarchy. Color.secondary does not inherit a parent's foreground style.
+        switch self {
+        case .surface: return AnyShapeStyle(.background)
+        case .text: return AnyShapeStyle(.primary)
+        case .secondaryText, .icon: return AnyShapeStyle(.secondary)
+        case .tertiaryText: return AnyShapeStyle(.tertiary)
+        case .border where palette.overrides[.text] == nil:
+            return AnyShapeStyle(.primary.opacity(0.12))
+        default: return AnyShapeStyle(palette[self])
         }
-        return AnyShapeStyle(environment.appPalette[self])
     }
 }
 
@@ -72,6 +80,7 @@ nonisolated struct AppPalette: Equatable {
         case .unavailableTime: return Color("UnavailableTimeTime")
         case .unavailableLabel: return Color("UnavailableTimeLabel")
         case .grid: return .gray.opacity(0.15)
+        case .breakStripe: return .gray.opacity(0.12)
         case .hour: return .gray
         case .now: return Color(red: 0.78, green: 0.43, blue: 0.25)
         case .success: return .green

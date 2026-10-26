@@ -59,6 +59,22 @@ import Testing
             }
         }
 
+        @Test func hexAcceptsRGBAndPreservesSeparateOpacity() throws {
+            let expected = ColorLab.RGBA(
+                red: 18.0 / 255, green: 171.0 / 255, blue: 239.0 / 255, alpha: 0.37)
+            #expect(ColorLab.RGBA(hex: "#12AbEf", alpha: 0.37) == expected)
+            #expect(ColorLab.RGBA(hex: " 12ABEF ", alpha: 0.37) == expected)
+            #expect(expected.hex == "#12ABEF")
+            #expect(ColorLab.RGBA(red: 0, green: 0, blue: 0).hex == "#000000")
+            #expect(ColorLab.RGBA(red: 1, green: 1, blue: 1).hex == "#FFFFFF")
+            let translucent = try #require(ColorLab.RGBA(hex: "#123456", alpha: 0.2))
+            #expect(translucent.alpha == 0.2)
+            #expect(ColorLab.RGBA(hex: translucent.hex, alpha: 0.8)?.alpha == 0.8)
+            for invalid in ["", "#123", "#12345", "#12345678", "#GG0000", "+12345", "＃123456"] {
+                #expect(ColorLab.RGBA(hex: invalid, alpha: 1) == nil)
+            }
+        }
+
         @Test func hslKnownColorsAndHueWrap() {
             #expect(
                 ColorLab.RGBA(red: 1, green: 0, blue: 0).hsl
