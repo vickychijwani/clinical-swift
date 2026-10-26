@@ -88,6 +88,24 @@ import SQLiteData
         adjustment.select(draftAppointment)
     }
 
+    func beginTimelineBooking(center: TimeOfDay, items: [TimelineItem]) {
+        // Clamp the centered interval at clinic boundaries, then keep the manual time on reload.
+        let minutes = center.totalMinutes - draft.durationMinutes / 2
+        // Only the initial start uses 15-minute steps. Later drags use five-minute steps.
+        let snapped = Int((Double(minutes) / 15).rounded()) * 15
+        draft.selectStart(
+            TimeOfDay(max(snapped, 0) / 60, max(snapped, 0) % 60)
+                .on(date: selectedDate, using: calendar))
+        isSelectingPatient = false
+        startTimelineEditing()
+        adjustment.begin(draftAppointment, edge: .move, items: items)
+    }
+
+    func releaseTimelineBooking() {
+        adjustment.release()
+        isSelectingPatient = draft.selectedPatient == nil
+    }
+
     func selectPatient(_ patient: Patient) {
         draft.selectedPatient = patient
         searchText = ""

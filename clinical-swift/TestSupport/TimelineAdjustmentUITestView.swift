@@ -28,6 +28,12 @@
                         status: .scheduled, createdAt: .now, updatedAt: .now)
                     try AppointmentRecord.insert { record }.execute(db)
                 }
+                try UnavailableTimeRecord.insert {
+                    UnavailableTimeRecord(
+                        id: UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20)),
+                        label: "Travel", start: Date.now.setTime(11, 0), durationMinutes: 30,
+                        createdAt: .now, updatedAt: .now)
+                }.execute(db)
             }
             return database
         }

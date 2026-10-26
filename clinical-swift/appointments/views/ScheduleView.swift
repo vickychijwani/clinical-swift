@@ -16,7 +16,6 @@ struct ScheduleView: View {
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
     @State private var adjustment = TimelineAdjustment()
-    @State private var confirmsDiscard = false
 
     private var bookingModel: AppointmentBookingModel? {
         guard case .appointment(let model) = editorSession?.editor else { return nil }
@@ -62,7 +61,21 @@ struct ScheduleView: View {
                     scrollPosition: scrollPositionBinding(for: date),
                     onSelectItem: selectItem,
                     allowsAdjustment: bookingModel.map { !$0.isSaving } ?? !editorIsActive,
-                    adjustment: activeAdjustment
+                    adjustment: activeAdjustment,
+                    onBeginBooking: { beginBooking(center: $0, on: date) },
+                    onBookingRelease: { released in
+                        guard let bookingModel, bookingModel.adjustment === released else { return }
+                        bookingModel.releaseTimelineBooking()
+                    },
+                    onCancel: { activeAdjustment.release() },
+                    onDiscard: {
+                        if let editorSession {
+                            finishEditor(editorSession.id, date: router.selectedScheduleDate)
+                        } else {
+                            adjustment.finish()
+                        }
+                    },
+                    onDone: saveAppointment
                 )
             }
         }
@@ -78,12 +91,6 @@ struct ScheduleView: View {
         .toolbar(activeAdjustment.isActive ? .hidden : .visible, for: .tabBar)
         .toolbar {
             if activeAdjustment.isActive {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", systemImage: "xmark") { confirmsDiscard = true }
-                        .disabled(
-                            activeAdjustment.isDragging || activeAdjustment.isSaving
-                                || bookingModel?.isSaving == true)
-                }
                 if let bookingModel {
                     ToolbarItem(placement: .principal) {
                         Button(bookingModel.draft.selectedPatient?.displayName ?? "Select Patient")
@@ -92,20 +99,6 @@ struct ScheduleView: View {
                         }
                         .disabled(bookingModel.isSaving || activeAdjustment.isDragging)
                     }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    AsyncButton("Done", systemImage: "checkmark") {
-                        if let bookingModel {
-                            _ = await bookingModel.saveAppointment()
-                        } else {
-                            await adjustment.save(using: scheduleModel.adjustAppointment)
-                        }
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glassProminent)
-                    .disabled(
-                        activeAdjustment.isDragging || activeAdjustment.isSaving
-                            || (bookingModel != nil && bookingModel?.draft.selectedPatient == nil))
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -128,17 +121,6 @@ struct ScheduleView: View {
                     }
                 }
             }
-        }
-        .confirmationDialog("Discard unsaved appointment?", isPresented: $confirmsDiscard) {
-            Button("Discard Changes", role: .destructive) {
-                if let editorSession {
-                    finishEditor(editorSession.id, date: router.selectedScheduleDate)
-                } else {
-                    adjustment.finish()
-                }
-            }
-        } message: {
-            Text("Your appointment changes have not been saved.")
         }
         .alert(
             "Unable to save appointment",
@@ -181,6 +163,8 @@ struct ScheduleView: View {
                 editorSession = nil
                 return
             }
+            // A timeline hold installs its session before the first drag update.
+            guard editorSession?.id != request.id else { return }
             adjustment.finish()
             editorSession = ScheduleEditorSession(
                 request: request, selectedDate: router.selectedScheduleDate,
@@ -190,7 +174,7 @@ struct ScheduleView: View {
             }
         }
         .task(id: editorSession?.id) {
-            guard editorSession != nil else { return }
+            guard editorSession != nil, !activeAdjustment.isDragging else { return }
 
             // Let SwiftUI lay out the draft and sheet clearance before animating to its position.
             await Task.yield()
@@ -307,6 +291,34 @@ struct ScheduleView: View {
         }
     }
 
+    private func beginBooking(center: TimeOfDay, on date: Date) -> TimelineAdjustment? {
+        guard !editorIsActive, !adjustment.isActive,
+            date.isSameDayAs(router.selectedScheduleDate)
+        else { return nil }
+        router.requestAppointmentBooking()
+        guard let request = scheduleEditorRequest else { return nil }
+        let model = AppointmentBookingModel(selectedDate: date) { savedDate in
+            finishEditor(request.id, date: savedDate)
+        }
+        model.beginTimelineBooking(center: center, items: visibleItems(for: date))
+        editorSession = ScheduleEditorSession(id: request.id, editor: .appointment(model))
+        return bookingModel?.adjustment
+    }
+
+    private func saveAppointment() async {
+        if let bookingModel {
+            if bookingModel.draft.selectedPatient == nil {
+                bookingModel.releaseTimelineBooking()
+                return
+            }
+            bookingModel.adjustment.release()
+            _ = await bookingModel.saveAppointment()
+        } else {
+            adjustment.release()
+            await adjustment.save(using: scheduleModel.adjustAppointment)
+        }
+    }
+
     private func finishEditor(_ requestID: UUID, date: Date) {
         guard let editorSession, editorSession.id == requestID,
             editorSession.finish(using: router, date: date)
@@ -368,6 +380,11 @@ struct ScheduleEditorSession: Identifiable {
     enum Editor {
         case appointment(AppointmentBookingModel)
         case unavailableTime(UnavailableTimeEditorModel)
+    }
+
+    init(id: UUID, editor: Editor) {
+        self.id = id
+        self.editor = editor
     }
 
     init?(
@@ -505,6 +522,11 @@ struct ScheduleTimelinePage: View {
     let onSelectItem: (TimelineItem) -> Void
     let allowsAdjustment: Bool
     let adjustment: TimelineAdjustment
+    let onBeginBooking: (TimeOfDay) -> TimelineAdjustment?
+    let onBookingRelease: (TimelineAdjustment) -> Void
+    let onCancel: () -> Void
+    let onDiscard: () -> Void
+    let onDone: @MainActor () async -> Void
     @State private var isDragging = false
     @State private var scrollY: CGFloat = 0
     @State private var needsAdjustmentClearance = false
@@ -528,6 +550,11 @@ struct ScheduleTimelinePage: View {
                         guard delta != 0 else { return }
                         pendingScrollY = max(scrollY + delta, 0)
                     },
+                    onBeginBooking: onBeginBooking,
+                    onBookingRelease: onBookingRelease,
+                    onCancel: onCancel,
+                    onDiscard: onDiscard,
+                    onDone: onDone,
                     date: date,
                     adjustment: adjustment
                 )

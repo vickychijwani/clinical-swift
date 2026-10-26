@@ -13,11 +13,19 @@ struct Timeline: View {
     var allowsAdjustment = false
     var onDraggingChanged: (Bool) -> Void = { _ in }
     var onScaleChange: (CGFloat) -> Void = { _ in }
+    var onBeginBooking: (TimeOfDay) -> TimelineAdjustment? = { _ in nil }
+    var onBookingRelease: (TimelineAdjustment) -> Void = { _ in }
+    var onCancel: () -> Void = {}
+    var onDiscard: () -> Void = {}
+    var onDone: @MainActor () async -> Void = {}
 
     var date: Date = .now
     // The session owns this reference. View state would keep the previous session's adjustment.
     var adjustment = TimelineAdjustment()
     @State private var lastDragEnd: ContinuousClock.Instant?
+    @State private var touchStart: CGPoint?
+    // Keep the first touch attached while Schedule installs the new booking session.
+    @State private var bookingDrag: TimelineAdjustment?
 
     static let metrics = TimelineMetrics(
         hourHeight: 60,
@@ -52,6 +60,10 @@ struct Timeline: View {
             }
         }
         .onChange(of: adjustment.isDragging) { _, dragging in
+            if !dragging {
+                bookingDrag = nil
+                touchStart = nil
+            }
             onDraggingChanged(dragging)
         }
         .sensoryFeedback(.impact(weight: .light), trigger: adjustment.isDragging)
@@ -152,17 +164,6 @@ struct Timeline: View {
                                 }
                             }
                     )
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.3)
-                            .onEnded { _ in
-                                guard allowsAdjustment, itemInteractionsEnabled,
-                                    case .appointment(let appointment) = layout.item,
-                                    appointment.status == .scheduled,
-                                    !adjustment.isActive || isSelected(layout.item)
-                                else { return }
-                                adjustment.begin(appointment, edge: .move, items: items)
-                            }
-                    )
                     .overlay {
                         // Handles sit outside the body gesture so a resize cannot start a move.
                         if case .appointment(let appointment) = layout.item,
@@ -180,6 +181,17 @@ struct Timeline: View {
                             )
                         }
                     }
+                    .overlay(alignment: .topTrailing) {
+                        if isSelected(layout.item), allowsAdjustment {
+                            TimelineAdjustmentActions(
+                                isSaving: adjustment.isSaving,
+                                onCancel: onCancel, onDiscard: onDiscard, onDone: onDone
+                            )
+                            .fixedSize()
+                            // Leave the duration handle its own touch area below the card.
+                            .offset(y: layout.rect.height + 4)
+                        }
+                    }
                     .zIndex(isSelected(layout.item) ? 1 : 0)
                     .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
@@ -190,6 +202,46 @@ struct Timeline: View {
                         .zIndex(2)
                 }
             }
+            .contentShape(.rect)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { value in
+                        touchStart = value.startLocation
+                        if let bookingDrag {
+                            onScaleChange(
+                                bookingDrag.update(
+                                    translation: value.translation.height, items: items))
+                        }
+                    }
+                    .onEnded { value in
+                        touchStart = nil
+                        guard let bookingDrag else { return }
+                        self.bookingDrag = nil
+                        // Done or Cancel can end the drag before the finger lifts.
+                        guard bookingDrag.isDragging else { return }
+                        lastDragEnd = .now
+                        onScaleChange(
+                            bookingDrag.update(
+                                translation: value.translation.height, items: items))
+                        bookingDrag.release()
+                        onBookingRelease(bookingDrag)
+                    },
+                including: allowsAdjustment && (!adjustment.isActive || bookingDrag != nil)
+                    ? .all : .subviews
+            )
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.3)
+                    .onEnded { _ in
+                        guard allowsAdjustment, itemInteractionsEnabled, !adjustment.isActive,
+                            let touchStart
+                        else { return }
+                        let y = touchStart.y - geometry.frame(in: .global).minY
+                        // Use the displayed scale, including a compact break, for touch mapping.
+                        bookingDrag = onBeginBooking(scale.time(at: y))
+                    },
+                including: allowsAdjustment && (!adjustment.isActive || bookingDrag != nil)
+                    ? .all : .subviews
+            )
         }
         .frame(height: scale.totalHeight)
         .padding(.vertical, Timeline.metrics.verticalPadding)
@@ -225,6 +277,36 @@ struct Timeline: View {
         }
 
         return scale.yOffset(for: time)
+    }
+}
+
+private struct TimelineAdjustmentActions: View {
+    let isSaving: Bool
+    let onCancel: () -> Void
+    let onDiscard: () -> Void
+    let onDone: @MainActor () async -> Void
+    @State private var confirmsDiscard = false
+
+    var body: some View {
+        GlassEffectContainer {
+            HStack {
+                Button("Cancel", systemImage: "xmark") {
+                    onCancel()
+                    confirmsDiscard = true
+                }
+                .buttonStyle(.glass)
+                .confirmationDialog("Discard unsaved appointment?", isPresented: $confirmsDiscard) {
+                    Button("Discard Changes", role: .destructive, action: onDiscard)
+                } message: {
+                    Text("Your appointment changes have not been saved.")
+                }
+                AsyncButton("Done", systemImage: "checkmark", action: onDone)
+                    .buttonStyle(.glassProminent)
+            }
+            .labelStyle(.iconOnly)
+            .controlSize(.mini)
+            .disabled(isSaving)
+        }
     }
 }
 
@@ -271,7 +353,7 @@ private struct TimelineAdjustmentHandles: View {
         RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
             .strokeBorder(.tint, lineWidth: 2)
             .allowsHitTesting(false)
-            .overlay(alignment: .bottomTrailing) { durationHandle() }
+            .overlay(alignment: .bottom) { durationHandle() }
             .overlay(alignment: .topLeading) {
                 if isDragging {
                     Text(
