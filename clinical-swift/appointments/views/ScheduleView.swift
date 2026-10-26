@@ -90,17 +90,7 @@ struct ScheduleView: View {
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar(activeAdjustment.isActive ? .hidden : .visible, for: .tabBar)
         .toolbar {
-            if activeAdjustment.isActive {
-                if let bookingModel {
-                    ToolbarItem(placement: .principal) {
-                        Button(bookingModel.draft.selectedPatient?.displayName ?? "Select Patient")
-                        {
-                            bookingModel.isSelectingPatient = true
-                        }
-                        .disabled(bookingModel.isSaving || activeAdjustment.isDragging)
-                    }
-                }
-            } else {
+            if !activeAdjustment.isActive {
                 ToolbarItem(placement: .topBarTrailing) {
                     BackupSettingsButton()
                 }
@@ -217,6 +207,21 @@ struct ScheduleView: View {
             // Initial presentation scrolls after layout in the session task above.
             guard let previous, let current, previous.sessionID == current.sessionID else { return }
             scrollToEditorPreview()
+        }
+        .timelineTuningOverlay(isVisible: showsCardLab)
+    }
+
+    private var showsCardLab: Bool {
+        guard router.selectedTab == .schedule, router.schedulePath.isEmpty,
+            editorSheet.wrappedValue == nil
+        else { return false }
+        switch router.activePresentation {
+        case nil:
+            return true
+        case .appointmentBooking, .appointmentEdit:
+            return bookingModel?.isSelectingPatient == false
+        default:
+            return false
         }
     }
 

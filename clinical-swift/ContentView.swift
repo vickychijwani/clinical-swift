@@ -72,6 +72,7 @@ struct ContentView: View {
         .onOpenURL { url in
             router.open(url)
         }
+        .timelineTuningRoot()
     }
 
     private var detailsPresentationBinding: Binding<DetailsPresentation?> {

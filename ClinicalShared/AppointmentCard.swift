@@ -19,7 +19,7 @@ struct AppointmentCard: View {
         if isAdjusting {
             return ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: .glass,
+                background: .active,
                 border: .accentColor.opacity(0.7),
                 borderStyle: StrokeStyle(lineWidth: 2))
         }

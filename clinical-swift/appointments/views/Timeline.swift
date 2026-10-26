@@ -120,7 +120,7 @@ struct Timeline: View {
                             }
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(TimelineCardButtonStyle())
                     .allowsHitTesting(
                         !adjustment.isSaving
                             && (itemInteractionsEnabled
@@ -185,6 +185,10 @@ struct Timeline: View {
                             )
                         }
                     }
+                    .modifier(
+                        ScheduleCardLift(
+                            isPressed: isSelected(layout.item) && adjustment.isDragging)
+                    )
                     .overlay(alignment: .topTrailing) {
                         if isSelected(layout.item), allowsAdjustment {
                             TimelineAdjustmentActions(
@@ -284,6 +288,13 @@ struct Timeline: View {
     }
 }
 
+private struct TimelineCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        // The lift owns press feedback. System button dimming would also fade the white fill.
+        configuration.label
+    }
+}
+
 private struct TimelineAdjustmentActions: View {
     let isSaving: Bool
     let onCancel: () -> Void
@@ -364,8 +375,9 @@ private struct TimelineAdjustmentHandles: View {
                         "\(appointment.start.formatted(date: .omitted, time: .shortened)) – \(appointment.end.formatted(date: .omitted, time: .shortened)) · \(appointment.durationMinutes) min"
                     )
                     .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.white)
                     .padding(6)
-                    .background(.regularMaterial, in: .capsule)
+                    .background(Color.accentColor, in: .capsule)
                     .fixedSize()
                     .offset(y: -32)
                     .allowsHitTesting(false)
