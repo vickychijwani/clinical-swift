@@ -39,3 +39,10 @@ This document captures testing rules that are easy to miss under strict Swift co
 - Override registered ambient values with `withDependencies` around model construction or the complete operation under test. Keep narrower scopes when a test needs a value with specific semantics, such as a fixed time zone.
 - Do not let tests fall through to live implementations of registered ambient values. Besides making tests environment-dependent, `swift-dependencies` reports live dependency access as a test issue.
 - Do not link `DependenciesTestSupport` into this Xcode test bundle. Its static dependency runtime duplicates the package framework loaded by the host app, causing test overrides to mutate a different `DependencyValues` context than production models read.
+
+## Color lab checks
+
+Launch a Debug build with `--ui-testing-color-lab` to check the full app shell
+with the existing synthetic schedule database. This path does not register the
+clinic backup task or start Calendar sync. Lab preferences still persist so a
+relaunch can check restoration. Use Reset all when a manual color check ends.

@@ -20,7 +20,7 @@ struct PatientContactActionsView: View {
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(AppColor.icon)
     }
 
     private var normalizedPhoneNumber: String? {

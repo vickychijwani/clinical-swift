@@ -21,7 +21,7 @@ struct AppointmentDetailsCard: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background)
+            .background(AppColor.surface)
             .clipShape(.rect(cornerRadius: 32))
 
         case .patientTimeline(let onSelectAppointment):
@@ -31,7 +31,7 @@ struct AppointmentDetailsCard: View {
                 AppointmentDetailsSummary(appointment: appointment)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.background)
+                    .background(AppColor.surface)
                     .clipShape(.rect(cornerRadius: 32))
             }
             .buttonStyle(.plain)
@@ -47,6 +47,7 @@ struct AppointmentDetailsCard: View {
 }
 
 struct AppointmentDetailsSummary: View {
+    @Environment(\.appPalette) private var palette
     @Dependency(\.locale) private var locale
 
     let appointment: Appointment
@@ -65,7 +66,7 @@ struct AppointmentDetailsSummary: View {
                     Text(formattedDate)
                         .font(.subheadline)
                         .bold()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColor.secondaryText)
 
                     Spacer()
                 }
@@ -105,20 +106,20 @@ struct AppointmentDetailsSummary: View {
     private var statusColor: Color {
         switch statusPresentation.treatment {
         case .active:
-            .green
+            palette[.success]
         case .accent:
-            .accentColor
+            palette[.accent]
         case .muted:
-            .secondary
+            palette[.secondaryText]
         }
     }
 
     private var timeColor: Color {
         switch statusPresentation.treatment {
         case .active, .accent:
-            .primary
+            palette[.text]
         case .muted:
-            .secondary
+            palette[.secondaryText]
         }
     }
 }
@@ -136,7 +137,7 @@ struct AppointmentDetailsSummary: View {
             )
         )
         .padding()
-        .background(Color("AppBackground"))
+        .background(AppColor.background)
     }
 }
 
@@ -150,7 +151,7 @@ struct AppointmentDetailsSummary: View {
             variant: .patientTimeline(onSelectAppointment: {})
         )
         .padding()
-        .background(Color("AppBackground"))
+        .background(AppColor.background)
     }
 }
 

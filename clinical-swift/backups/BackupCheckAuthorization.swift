@@ -71,7 +71,7 @@
                             Text("Test credentials saved. You can export them now.")
                         }
                         if let problem = authorization.problem {
-                            Text(problem).foregroundStyle(.orange)
+                            Text(problem).foregroundStyle(AppColor.warning)
                         }
                         AsyncButton("Connect Google Drive", systemImage: "externaldrive") {
                             await authorization.connect { request in

@@ -10,13 +10,13 @@ struct TimelineHourGrid: View {
                 let y = scale.yOffset(for: time)
 
                 Rectangle()
-                    .fill(.gray.opacity(0.15))
+                    .fill(AppColor.grid)
                     .frame(width: contentWidth, height: 1)
                     .position(x: contentCenterX, y: y)
 
                 Text(time.formatted(.hourOnly))
                     .font(.caption)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(AppColor.hour)
                     .position(x: Timeline.metrics.timeColumnWidth - 8, y: y)
             }
         }

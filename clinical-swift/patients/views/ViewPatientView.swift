@@ -18,7 +18,7 @@ struct ViewPatientView: View {
                 )
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(Color.white)
+                .background(AppColor.card)
                 .clipShape(.rect(cornerRadius: 32))
 
                 PatientActionsView(scheduleAppointment: scheduleAppointment)
@@ -28,7 +28,7 @@ struct ViewPatientView: View {
 
                 if appointments.isEmpty {
                     Text("No appointments yet")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColor.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     ForEach(appointments) { appointment in
@@ -46,7 +46,7 @@ struct ViewPatientView: View {
             .padding(16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color("AppBackground"))
+        .background(AppColor.background)
     }
 
     private func scheduleAppointment() {

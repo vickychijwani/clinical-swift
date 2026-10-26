@@ -6,7 +6,7 @@ struct PatientSearchField: View {
     var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColor.icon)
 
             TextField("Name", text: $text)
                 .textInputAutocapitalization(.words)
@@ -17,12 +17,12 @@ struct PatientSearchField: View {
                     text = ""
                 }
                 .labelStyle(.iconOnly)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColor.icon)
             }
         }
         .padding(.horizontal)
         .padding(.vertical, 12)
-        .background(.background)
+        .background(AppColor.surface)
         .clipShape(.rect(cornerRadius: 18))
     }
 }
@@ -32,5 +32,5 @@ struct PatientSearchField: View {
 
     PatientSearchField(text: $searchText)
         .padding()
-        .background(Color("AppBackground"))
+        .background(AppColor.background)
 }

@@ -6,6 +6,7 @@ import SwiftUI
 private let scheduleDayRadius = 3
 
 struct ScheduleView: View {
+    @Environment(\.appPalette) private var palette
     @Dependency(\.calendar) private var calendar
     @Environment(Router.self) private var router
 
@@ -85,7 +86,7 @@ struct ScheduleView: View {
                 )
             }
         }
-        .background(Color("AppBackground"))
+        .background(palette[.background])
         .navigationTitle(
             router.selectedScheduleDate.formatted(
                 .dateTime
@@ -677,11 +678,12 @@ private struct TimelineScrollModifier: ViewModifier {
 }
 
 private struct TimelineTopScrollFade: View {
+    @Environment(\.appPalette) private var palette
     var body: some View {
         LinearGradient(
             colors: [
-                Color("AppBackground"),
-                Color("AppBackground").opacity(0),
+                palette[.background],
+                palette[.background].opacity(0),
             ],
             startPoint: .top,
             endPoint: .bottom

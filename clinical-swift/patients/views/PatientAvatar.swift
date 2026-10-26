@@ -8,9 +8,9 @@ struct PatientAvatar: View {
         Text(initials)
             .font(.headline.pointSize(13))
             .bold()
-            .foregroundStyle(.green)
+            .foregroundStyle(AppColor.success)
             .frame(width: 34, height: 34)
-            .background(.green.opacity(0.16))
+            .background(AppColor.success.opacity(0.16))
             .clipShape(.circle)
             .accessibilityHidden(true)
     }

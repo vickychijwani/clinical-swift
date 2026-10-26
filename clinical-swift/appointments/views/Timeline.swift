@@ -118,7 +118,7 @@ struct Timeline: View {
                         .overlay {
                             if case .appointment = layout.item {
                                 RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                                    .strokeBorder(.gray.opacity(0.15))
+                                    .strokeBorder(AppColor.grid)
                                     .allowsHitTesting(false)
                             }
                         }
@@ -371,7 +371,7 @@ func sampleTimeline(
         showsNowMarker: true,
         previewNowMarker: Date.now.setTime(9, 30)
     )
-    .background(Color("AppBackground"))
+    .background(AppColor.background)
 }
 
 #Preview {
@@ -411,9 +411,9 @@ private struct TimelineAdjustmentHandles: View {
                         "\(item.start.formatted(date: .omitted, time: .shortened)) – \(item.end(using: calendar).formatted(date: .omitted, time: .shortened)) · \(item.durationMinutes) min"
                     )
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColor.onAccent)
                     .padding(6)
-                    .background(Color.accentColor, in: .capsule)
+                    .background(AppColor.accent, in: .capsule)
                     .fixedSize()
                     .offset(y: -32)
                     .allowsHitTesting(false)
@@ -430,7 +430,7 @@ private struct TimelineAdjustmentHandles: View {
                     Capsule().frame(width: 12, height: 1)
                     Capsule().frame(width: 12, height: 1)
                 }
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundStyle(AppColor.onAccent.opacity(0.65))
             }
             .frame(width: 44, height: 28)
             .contentShape(.rect)

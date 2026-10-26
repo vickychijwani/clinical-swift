@@ -2,6 +2,7 @@ import ClinicalModels
 import SwiftUI
 
 struct UnavailableTimeCard: View {
+    @Environment(\.appPalette) private var palette
     let block: UnavailableTime
     var isAdjusting = false
     var isDeemphasized = false
@@ -12,11 +13,11 @@ struct UnavailableTimeCard: View {
             label: block.displayLabel,
             appearance: .init(
                 systemImage: "nosign",
-                background: isAdjusting ? .active : .color(Color("UnavailableTimeBackground")),
-                border: isAdjusting ? .accentColor.opacity(0.7) : Color("UnavailableTimeBorder"),
+                background: isAdjusting ? .active : .color(palette[.unavailable]),
+                border: isAdjusting ? palette[.activeBorder] : palette[.unavailableBorder],
                 borderStyle: StrokeStyle(lineWidth: 2),
-                timeColor: Color("UnavailableTimeTime"),
-                labelColor: Color("UnavailableTimeLabel")
+                timeColor: palette[.unavailableTime],
+                labelColor: palette[.unavailableLabel]
             ),
             isDeemphasized: isDeemphasized
         )

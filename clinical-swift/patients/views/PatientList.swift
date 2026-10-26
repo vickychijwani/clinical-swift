@@ -53,5 +53,5 @@ struct PatientList: View {
         onSelectPatient: { _ in },
         searchText: .constant("")
     )
-    .background(Color("AppBackground"))
+    .background(AppColor.background)
 }

@@ -52,7 +52,7 @@ struct PatientSummaryView: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(AppColor.tertiaryText)
             }
         }
     }

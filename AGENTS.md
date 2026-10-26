@@ -34,6 +34,7 @@ Swift and SwiftUI guides:
 App-specific guides:
 
 - Package and widget boundaries, with a link to the policy: `docs/architecture.md`.
+- Local Card lab and Color lab tools, appearance colors, and limits: `docs/design-tools.md`.
 - Working with SQL / SQLiteData, Linux package boundaries, CloudKit sync, and record/domain boundaries: `docs/persistence.md` (CloudKit / sync stuff should be moved into a separate file when we implement that feature)
 - Assisted patient-data recovery procedure and limits: `docs/patient-data-restore.md` (backup and restore implementation is pending; user-facing screens are deferred)
 - Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`

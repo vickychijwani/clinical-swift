@@ -3,7 +3,8 @@ import SwiftUI
 struct NowMarkerView: View {
     let availableWidth: CGFloat
 
-    private let color = Color(red: 0.78, green: 0.43, blue: 0.25)
+    @Environment(\.appPalette) private var palette
+    private var color: Color { palette[.now] }
     private let dotSize: CGFloat = 10
     private let lineHeight: CGFloat = 1
 

@@ -165,6 +165,7 @@ private enum WeekPageOffset: Int, CaseIterable, Identifiable {
 }
 
 private struct WeekDatePage: View {
+    @Environment(\.appPalette) private var palette
     let weekStart: Date
     let selectedDate: Date
     let today: Date
@@ -195,7 +196,7 @@ private struct WeekDatePage: View {
                     .frame(width: 44, height: displayMode.cellMinHeight)
                     .glassEffect(
                         .regular.tint(
-                            selectedDate.isSameDayAs(today) ? .accentColor.opacity(0.2) : nil
+                            selectedDate.isSameDayAs(today) ? palette[.accent].opacity(0.2) : nil
                         )
                         .interactive(),
                         in: .rect(cornerRadius: displayMode.cornerRadius, style: .continuous)
@@ -211,6 +212,7 @@ private struct WeekDatePage: View {
 }
 
 private struct DateStripCell: View {
+    @Environment(\.appPalette) private var palette
     let date: Date
     let isSelected: Bool
     let isToday: Bool
@@ -260,17 +262,17 @@ private struct DateStripCell: View {
 
     private var foregroundStyle: Color {
         if isToday {
-            .accentColor
+            palette[.accent]
         } else if isSelected {
-            .primary
+            palette[.text]
         } else {
-            .secondary
+            palette[.secondaryText]
         }
     }
 
     private var sheetBackgroundStyle: AnyShapeStyle {
         if isSelected {
-            AnyShapeStyle(Color.accentColor.opacity(0.2))
+            AnyShapeStyle(palette[.accent].opacity(0.2))
         } else {
             AnyShapeStyle(.background)
         }
@@ -307,12 +309,12 @@ private struct DateStripCell: View {
     @Previewable @State var selectedDate = Date.now.startOfDay()
 
     WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .schedule)
-        .background(Color("AppBackground"))
+        .background(AppColor.background)
 }
 
 #Preview("displayMode: sheet", traits: .sizeThatFitsLayout) {
     @Previewable @State var selectedDate = Date.now.startOfDay()
 
     WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .sheet)
-        .background(Color("AppBackground"))
+        .background(AppColor.background)
 }

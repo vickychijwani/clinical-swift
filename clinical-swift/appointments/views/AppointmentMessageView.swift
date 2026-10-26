@@ -53,7 +53,7 @@ struct AppointmentMessageView: View {
         }
         .interactiveDismissDisabled()
         .presentationDetents([.height(560)])
-        .presentationBackground(Color("AppBackground"))
+        .presentationBackground(AppColor.background)
     }
 }
 
@@ -84,7 +84,7 @@ private struct AppointmentMessageComposeView: View {
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppColor.destructive)
             }
 
             VStack(spacing: 4) {
@@ -97,7 +97,7 @@ private struct AppointmentMessageComposeView: View {
                         Label(model.recipientLabel, systemImage: model.recipientSystemImage)
                             .labelIconToTitleSpacing(4)
                             .dottedUnderline()
-                            .foregroundStyle(Color("AccentColor"))
+                            .foregroundStyle(AppColor.accent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -106,7 +106,7 @@ private struct AppointmentMessageComposeView: View {
                     Text("This will be saved as the patient's contact number")
                 }
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppColor.secondaryText)
             .font(.subheadline)
             .frame(maxWidth: .infinity)
             .multilineTextAlignment(.center)
@@ -122,7 +122,7 @@ private struct AppointmentMessageComposeView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color("AppBackground"))
+        .background(AppColor.background)
         .task {
             await model.loadRecipientName()
         }

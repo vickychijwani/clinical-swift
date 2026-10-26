@@ -28,7 +28,9 @@ struct ClinicalApp: App {
         do {
             #if DEBUG
                 // Keep gesture tests away from clinic data and its background integrations.
-                if CommandLine.arguments.contains("--ui-testing-timeline-adjustment") {
+                if CommandLine.arguments.contains("--ui-testing-timeline-adjustment")
+                    || CommandLine.arguments.contains("--ui-testing-color-lab")
+                {
                     let database = try prepareDependencies {
                         let database = try TimelineAdjustmentUITestView.makeDatabase()
                         $0.defaultDatabase = database

@@ -6,7 +6,7 @@ extension View {
             AppTextStyleModifier(
                 font: .system(size: 12, weight: .semibold)
                     .monospacedDigit(),
-                color: color ?? Color(red: 0.46, green: 0.49, blue: 0.47),
+                style: color.map { AnyShapeStyle($0) } ?? AnyShapeStyle(AppColor.time),
                 tracking: 0.4
             )
         )
@@ -16,7 +16,7 @@ extension View {
         modifier(
             AppTextStyleModifier(
                 font: .caption.bold(),
-                style: .secondary,
+                style: AppColor.secondaryText,
                 textCase: .uppercase
             )
         )
@@ -34,7 +34,7 @@ extension View {
         modifier(
             AppTextStyleModifier(
                 font: .system(size: 12, weight: .regular),
-                style: .secondary
+                style: AppColor.secondaryText
             )
         )
     }
@@ -76,7 +76,7 @@ struct AppTextStyleModifier: ViewModifier {
     private var resolvedStyle: AnyShapeStyle {
         if let style { return style }
         if let color { return AnyShapeStyle(color) }
-        return AnyShapeStyle(.primary)
+        return AnyShapeStyle(AppColor.text)
     }
 
     func body(content: Content) -> some View {

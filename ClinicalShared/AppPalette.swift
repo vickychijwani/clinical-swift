@@ -1,0 +1,95 @@
+import SwiftUI
+
+/// App-owned colors. System controls keep their native materials and state effects.
+nonisolated enum AppColor: String, CaseIterable, Codable, Identifiable, ShapeStyle {
+    case background = "App background"
+    case accent = "Accent"
+    case surface = "Panel surface"
+    case text = "Primary text"
+    case secondaryText = "Secondary text"
+    case tertiaryText = "Tertiary text"
+    case icon = "Icons"
+    case border = "Panel border"
+    case card = "Appointment card"
+    case cardBorder = "Appointment border"
+    case completedCard = "Completed card"
+    case completedBorder = "Completed border"
+    case draftCard = "Draft card"
+    case draftBorder = "Draft border"
+    case activeCard = "Active card"
+    case activeBorder = "Active border"
+    case time = "Appointment time"
+    case cardIcon = "Appointment icons"
+    case unavailable = "Unavailable card"
+    case unavailableBorder = "Unavailable border"
+    case unavailableTime = "Unavailable time"
+    case unavailableLabel = "Unavailable label"
+    case grid = "Timeline lines"
+    case hour = "Timeline hours"
+    case now = "Now marker"
+    case success = "Success and avatars"
+    case warning = "Warning"
+    case destructive = "Error"
+    case onAccent = "Text on accent"
+    case shadow = "Shadow"
+    case highlight = "Inset highlight"
+
+    var id: Self { self }
+
+    func resolve(in environment: EnvironmentValues) -> AnyShapeStyle {
+        if environment.appPalette.overrides[self] == nil {
+            if self == .surface { return AnyShapeStyle(.background) }
+            if self == .tertiaryText { return AnyShapeStyle(.tertiary) }
+        }
+        return AnyShapeStyle(environment.appPalette[self])
+    }
+}
+
+nonisolated struct AppPalette: Equatable {
+    var overrides: [AppColor: Color] = [:]
+
+    subscript(role: AppColor) -> Color {
+        if let color = overrides[role] { return color }
+        switch role {
+        case .background: return Color("AppBackground")
+        case .accent: return .accentColor
+        case .surface: return Color("LabSystemBackground")
+        case .text: return .primary
+        case .secondaryText, .icon: return .secondary
+        case .tertiaryText: return Color.primary.opacity(0.3)
+        case .border: return self[.text].opacity(0.12)
+        case .card, .activeCard: return .white
+        case .cardBorder: return .gray.opacity(0.15)
+        case .completedCard: return Color(red: 0.95, green: 0.95, blue: 0.95)
+        case .completedBorder: return .gray.opacity(0.1)
+        case .draftCard: return self[.accent].opacity(0.08)
+        case .draftBorder: return self[.accent].opacity(0.5)
+        case .activeBorder: return self[.accent].opacity(0.7)
+        case .cardIcon: return self[.time]
+        case .time: return Color(red: 0.46, green: 0.49, blue: 0.47)
+        case .unavailable: return Color("UnavailableTimeBackground")
+        case .unavailableBorder: return Color("UnavailableTimeBorder")
+        case .unavailableTime: return Color("UnavailableTimeTime")
+        case .unavailableLabel: return Color("UnavailableTimeLabel")
+        case .grid: return .gray.opacity(0.15)
+        case .hour: return .gray
+        case .now: return Color(red: 0.78, green: 0.43, blue: 0.25)
+        case .success: return .green
+        case .warning: return .orange
+        case .destructive: return .red
+        case .onAccent, .highlight: return .white
+        case .shadow: return .black
+        }
+    }
+}
+
+nonisolated private struct AppPaletteKey: EnvironmentKey {
+    static let defaultValue = AppPalette()
+}
+
+extension EnvironmentValues {
+    nonisolated var appPalette: AppPalette {
+        get { self[AppPaletteKey.self] }
+        set { self[AppPaletteKey.self] = newValue }
+    }
+}
