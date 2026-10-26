@@ -85,7 +85,7 @@ import SQLiteData
 
     func startTimelineEditing() {
         automaticallyPrefills = false
-        adjustment.select(draftAppointment)
+        adjustment.select(.appointment(draftAppointment))
     }
 
     func beginTimelineBooking(center: TimeOfDay, items: [TimelineItem]) {
@@ -98,7 +98,7 @@ import SQLiteData
                 .on(date: selectedDate, using: calendar))
         isSelectingPatient = false
         startTimelineEditing()
-        adjustment.begin(draftAppointment, edge: .move, items: items)
+        adjustment.begin(.appointment(draftAppointment), edge: .move, items: items)
     }
 
     func releaseTimelineBooking() {
@@ -109,7 +109,7 @@ import SQLiteData
     func selectPatient(_ patient: Patient) {
         draft.selectedPatient = patient
         searchText = ""
-        adjustment.select(draftAppointment)
+        adjustment.select(.appointment(draftAppointment))
         isSelectingPatient = false
     }
 

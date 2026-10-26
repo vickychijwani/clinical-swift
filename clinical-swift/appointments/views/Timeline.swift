@@ -1,4 +1,5 @@
 import ClinicalModels
+import Dependencies
 import SwiftUI
 
 struct Timeline: View {
@@ -10,6 +11,7 @@ struct Timeline: View {
     var previewNowMarker: Date? = nil
     var itemInteractionsEnabled = true
     var onSelectItem: (TimelineItem) -> Void = { _ in }
+    var onSelectActiveItem: () -> Void = {}
     var allowsAdjustment = false
     var onDraggingChanged: (Bool) -> Void = { _ in }
     var onScaleChange: (CGFloat) -> Void = { _ in }
@@ -18,6 +20,7 @@ struct Timeline: View {
     var onCancel: () -> Void = {}
     var onDiscard: () -> Void = {}
     var onDone: @MainActor () async -> Void = {}
+    var onDelete: (@MainActor () async -> Void)? = nil
 
     var date: Date = .now
     // The session owns this reference. View state would keep the previous session's adjustment.
@@ -80,7 +83,7 @@ struct Timeline: View {
             )
             let layouts = engine.layout(
                 items: adjustment.items(items, on: date),
-                floatingID: adjustment.selectedID.map(TimelineItem.ID.appointment))
+                floatingID: adjustment.selectedID)
 
             ZStack(alignment: .topLeading) {
                 TimelineBreakView(
@@ -139,10 +142,8 @@ struct Timeline: View {
                                 {
                                     lastDragEnd = .now
                                 }
-                                if isSelected(layout.item), !adjustment.isDragging,
-                                    case .appointment(let appointment) = layout.item
-                                {
-                                    adjustment.begin(appointment, edge: .move, items: items)
+                                if isSelected(layout.item), !adjustment.isDragging {
+                                    adjustment.begin(layout.item, edge: .move, items: items)
                                 }
                                 if isSelected(layout.item), adjustment.isDragging,
                                     adjustment.edge == .move
@@ -165,21 +166,25 @@ struct Timeline: View {
                                         adjustment.update(
                                             translation: value.translation.height, items: items))
                                     releaseAdjustment()
+                                    if abs(value.translation.height) < 5,
+                                        abs(value.translation.width) < 5
+                                    {
+                                        onSelectActiveItem()
+                                    }
                                 }
                             }
                     )
                     .overlay {
                         // Handles sit outside the body gesture so a resize cannot start a move.
-                        if case .appointment(let appointment) = layout.item,
-                            adjustment.selectedID == appointment.id,
+                        if isSelected(layout.item),
                             allowsAdjustment,
-                            appointment.status == .scheduled || appointment.status == .draft
+                            layout.item.allowsAdjustment
                         {
                             TimelineAdjustmentHandles(
-                                appointment: appointment,
+                                item: layout.item,
                                 isDragging: adjustment.isDragging,
                                 onDrag: { edge, value in
-                                    drag(appointment, edge: edge, value: value)
+                                    drag(layout.item, edge: edge, value: value)
                                 },
                                 onEnd: releaseAdjustment
                             )
@@ -192,8 +197,10 @@ struct Timeline: View {
                     .overlay(alignment: .topTrailing) {
                         if isSelected(layout.item), allowsAdjustment {
                             TimelineAdjustmentActions(
+                                item: layout.item,
                                 isSaving: adjustment.isSaving,
-                                onCancel: onCancel, onDiscard: onDiscard, onDone: onDone
+                                onCancel: onCancel, onDiscard: onDiscard, onDone: onDone,
+                                onDelete: onDelete
                             )
                             .fixedSize()
                             // Leave the duration handle its own touch area below the card.
@@ -257,13 +264,13 @@ struct Timeline: View {
 
     private func isSelected(_ item: TimelineItem) -> Bool {
         guard let id = adjustment.selectedID else { return false }
-        return item.id == .appointment(id)
+        return item.id == id
     }
 
     private func drag(
-        _ appointment: Appointment, edge: TimelineAdjustment.Edge, value: DragGesture.Value
+        _ item: TimelineItem, edge: TimelineAdjustment.Edge, value: DragGesture.Value
     ) {
-        if !adjustment.isDragging { adjustment.begin(appointment, edge: edge, items: items) }
+        if !adjustment.isDragging { adjustment.begin(item, edge: edge, items: items) }
         onScaleChange(adjustment.update(translation: value.translation.height, items: items))
     }
 
@@ -296,24 +303,38 @@ private struct TimelineCardButtonStyle: ButtonStyle {
 }
 
 private struct TimelineAdjustmentActions: View {
+    let item: TimelineItem
     let isSaving: Bool
     let onCancel: () -> Void
     let onDiscard: () -> Void
     let onDone: @MainActor () async -> Void
+    let onDelete: (@MainActor () async -> Void)?
     @State private var confirmsDiscard = false
 
     var body: some View {
         GlassEffectContainer {
             HStack {
+                if let onDelete {
+                    ConfirmingAsyncButton(
+                        "Delete Unavailable Time", role: .destructive,
+                        message: Text("Delete this unavailable time?"),
+                        onConfirmation: onCancel
+                    ) {
+                        await onDelete()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .buttonStyle(.glass)
+                }
                 Button("Cancel", systemImage: "xmark") {
                     onCancel()
                     confirmsDiscard = true
                 }
                 .buttonStyle(.glass)
-                .confirmationDialog("Discard unsaved appointment?", isPresented: $confirmsDiscard) {
+                .confirmationDialog(discardTitle, isPresented: $confirmsDiscard) {
                     Button("Discard Changes", role: .destructive, action: onDiscard)
                 } message: {
-                    Text("Your appointment changes have not been saved.")
+                    Text(discardMessage)
                 }
                 AsyncButton("Done", systemImage: "checkmark", action: onDone)
                     .buttonStyle(.glassProminent)
@@ -321,6 +342,20 @@ private struct TimelineAdjustmentActions: View {
             .labelStyle(.iconOnly)
             .controlSize(.mini)
             .disabled(isSaving)
+        }
+    }
+
+    private var discardTitle: String {
+        switch item {
+        case .appointment: "Discard unsaved appointment?"
+        case .unavailableTime: "Discard unsaved unavailable time?"
+        }
+    }
+
+    private var discardMessage: String {
+        switch item {
+        case .appointment: "Your appointment changes have not been saved."
+        case .unavailableTime: "Your unavailable time changes have not been saved."
         }
     }
 }
@@ -359,7 +394,8 @@ func sampleTimeline(
 }
 
 private struct TimelineAdjustmentHandles: View {
-    let appointment: Appointment
+    @Dependency(\.calendar) private var calendar
+    let item: TimelineItem
     let isDragging: Bool
     let onDrag: (TimelineAdjustment.Edge, DragGesture.Value) -> Void
     let onEnd: () -> Void
@@ -372,7 +408,7 @@ private struct TimelineAdjustmentHandles: View {
             .overlay(alignment: .topLeading) {
                 if isDragging {
                     Text(
-                        "\(appointment.start.formatted(date: .omitted, time: .shortened)) – \(appointment.end.formatted(date: .omitted, time: .shortened)) · \(appointment.durationMinutes) min"
+                        "\(item.start.formatted(date: .omitted, time: .shortened)) – \(item.end(using: calendar).formatted(date: .omitted, time: .shortened)) · \(item.durationMinutes) min"
                     )
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.white)
@@ -408,6 +444,13 @@ private struct TimelineAdjustmentHandles: View {
                         onEnd()
                     }
             )
-            .accessibilityIdentifier("appointment-duration-handle")
+            .accessibilityIdentifier(durationHandleID)
+    }
+
+    private var durationHandleID: String {
+        switch item {
+        case .appointment: "appointment-duration-handle"
+        case .unavailableTime: "unavailable-time-duration-handle"
+        }
     }
 }

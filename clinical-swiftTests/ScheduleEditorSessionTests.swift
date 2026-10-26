@@ -7,6 +7,32 @@ import Testing
 
 @MainActor
 struct ScheduleEditorSessionTests {
+    @Test(arguments: [false, true])
+    func unavailableTimeUsesLabelSheetOnlyForCreation(editing: Bool) throws {
+        let start = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
+        try withDependencies {
+            $0.calendar = utcCalendar
+        } operation: {
+            let block = UnavailableTime(label: "Travel", start: start, durationMinutes: 60)
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: .unavailableTimeEditor(
+                        UnavailableTimeEditorRequest(
+                            purpose: editing ? .edit(block) : .create)),
+                    selectedDate: start, appointments: [], onFinished: { _ in }))
+            #expect(session.adjustment.isActive)
+            #expect(session.isShowingSheet == !editing)
+            #expect(session.preview.durationMinutes == 60)
+            if !editing {
+                #expect(
+                    session.preview.start == Bitehaus.opening.on(date: start, using: utcCalendar))
+            }
+            session.isShowingSheet = false
+            #expect(!session.isShowingSheet)
+            #expect(session.adjustment.isActive)
+        }
+    }
+
     @Test func bookingUsesTheRouterIDAndPrefillsBeforePresentation() throws {
         let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
         let busyStart = try Date("2026-10-02T09:00:00Z", strategy: .iso8601)

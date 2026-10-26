@@ -10,8 +10,8 @@ final class TimelineAdjustment {
     enum Edge { case move, duration }
 
     @ObservationIgnored @Dependency(\.calendar) private var calendar
-    private(set) var original: Appointment?
-    private(set) var preview: Appointment?
+    private(set) var original: TimelineItem?
+    private(set) var preview: TimelineItem?
     private(set) var edge: Edge = .move
     private(set) var isDragging = false
     private(set) var isSaving = false
@@ -20,23 +20,23 @@ final class TimelineAdjustment {
     private var anchorY: CGFloat = 0
     private var translation: CGFloat = 0
 
-    private(set) var selectedID: Appointment.ID?
+    private(set) var selectedID: TimelineItem.ID?
     var errorMessage: String?
 
     var isActive: Bool { preview != nil }
 
-    func select(_ appointment: Appointment) {
+    func select(_ item: TimelineItem) {
         guard !isDragging, !isSaving else { return }
-        preview = appointment
-        selectedID = appointment.id
+        preview = item
+        selectedID = item.id
     }
 
     func items(_ items: [TimelineItem], on date: Date? = nil) -> [TimelineItem] {
         guard let preview else { return items }
         let date = date ?? items.first?.start ?? preview.start
-        var items = items.filter { $0.id != .appointment(preview.id) }
+        var items = items.filter { $0.id != preview.id }
         if calendar.isDate(preview.start, inSameDayAs: date) {
-            items.append(.appointment(preview))
+            items.append(preview)
         }
         return items
     }
@@ -44,9 +44,9 @@ final class TimelineAdjustment {
     func scale(_ items: [TimelineItem], on date: Date? = nil) -> TimelineScale {
         let displayed = self.items(items, on: date)
         guard isDragging,
-            displayed.contains(where: { $0.id == preview.map { .appointment($0.id) } })
+            displayed.contains(where: { $0.id == preview?.id })
         else { return TimelineScale(items: displayed) }
-        let others = displayed.filter { $0.id != preview.map { .appointment($0.id) } }
+        let others = displayed.filter { $0.id != preview?.id }
         return TimelineScale(
             items: others,
             breakPresentation: expanded || TimelineScale(items: others).isBreakExpanded
@@ -54,21 +54,21 @@ final class TimelineAdjustment {
         )
     }
 
-    func begin(_ appointment: Appointment, edge: Edge, items: [TimelineItem]) {
+    func begin(_ item: TimelineItem, edge: Edge, items: [TimelineItem]) {
         guard !isDragging, !isSaving,
-            appointment.status == .scheduled || appointment.status == .draft,
-            selectedID == nil || selectedID == appointment.id
+            item.allowsAdjustment,
+            selectedID == nil || selectedID == item.id
         else { return }
-        let appointment = preview ?? appointment
-        original = appointment
-        preview = appointment
-        selectedID = appointment.id
+        let item = preview ?? item
+        original = item
+        preview = item
+        selectedID = item.id
         self.edge = edge
         expanded = TimelineScale(items: items).isBreakExpanded
         let time =
             edge == .duration
-            ? TimeOfDay(date: appointment.start, calendar: calendar) + appointment.durationMinutes
-            : TimeOfDay(date: appointment.start, calendar: calendar)
+            ? TimeOfDay(date: item.start, calendar: calendar) + item.durationMinutes
+            : TimeOfDay(date: item.start, calendar: calendar)
         anchorY = scale(items).yOffset(for: time)
         translation = 0
         isDragging = true
@@ -77,7 +77,8 @@ final class TimelineAdjustment {
     /// Return a scroll correction so a scale change does not move the card away from the finger.
     @discardableResult
     func update(translation: CGFloat, items: [TimelineItem]) -> CGFloat {
-        guard isDragging else { return 0 }
+        // A tap can reopen label or patient selection. Keep stored times exact until movement.
+        guard isDragging, translation != 0 || self.translation != 0 else { return 0 }
         self.translation = translation
         let oldScale = scale(items)
         updatePreview(scale: oldScale)
@@ -122,7 +123,7 @@ final class TimelineAdjustment {
         selectedID = nil
     }
 
-    func save(using save: (Appointment) async throws -> Void) async {
+    func save(using save: (TimelineItem) async throws -> Void) async {
         guard let preview, !isDragging, !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
@@ -130,19 +131,18 @@ final class TimelineAdjustment {
             try await save(preview)
             finish()
         } catch {
-            errorMessage = "The appointment could not be saved. Try again."
+            errorMessage = "The schedule item could not be saved. Try again."
         }
     }
 
-    func selectDate(_ date: Date) -> Appointment? {
+    func selectDate(_ date: Date) -> TimelineItem? {
         guard !isSaving, let preview,
             !calendar.isDate(preview.start, inSameDayAs: date)
         else { return nil }
-        self.preview = Appointment(
-            id: preview.id, patientName: preview.patientName,
+        self.preview = preview.rescheduled(
             start: TimeOfDay(date: preview.start, calendar: calendar).on(
                 date: date, using: calendar),
-            durationMinutes: preview.durationMinutes, status: preview.status)
+            durationMinutes: preview.durationMinutes)
         hoverRequest = nil
         isDragging = false
         return self.preview
@@ -176,9 +176,8 @@ final class TimelineAdjustment {
             start = originalStart
             end = min(max(snapped, originalStart + 15), Bitehaus.closing.totalMinutes)
         }
-        preview = Appointment(
-            id: original.id, patientName: original.patientName,
+        preview = original.rescheduled(
             start: TimeOfDay(start / 60, start % 60).on(date: original.start, using: calendar),
-            durationMinutes: end - start, status: original.status)
+            durationMinutes: end - start)
     }
 }

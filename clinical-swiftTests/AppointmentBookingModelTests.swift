@@ -127,10 +127,11 @@ struct AppointmentBookingModelTests {
             model.selectStart(date)
             model.startTimelineEditing()
             let draft = model.draftAppointment
-            model.adjustment.begin(draft, edge: .move, items: [.appointment(draft)])
+            model.adjustment.begin(.appointment(draft), edge: .move, items: [.appointment(draft)])
             model.adjustment.update(translation: 15, items: [.appointment(draft)])
             model.adjustment.release()
-            model.adjustment.begin(draft, edge: .duration, items: [.appointment(draft)])
+            model.adjustment.begin(
+                .appointment(draft), edge: .duration, items: [.appointment(draft)])
             model.adjustment.update(translation: -100, items: [.appointment(draft)])
             model.adjustment.release()
             model.selectDate(nextDate)

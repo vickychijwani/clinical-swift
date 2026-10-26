@@ -22,20 +22,21 @@ struct ScheduleView: View {
         return model
     }
 
-    private var activeAdjustment: TimelineAdjustment { bookingModel?.adjustment ?? adjustment }
+    private var unavailableTimeModel: UnavailableTimeEditorModel? {
+        guard case .unavailableTime(let model) = editorSession?.editor else { return nil }
+        return model
+    }
+
+    private var activeAdjustment: TimelineAdjustment { editorSession?.adjustment ?? adjustment }
 
     private var editorSheet: Binding<ScheduleEditorSession?> {
         Binding(
             get: {
-                guard bookingModel?.isSelectingPatient != false else { return nil }
+                guard editorSession?.isShowingSheet == true else { return nil }
                 return editorSession
             },
             set: { value in
-                if let bookingModel {
-                    bookingModel.isSelectingPatient = value != nil
-                } else {
-                    editorSession = value
-                }
+                editorSession?.isShowingSheet = value != nil
             })
     }
 
@@ -56,11 +57,14 @@ struct ScheduleView: View {
                     date: date,
                     items: visibleItems(for: date),
                     calendar: calendar,
-                    needsBookingClearance: editorIsActive && bookingModel == nil,
                     itemInteractionsEnabled: !editorIsActive,
                     scrollPosition: scrollPositionBinding(for: date),
                     onSelectItem: selectItem,
-                    allowsAdjustment: bookingModel.map { !$0.isSaving } ?? !editorIsActive,
+                    onSelectActiveItem: { editorSession?.isShowingSheet = true },
+                    allowsAdjustment: editorSession.map {
+                        $0.allowsDateSelection && !$0.isShowingSheet
+                    }
+                        ?? !editorIsActive,
                     adjustment: activeAdjustment,
                     onBeginBooking: { beginBooking(center: $0, on: date) },
                     onBookingRelease: { released in
@@ -75,7 +79,9 @@ struct ScheduleView: View {
                             adjustment.finish()
                         }
                     },
-                    onDone: saveAppointment
+                    onDone: saveEditor,
+                    onDelete: unavailableTimeModel?.purpose.editedID == nil
+                        ? nil : deleteUnavailableTime
                 )
             }
         }
@@ -113,6 +119,17 @@ struct ScheduleView: View {
             }
         }
         .alert(
+            "Unable to change unavailable time",
+            isPresented: Binding(
+                get: { unavailableTimeModel?.errorMessage != nil },
+                set: { if !$0 { unavailableTimeModel?.errorMessage = nil } }
+            )
+        ) {
+            Button("OK") { unavailableTimeModel?.errorMessage = nil }
+        } message: {
+            Text(unavailableTimeModel?.errorMessage ?? "")
+        }
+        .alert(
             "Unable to save appointment",
             isPresented: Binding(
                 get: { bookingModel?.saveErrorMessage != nil },
@@ -142,7 +159,7 @@ struct ScheduleView: View {
             item: editorSheet,
             onDismiss: {
                 router.presentationDidDismiss(
-                    retainingScheduleEditor: bookingModel == nil ? nil : editorSession?.id)
+                    retainingScheduleEditor: editorSession?.id)
             }
         ) { session in
             ScheduleEditorSheet(session: session)
@@ -218,8 +235,8 @@ struct ScheduleView: View {
         switch router.activePresentation {
         case nil:
             return true
-        case .appointmentBooking, .appointmentEdit:
-            return bookingModel?.isSelectingPatient == false
+        case .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
+            return editorSession?.isShowingSheet == false
         default:
             return false
         }
@@ -310,7 +327,7 @@ struct ScheduleView: View {
         return bookingModel?.adjustment
     }
 
-    private func saveAppointment() async {
+    private func saveEditor() async {
         if let bookingModel {
             if bookingModel.draft.selectedPatient == nil {
                 bookingModel.releaseTimelineBooking()
@@ -318,10 +335,22 @@ struct ScheduleView: View {
             }
             bookingModel.adjustment.release()
             _ = await bookingModel.saveAppointment()
+        } else if let unavailableTimeModel {
+            unavailableTimeModel.adjustment.release()
+            _ = await unavailableTimeModel.save()
         } else {
             adjustment.release()
-            await adjustment.save(using: scheduleModel.adjustAppointment)
+            await adjustment.save { item in
+                guard case .appointment(let appointment) = item else { return }
+                try await scheduleModel.adjustAppointment(appointment)
+            }
         }
+    }
+
+    private func deleteUnavailableTime() async {
+        guard let unavailableTimeModel else { return }
+        unavailableTimeModel.adjustment.release()
+        _ = await unavailableTimeModel.delete()
     }
 
     private func finishEditor(_ requestID: UUID, date: Date) {
@@ -425,6 +454,9 @@ struct ScheduleEditorSession: Identifiable {
                     UnavailableTimeEditorModel(
                         id: request.id, editing: block, onFinished: onFinished))
             }
+            if case .unavailableTime(let model) = editor {
+                model.startTimelineEditing()
+            }
         default:
             return nil
         }
@@ -434,6 +466,28 @@ struct ScheduleEditorSession: Identifiable {
         switch editor {
         case .appointment(let model): model.selectedDate
         case .unavailableTime(let model): model.selectedDate
+        }
+    }
+
+    var adjustment: TimelineAdjustment {
+        switch editor {
+        case .appointment(let model): model.adjustment
+        case .unavailableTime(let model): model.adjustment
+        }
+    }
+
+    var isShowingSheet: Bool {
+        get {
+            switch editor {
+            case .appointment(let model): model.isSelectingPatient
+            case .unavailableTime(let model): model.isEditingLabel
+            }
+        }
+        nonmutating set {
+            switch editor {
+            case .appointment(let model): model.isSelectingPatient = newValue
+            case .unavailableTime(let model): model.isEditingLabel = newValue
+            }
         }
     }
 
@@ -521,10 +575,10 @@ struct ScheduleTimelinePage: View {
     let date: Date
     let items: [TimelineItem]
     let calendar: Calendar
-    let needsBookingClearance: Bool
     let itemInteractionsEnabled: Bool
     @Binding var scrollPosition: ScrollPosition
     let onSelectItem: (TimelineItem) -> Void
+    let onSelectActiveItem: () -> Void
     let allowsAdjustment: Bool
     let adjustment: TimelineAdjustment
     let onBeginBooking: (TimeOfDay) -> TimelineAdjustment?
@@ -532,6 +586,7 @@ struct ScheduleTimelinePage: View {
     let onCancel: () -> Void
     let onDiscard: () -> Void
     let onDone: @MainActor () async -> Void
+    let onDelete: (@MainActor () async -> Void)?
     @State private var isDragging = false
     @State private var scrollY: CGFloat = 0
     @State private var needsAdjustmentClearance = false
@@ -546,6 +601,7 @@ struct ScheduleTimelinePage: View {
                     showsNowMarker: calendar.isDateInToday(date),
                     itemInteractionsEnabled: itemInteractionsEnabled,
                     onSelectItem: onSelectItem,
+                    onSelectActiveItem: onSelectActiveItem,
                     allowsAdjustment: allowsAdjustment,
                     onDraggingChanged: {
                         isDragging = $0
@@ -560,13 +616,13 @@ struct ScheduleTimelinePage: View {
                     onCancel: onCancel,
                     onDiscard: onDiscard,
                     onDone: onDone,
+                    onDelete: onDelete,
                     date: date,
                     adjustment: adjustment
                 )
 
-                if needsBookingClearance || needsAdjustmentClearance {
-                    // Leave room to scroll late appointments above the booking sheet.
-                    // Direct adjustment also needs scroll range to anchor an expanding break.
+                if needsAdjustmentClearance {
+                    // Direct adjustment needs scroll range to anchor an expanding break.
                     Color.clear
                         .containerRelativeFrame(
                             .vertical,
@@ -583,6 +639,9 @@ struct ScheduleTimelinePage: View {
                 scrollPosition.scrollTo(y: pendingScrollY)
                 self.pendingScrollY = nil
             }
+        }
+        .onChange(of: adjustment.isActive, initial: true) {
+            needsAdjustmentClearance = adjustment.isActive
         }
         .scrollDisabled(isDragging)
         .onScrollGeometryChange(for: CGFloat.self) {

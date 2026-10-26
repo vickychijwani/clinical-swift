@@ -11,7 +11,8 @@ struct ScheduleItemCard: View {
             AppointmentCard(
                 appt: appointment, isAdjusting: isAdjusting, isDeemphasized: isDeemphasized)
         case .unavailableTime(let block):
-            UnavailableTimeCard(block: block, isDeemphasized: isDeemphasized)
+            UnavailableTimeCard(
+                block: block, isAdjusting: isAdjusting, isDeemphasized: isDeemphasized)
         }
     }
 }

@@ -98,6 +98,79 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertFalse(app.textFields["Optional label"].exists)
     }
 
+    @MainActor func testUnavailableTimeTapMovesResizesAndCancelRestoresStoredBlock() {
+        let app = launch()
+        let block = app.buttons["unavailable-time-00000000-0000-0000-0000-000000000014"]
+        block.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.textFields["Optional label"].exists)
+        XCTAssertTrue(app.buttons["Delete"].exists)
+        XCTAssertGreaterThan(block.frame.width, 300)
+        drag(block, by: 15)
+        XCTAssertEqual(time(block), "11:15 AM")
+        XCTAssertFalse(app.textFields["Optional label"].exists)
+        let handle = app.otherElements["unavailable-time-duration-handle"]
+        XCTAssertTrue(handle.exists)
+        drag(handle, by: -100)
+        XCTAssertEqual(time(block), "11:15 AM")
+        XCTAssertEqual(block.value as? String, "15 min")
+        attach(app, "Unavailable time with shared card controls")
+        app.buttons["Cancel"].tap()
+        app.buttons["Discard Changes"].tap()
+        XCTAssertTrue(app.buttons["Unavailable Time"].waitForExistence(timeout: 3))
+        XCTAssertEqual(time(block), "11:00 AM")
+        XCTAssertEqual(block.value as? String, "30 min")
+    }
+
+    @MainActor func testUnavailableTimeCreationLabelReturnsToDraftAndCanReopen() {
+        let app = launch()
+        app.buttons["Unavailable Time"].tap()
+        let label = app.textFields["Optional label"]
+        XCTAssertTrue(label.waitForExistence(timeout: 3))
+        label.tap()
+        label.typeText("Holiday")
+        app.buttons["Continue"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
+        let block = app.buttons.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND identifier != %@", "unavailable-time-",
+                "unavailable-time-00000000-0000-0000-0000-000000000014")
+        ).firstMatch
+        XCTAssertEqual(time(block), "9:00 AM")
+        XCTAssertEqual(block.value as? String, "60 min")
+        XCTAssertFalse(app.buttons["Delete"].exists)
+        drag(block, by: 15)
+        XCTAssertEqual(time(block), "9:15 AM")
+        XCTAssertFalse(label.exists)
+        block.tap()
+        XCTAssertTrue(label.waitForExistence(timeout: 3))
+        XCTAssertEqual(label.value as? String, "Holiday")
+        app.buttons["Back"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
+        XCTAssertEqual(time(block), "9:15 AM")
+        let id = block.identifier
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Unavailable Time"].waitForExistence(timeout: 3))
+        XCTAssertEqual(time(app.buttons[id]), "9:15 AM")
+    }
+
+    @MainActor func testUnavailableTimeDeleteConfirmsAtCard() {
+        let app = launch()
+        let block = app.buttons["unavailable-time-00000000-0000-0000-0000-000000000014"]
+        block.tap()
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3))
+        let delete = app.buttons["Delete"]
+        XCTAssertGreaterThan(delete.frame.minY, block.frame.maxY)
+        delete.tap()
+        let confirm = app.buttons["Delete Unavailable Time"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        XCTAssertTrue(block.exists)
+        attach(app, "Unavailable time delete confirmation")
+        confirm.tap()
+        XCTAssertTrue(app.buttons["Unavailable Time"].waitForExistence(timeout: 3))
+        XCTAssertFalse(block.exists)
+    }
+
     @MainActor func testHoldOnEmptyTimelineCreatesCenteredBooking() {
         let app = launch()
         let card = original(app)

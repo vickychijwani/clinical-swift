@@ -42,8 +42,10 @@ final class UnavailableTimeEditorModel: Identifiable {
     let id: UUID
     let purpose: UnavailableTimeEditorPurpose
     let blockID: UUID
+    let adjustment = TimelineAdjustment()
     let originalDraft: UnavailableTimeDraft
     var draft: UnavailableTimeDraft
+    var isEditingLabel = false
     private(set) var isSaving = false
     private(set) var isDeleting = false
     private(set) var didFinish = false
@@ -55,6 +57,7 @@ final class UnavailableTimeEditorModel: Identifiable {
         @Dependency(\.calendar) var calendar
         self.id = id
         purpose = .create
+        isEditingLabel = true
         blockID = UUID()
         let initialDraft = UnavailableTimeDraft(
             label: "",
@@ -80,42 +83,67 @@ final class UnavailableTimeEditorModel: Identifiable {
     }
 
     var isWorking: Bool { isSaving || isDeleting }
-    var hasUnsavedChanges: Bool { draft != originalDraft }
-    var selectedDate: Date { calendar.startOfDay(for: draft.start) }
+    var hasUnsavedChanges: Bool {
+        UnavailableTimeDraft(
+            label: draft.label, start: preview.start, durationMinutes: preview.durationMinutes)
+            != originalDraft
+    }
+    var selectedDate: Date { calendar.startOfDay(for: preview.start) }
     var preview: UnavailableTime {
         UnavailableTime(
-            id: blockID, label: draft.label, start: draft.start,
-            durationMinutes: draft.durationMinutes
+            id: blockID, label: draft.label, start: adjustment.preview?.start ?? draft.start,
+            durationMinutes: adjustment.preview?.durationMinutes ?? draft.durationMinutes
         )
     }
 
+    func startTimelineEditing() {
+        adjustment.select(.unavailableTime(preview))
+    }
+
+    func finishLabelEntry() {
+        guard !isWorking else { return }
+        applyTimelinePreview()
+        adjustment.select(.unavailableTime(draftBlock))
+        isEditingLabel = false
+    }
+
     func selectDate(_ date: Date) {
-        guard !calendar.isDate(date, inSameDayAs: draft.start), !isWorking else { return }
-        draft.move(to: date)
+        guard !calendar.isDate(date, inSameDayAs: preview.start), !isWorking else { return }
+        if adjustment.isActive {
+            _ = adjustment.selectDate(date)
+            applyTimelinePreview()
+        } else {
+            draft.move(to: date)
+        }
         draftPreviewScrollRequest += 1
     }
 
     func selectStart(_ start: Date) {
         guard !isWorking else { return }
+        applyTimelinePreview()
         let date = selectedDate
         draft.start = start
         draft.move(to: date)
+        if adjustment.isActive { adjustment.select(.unavailableTime(draftBlock)) }
         draftPreviewScrollRequest += 1
     }
 
     func selectDuration(_ minutes: Int) {
         guard !isWorking else { return }
+        applyTimelinePreview()
         draft.durationMinutes = minutes
         draft.move(to: selectedDate)
+        if adjustment.isActive { adjustment.select(.unavailableTime(draftBlock)) }
         draftPreviewScrollRequest += 1
     }
 
     @discardableResult
     func save() async -> Bool {
-        guard !isWorking, !didFinish else { return false }
+        guard !isWorking, !didFinish, !adjustment.isDragging else { return false }
         isSaving = true
         defer { isSaving = false }
         errorMessage = nil
+        applyTimelinePreview()
         do {
             try draft.validate()
             let record = UnavailableTimeRecord(
@@ -151,7 +179,9 @@ final class UnavailableTimeEditorModel: Identifiable {
 
     @discardableResult
     func delete() async -> Bool {
-        guard !isWorking, !didFinish, let targetID = purpose.editedID else { return false }
+        guard !isWorking, !didFinish, !adjustment.isDragging,
+            let targetID = purpose.editedID
+        else { return false }
         isDeleting = true
         defer { isDeleting = false }
         errorMessage = nil
@@ -172,6 +202,18 @@ final class UnavailableTimeEditorModel: Identifiable {
                 ?? "The unavailable time could not be deleted."
             return false
         }
+    }
+
+    private var draftBlock: UnavailableTime {
+        UnavailableTime(
+            id: blockID, label: draft.label, start: draft.start,
+            durationMinutes: draft.durationMinutes)
+    }
+
+    private func applyTimelinePreview() {
+        guard let preview = adjustment.preview else { return }
+        draft.start = preview.start
+        draft.durationMinutes = preview.durationMinutes
     }
 }
 
