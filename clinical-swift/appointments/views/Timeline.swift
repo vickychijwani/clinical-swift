@@ -337,7 +337,7 @@ private struct TimelineAdjustmentActions: View {
                     Text(discardMessage)
                 }
                 AsyncButton("Done", systemImage: "checkmark", action: onDone)
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.appGlassProminent)
             }
             .labelStyle(.iconOnly)
             .controlSize(.mini)

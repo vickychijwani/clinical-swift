@@ -117,7 +117,7 @@ private struct AppointmentMessageComposeView: View {
                 Label("Send", systemImage: "arrow.up.message")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.appGlassProminent)
             .disabled(!model.hasValidRecipientPhone)
         }
         .padding()

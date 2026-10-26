@@ -102,3 +102,23 @@ extension EnvironmentValues {
         set { self[AppPaletteKey.self] = newValue }
     }
 }
+
+/// Keep accent tint inside prominent controls so other native buttons retain their own colors.
+struct AppAccentButtonStyle<Style: PrimitiveButtonStyle>: PrimitiveButtonStyle {
+    let style: Style
+    @Environment(\.appPalette) private var palette
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button(configuration)
+            .buttonStyle(style)
+            .tint(palette.overrides[.accent])
+    }
+}
+
+extension PrimitiveButtonStyle where Self == AppAccentButtonStyle<GlassProminentButtonStyle> {
+    static var appGlassProminent: Self { Self(style: .glassProminent) }
+}
+
+extension PrimitiveButtonStyle where Self == AppAccentButtonStyle<BorderedProminentButtonStyle> {
+    static var appBorderedProminent: Self { Self(style: .borderedProminent) }
+}

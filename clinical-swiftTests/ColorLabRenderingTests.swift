@@ -22,6 +22,23 @@ struct ColorLabRenderingTests {
         }
     }
 
+    @Test(arguments: [ColorScheme.light, .dark])
+    func prominentButtonsUseOnlyTheirScopedAccent(scheme: ColorScheme) throws {
+        let button = Button("Done", systemImage: "checkmark") {}
+        // ImageRenderer does not draw native glass. Check the shared tint with bordered prominent buttons.
+        let native = button.buttonStyle(.borderedProminent)
+        let original = try pixels(native, scheme: scheme)
+        #expect(original.contains { byte in byte != 0 })
+        #expect(try pixels(button.buttonStyle(.appBorderedProminent), scheme: scheme) == original)
+        var palette = AppPalette()
+        palette.overrides[.accent] = .purple
+        let scoped = try pixels(
+            button.buttonStyle(.appBorderedProminent).environment(\.appPalette, palette),
+            scheme: scheme)
+        #expect(scoped == (try pixels(native.tint(.purple), scheme: scheme)))
+        #expect(scoped != original)
+    }
+
     #if DEBUG
         @Test(arguments: [ColorScheme.light, .dark])
         func accentOverrideLeavesNativeControlsUnchanged(scheme: ColorScheme) throws {

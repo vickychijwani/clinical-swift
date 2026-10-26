@@ -65,7 +65,7 @@ private struct PatientActionsView: View {
                 Label("Schedule Appointment", systemImage: "calendar.badge.plus")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.appGlassProminent)
         }
     }
 }

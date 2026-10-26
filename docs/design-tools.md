@@ -20,9 +20,9 @@ outlines follow the accent until they have their own override. Card lab opacity
 still applies after color selection. The panel uses its own native colors so it
 stays readable when a test palette has low contrast.
 
-Native navigation, tab bars, controls, and Liquid Glass keep their system
-materials, tint, and state effects when the app accent changes. The widget uses
-the source defaults; app preference changes do not change its separate process.
+Native navigation, tab bars, and plain controls keep their system tint when the
+app accent changes. Liquid Glass keeps its native materials and state effects.
+The widget uses source defaults; app preferences do not change its process.
 
 An empty palette must preserve the original appearance. Never install the app
 accent as a root tint, even after an explicit color edit: native toolbar buttons
@@ -30,3 +30,9 @@ and other controls can use a different color. Only existing app accent roles
 follow the Accent control. Keep primary, secondary, and tertiary foreground styles
 as inherited styles rather than fixed label colors. Tests compare every default
 against the PR #13 source styles in both light and dark mode.
+
+Prominent buttons already use the app accent. Use `.appGlassProminent` or
+`.appBorderedProminent` to keep their color rule in one shared style. Each style
+wraps the native button style and reads the palette. No separate tint modifier
+is needed at each button. Keep this tint off shared containers and navigation
+so adjacent plain and standard glass buttons keep their original colors.
