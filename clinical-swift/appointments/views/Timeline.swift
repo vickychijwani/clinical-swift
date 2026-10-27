@@ -207,7 +207,12 @@ struct Timeline: View {
                     }
                     .overlay(alignment: .topTrailing) {
                         if isSelected(layout.item), allowsAdjustment {
-                            VStack(alignment: .leading) {
+                            HStack {
+                                if adjustment.isDragging, tooltipBelow {
+                                    // Keep the tooltip clear of the duration grip and card actions.
+                                    TimelineAdjustmentTooltip(item: layout.item)
+                                }
+                                Spacer(minLength: 0)
                                 TimelineAdjustmentActions(
                                     item: layout.item,
                                     isSaving: adjustment.isSaving,
@@ -215,11 +220,6 @@ struct Timeline: View {
                                     onDelete: onDelete
                                 )
                                 .fixedSize()
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                                if adjustment.isDragging, tooltipBelow {
-                                    // Keep the tooltip clear of the duration grip and card actions.
-                                    TimelineAdjustmentTooltip(item: layout.item)
-                                }
                             }
                             .frame(width: layout.rect.width, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
