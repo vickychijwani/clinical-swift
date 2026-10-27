@@ -14,7 +14,7 @@ struct ColorLabRenderingTests {
         var palette = AppPalette(overrides: [.accent: accent.opacity(0.2)])
         let todayAccent = palette.opaqueAccent(in: environment)
         #expect(palette.todaySelection.textColor(accent: todayAccent) == todayAccent)
-        #expect(palette.todaySelection.highlightOpacity == 0.2)
+        #expect(palette.todaySelection.highlightOpacity == 0.1)
         #expect(
             try pixels(Rectangle().fill(todayAccent), scheme: scheme)
                 == pixels(Rectangle().fill(accent), scheme: scheme))

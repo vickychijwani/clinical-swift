@@ -50,7 +50,7 @@ import Testing
             defer { defaults.removePersistentDomain(forName: suite) }
             let lab = ColorLab(defaults: defaults)
             #expect(lab.palette.todaySelection.textColor(accent: .purple) == .purple)
-            #expect(lab.palette.todaySelection.highlightOpacity == 0.2)
+            #expect(lab.palette.todaySelection.highlightOpacity == 0.1)
             lab.state.todaySelection = .init(usesWhiteText: false, highlightOpacity: 0.35)
             lab.state.isEnabled = false
             let restored = ColorLab(defaults: defaults)

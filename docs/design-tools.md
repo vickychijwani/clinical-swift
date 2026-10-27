@@ -13,7 +13,7 @@ palette and RGB or HSL channels. Opacity is available in every mode, including
 Hex. Hex accepts six RGB digits with an optional # prefix. Named system colors
 are also available. Numeric fields and sliders edit the same value.
 The Today selected controls switch the date strip text between accent, white,
-and black and set its accent glass tint opacity. The defaults are accent and 20%.
+and black and set its accent glass tint opacity. The defaults are accent and 10%.
 These values persist when the panel is hidden and reset with Reset all.
 Unselected today text always uses the full-opacity accent.
 Editing a channel converts a system color to a fixed sRGB color. A system choice

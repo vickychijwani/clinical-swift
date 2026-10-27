@@ -60,7 +60,7 @@ nonisolated struct AppPalette: Equatable {
     struct TodaySelection: Codable, Equatable {
         // Nil follows the accent. White and black remain optional lab overrides.
         var usesWhiteText: Bool?
-        var highlightOpacity = 0.2
+        var highlightOpacity = 0.1
 
         func textColor(accent: Color) -> Color {
             guard let usesWhiteText else { return accent }
