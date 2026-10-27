@@ -9,9 +9,9 @@ extension View {
         #endif
     }
 
-    func colorLabOverlay() -> some View {
+    func colorLabOverlay(isVisible: Bool) -> some View {
         #if DEBUG
-            modifier(ColorLabOverlay())
+            modifier(ColorLabOverlay(isVisible: isVisible))
         #else
             self
         #endif
@@ -212,6 +212,7 @@ extension View {
     }
 
     private struct ColorLabOverlay: ViewModifier {
+        let isVisible: Bool
         @Environment(\.colorLab) private var lab
         @State private var availableSize = CGSize.zero
 
@@ -223,7 +224,7 @@ extension View {
                     availableSize = $0
                 }
                 .overlay(alignment: .topLeading) {
-                    if let lab, lab.state.isEnabled {
+                    if isVisible, let lab, lab.state.isEnabled {
                         ColorLabPanel(lab: lab, availableSize: availableSize)
                             // The tool must stay readable when app colors have low contrast.
                             .environment(\.appPalette, AppPalette())
@@ -328,8 +329,9 @@ extension View {
             VStack(alignment: .leading) {
                 Text("Today selected").bold()
                 Picker("Text color", selection: selection.usesWhiteText) {
-                    Text("White").tag(true)
-                    Text("Black").tag(false)
+                    Text("Accent").tag(Optional<Bool>.none)
+                    Text("White").tag(Optional(true))
+                    Text("Black").tag(Optional(false))
                 }
                 .pickerStyle(.segmented)
                 ColorLabChannel(

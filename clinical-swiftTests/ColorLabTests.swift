@@ -49,12 +49,12 @@ import Testing
             let defaults = try #require(UserDefaults(suiteName: suite))
             defer { defaults.removePersistentDomain(forName: suite) }
             let lab = ColorLab(defaults: defaults)
-            #expect(lab.palette.todaySelection.textColor == .white)
-            #expect(lab.palette.todaySelection.highlightOpacity == 1)
+            #expect(lab.palette.todaySelection.textColor(accent: .purple) == .purple)
+            #expect(lab.palette.todaySelection.highlightOpacity == 0.2)
             lab.state.todaySelection = .init(usesWhiteText: false, highlightOpacity: 0.35)
             lab.state.isEnabled = false
             let restored = ColorLab(defaults: defaults)
-            #expect(restored.palette.todaySelection.textColor == .black)
+            #expect(restored.palette.todaySelection.textColor(accent: .purple) == .black)
             #expect(restored.palette.todaySelection.highlightOpacity == 0.35)
             restored.state.colors[.accent] = .system(.purple)
             restored.reset()

@@ -13,6 +13,8 @@ struct ColorLabRenderingTests {
         let accent = Color(.sRGB, red: 0.3, green: 0.5, blue: 0.7)
         var palette = AppPalette(overrides: [.accent: accent.opacity(0.2)])
         let todayAccent = palette.opaqueAccent(in: environment)
+        #expect(palette.todaySelection.textColor(accent: todayAccent) == todayAccent)
+        #expect(palette.todaySelection.highlightOpacity == 0.2)
         #expect(
             try pixels(Rectangle().fill(todayAccent), scheme: scheme)
                 == pixels(Rectangle().fill(accent), scheme: scheme))
@@ -27,6 +29,18 @@ struct ColorLabRenderingTests {
 
     @Test(arguments: [ColorScheme.light, .dark])
     func defaultsMatchOriginalStyles(scheme: ColorScheme) throws {
+        #expect(
+            try pixels(Rectangle().fill(AppColor.background), scheme: scheme)
+                == pixels(
+                    Rectangle().fill(
+                        Color(.sRGB, red: 249.0 / 255, green: 249.0 / 255, blue: 250.0 / 255)),
+                    scheme: scheme))
+        #expect(
+            try pixels(Rectangle().fill(Color("AccentColor")), scheme: scheme)
+                == pixels(
+                    Rectangle().fill(
+                        Color(.sRGB, red: 59.0 / 255, green: 134.0 / 255, blue: 246.0 / 255)),
+                    scheme: scheme))
         #expect(
             try pixels(Rectangle().fill(AppColor.accent), scheme: scheme)
                 == pixels(Rectangle().fill(.tint), scheme: scheme))

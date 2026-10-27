@@ -23,7 +23,6 @@ struct ContentView: View {
             onDismiss: router.presentationDidDismiss
         ) { presentation in
             DetailsFlowSheet(presentation: presentation)
-                .colorLabOverlay()
                 .id(presentation.id)
                 .onAppear {
                     router.presentationDidAppear(presentation.id)
@@ -34,7 +33,6 @@ struct ContentView: View {
             onDismiss: router.presentationDidDismiss
         ) { request in
             EditPatientView(patient: request.patient)
-                .colorLabOverlay()
                 .onAppear {
                     router.presentationDidAppear(request.id)
                 }
@@ -44,7 +42,6 @@ struct ContentView: View {
             onDismiss: router.presentationDidDismiss
         ) { request in
             AppointmentMessageView(id: request.appointmentID)
-                .colorLabOverlay()
                 .onAppear {
                     router.presentationDidAppear(request.id)
                 }
@@ -75,7 +72,6 @@ struct ContentView: View {
         .onOpenURL { url in
             router.open(url)
         }
-        .colorLabOverlay()
         .timelineTuningRoot()
         .colorLabRoot()
     }

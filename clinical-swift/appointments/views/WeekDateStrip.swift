@@ -266,11 +266,12 @@ private struct DateStripCell: View {
 
     private var foregroundStyle: Color {
         if isToday {
-            isSelected ? palette.todaySelection.textColor : palette.opaqueAccent(in: environment)
+            let accent = palette.opaqueAccent(in: environment)
+            return isSelected ? palette.todaySelection.textColor(accent: accent) : accent
         } else if isSelected {
-            palette[.text]
+            return palette[.text]
         } else {
-            palette[.secondaryText]
+            return palette[.secondaryText]
         }
     }
 

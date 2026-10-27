@@ -5,14 +5,15 @@ this device, in separate app preferences. These tools do not write clinic data.
 Hide closes a panel and keeps its values. Reset restores the source defaults.
 Release builds have no lab controls and do not load saved lab values.
 
-Color lab shows live changes across app screens and the details, patient edit,
-and appointment message sheets. Drag the header to move it. Collapse keeps its
+Both panels appear only on the Schedule screen and share the same visibility
+rule. Hide them while a sheet or another destination is open. Color lab values
+still apply across app screens and sheets. Drag the header to move it. Collapse keeps its
 header available. Each color starts in Hex mode and also supports the native
 palette and RGB or HSL channels. Opacity is available in every mode, including
 Hex. Hex accepts six RGB digits with an optional # prefix. Named system colors
 are also available. Numeric fields and sliders edit the same value.
-The Today selected controls switch the date strip text between white and black
-and set its accent glass tint opacity. The defaults are white and 100%.
+The Today selected controls switch the date strip text between accent, white,
+and black and set its accent glass tint opacity. The defaults are accent and 20%.
 These values persist when the panel is hidden and reset with Reset all.
 Unselected today text always uses the full-opacity accent.
 Editing a channel converts a system color to a fixed sRGB color. A system choice

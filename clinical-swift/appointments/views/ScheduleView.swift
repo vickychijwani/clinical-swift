@@ -226,10 +226,11 @@ struct ScheduleView: View {
             guard let previous, let current, previous.sessionID == current.sessionID else { return }
             scrollToEditorPreview()
         }
-        .timelineTuningOverlay(isVisible: showsCardLab)
+        .timelineTuningOverlay(isVisible: showsDesignLabs)
+        .colorLabOverlay(isVisible: showsDesignLabs)
     }
 
-    private var showsCardLab: Bool {
+    private var showsDesignLabs: Bool {
         guard router.selectedTab == .schedule, router.schedulePath.isEmpty,
             editorSheet.wrappedValue == nil
         else { return false }
