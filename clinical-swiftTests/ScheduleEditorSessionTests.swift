@@ -1,12 +1,192 @@
 import ClinicalModels
+import ClinicalPersistence
 import Dependencies
 import Foundation
+import SQLiteData
 import Testing
 
 @testable import clinical_swift
 
 @MainActor
 struct ScheduleEditorSessionTests {
+    @Test func initialHoldUsesItsOwnAdjustmentAndDoneRequiresPatientSelection() async throws {
+        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+        await withDependencies {
+            $0.calendar = utcCalendar
+            $0.date.now = date
+        } operation: {
+            var didFinish = false
+            let id = UUID()
+            let session = ScheduleEditorSession(
+                bookingID: id, selectedDate: date, center: TimeOfDay(12, 0), items: []
+            ) { _ in didFinish = true }
+            #expect(session.id == id)
+            #expect(session.adjustment.isDragging)
+            #expect(!session.isShowingSheet)
+            #expect(!session.canDelete)
+            let preview = session.preview
+            session.releaseBooking(TimelineAdjustment())
+            #expect(session.adjustment.isDragging)
+            #expect(!session.isShowingSheet)
+            session.releaseBooking(session.adjustment)
+            #expect(!session.adjustment.isDragging)
+            #expect(session.isShowingSheet)
+            session.isShowingSheet = false
+            await session.save()
+            #expect(session.isShowingSheet)
+            #expect(session.preview.id == preview.id)
+            #expect(session.preview.start == preview.start)
+            #expect(session.preview.durationMinutes == preview.durationMinutes)
+            #expect(session.errorMessage == nil)
+            #expect(!didFinish)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func saveReleasesDragAndKeepsFailedPreviewForRetry(unavailable: Bool) async throws {
+        let database = try makeDatabase()
+        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+        }
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            var finishedDates: [Date] = []
+            let request: AppPresentation =
+                unavailable
+                ? .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create))
+                : .appointmentBooking(AppointmentBookingRequest(patient: patient))
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: request, selectedDate: date, appointments: []
+                ) { finishedDates.append($0) })
+            session.isShowingSheet = false
+            session.adjustment.begin(session.preview, edge: .move, items: [])
+            session.adjustment.update(translation: 15, items: [])
+            let preview = session.preview
+            let table = unavailable ? "unavailableTimes" : "appointments"
+            try await database.write { db in
+                try db.execute(
+                    sql: """
+                        CREATE TRIGGER reject_session_save BEFORE INSERT ON \(table)
+                        BEGIN SELECT RAISE(ABORT, 'test failure'); END
+                        """)
+            }
+            await session.save()
+            #expect(!session.adjustment.isDragging)
+            #expect(session.adjustment.isActive)
+            #expect(session.preview.id == preview.id)
+            #expect(session.preview.start == preview.start)
+            #expect(session.preview.durationMinutes == preview.durationMinutes)
+            #expect(session.errorMessage != nil)
+            #expect(
+                session.errorTitle
+                    == (unavailable
+                        ? "Unable to change unavailable time" : "Unable to save appointment"))
+            #expect(!session.isWorking)
+            #expect(session.allowsDateSelection)
+            #expect(finishedDates.isEmpty)
+            session.errorMessage = nil
+            #expect(session.errorMessage == nil)
+            try await database.write { db in try db.execute(sql: "DROP TRIGGER reject_session_save")
+            }
+            await session.save()
+            #expect(finishedDates == [preview.start])
+            #expect(session.errorMessage == nil)
+            let starts = try await database.read { db in
+                if unavailable {
+                    return try UnavailableTimeRecord.fetchAll(db).map(\.start)
+                }
+                return try AppointmentRecord.fetchAll(db).map(\.start)
+            }
+            #expect(starts == [preview.start])
+        }
+    }
+
+    @Test(arguments: [Appointment.Status.completed, .cancelled])
+    func editingTerminalAppointmentKeepsPreviewAndReportsError(status: Appointment.Status)
+        async throws
+    {
+        let database = try makeDatabase()
+        let date = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        let appointment = Appointment(
+            patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
+        let record = try AppointmentRecord.persisted(
+            id: appointment.id, patientID: patient.id, start: date,
+            durationMinutes: 30, status: status, createdAt: date, updatedAt: date)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+            try AppointmentRecord.insert { record }.execute(db)
+        }
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            var didFinish = false
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: .appointmentEdit(
+                        AppointmentEditRequest(
+                            details: AppointmentDetails(appointment: appointment, patient: patient))
+                    ),
+                    selectedDate: date, appointments: [appointment]
+                ) { _ in didFinish = true })
+            session.adjustment.begin(session.preview, edge: .move, items: [])
+            session.adjustment.update(translation: 15, items: [])
+            let preview = session.preview
+            await session.save()
+            #expect(!didFinish)
+            #expect(session.errorMessage == "This appointment can no longer be edited.")
+            #expect(session.adjustment.isActive)
+            #expect(session.preview.start == preview.start)
+            let record = try #require(
+                try await database.read { try AppointmentRecord.find(appointment.id).fetchOne($0) })
+            #expect(record.start == date)
+            #expect(record.status == status.rawValue)
+        }
+    }
+
+    @Test func deletingMovedBlockUsesItsSavedIdentity() async throws {
+        let database = try makeDatabase()
+        let date = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
+        let nextDate = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
+        let block = UnavailableTime(label: "Travel", start: date, durationMinutes: 60)
+        try await database.write { db in
+            try UnavailableTimeRecord.insert {
+                UnavailableTimeRecord(
+                    id: block.id, label: block.label, start: block.start,
+                    durationMinutes: block.durationMinutes, createdAt: date, updatedAt: date)
+            }.execute(db)
+        }
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            var finishedDates: [Date] = []
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: .unavailableTimeEditor(
+                        UnavailableTimeEditorRequest(purpose: .edit(block))),
+                    selectedDate: date, appointments: []
+                ) { finishedDates.append($0) })
+            #expect(session.canDelete)
+            session.selectDate(nextDate)
+            session.adjustment.begin(session.preview, edge: .move, items: [])
+            session.adjustment.update(translation: 15, items: [])
+            await session.delete()
+            #expect(!session.adjustment.isDragging)
+            #expect(finishedDates == [nextDate])
+            #expect(try await database.read { try UnavailableTimeRecord.fetchAll($0).isEmpty })
+        }
+    }
+
     @Test(arguments: [false, true])
     func unavailableTimeUsesLabelSheetOnlyForCreation(editing: Bool) throws {
         let start = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
@@ -208,6 +388,12 @@ struct ScheduleEditorSessionTests {
             #expect(router.activePresentation?.id == replacementID)
             #expect(router.selectedScheduleDate == savedDate.startOfDay(using: utcCalendar))
         }
+    }
+
+    private func makeDatabase() throws -> DatabaseQueue {
+        let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
+        try migrateDatabase(database)
+        return database
     }
 
     private var utcCalendar: Calendar {

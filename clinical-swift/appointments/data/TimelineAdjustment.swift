@@ -4,7 +4,7 @@ import Foundation
 import Observation
 
 /// Gesture release and date selection change only the preview in memory.
-/// Done is the only action that writes these changes to storage.
+/// The editor owns saving and errors.
 @MainActor @Observable
 final class TimelineAdjustment {
     enum Edge { case move, duration }
@@ -14,19 +14,17 @@ final class TimelineAdjustment {
     private(set) var preview: TimelineItem?
     private(set) var edge: Edge = .move
     private(set) var isDragging = false
-    private(set) var isSaving = false
     private(set) var hoverRequest: UUID?
     private var expanded = false
     private var anchorY: CGFloat = 0
     private var translation: CGFloat = 0
 
     private(set) var selectedID: TimelineItem.ID?
-    var errorMessage: String?
 
     var isActive: Bool { preview != nil }
 
     func select(_ item: TimelineItem) {
-        guard !isDragging, !isSaving else { return }
+        guard !isDragging else { return }
         preview = item
         selectedID = item.id
     }
@@ -55,7 +53,7 @@ final class TimelineAdjustment {
     }
 
     func begin(_ item: TimelineItem, edge: Edge, items: [TimelineItem]) {
-        guard !isDragging, !isSaving,
+        guard !isDragging,
             item.allowsAdjustment,
             selectedID == nil || selectedID == item.id
         else { return }
@@ -118,25 +116,12 @@ final class TimelineAdjustment {
         preview = nil
         original = nil
         isDragging = false
-        isSaving = false
         hoverRequest = nil
         selectedID = nil
     }
 
-    func save(using save: (TimelineItem) async throws -> Void) async {
-        guard let preview, !isDragging, !isSaving else { return }
-        isSaving = true
-        defer { isSaving = false }
-        do {
-            try await save(preview)
-            finish()
-        } catch {
-            errorMessage = "The schedule item could not be saved. Try again."
-        }
-    }
-
     func selectDate(_ date: Date) -> TimelineItem? {
-        guard !isSaving, let preview,
+        guard let preview,
             !calendar.isDate(preview.start, inSameDayAs: date)
         else { return nil }
         self.preview = preview.rescheduled(

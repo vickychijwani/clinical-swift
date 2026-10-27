@@ -63,60 +63,6 @@ struct ScheduleModelTests {
         #expect(saturday.date(byAddingDays: 1, using: calendar) == sunday)
     }
 
-    @Test func directAdjustmentSavesTimeAndPreservesPatientAndStatus() async throws {
-        let database = try testDatabase()
-        let date = try Date("2026-10-25T12:00:00Z", strategy: .iso8601)
-        let id = UUID()
-        try seedPatientAndAppointments(
-            database: database, appointments: [AppointmentSeed(id: id, start: date)])
-        try await withDependencies {
-            $0.defaultDatabase = database
-            $0.calendar = gregorianCalendar
-            $0.date.now = date
-        } operation: {
-            let model = ScheduleModel()
-            let beforeRow = try await database.read { try AppointmentRecord.find(id).fetchOne($0) }
-            let before = try #require(beforeRow)
-            let adjusted = Appointment(
-                id: id, patientName: "Ignored display name",
-                start: date.addingTimeInterval(90 * 60), durationMinutes: 45, status: .scheduled)
-            try await model.adjustAppointment(adjusted)
-            let afterRow = try await database.read { try AppointmentRecord.find(id).fetchOne($0) }
-            let after = try #require(afterRow)
-            #expect(after.start == adjusted.start)
-            #expect(after.durationMinutes == 45)
-            #expect(after.patientID == before.patientID)
-            #expect(after.status == before.status)
-            #expect(after.createdAt == before.createdAt)
-        }
-    }
-
-    @Test func directAdjustmentRejectsCompletedAppointment() async throws {
-        let database = try testDatabase()
-        let date = try Date("2026-10-25T12:00:00Z", strategy: .iso8601)
-        let id = UUID()
-        try seedPatientAndAppointments(
-            database: database,
-            appointments: [AppointmentSeed(id: id, start: date, status: .completed)])
-        try await withDependencies {
-            $0.defaultDatabase = database
-            $0.calendar = gregorianCalendar
-            $0.date.now = date
-        } operation: {
-            let model = ScheduleModel()
-            let adjusted = Appointment(
-                id: id, patientName: "Patient", start: date.addingTimeInterval(60 * 60),
-                durationMinutes: 45, status: .scheduled)
-            await #expect(throws: AppointmentEditingError.self) {
-                try await model.adjustAppointment(adjusted)
-            }
-            let afterRow = try await database.read { try AppointmentRecord.find(id).fetchOne($0) }
-            let after = try #require(afterRow)
-            #expect(after.start == date)
-            #expect(after.durationMinutes == 30)
-        }
-    }
-
     private var gregorianCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

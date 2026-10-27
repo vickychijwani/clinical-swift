@@ -24,7 +24,8 @@ struct Timeline: View {
 
     var date: Date = .now
     // The session owns this reference. View state would keep the previous session's adjustment.
-    var adjustment = TimelineAdjustment()
+    var adjustment: TimelineAdjustment?
+    var isWorking = false
     @State private var lastDragEnd: ContinuousClock.Instant?
     @State private var touchStart: CGPoint?
     // Keep the first touch attached while Schedule installs the new booking session.
@@ -53,8 +54,8 @@ struct Timeline: View {
                 timelineContent(now: nil)
             }
         }
-        .task(id: adjustment.hoverRequest) {
-            guard adjustment.hoverRequest != nil,
+        .task(id: adjustment?.hoverRequest) {
+            guard let adjustment, adjustment.hoverRequest != nil,
                 adjustment.preview?.start.isSameDayAs(date) == true
             else { return }
             do { try await Task.sleep(for: .milliseconds(550)) } catch { return }
@@ -62,28 +63,28 @@ struct Timeline: View {
                 onScaleChange(adjustment.expandBreak(items: items))
             }
         }
-        .onChange(of: adjustment.isDragging) { _, dragging in
-            if !dragging {
+        .onChange(of: adjustment?.isDragging) { _, dragging in
+            if dragging != true {
                 bookingDrag = nil
                 touchStart = nil
             }
-            onDraggingChanged(dragging)
+            onDraggingChanged(dragging == true)
         }
-        .sensoryFeedback(.impact(weight: .light), trigger: adjustment.isDragging)
-        .sensoryFeedback(.selection, trigger: adjustment.preview?.start)
-        .sensoryFeedback(.selection, trigger: adjustment.preview?.durationMinutes)
+        .sensoryFeedback(.impact(weight: .light), trigger: adjustment?.isDragging == true)
+        .sensoryFeedback(.selection, trigger: adjustment?.preview?.start)
+        .sensoryFeedback(.selection, trigger: adjustment?.preview?.durationMinutes)
     }
 
     private func timelineContent(now: Date?) -> some View {
-        let scale = allowsAdjustment ? adjustment.scale(items, on: date) : scale
+        let scale = allowsAdjustment ? adjustment?.scale(items, on: date) ?? scale : scale
         return GeometryReader { geometry in
             let engine = TimelineLayoutEngine(
                 availableWidth: geometry.size.width,
                 scale: scale
             )
             let layouts = engine.layout(
-                items: adjustment.items(items, on: date),
-                floatingID: adjustment.selectedID)
+                items: adjustment?.items(items, on: date) ?? items,
+                floatingID: adjustment?.selectedID)
 
             ZStack(alignment: .topLeading) {
                 TimelineBreakView(
@@ -97,9 +98,11 @@ struct Timeline: View {
                 )
 
                 ForEach(layouts) { layout in
+                    let tooltipBelow =
+                        layout.item.start.timeOfDay.minutes(since: Bitehaus.opening) <= 30
                     Button {
                         // A hold can finish in the same event as the button release.
-                        guard !adjustment.isActive,
+                        guard adjustment?.isActive != true,
                             lastDragEnd.map({ $0.duration(to: .now) > .milliseconds(150) }) ?? true
                         else { return }
                         onSelectItem(layout.item)
@@ -107,7 +110,7 @@ struct Timeline: View {
                         ScheduleItemCard(
                             item: layout.item,
                             isAdjusting: isSelected(layout.item),
-                            isDeemphasized: adjustment.isActive && !isSelected(layout.item)
+                            isDeemphasized: adjustment?.isActive == true && !isSelected(layout.item)
                         )
                         .frame(width: layout.rect.width, height: layout.rect.height)
                         // Keep clipped text within the card's tap area.
@@ -125,7 +128,7 @@ struct Timeline: View {
                     }
                     .buttonStyle(TimelineCardButtonStyle())
                     .allowsHitTesting(
-                        !adjustment.isSaving
+                        !isWorking
                             && (itemInteractionsEnabled
                                 || (allowsAdjustment && isSelected(layout.item)))
                     )
@@ -142,6 +145,7 @@ struct Timeline: View {
                                 {
                                     lastDragEnd = .now
                                 }
+                                guard let adjustment, !isWorking else { return }
                                 if isSelected(layout.item), !adjustment.isDragging {
                                     adjustment.begin(layout.item, edge: .move, items: items)
                                 }
@@ -154,6 +158,7 @@ struct Timeline: View {
                                 }
                             }
                             .onEnded { value in
+                                guard let adjustment else { return }
                                 if abs(value.translation.height) > 10
                                     || abs(value.translation.width) > 10
                                 {
@@ -182,7 +187,6 @@ struct Timeline: View {
                         {
                             TimelineAdjustmentHandles(
                                 item: layout.item,
-                                isDragging: adjustment.isDragging,
                                 onDrag: { edge, value in
                                     drag(layout.item, edge: edge, value: value)
                                 },
@@ -192,17 +196,37 @@ struct Timeline: View {
                     }
                     .modifier(
                         ScheduleCardLift(
-                            isPressed: isSelected(layout.item) && adjustment.isDragging)
+                            isPressed: isSelected(layout.item) && adjustment?.isDragging == true)
                     )
+                    .overlay(alignment: .topLeading) {
+                        if isSelected(layout.item), allowsAdjustment,
+                            adjustment?.isDragging == true,
+                            !tooltipBelow
+                        {
+                            TimelineAdjustmentTooltip(item: layout.item)
+                                .visualEffect { content, geometry in
+                                    content.offset(y: -geometry.size.height - 4)
+                                }
+                        }
+                    }
                     .overlay(alignment: .topTrailing) {
                         if isSelected(layout.item), allowsAdjustment {
-                            TimelineAdjustmentActions(
-                                item: layout.item,
-                                isSaving: adjustment.isSaving,
-                                onCancel: onCancel, onDiscard: onDiscard, onDone: onDone,
-                                onDelete: onDelete
-                            )
-                            .fixedSize()
+                            HStack {
+                                if adjustment?.isDragging == true, tooltipBelow {
+                                    // Keep the tooltip clear of the duration grip and card actions.
+                                    TimelineAdjustmentTooltip(item: layout.item)
+                                }
+                                Spacer(minLength: 0)
+                                TimelineAdjustmentActions(
+                                    item: layout.item,
+                                    isSaving: isWorking,
+                                    onCancel: onCancel, onDiscard: onDiscard, onDone: onDone,
+                                    onDelete: onDelete
+                                )
+                                .fixedSize()
+                            }
+                            .frame(width: layout.rect.width, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
                             // Leave the duration handle its own touch area below the card.
                             .offset(y: layout.rect.height + 4)
                         }
@@ -241,20 +265,21 @@ struct Timeline: View {
                         bookingDrag.release()
                         onBookingRelease(bookingDrag)
                     },
-                including: allowsAdjustment && (!adjustment.isActive || bookingDrag != nil)
+                including: allowsAdjustment && (adjustment?.isActive != true || bookingDrag != nil)
                     ? .all : .subviews
             )
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.3)
                     .onEnded { _ in
-                        guard allowsAdjustment, itemInteractionsEnabled, !adjustment.isActive,
+                        guard allowsAdjustment, itemInteractionsEnabled,
+                            adjustment?.isActive != true,
                             let touchStart
                         else { return }
                         let y = touchStart.y - geometry.frame(in: .global).minY
                         // Use the displayed scale, including a compact break, for touch mapping.
                         bookingDrag = onBeginBooking(scale.time(at: y))
                     },
-                including: allowsAdjustment && (!adjustment.isActive || bookingDrag != nil)
+                including: allowsAdjustment && (adjustment?.isActive != true || bookingDrag != nil)
                     ? .all : .subviews
             )
         }
@@ -263,19 +288,20 @@ struct Timeline: View {
     }
 
     private func isSelected(_ item: TimelineItem) -> Bool {
-        guard let id = adjustment.selectedID else { return false }
+        guard let id = adjustment?.selectedID else { return false }
         return item.id == id
     }
 
     private func drag(
         _ item: TimelineItem, edge: TimelineAdjustment.Edge, value: DragGesture.Value
     ) {
+        guard let adjustment, !isWorking else { return }
         if !adjustment.isDragging { adjustment.begin(item, edge: edge, items: items) }
         onScaleChange(adjustment.update(translation: value.translation.height, items: items))
     }
 
     private func releaseAdjustment() {
-        guard adjustment.isDragging else { return }
+        guard let adjustment, adjustment.isDragging else { return }
         lastDragEnd = .now
         adjustment.release()
     }
@@ -286,7 +312,7 @@ struct Timeline: View {
         }
 
         let time = now.timeOfDay
-        let scale = allowsAdjustment ? adjustment.scale(items, on: date) : scale
+        let scale = allowsAdjustment ? adjustment?.scale(items, on: date) ?? scale : scale
         guard scale.showsTime(time) else {
             return nil
         }
@@ -394,9 +420,7 @@ func sampleTimeline(
 }
 
 private struct TimelineAdjustmentHandles: View {
-    @Dependency(\.calendar) private var calendar
     let item: TimelineItem
-    let isDragging: Bool
     let onDrag: (TimelineAdjustment.Edge, DragGesture.Value) -> Void
     let onEnd: () -> Void
 
@@ -405,20 +429,6 @@ private struct TimelineAdjustmentHandles: View {
             .strokeBorder(AppColor.accent, lineWidth: 2)
             .allowsHitTesting(false)
             .overlay(alignment: .bottom) { durationHandle() }
-            .overlay(alignment: .topLeading) {
-                if isDragging {
-                    Text(
-                        "\(item.start.formatted(date: .omitted, time: .shortened)) – \(item.end(using: calendar).formatted(date: .omitted, time: .shortened)) · \(item.durationMinutes) min"
-                    )
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(AppColor.onAccent)
-                    .padding(6)
-                    .background(AppColor.accent, in: .capsule)
-                    .fixedSize()
-                    .offset(y: -32)
-                    .allowsHitTesting(false)
-                }
-            }
     }
 
     private func durationHandle() -> some View {
@@ -452,5 +462,22 @@ private struct TimelineAdjustmentHandles: View {
         case .appointment: "appointment-duration-handle"
         case .unavailableTime: "unavailable-time-duration-handle"
         }
+    }
+}
+
+private struct TimelineAdjustmentTooltip: View {
+    @Dependency(\.calendar) private var calendar
+    let item: TimelineItem
+
+    var body: some View {
+        Text(
+            "\(item.start.formatted(date: .omitted, time: .shortened)) – \(item.end(using: calendar).formatted(date: .omitted, time: .shortened)) · \(item.durationMinutes) min"
+        )
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(AppColor.onAccent)
+        .padding(6)
+        .background(AppColor.accent, in: .capsule)
+        .fixedSize()
+        .allowsHitTesting(false)
     }
 }

@@ -1,35 +1,29 @@
-# Appointment Booking Architecture
+# Appointment booking
 
-This document captures the deliberate constraints an agent is likely to break when changing appointment booking.
+## Suggestions are not restrictions
 
-## Invariants
+Overlapping appointments, clinic breaks, and unavailable-time blocks do not prevent
+booking. A visiting dentist can work while the clinic owner is busy or away. Time
+suggestions prefer free working hours because the clinic usually has one dentist;
+that preference must not become a save-time restriction.
 
-- Overlapping appointments are valid. The clinic can have multiple doctors attending different patients at the same time, so an existing appointment does not make that interval unavailable.
-- Booking during or across the clinic break is valid. The break is a scheduling preference, not unavailable time.
-- Automatic time prefilling should prefer an empty interval within the regular working segments because the clinic usually has a single doctor.
-- Timeline holds use the touched time as the center of the default duration, then snap the initial start to the nearest 15-minute boundary. Later drags still use five-minute steps. Holds bypass automatic slot suggestions, including over existing appointments and unavailable time. Show patient selection after the initial drag ends, then keep the draft active until Done or Cancel.
-- When creating a booking for today, automatic prefilling must not suggest a past clock-minute bucket. Start the search from the next 5-minute boundary after the current clock minute, ignoring seconds, but still preserve a valid user-carried clock time when changing dates.
-- Existing appointments must not restrict manual time selection or saving. Multiple doctors may be available even when the selected interval is occupied.
-- Scheduling inputs inherit the normal appointment-read policy: cancelled rows are excluded before slot suggestions are calculated. Do not make each availability consumer remember to filter them.
-- Patient selection uses a stable full-height sheet so search results and the keyboard do not resize it.
-- Booking patients are ordered by the later of patient creation and the latest appointment start at or before the query's current time. Include scheduled and completed appointments; exclude cancelled and future appointments from this sort date. This supports follow-up booking without giving distant future appointments priority. Patient edits do not increase recency.
-- Refresh the booking patient query's time boundary when patient selection opens or the app returns to the foreground. Database observation updates patient and appointment changes between these refreshes; typing does not change the time boundary.
-- Show patient creation as the last search result for any nonblank search, even when patients match. Empty and whitespace-only searches show no creation result.
-- Time and duration are edited only on the timeline, for both new and existing appointments. Drag the card to change start time; use its bottom handle to change duration. The minimum duration is 15 minutes.
-- The patient sheet closes after selection. Its Back action returns to the unsaved schedule draft. Tapping the active card can reopen it. Patient selection does not save an appointment.
-- Done saves the draft. Gesture release and date changes do not write to storage. Cancel confirms before discarding the draft. Save errors keep all draft changes for retry.
-- Creating and editing share one scheduling flow. Edit mode starts on the timeline with its draft selected. Both flows permit changing the patient by tapping the active card.
-- Appointment editing is coordinated by the Schedule tab. Entry points from a details flow permanently replace that presentation, select the appointment's day, and present the editor only after dismissal so sheets never compete for presentation.
-- Starting a booking from patient details follows the same Schedule-owned handoff, with that patient preselected. The interrupted details route and navigation history are discarded rather than restored after booking ends.
-- Patient creation from the booking patient search is an in-context nested form, not a router handoff. Prefill the new patient name from the current search text, and only mutate the booking draft after patient save succeeds. Cancelling the patient form or hitting a patient-save error must leave the booking search, selected patient, date, time, duration, and step as they were before creation started.
-- Saving or cancelling an edit returns to the Schedule tab without restoring the interrupted details flow. The saved appointment date remains selected.
-- While editing, render one draft preview and omit the persisted version of that appointment. Keeping both would duplicate the appointment and make availability suggestions treat it as its own conflict.
-- Opening an existing appointment for editing must preserve its saved time exactly. Automatic prefilling selects only the initial slot for creation. Once timeline editing starts, date changes and schedule reloads preserve the chosen clock time and duration, including overlaps and break times.
-- Saving an edit updates the existing appointment identity and preserves its status and creation timestamp. Schedule refreshes and selects the saved date before the editor closes.
-- Unavailable time blocks are display data - they must never enter appointment availability inputs, nor use appointment availability to determine start time. Suggestions, manual selection, and appointment saving are identical with or without blocks.
-- Appointment and block overlaps are valid and require no confirmation. Other doctors can still work while the clinic owner is unavailable.
+Opening an appointment for editing preserves its saved time. Once timeline editing
+starts, date changes preserve the chosen clock time and duration, and schedule
+reloads do not apply suggestions. Otherwise, automatic prefilling could silently
+move an appointment away from the doctor's chosen time.
 
-## Do Not Reintroduce
+## Patient selection
 
-- Do not turn the prefill preference for empty intervals into a hard availability rule. Visiting doctors make overlapping bookings valid even though they are not the default preference.
-- Do not reject a booking because it starts during or extends across the clinic break. Exceptional scheduling must remain possible even though automatic prefilling avoids the break.
+Recency uses past appointments and patient creation, not patient edits or future
+bookings. This puts follow-up patients near the top without letting distant
+bookings dominate the list.
+
+Creating a patient from booking stays within that booking. Cancel or failure must
+leave the draft intact; it is not an app-level interruption. Other entry points
+follow the [routing policy](routing.md).
+
+## Schedule context
+
+Time selection stays on the full schedule so the doctor can place the appointment
+in context. Appointments and unavailable time follow the same
+[direct editing rules](timeline.md#direct-editing).

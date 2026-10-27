@@ -1,48 +1,27 @@
 # Testing
 
-This document captures testing rules that are easy to miss under strict Swift concurrency.
+## Entry points
 
-## Test Commands
+- `make data-test`: package model and persistence tests without an app host or
+  simulator. Requires Swift 6.2 or later.
+- `make test`: package and app unit tests. UI and backup tests stay outside its
+  build graph so routine checks need neither extra test hosts nor account setup.
+- `make ui-test`: UI tests only.
+- `make backup-test`: local backup tests without network access.
+- `make backup-drive-check`: real Drive round trip with an isolated test account.
 
-- `make data-test` (or `swift test` from the repository root) runs the existing
-  model and persistence tests without an app host, simulator, or Xcode. Use Swift
-  6.2 or later. CI installs the required SQLite development files on Linux.
-  `SWIFT` selects the toolchain and `SWIFT_TEST_FLAGS` passes extra
-  SwiftPM flags when needed.
-- The package tests use public imports so missing exports fail compilation at the
-  same boundary used by the app. Their default actor isolation remains MainActor.
-  App editor and debug-seeding tests remain in the Xcode test bundle because their
-  owners stay in the app.
-- `make test` uses the shared unit-test scheme and must not build or run the UI-test target. Parallel Xcode test runners are disabled for this command so it can use the selected simulator directly instead of creating a simulator clone.
-- `make test` also runs `make data-test`.
-- `make ui-test` uses the separate shared UI-test scheme. Keep unit and UI targets in their respective schemes so selecting one kind of test does not build the other bundle.
+See [backup setup and release](backups.md#verification-and-release) for credentials
+and the release gate. The [Makefile](../Makefile) owns command options and schemes.
 
-## Backup checks
+## Test boundaries
 
-- `make backup-test` builds only the separate backup bundle through `clinical-swift-Backups`. It skips `BackupDriveTests` and needs no network.
-- `make backup-drive-check` selects only `BackupDriveTests`. Missing credentials fail the command. See [backup setup and release rules](backups.md).
-- `make release-verify` runs both in sequence in Release. Upload recipes enforce it before export; do not replace the gate with an earlier result from a different source tree.
-- Ordinary `make test` keeps backup tests out of its build graph.
-- Set `CLINICAL_INTERNAL_CONDITIONS=INTERNAL_BACKUP_CHECK` for the backup scheme to
-  include internal authorization tests. They use synthetic OAuth responses and
-  separate Keychain entries. They check credential export, account isolation,
-  cancellation, and export failures without a Google session.
+Package tests use public imports to check the same API boundary as the app. Tests
+for app-owned editors and platform setup stay in the app test bundle.
 
-## Async Database Access
+Override registered dependencies with `withDependencies` around construction and
+the complete operation under test. A live dependency makes tests depend on the
+machine and can produce a dependency-access test failure.
 
-- In an `async` test, calls to `DatabaseWriter.read` and `DatabaseWriter.write` resolve to their asynchronous overloads. Always write `try await database.read { ... }` and `try await database.write { ... }`.
-- This applies even when the database is an in-memory `DatabaseQueue` and the closure itself contains no suspension point. Overload selection follows the surrounding async context, not whether the closure appears synchronous.
-- Keep purely synchronous database tests synchronous when practical. When a test must be async, audit every database read and write in that test for the required `await`.
-
-## Test Dependencies
-
-- Override registered ambient values with `withDependencies` around model construction or the complete operation under test. Keep narrower scopes when a test needs a value with specific semantics, such as a fixed time zone.
-- Do not let tests fall through to live implementations of registered ambient values. Besides making tests environment-dependent, `swift-dependencies` reports live dependency access as a test issue.
-- Do not link `DependenciesTestSupport` into this Xcode test bundle. Its static dependency runtime duplicates the package framework loaded by the host app, causing test overrides to mutate a different `DependencyValues` context than production models read.
-
-## Color lab checks
-
-Launch a Debug build with `--ui-testing-color-lab` to check the full app shell
-with the existing synthetic schedule database. This path does not register the
-clinic backup task or start Calendar sync. Lab preferences still persist so a
-relaunch can check restoration. Use Reset all when a manual color check ends.
+Do not link `DependenciesTestSupport` into the hosted Xcode test bundle. It loads a
+second dependency runtime, so test overrides can change a different context from
+the one production code reads.
