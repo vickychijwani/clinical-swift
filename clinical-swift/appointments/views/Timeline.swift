@@ -97,6 +97,8 @@ struct Timeline: View {
                 )
 
                 ForEach(layouts) { layout in
+                    let tooltipBelow =
+                        layout.item.start.timeOfDay.minutes(since: Bitehaus.opening) <= 30
                     Button {
                         // A hold can finish in the same event as the button release.
                         guard !adjustment.isActive,
@@ -182,7 +184,6 @@ struct Timeline: View {
                         {
                             TimelineAdjustmentHandles(
                                 item: layout.item,
-                                isDragging: adjustment.isDragging,
                                 onDrag: { edge, value in
                                     drag(layout.item, edge: edge, value: value)
                                 },
@@ -194,15 +195,34 @@ struct Timeline: View {
                         ScheduleCardLift(
                             isPressed: isSelected(layout.item) && adjustment.isDragging)
                     )
+                    .overlay(alignment: .topLeading) {
+                        if isSelected(layout.item), allowsAdjustment, adjustment.isDragging,
+                            !tooltipBelow
+                        {
+                            TimelineAdjustmentTooltip(item: layout.item)
+                                .visualEffect { content, geometry in
+                                    content.offset(y: -geometry.size.height - 4)
+                                }
+                        }
+                    }
                     .overlay(alignment: .topTrailing) {
                         if isSelected(layout.item), allowsAdjustment {
-                            TimelineAdjustmentActions(
-                                item: layout.item,
-                                isSaving: adjustment.isSaving,
-                                onCancel: onCancel, onDiscard: onDiscard, onDone: onDone,
-                                onDelete: onDelete
-                            )
-                            .fixedSize()
+                            VStack(alignment: .leading) {
+                                TimelineAdjustmentActions(
+                                    item: layout.item,
+                                    isSaving: adjustment.isSaving,
+                                    onCancel: onCancel, onDiscard: onDiscard, onDone: onDone,
+                                    onDelete: onDelete
+                                )
+                                .fixedSize()
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                if adjustment.isDragging, tooltipBelow {
+                                    // Keep the tooltip clear of the duration grip and card actions.
+                                    TimelineAdjustmentTooltip(item: layout.item)
+                                }
+                            }
+                            .frame(width: layout.rect.width, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
                             // Leave the duration handle its own touch area below the card.
                             .offset(y: layout.rect.height + 4)
                         }
@@ -394,9 +414,7 @@ func sampleTimeline(
 }
 
 private struct TimelineAdjustmentHandles: View {
-    @Dependency(\.calendar) private var calendar
     let item: TimelineItem
-    let isDragging: Bool
     let onDrag: (TimelineAdjustment.Edge, DragGesture.Value) -> Void
     let onEnd: () -> Void
 
@@ -405,20 +423,6 @@ private struct TimelineAdjustmentHandles: View {
             .strokeBorder(.tint, lineWidth: 2)
             .allowsHitTesting(false)
             .overlay(alignment: .bottom) { durationHandle() }
-            .overlay(alignment: .topLeading) {
-                if isDragging {
-                    Text(
-                        "\(item.start.formatted(date: .omitted, time: .shortened)) – \(item.end(using: calendar).formatted(date: .omitted, time: .shortened)) · \(item.durationMinutes) min"
-                    )
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.white)
-                    .padding(6)
-                    .background(Color.accentColor, in: .capsule)
-                    .fixedSize()
-                    .offset(y: -32)
-                    .allowsHitTesting(false)
-                }
-            }
     }
 
     private func durationHandle() -> some View {
@@ -452,5 +456,22 @@ private struct TimelineAdjustmentHandles: View {
         case .appointment: "appointment-duration-handle"
         case .unavailableTime: "unavailable-time-duration-handle"
         }
+    }
+}
+
+private struct TimelineAdjustmentTooltip: View {
+    @Dependency(\.calendar) private var calendar
+    let item: TimelineItem
+
+    var body: some View {
+        Text(
+            "\(item.start.formatted(date: .omitted, time: .shortened)) – \(item.end(using: calendar).formatted(date: .omitted, time: .shortened)) · \(item.durationMinutes) min"
+        )
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(.white)
+        .padding(6)
+        .background(Color.accentColor, in: .capsule)
+        .fixedSize()
+        .allowsHitTesting(false)
     }
 }
