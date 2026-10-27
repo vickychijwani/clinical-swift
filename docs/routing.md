@@ -1,22 +1,26 @@
-# Routing Architecture
+# Presentation and routing
 
-This document captures the app-level presentation rules that must remain consistent across tabs and external entry points.
+The router owns app-level presentation and details history across tabs, widgets,
+and links. Separate presentation owners can try to show competing sheets or apply
+different date rules to the same destination.
 
-## Invariants
+An accepted app-level action replaces the old presentation and its transient state.
+Keep only the newest request while a sheet dismisses. Do not queue actions or
+restore an interrupted flow afterward: old state must not compete with the user's
+new action. Moving within a details flow preserves its history; an external link
+replaces that history with a new root. Settings opens only when no sheet is active,
+so it cannot discard an editor.
 
-- The router owns one app-level presentation at a time. Details, appointment booking/editing, appointment messaging, and patient creation/editing must not maintain competing presentation intent in separate state.
-- Schedule editors share one optional session and one sheet host. Use the router request ID for sheet appearance and completion; an editor model can have a different ID. Reject completion from an old session before clearing the editor or changing the selected date.
-- Closing patient selection returns to the same appointment session on the timeline. Clear the sheet appearance state while retaining that editor request. If another action interrupts dismissal, complete the normal latest-wins handoff instead.
-- Newly triggered app-level actions are latest-wins interruptions. Discard the current presentation and any unsaved transient state; never restore it after the new action ends.
-- SwiftUI may require the current sheet to finish dismissing before its replacement appears. Retain only the newest requested replacement during that handoff rather than building a queue.
-- Replacing one active details destination with another may reuse the stable sheet session for responsiveness, but it must replace the root and clear modal history. This intentionally supersedes the new-presentation-identity rule for external links in the implemented details-sheet specification; root replacement still preserves its user-facing requirement that the external destination starts with an xmark and no prior history.
-- Details navigation history belongs to the details presentation. Every push, pop, and root replacement must pass through router-owned mutation so route-specific invariants cannot be bypassed by a writable navigation path.
-- Appointment routes may open immediately from an ID. Until the appointment record resolves and the Schedule tab is showing the same calendar day, render neutral sheet content rather than contradictory appointment details.
-- Keep each details destination's navigation title and toolbar attached to its stable route view, outside loading, alignment, and unavailable-content branches. Covered routes may remain mounted by `NavigationStack`; withdrawing their navigation preferences during a push can leave stale chrome when the user navigates back.
-- External schedule and list destinations interrupt any app-level presentation before changing the underlying tab or selection.
+Closing a schedule editor's patient or label sheet keeps its editor session active.
+Sheet dismissal alone must not discard the timeline draft. If a new app-level
+action interrupts that dismissal, the normal replacement policy still applies.
 
-## Do Not Reintroduce
+Late editor completions must identify the router session they belong to before
+changing presentation or date selection. An editor model's identity is not proof
+that its sheet is still current.
 
-- Suspended details sessions or restoration after booking, editing, or messaging. Old state competing with a newer user action makes routing order-dependent and confusing.
-- Parallel optional request properties in the Router as independent sources of truth. They allow multiple sheet hosts to believe they should present simultaneously.
-- Appointment-date synchronization in individual callers. Widget, URL, sheet-navigation, and future App Intent entry points must all receive the same enforcement at the shared route boundary.
+Appointment details must agree with the selected Schedule day before they appear.
+Keep the sheet neutral while resolving the record and aligning the schedule.
+Enforce this at the route boundary so every entry point gets the same behavior.
+Changing the day directly dismisses the details flow rather than showing details
+for one day over another day's schedule.

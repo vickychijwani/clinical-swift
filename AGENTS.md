@@ -34,8 +34,8 @@ Swift and SwiftUI guides:
 App-specific guides:
 
 - Package and widget boundaries, with a link to the policy: `docs/architecture.md`.
-- Working with SQL / SQLiteData, Linux package boundaries, CloudKit sync, and record/domain boundaries: `docs/persistence.md` (CloudKit / sync stuff should be moved into a separate file when we implement that feature)
-- Assisted patient-data recovery procedure and limits: `docs/patient-data-restore.md` (backup and restore implementation is pending; user-facing screens are deferred)
+- Persistence boundaries, shared database access, and future CloudKit sync: `docs/persistence.md`
+- Assisted patient-data recovery procedure and limits: `docs/patient-data-restore.md`
 - Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`
 - Appointment booking validation and scheduling principles: `docs/appointment-booking.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
@@ -47,17 +47,19 @@ App-specific guides:
 - Financial entries, current balances, dated reports, and derived coverage: `docs/payments.md`
 - Patient data backups, Google account binding, release checks, and assisted restore: `docs/backups.md`
 
-Keep the documentation map and the documents it points to up-to-date when changing the related architecture.
+Update guides when a documented decision changes. A code change alone does not require a documentation change.
 
 Files under `docs/specs/` are feature specifications - mutable while in `pending` state, and immutable once `implemented`. When a pending spec is implemented, update its status.
+Plans, implemented specs, and validation reports are historical context, not current architecture guidance.
 
 
 ## Documentation Guidance
 
-- Documentation should capture durable decisions, invariants, edge cases, and non-obvious constraints that future agents are likely to break.
-- Documentation should not restate the current implementation shape, file-by-file flow, or code that is already clearer as source.
-- When documenting what not to do, briefly explain why so future agents understand the tradeoff instead of treating it as a preference.
-- Prefer short architecture notes over walkthroughs. If a detail will go stale as code moves, leave it out or describe the invariant behind it.
+- Keep only consequential decisions and constraints whose reason is not clear from code or tests. Explain the reason briefly.
+- Keep cross-module and cross-process constraints in guides; keep local implementation traps beside the code.
+- Give each decision one home and link to it. Do not repeat it as an invariant, warning, and edge case.
+- Omit implementation inventories, ordinary UI details, test lists/results, and change summaries. Keep runnable setup and recovery procedures.
+- When editing a guide, remove duplicate and obsolete text instead of appending a feature summary.
 
 ## Core instructions
 

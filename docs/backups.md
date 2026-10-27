@@ -1,158 +1,79 @@
 # Patient data backups
 
-## Data and account boundaries
+## Account and snapshot boundaries
 
-Clinical uses Google Drive `drive.file`, `openid`, and `email` access. Native OAuth
-uses PKCE and a system authentication session. Tokens stay in Keychain with
-`AfterFirstUnlockThisDeviceOnly` protection. The stable Google account ID binds
-both the dataset and pending uploads. Reconnect must use that account. An email
-address alone is not an account identity.
+Bind the dataset and pending uploads to the stable Google account ID, not an email
+address. Reconnect must use that account. Address Drive folders by saved IDs;
+missing, moved, or shared folders must stop backup work rather than redirect it.
+An uncertain orphan is safer to leave than to delete or reuse by name.
 
-The iOS OAuth client belongs to Google project `clinical-79c20`. Its identifiers
-are public app configuration in `Info.plist`. The owner confirmed External
-Production status on 11 October 2026. Keep the Drive API enabled. Testing status
-can expire refresh tokens after seven days. The public Branding pages are listed
-in [the Sites record](../sites/README.md).
+Use the SQLite backup API to capture committed WAL data. A copied database file
+alone can omit committed edits. The result must be a validated standalone database
+with its matching manifest. Keep patient fields out of remote filenames and
+properties.
 
-The app stores an unshared `Clinical Backups` folder ID, then a dataset subfolder
-ID. It does not select folders by name. A missing or shared folder stops work. A dataset folder moved out of its
-recorded root also stops work. Restore access and reconnect; do not silently upload to another account.
+Keep recovery state outside SQLite so a database failure does not remove it.
+Resolve saved file IDs under current container roots; app updates can move those
+roots. Corrupt backup state must stop backup work without stopping clinic editing.
 
-## Files and durable state
-
-Each capture has a UUID and two files: a dated `.db` and matching `.json`.
-Filenames and Drive properties contain no patient fields. The manifest records
-format version 1, dataset and snapshot IDs, whole-second UTC capture time, app
-version, ordered migration IDs, byte count, and SHA-256 of the database bytes.
-
-Financial entries and their trigger-maintained balance summaries use the same SQLite snapshot.
-
-The SQLite backup API captures committed WAL changes consistently. The closed
-snapshot uses DELETE journal mode and opens read-only without sidecars. Integrity,
-foreign keys, checksum, size, and supported migration prefix must all pass.
-
-Application Support `ClinicalBackups` holds protected state and the pending pair.
-These files are excluded from OS backup. State is outside SQLite, so database
-failure does not remove recovery metadata. File APIs and SQLite use decoded file
-paths, including spaces in Application Support. A corrupt state file stops backup work;
-keep it for assisted repair. It must not stop clinic editing.
-
-Pending state stores the manifest and remote file IDs. Resolve its local pair from
-the snapshot ID under the current Application Support directory. Restore journals
-store a recovery ID and resolve the live database from the current App Group.
-Do not retain absolute container paths: an app update can move those containers.
-Older state and journals remain readable; their saved IDs locate the files under
-the current roots.
-
-Persist both generated Drive IDs before upload. Upload the database, then the
-manifest. Fetch each ID and compare its parent, privacy, size, SHA-256, and app
-properties before success. A duplicate-ID conflict is only a reason to fetch and
-check. Persist success before removing local pending bytes. Listings paginate and
-expose only complete pairs from this dataset.
-
-Keep complete pairs for 30 days. Always keep the newest remote pair and the local
-confirmed success. Persist unfinished deletions and recheck ownership before
-retrying. Never delete unrelated files, another dataset, or the only usable pair.
-An orphan from interrupted folder creation can remain; it is safer to leave an
-unreferenced folder than select it by name or delete uncertain data.
-
-## Scheduling and status
-
-A single coordinator runs on authorization, launch, activation, and network-enabled
-BGProcessing opportunities. Eligibility uses 24 hours since the last confirmed
-capture. Pending work keeps its capture time and IDs. If it is old after upload,
-the next opportunity can capture again. Failed opportunities use exponential
-backoff from one minute to one hour. Manual retry clears the delay.
-
-Cancellation retains validated pending files. Snapshot copying checks cancellation
-between SQLite backup steps. Token refresh runs in the backup task, so cancellation
-also stops the token request and keeps the saved credentials. Background work
-resumes the database, waits for work to end, then suspends it if the app is still
-in the background. It does not request Google or Calendar permission. iOS does not
-guarantee daily background execution.
-
-Settings shows running, waiting, success, or needs attention. Success means remote
-confirmation. Missing authorization, a current error, or a confirmed/pending
-snapshot at least 48 hours old keeps the native warning badge visible. Opening
-Settings does not clear it. The router rejects Settings while an editor is active.
+Persist remote file IDs before upload so retries reconcile the same files after
+interruption. Confirm the remote pair before reporting success or deleting local
+pending bytes. Retention must preserve the newest usable pair and must never
+remove another dataset or unrelated files. Cancellation retains validated pending
+work and saved credentials. iOS background opportunities do not guarantee a daily
+backup, so status must reflect confirmed remote success rather than task execution.
 
 ## Restore boundaries
 
-See [assisted restore](patient-data-restore.md) for the internal invocation. Restore
-runs before live app pools open. Process-local access records reject replacement
-while a writer or scoped read remains in use. Do not hold a `flock` for a pool's
-lifetime: iOS can terminate a suspended process with `0xdead10cc` even after GRDB
-suspends its SQLite connections.
+Restore runs before live app pools open and follows the shared
+[database access rules](persistence.md#shared-database-access). Keep the journal and
+original database/WAL/SHM set outside the replaced database. Save rollback or
+finalization intent before changing files so startup can finish interrupted work.
+An installed journal permits ordinary reads; rollback remains available until
+explicit finalization.
 
-Widget reads coordinate the full operation, including closing the read pool.
-Restore and rollback use replacement coordination on the same database URL and
-wait for reads in other processes to end. Coordinating only database opening is
-not sufficient: a pool could still use the old database and sidecars during
-replacement. An installed journal needs no replacement access for normal startup,
-because no database files change in that phase.
-
-The journal and original DB/WAL/SHM set remain outside the replaced database.
-Replacement uses a same-filesystem atomic rename. Interrupted installation resumes
-before normal startup. Rollback and finalization save their intent before changing
-files, so startup can finish either action after termination. Rollback remains
-available until explicit finalization.
-Recovery disables sample seeding and destructive debug schema repair. The restored
-dataset is adopted and old pending upload references are cleared. Unreferenced
-pending files can be removed after recovery is accepted.
-
-Calendar recovery restores every database record. Its fixed seven-day cutoff only
-limits Calendar work. See [Calendar recovery](calendar-sync.md#backup-recovery).
+Recovered data must not pass through debug erasure or sample seeding. Adopt its
+dataset and clear old pending-upload references. See the
+[restore procedure](patient-data-restore.md) for invocation and acceptance, and
+[Calendar recovery](calendar-sync.md#backup-recovery) for external side effects.
 
 ## Verification and release
 
-`make backup-test` uses a separate bundle and no account or network. `make test`
-does not build that bundle. The fixture includes every table/field, all appointment
-states, nil values, links, deletion tombstones, and committed WAL writes. The test
-removes the source and opens the independent snapshot read-only.
+Use an isolated Google account for live checks. The internal authorization flow
+uses separate credentials and must not change the clinic account binding.
 
-`make backup-drive-check` requires an isolated account credential file outside the
-repository. It forces token refresh, uploads synthetic data with production code,
-reconciles the same IDs, downloads the exact remote pair, removes upload staging,
-and compares every row and field. Missing credentials and infrastructure failures
-are failures, not skips. Cleanup deletes only the UUID folder created by that run.
+For simulator setup:
 
-Set up credentials once with `make backup-authorize`. The internal authorization
-screen opens before clinic data or recovery state is accessed. It uses a separate
-Keychain service and the production Google sign-in code. It does not create a
-database or start backup, Calendar, widget, or App Intent services. Test account
-selection does not change the clinic account binding. Legacy `ClinicalBackupCheck`
-state is no longer used. Complete Google sign-in in Simulator, then run
-`make backup-export-credentials`. The default destination is
-`~/.config/clinical-backups/check-credentials.json`, mode 600. Keep this file private.
-Override its path with `CLINICAL_BACKUP_CHECK_CREDENTIALS`. Revoke this grant when
-retiring the runner. Ordinary builds cannot export credentials or invoke recovery.
+1. Run `make backup-authorize` and complete Google sign-in.
+2. Run `make backup-export-credentials`. It writes
+   `~/.config/clinical-backups/check-credentials.json` with mode 600. Override the
+   destination with `CLINICAL_BACKUP_CHECK_CREDENTIALS` if needed.
+3. Run `make backup-drive-check CONFIGURATION=Release` to check the live round trip.
 
-The shared `make release-verify` runs both checks sequentially in Release with testability enabled for the host module. All Make
-upload paths call it from inside the upload recipe, including with `make -j`.
-Archives record source/configuration and archive-byte hashes. A changed source or
-old archive without a matching receipt must be rebuilt. Keep build settings in the
-checked project/Makefile; do not upload an archive built with unrecorded overrides.
+Keep credentials outside the repository and revoke the grant when retiring the
+runner. Keep the Google project in External Production status with Drive enabled;
+Testing status can expire refresh tokens after seven days. Public client settings
+are in `Info.plist`; public Branding pages are in [the Sites record](../sites/README.md).
 
-Xcode Cloud archive actions run the same gate before building. Configure the
-protected `CLINICAL_BACKUP_CHECK_CREDENTIALS_BASE64` secret with the isolated
-credential JSON, plus a usable simulator and network access. The post-build hook
-rejects a changed checkout. Distribution is blocked without this setup. A local
-result cannot verify a different cloud checkout.
+Distribution also requires native authorization evidence from a physical iPhone:
 
-The release gate also requires physical-device authorization evidence for the
-configured client ID and callback scheme. Build the signed app in Release with
-`CLINICAL_INTERNAL_CONDITIONS=INTERNAL_BACKUP_CHECK`, launch with `--backup-check-authorize`, and complete native
-Google sign-in. Export `Documents/backup-check-credentials.json` from its device
-container to the private runner path, with mode 600. The internal build records
-whether authorization ran on a physical device in Release. This is generated
-from the actual native session; a manually marked checklist cannot satisfy it.
-Changing the client ID or callback scheme requires fresh device evidence.
-The custom setting adds conditions only to the app and backup-test targets, so
-widget and package conditions remain intact. Do not override compilation
-conditions for every target.
+1. Build the signed app in Release with
+   `CLINICAL_INTERNAL_CONDITIONS=INTERNAL_BACKUP_CHECK`.
+2. Launch with `--backup-check-authorize`, complete Google sign-in, and check reconnect.
+3. Export `Documents/backup-check-credentials.json` from the device container to
+   the private runner path with mode 600.
 
-Check reconnect on that device as well. Routine Drive checks force token refresh.
-Simulator credentials can run the independent Drive check, but cannot allow
-release distribution. Simulator checks do not prove physical-device signing or
-exact OS wakeup timing. The physical-device check remains pending at the owner's
-request; keep the spec pending until it passes.
+The internal flow records physical-device evidence for the client ID and callback
+scheme. Changing either requires fresh evidence. Simulator credentials can run
+the Drive check but cannot satisfy this release requirement. Ordinary builds cannot
+export credentials or invoke recovery.
+
+Run `make release-verify` for the candidate. It runs local and live backup checks in
+Release and checks device evidence. Upload paths enforce the gate against the same
+source and archive; an old result or changed archive cannot stand in for it. Keep
+build settings in the checked project and Makefile, not unrecorded overrides.
+
+For Xcode Cloud, configure the protected
+`CLINICAL_BACKUP_CHECK_CREDENTIALS_BASE64` secret with the isolated credential JSON,
+plus a usable simulator and network access. Cloud archives run the same gate on
+their own checkout. See [testing](testing.md) for routine test entry points.
