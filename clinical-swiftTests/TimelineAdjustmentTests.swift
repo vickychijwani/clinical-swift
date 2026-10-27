@@ -91,35 +91,6 @@ struct TimelineAdjustmentTests {
         }
     }
 
-    @Test func doneSavesOnceAndFailureKeepsDraftForRetry() async throws {
-        let appointment = try appointment()
-        let model = withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            TimelineAdjustment()
-        }
-        let items = [TimelineItem.appointment(appointment)]
-        model.begin(.appointment(appointment), edge: .move, items: items)
-        model.update(translation: 15, items: items)
-        model.release()
-        #expect(!model.isSaving)
-        let preview = model.preview
-        enum SaveError: Error { case failed }
-        await model.save { _ in throw SaveError.failed }
-        #expect(model.preview?.start == preview?.start)
-        #expect(model.preview?.durationMinutes == preview?.durationMinutes)
-        #expect(model.isActive)
-        #expect(!model.isSaving)
-        #expect(model.errorMessage != nil)
-        var saved: [TimelineItem] = []
-        await model.save { saved.append($0) }
-        await model.save { saved.append($0) }
-        #expect(saved.count == 1)
-        #expect(saved.first?.start == preview?.start)
-        #expect(saved.first?.durationMinutes == preview?.durationMinutes)
-        #expect(!model.isActive)
-    }
-
     private func appointment(hour: Int = 12, minute: Int = 0) throws -> Appointment {
         Appointment(
             patientName: "Patient",
@@ -151,7 +122,6 @@ struct TimelineAdjustmentTests {
         #expect(model.preview?.durationMinutes == 30)
         model.release()
         #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
-        #expect(!model.isSaving)
     }
 
     @Test func durationHandleKeepsStartAndMinimumDuration() throws {
@@ -235,7 +205,6 @@ struct TimelineAdjustmentTests {
         model.release()
         #expect(model.selectedID == .appointment(appointment.id))
         #expect(!model.isDragging)
-        #expect(!model.isSaving)
         #expect(model.isActive)
     }
 
@@ -281,7 +250,6 @@ struct TimelineAdjustmentTests {
         #expect(model.items([], on: nextDate).map(\.id) == [.appointment(appointment.id)])
         #expect(model.scale([], on: nextDate).isBreakExpanded)
         #expect(!model.scale([], on: appointment.start).isBreakExpanded)
-        #expect(!model.isSaving)
     }
 
     @Test func floatingCardUsesFullWidthAndLeavesOtherCardsInTheirOwnColumns() throws {

@@ -36,6 +36,7 @@ This document captures the deliberate constraints an agent is likely to break if
 - Timeline rendering, scale, and layout accept `TimelineItem` only. Keep tests and previews on this API so they check the same path as the app.
 - The timeline reports the selected `TimelineItem` through one callback. Schedule owns the action for each item type. This keeps navigation and editor presentation out of the timeline.
 - One active editor session supplies the preview, selected date, and scroll requests. Keep the concrete models separate: only appointments use availability updates, and unavailable-time editors prevent date changes during saving or deletion.
+- With no editor session, the timeline has no adjustment. A hold creates the booking session before returning its adjustment to the gesture. Keep saving, deletion, and errors in the editor models; a second timeline save path can bypass their validation and lifecycle rules.
 
 ## Do Not Reintroduce
 
