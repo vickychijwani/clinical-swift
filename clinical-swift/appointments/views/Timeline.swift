@@ -262,7 +262,7 @@ func sampleTimeline(
         showsNowMarker: true,
         previewNowMarker: Date.now.setTime(9, 30)
     )
-    .background(AppColor.background)
+    .background(AppColor.canvas)
 }
 
 #Preview {

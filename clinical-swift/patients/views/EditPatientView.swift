@@ -38,7 +38,7 @@ struct EditPatientView: View {
             }
         }
         .modifier(FittedSheetModifier(fitsVertically: true))
-        .background(AppColor.background)
+        .background(AppColor.canvas)
         .alert(
             "Unable to save patient",
             isPresented: Binding(

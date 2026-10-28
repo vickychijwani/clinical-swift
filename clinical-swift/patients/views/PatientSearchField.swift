@@ -32,5 +32,5 @@ struct PatientSearchField: View {
 
     PatientSearchField(text: $searchText)
         .padding()
-        .background(AppColor.background)
+        .background(AppColor.canvas)
 }

@@ -124,7 +124,9 @@ import Testing
 
         @Test func defaultAccentRolesFollowAccentUntilOverridden() {
             var palette = AppPalette()
+            #expect(palette[.now] == .accentColor)
             palette.overrides[.accent] = .purple
+            #expect(palette[.now] == .purple)
             #expect(palette[.activeCard] == .white)
             #expect(palette[.activeBorder] == Color.purple.opacity(0.7))
             palette.overrides[.activeBorder] = .blue

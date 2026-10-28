@@ -38,7 +38,7 @@ struct ScheduleRenderingTests {
                         items: items, scale: TimelineScale(items: items), showsNowMarker: false
                     )
                     .frame(width: 390)
-                    .background(Color("AppBackground"))
+                    .background(Color("AppCanvas"))
             )
             try render(
                 "cards", directory: directory,
@@ -69,7 +69,7 @@ struct ScheduleRenderingTests {
                                 }
                             }.frame(height: CGFloat(height))
                         }
-                    }.padding().frame(width: 390).background(Color("AppBackground"))
+                    }.padding().frame(width: 390).background(Color("AppCanvas"))
             )
             let scenarios: [(String, [TimelineItem])] = [
                 ("widget-dense", Array(repeating: items, count: 3).flatMap { $0 }),
@@ -101,7 +101,7 @@ struct ScheduleRenderingTests {
                         )
                         .environment(\.calendar, Calendar.autoupdatingCurrent)
                         .padding().frame(width: 364, height: 376)
-                        .background(Color("AppBackground"))
+                        .background(Color("AppCanvas"))
                 )
             }
         }

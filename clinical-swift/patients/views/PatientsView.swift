@@ -24,7 +24,7 @@ struct PatientsView: View {
             },
             searchText: $searchText
         )
-        .background(AppColor.background)
+        .background(AppColor.canvas)
         .navigationTitle("Patients")
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {

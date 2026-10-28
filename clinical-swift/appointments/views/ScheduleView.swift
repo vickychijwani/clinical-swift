@@ -70,7 +70,7 @@ struct ScheduleView: View {
                 )
             }
         }
-        .background(palette[.background])
+        .background(palette[.canvas])
         .navigationTitle(
             router.selectedScheduleDate.formatted(
                 .dateTime

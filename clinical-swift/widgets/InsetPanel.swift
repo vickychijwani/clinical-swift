@@ -30,7 +30,7 @@ struct InsetPanel<Content: View>: View {
     InsetPanel(cornerRadius: 16) {
         VStack {}
             .frame(width: 300, height: 300)
-            .background(AppColor.background)
+            .background(AppColor.canvas)
     }
     .frame(width: 400, height: 400)
     .background(AppColor.accent.opacity(0.3))

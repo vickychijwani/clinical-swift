@@ -16,7 +16,7 @@ struct UnavailableTimeEditorView: View {
             }
             .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(AppColor.background)
+            .background(AppColor.canvas)
             .navigationTitle("Unavailable Time")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -36,7 +36,7 @@ struct UnavailableTimeEditorView: View {
         }
         .interactiveDismissDisabled()
         .presentationDragIndicator(.hidden)
-        .presentationBackground(AppColor.background)
+        .presentationBackground(AppColor.canvas)
         .presentationBackgroundInteraction(.disabled)
     }
 }

@@ -137,7 +137,7 @@ struct AppointmentDetailsSummary: View {
             )
         )
         .padding()
-        .background(AppColor.background)
+        .background(AppColor.canvas)
     }
 }
 
@@ -151,7 +151,7 @@ struct AppointmentDetailsSummary: View {
             variant: .patientTimeline(onSelectAppointment: {})
         )
         .padding()
-        .background(AppColor.background)
+        .background(AppColor.canvas)
     }
 }
 

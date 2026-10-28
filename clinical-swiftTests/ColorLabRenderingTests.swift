@@ -7,6 +7,19 @@ import Testing
 @MainActor
 struct ColorLabRenderingTests {
     @Test(arguments: [ColorScheme.light, .dark])
+    func contentSurfaceFollowsEnvironmentUntilOverridden(scheme: ColorScheme) throws {
+        let surface = Rectangle().fill(AppColor.surface).backgroundStyle(.purple)
+        #expect(
+            try pixels(surface, scheme: scheme)
+                == pixels(Rectangle().fill(.purple), scheme: scheme))
+        #expect(
+            try pixels(
+                surface.environment(\.appPalette, AppPalette(overrides: [.surface: .orange])),
+                scheme: scheme)
+                == pixels(Rectangle().fill(.orange), scheme: scheme))
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
     func todayAccentOpacityIsSeparateFromAccentControl(scheme: ColorScheme) throws {
         var environment = EnvironmentValues()
         environment.colorScheme = scheme
@@ -30,7 +43,7 @@ struct ColorLabRenderingTests {
     @Test(arguments: [ColorScheme.light, .dark])
     func defaultsMatchOriginalStyles(scheme: ColorScheme) throws {
         #expect(
-            try pixels(Rectangle().fill(AppColor.background), scheme: scheme)
+            try pixels(Rectangle().fill(AppColor.canvas), scheme: scheme)
                 == pixels(
                     Rectangle().fill(
                         Color(.sRGB, red: 249.0 / 255, green: 249.0 / 255, blue: 250.0 / 255)),
@@ -102,10 +115,10 @@ struct ColorLabRenderingTests {
         }
     #endif
 
-    // Keep these source styles from PR #13 independent of AppPalette's defaults.
+    // Keep expected source styles independent of AppPalette's defaults.
     private func originalStyle(_ role: AppColor) -> AnyShapeStyle {
         switch role {
-        case .background: AnyShapeStyle(Color("AppBackground"))
+        case .canvas: AnyShapeStyle(Color("AppCanvas"))
         case .accent: AnyShapeStyle(Color.accentColor)
         case .surface: AnyShapeStyle(.background)
         case .text: AnyShapeStyle(.primary)
@@ -124,7 +137,7 @@ struct ColorLabRenderingTests {
         case .unavailableLabel: AnyShapeStyle(Color("UnavailableTimeLabel"))
         case .breakStripe: AnyShapeStyle(Color.gray.opacity(0.12))
         case .hour: AnyShapeStyle(Color.gray)
-        case .now: AnyShapeStyle(Color(red: 0.78, green: 0.43, blue: 0.25))
+        case .now: AnyShapeStyle(Color.accentColor)
         case .success: AnyShapeStyle(Color.green)
         case .warning: AnyShapeStyle(Color.orange)
         case .destructive: AnyShapeStyle(Color.red)

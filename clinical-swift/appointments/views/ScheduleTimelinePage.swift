@@ -113,8 +113,8 @@ private struct TimelineTopScrollFade: View {
     var body: some View {
         LinearGradient(
             colors: [
-                palette[.background],
-                palette[.background].opacity(0),
+                palette[.canvas],
+                palette[.canvas].opacity(0),
             ],
             startPoint: .top,
             endPoint: .bottom

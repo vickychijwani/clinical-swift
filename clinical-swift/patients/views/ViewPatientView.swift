@@ -18,7 +18,7 @@ struct ViewPatientView: View {
                 )
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(AppColor.card)
+                .background(AppColor.surface)
                 .clipShape(.rect(cornerRadius: 32))
 
                 PatientActionsView(scheduleAppointment: scheduleAppointment)
@@ -46,7 +46,7 @@ struct ViewPatientView: View {
             .padding(16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColor.background)
+        .background(AppColor.canvas)
     }
 
     private func scheduleAppointment() {

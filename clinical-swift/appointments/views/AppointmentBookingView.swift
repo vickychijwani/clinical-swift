@@ -19,7 +19,7 @@ struct AppointmentBookingView: View {
         }
         .interactiveDismissDisabled()
         .presentationDragIndicator(.hidden)
-        .presentationBackground(AppColor.background)
+        .presentationBackground(AppColor.canvas)
         .presentationBackgroundInteraction(.disabled)
         // Refresh when the app returns: an appointment may now be in the past.
         // Skip this when the app is inactive or patient selection is closed.
@@ -52,7 +52,7 @@ private struct AppointmentBookingForm: View {
             .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(AppColor.background)
+        .background(AppColor.canvas)
         .navigationTitle("Select Patient")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

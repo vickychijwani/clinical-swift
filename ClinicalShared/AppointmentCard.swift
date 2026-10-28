@@ -75,7 +75,7 @@ struct AppointmentCard: View {
             Color.clear.frame(height: 8)
         }
         .padding(.horizontal, 16)
-        .background(AppColor.background)
+        .background(AppColor.canvas)
     }
 
     #Preview(traits: .sizeThatFitsLayout) {

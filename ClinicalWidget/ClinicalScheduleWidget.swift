@@ -184,7 +184,7 @@ struct ClinicalScheduleWidget: Widget {
         ) { entry in
             ClinicalScheduleWidgetView(entry: entry)
                 .containerBackground(for: .widget) {
-                    Color("AppBackground")
+                    Color("AppCanvas")
                 }
         }
         .configurationDisplayName("Upcoming Schedule")

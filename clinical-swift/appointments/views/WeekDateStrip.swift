@@ -314,12 +314,12 @@ private struct DateStripCell: View {
     @Previewable @State var selectedDate = Date.now.startOfDay()
 
     WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .schedule)
-        .background(AppColor.background)
+        .background(AppColor.canvas)
 }
 
 #Preview("displayMode: sheet", traits: .sizeThatFitsLayout) {
     @Previewable @State var selectedDate = Date.now.startOfDay()
 
     WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .sheet)
-        .background(AppColor.background)
+        .background(AppColor.canvas)
 }

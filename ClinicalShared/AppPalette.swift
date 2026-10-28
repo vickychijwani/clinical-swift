@@ -2,9 +2,9 @@ import SwiftUI
 
 /// App-owned colors. System controls keep their native materials and state effects.
 nonisolated enum AppColor: String, CaseIterable, Codable, Identifiable, ShapeStyle {
-    case background = "App background"
+    case canvas = "App canvas"
     case accent = "Accent"
-    case surface = "Panel surface"
+    case surface = "Content surface"
     case text = "Primary text"
     case secondaryText = "Secondary text"
     case tertiaryText = "Tertiary text"
@@ -76,9 +76,10 @@ nonisolated struct AppPalette: Equatable {
     subscript(role: AppColor) -> Color {
         if let color = overrides[role] { return color }
         switch role {
-        case .background: return Color("AppBackground")
+        case .canvas: return Color("AppCanvas")
         case .accent: return .accentColor
-        case .surface: return Color("LabSystemBackground")
+        // The lab needs a Color sample. Views use the semantic background in AppColor.resolve.
+        case .surface: return Color("LabAdaptiveWhiteBlack")
         case .text: return .primary
         case .secondaryText, .icon: return .secondary
         case .tertiaryText: return Color.primary.opacity(0.3)
@@ -97,7 +98,7 @@ nonisolated struct AppPalette: Equatable {
         case .grid: return .gray.opacity(0.15)
         case .breakStripe: return .gray.opacity(0.12)
         case .hour: return .gray
-        case .now: return Color(red: 0.78, green: 0.43, blue: 0.25)
+        case .now: return self[.accent]
         case .success: return .green
         case .warning: return .orange
         case .destructive: return .red

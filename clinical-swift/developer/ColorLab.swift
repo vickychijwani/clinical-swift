@@ -54,7 +54,7 @@ extension View {
             var isEnabled = false
             var isExpanded = true
             var position = TimelineTuning.Position(x: 0, y: 0)
-            var selected = AppColor.background
+            var selected = AppColor.canvas
             var colors: [AppColor: Selection] = [:]
             var todaySelection: AppPalette.TodaySelection?
         }
@@ -72,7 +72,8 @@ extension View {
         }
 
         enum SystemColor: String, CaseIterable, Codable, Identifiable {
-            case primary, secondary, tertiary, background
+            case primary, secondary, tertiary
+            case adaptiveWhiteBlack = "Adaptive white / black"
             case red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple, pink, brown
             case gray, white, black, clear
 
@@ -82,7 +83,7 @@ extension View {
                 case .primary: .primary
                 case .secondary: .secondary
                 case .tertiary: Color.primary.opacity(0.3)
-                case .background: Color("LabSystemBackground")
+                case .adaptiveWhiteBlack: Color("LabAdaptiveWhiteBlack")
                 case .red: .red
                 case .orange: .orange
                 case .yellow: .yellow
@@ -398,7 +399,7 @@ extension View {
                 ) {
                     Text("Default or custom").tag(Optional<ColorLab.SystemColor>.none)
                     ForEach(ColorLab.SystemColor.allCases) { color in
-                        Text(color.rawValue.capitalized).tag(Optional(color))
+                        Text(color == .adaptiveWhiteBlack ? color.rawValue : color.rawValue.capitalized).tag(Optional(color))
                     }
                 }
                 .pickerStyle(.menu)

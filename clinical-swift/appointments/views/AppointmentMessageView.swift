@@ -53,7 +53,7 @@ struct AppointmentMessageView: View {
         }
         .interactiveDismissDisabled()
         .presentationDetents([.height(560)])
-        .presentationBackground(AppColor.background)
+        .presentationBackground(AppColor.canvas)
     }
 }
 
@@ -122,7 +122,7 @@ private struct AppointmentMessageComposeView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(AppColor.background)
+        .background(AppColor.canvas)
         .task {
             await model.loadRecipientName()
         }
