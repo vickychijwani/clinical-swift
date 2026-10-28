@@ -116,8 +116,6 @@ struct ColorLabRenderingTests {
         case .cardBorder, .grid: AnyShapeStyle(Color.gray.opacity(0.15))
         case .completedCard: AnyShapeStyle(Color(red: 0.95, green: 0.95, blue: 0.95))
         case .completedBorder: AnyShapeStyle(Color.gray.opacity(0.1))
-        case .draftCard: AnyShapeStyle(Color.accentColor.opacity(0.08))
-        case .draftBorder: AnyShapeStyle(Color.accentColor.opacity(0.5))
         case .activeBorder: AnyShapeStyle(Color.accentColor.opacity(0.7))
         case .time, .cardIcon: AnyShapeStyle(Color(red: 0.46, green: 0.49, blue: 0.47))
         case .unavailable: AnyShapeStyle(Color("UnavailableTimeBackground"))

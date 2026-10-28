@@ -125,13 +125,14 @@ import Testing
         @Test func defaultAccentRolesFollowAccentUntilOverridden() {
             var palette = AppPalette()
             palette.overrides[.accent] = .purple
-            #expect(palette[.draftCard] == Color.purple.opacity(0.08))
+            #expect(palette[.activeCard] == .white)
             #expect(palette[.activeBorder] == Color.purple.opacity(0.7))
             palette.overrides[.activeBorder] = .blue
             #expect(palette[.activeBorder] == .blue)
             palette.overrides[.accent] = .green
             #expect(palette[.activeBorder] == .blue)
-            #expect(palette[.draftBorder] == Color.green.opacity(0.5))
+            palette.overrides.removeValue(forKey: .activeBorder)
+            #expect(palette[.activeBorder] == Color.green.opacity(0.7))
         }
     }
 #endif

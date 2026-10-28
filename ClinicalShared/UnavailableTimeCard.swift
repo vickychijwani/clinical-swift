@@ -4,7 +4,7 @@ import SwiftUI
 struct UnavailableTimeCard: View {
     @Environment(\.appPalette) private var palette
     let block: UnavailableTime
-    var isAdjusting = false
+    var isDraft = false
     var isDeemphasized = false
 
     var body: some View {
@@ -13,8 +13,8 @@ struct UnavailableTimeCard: View {
             label: block.displayLabel,
             appearance: .init(
                 systemImage: "nosign",
-                background: isAdjusting ? .active : .color(palette[.unavailable]),
-                border: isAdjusting ? palette[.activeBorder] : palette[.unavailableBorder],
+                background: isDraft ? .draft : .color(palette[.unavailable]),
+                border: isDraft ? palette[.activeBorder] : palette[.unavailableBorder],
                 borderStyle: StrokeStyle(lineWidth: 2),
                 timeColor: palette[.unavailableTime],
                 labelColor: palette[.unavailableLabel]

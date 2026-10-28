@@ -29,8 +29,10 @@ struct AppointmentBookingModelTests {
             $0.calendar = gregorianCalendar
             $0.date.now = date
         } operation: {
-            let model = AppointmentBookingModel(selectedDate: date) { _ in }
-            model.beginTimelineBooking(center: center, items: [])
+            let session = ScheduleEditorSession(
+                bookingID: UUID(), selectedDate: date, center: center, items: [],
+                onFinished: { _ in })
+            guard case .appointment(let model) = session.editor else { return }
             #expect(
                 model.draftAppointment.start
                     == expectedStart.on(date: date, using: gregorianCalendar))
@@ -38,7 +40,7 @@ struct AppointmentBookingModelTests {
             #expect(model.draftAppointment.durationMinutes == 30)
             #expect(model.adjustment.isDragging)
             #expect(!model.isSelectingPatient)
-            model.adjustment.update(translation: 0, items: [])
+            session.updateAdjustment(translation: 0, items: [])
             #expect(
                 model.draftAppointment.start
                     == expectedStart.on(date: date, using: gregorianCalendar))
@@ -60,15 +62,18 @@ struct AppointmentBookingModelTests {
             $0.defaultDatabase = database
         } operation: {
             var savedDate: Date?
-            let model = AppointmentBookingModel(selectedDate: date) { savedDate = $0 }
+            let session = ScheduleEditorSession(
+                bookingID: UUID(), selectedDate: date, center: TimeOfDay(12, 22), items: []
+            ) { savedDate = $0 }
+            guard case .appointment(let model) = session.editor else { return }
             let conflict = Appointment(
                 patientName: "Other patient", start: date.addingTimeInterval(12 * 3600),
                 durationMinutes: 60, status: .scheduled)
-            model.beginTimelineBooking(center: TimeOfDay(12, 22), items: [.appointment(conflict)])
-            model.adjustment.update(translation: 7, items: [.appointment(conflict)])
+            session.updateAdjustment(translation: 7, items: [.appointment(conflict)])
             let id = model.draftAppointment.id
             let start = date.addingTimeInterval(12 * 3600 + 5 * 60)
             #expect(model.draftAppointment.start == start)
+            #expect(model.draft.start == start)
             #expect(!model.isSelectingPatient)
             #expect(!(await model.saveAppointment()))
             model.releaseTimelineBooking()
@@ -77,7 +82,6 @@ struct AppointmentBookingModelTests {
             model.selectPatient(patient)
             model.updateAppointments([conflict], for: date)
             #expect(!model.isSelectingPatient)
-            #expect(model.adjustment.isActive)
             #expect(model.draftAppointment.id == id)
             #expect(model.draftAppointment.start == start)
             #expect(model.draftAppointment.patientName == patient.displayName)
@@ -116,23 +120,28 @@ struct AppointmentBookingModelTests {
             $0.defaultDatabase = database
         } operation: {
             var savedDate: Date?
-            let model =
+            let request: AppPresentation =
                 editing
-                ? AppointmentBookingModel(
-                    editing: AppointmentDetails(appointment: appointment, patient: patient)
-                ) { savedDate = $0 }
-                : AppointmentBookingModel(selectedDate: date, selectedPatient: patient) {
-                    savedDate = $0
-                }
+                ? .appointmentEdit(
+                    AppointmentEditRequest(
+                        details: AppointmentDetails(
+                            appointment: appointment, patient: patient)))
+                : .appointmentBooking(AppointmentBookingRequest(patient: patient))
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: request, selectedDate: date, appointments: []
+                ) { savedDate = $0 })
+            guard case .appointment(let model) = session.editor else { return }
             model.selectStart(date)
-            model.startTimelineEditing()
             let draft = model.draftAppointment
-            model.adjustment.begin(.appointment(draft), edge: .move, items: [.appointment(draft)])
-            model.adjustment.update(translation: 15, items: [.appointment(draft)])
+            session.beginAdjustment(.appointment(draft), edge: .move, items: [.appointment(draft)])
+            session.updateAdjustment(translation: 15, items: [.appointment(draft)])
+            #expect(model.draft.start == date.addingTimeInterval(15 * 60))
             model.adjustment.release()
-            model.adjustment.begin(
+            session.beginAdjustment(
                 .appointment(draft), edge: .duration, items: [.appointment(draft)])
-            model.adjustment.update(translation: -100, items: [.appointment(draft)])
+            session.updateAdjustment(translation: -100, items: [.appointment(draft)])
+            #expect(model.draft.durationMinutes == 15)
             model.adjustment.release()
             model.selectDate(nextDate)
             let conflict = Appointment(
@@ -148,7 +157,8 @@ struct AppointmentBookingModelTests {
             #expect(before.first?.start == (editing ? date : nil))
             #expect(before.first?.durationMinutes == (editing ? 30 : nil))
 
-            #expect(await model.saveAppointment())
+            await session.save()
+            #expect(model.saveErrorMessage == nil)
             let after = try await database.read { try AppointmentRecord.fetchAll($0) }
             #expect(after.count == 1)
             #expect(after.first?.start == expectedStart)

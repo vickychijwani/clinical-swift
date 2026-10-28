@@ -10,7 +10,7 @@ struct ScheduleView: View {
     @Dependency(\.calendar) private var calendar
     @Environment(Router.self) private var router
 
-    /// `nil` means normal schedule mode. A session owns the active editor and its preview.
+    /// `nil` means normal schedule mode. A session owns the editor and its draft preview.
     /// This value controls the sheet, draft rendering, card interactions, and creation buttons.
     @State private var editorSession: ScheduleEditorSession?
 
@@ -45,15 +45,15 @@ struct ScheduleView: View {
                     date: date,
                     items: visibleItems(for: date),
                     calendar: calendar,
-                    itemInteractionsEnabled: !editorIsActive,
+                    itemInteractionsEnabled: !hasEditor,
                     scrollPosition: scrollPositionBinding(for: date),
                     onSelectItem: selectItem,
-                    onSelectActiveItem: { editorSession?.isShowingSheet = true },
+                    onSelectDraft: { editorSession?.isShowingSheet = true },
                     allowsAdjustment: editorSession.map {
                         $0.allowsDateSelection && !$0.isShowingSheet
                     }
-                        ?? !editorIsActive,
-                    adjustment: editorSession?.adjustment,
+                        ?? !hasEditor,
+                    editorSession: editorSession,
                     isWorking: editorSession?.isWorking == true,
                     onBeginBooking: { beginBooking(center: $0, on: date) },
                     onBookingRelease: { released in
@@ -79,23 +79,23 @@ struct ScheduleView: View {
                     .day())
         )
         .toolbarTitleDisplayMode(.inlineLarge)
-        .toolbar(editorSession?.adjustment.isActive == true ? .hidden : .visible, for: .tabBar)
+        .toolbar(editorSession != nil ? .hidden : .visible, for: .tabBar)
         .toolbar {
-            if editorSession?.adjustment.isActive != true {
+            if editorSession == nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     BackupSettingsButton()
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .topBarTrailing) {
-                    if !editorIsActive {
+                    if !hasEditor {
                         Button("Unavailable Time", systemImage: "nosign") {
                             router.requestUnavailableTimeCreation()
                         }
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    // Display creation buttons only when no schedule editor is active.
-                    if !editorIsActive {
+                    // Display creation buttons only when there is no schedule editor.
+                    if !hasEditor {
                         Button("Add", systemImage: "plus") {
                             router.requestAppointmentBooking()
                         }
@@ -229,7 +229,7 @@ struct ScheduleView: View {
         }
     }
 
-    private var editorIsActive: Bool {
+    private var hasEditor: Bool {
         scheduleEditorRequest != nil || editorSession != nil
     }
 
@@ -262,7 +262,7 @@ struct ScheduleView: View {
     }
 
     private func selectItem(_ item: TimelineItem) {
-        guard !editorIsActive else { return }
+        guard !hasEditor else { return }
         switch item {
         case .appointment(let appointment):
             router.presentDetails(.appointment(appointment.id))
@@ -271,8 +271,8 @@ struct ScheduleView: View {
         }
     }
 
-    private func beginBooking(center: TimeOfDay, on date: Date) -> TimelineAdjustment? {
-        guard !editorIsActive,
+    private func beginBooking(center: TimeOfDay, on date: Date) -> ScheduleEditorSession? {
+        guard !hasEditor,
             date.isSameDayAs(router.selectedScheduleDate)
         else { return nil }
         router.requestAppointmentBooking()
@@ -283,7 +283,7 @@ struct ScheduleView: View {
         ) { savedDate in
             finishEditor(request.id, date: savedDate)
         }
-        return editorSession?.adjustment
+        return editorSession
     }
 
     private func deleteEditor() async {

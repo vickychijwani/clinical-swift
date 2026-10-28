@@ -4,7 +4,6 @@ import SwiftUI
 struct AppointmentCard: View {
     @Environment(\.appPalette) private var palette
     let appt: Appointment
-    var isAdjusting = false
     var isDeemphasized = false
 
     var body: some View {
@@ -17,25 +16,13 @@ struct AppointmentCard: View {
 
     private var appearance: ScheduleCard.Appearance {
         let systemImage = AppointmentStatusPresentation(status: appt.status).systemImage
-        if isAdjusting {
-            return ScheduleCard.Appearance(
-                systemImage: systemImage,
-                background: .active,
-                border: palette[.activeBorder],
-                borderStyle: StrokeStyle(lineWidth: 2))
-        }
         return switch appt.status {
         case .draft:
             ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: .color(palette[.draftCard]),
-                border: palette[.draftBorder],
-                borderStyle: StrokeStyle(
-                    lineWidth: 3,
-                    lineCap: .round,
-                    dash: [5, 10]
-                ),
-                contentOpacity: 1
+                background: .draft,
+                border: palette[.activeBorder],
+                borderStyle: StrokeStyle(lineWidth: 2)
             )
 
         case .scheduled:

@@ -14,7 +14,7 @@ struct ScheduleCard: View {
             case .color(let color):
                 RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
                     .fill(color)
-            case .active:
+            case .draft:
                 RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
                     .fill(AppColor.activeCard)
                     // Keep underlying card edges visible as possible conflict cues.
@@ -46,7 +46,7 @@ struct ScheduleCard: View {
 
     enum Background {
         case color(Color)
-        case active
+        case draft
     }
 }
 

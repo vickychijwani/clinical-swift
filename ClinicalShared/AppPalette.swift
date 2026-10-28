@@ -14,8 +14,6 @@ nonisolated enum AppColor: String, CaseIterable, Codable, Identifiable, ShapeSty
     case cardBorder = "Appointment border"
     case completedCard = "Completed card"
     case completedBorder = "Completed border"
-    case draftCard = "Draft card"
-    case draftBorder = "Draft border"
     case activeCard = "Active card"
     case activeBorder = "Active border"
     case time = "Appointment time"
@@ -89,8 +87,6 @@ nonisolated struct AppPalette: Equatable {
         case .cardBorder: return .gray.opacity(0.15)
         case .completedCard: return Color(red: 0.95, green: 0.95, blue: 0.95)
         case .completedBorder: return .gray.opacity(0.1)
-        case .draftCard: return self[.accent].opacity(0.08)
-        case .draftBorder: return self[.accent].opacity(0.5)
         case .activeBorder: return self[.accent].opacity(0.7)
         case .cardIcon: return self[.time]
         case .time: return Color(red: 0.46, green: 0.49, blue: 0.47)

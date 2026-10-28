@@ -2,17 +2,17 @@ import SwiftUI
 
 struct ScheduleItemCard: View {
     let item: TimelineItem
-    var isAdjusting = false
+    var isDraft = false
     var isDeemphasized = false
 
     var body: some View {
         switch item {
         case .appointment(let appointment):
             AppointmentCard(
-                appt: appointment, isAdjusting: isAdjusting, isDeemphasized: isDeemphasized)
+                appt: appointment, isDeemphasized: isDeemphasized)
         case .unavailableTime(let block):
             UnavailableTimeCard(
-                block: block, isAdjusting: isAdjusting, isDeemphasized: isDeemphasized)
+                block: block, isDraft: isDraft, isDeemphasized: isDeemphasized)
         }
     }
 }

@@ -58,6 +58,27 @@ struct BackupRestore {
 
     var journalURL: URL { store.directory.appending(path: "restore.json") }
 
+    struct StartupPolicy {
+        let seedSamples: Bool
+        let recoverySafe: Bool
+        let allowsBackgroundBackups: Bool
+    }
+
+    /// Resolve recovery before opening the live database or starting its services.
+    func prepareForStartup() throws -> StartupPolicy {
+        let manager = FileManager.default
+        if manager.fileExists(atPath: journalURL.path(percentEncoded: false)) {
+            let journal = try BackupFiles.load(BackupRestoreJournal.self, from: journalURL)
+            if journal.phase != .rolledBack { try installOrResume() }
+        }
+        let hasJournal = manager.fileExists(atPath: journalURL.path(percentEncoded: false))
+        // Unreadable state must not expose recovered data to debug erasure or sample seeding.
+        let recoverySafe = hasJournal || ((try? store.load().restored) ?? true)
+        return StartupPolicy(
+            seedSamples: !hasJournal, recoverySafe: recoverySafe,
+            allowsBackgroundBackups: !hasJournal)
+    }
+
     func prepare(
         snapshot: BackupSnapshot, expectedDatasetID: UUID, recoveryDate: Date,
         confirmed: Bool

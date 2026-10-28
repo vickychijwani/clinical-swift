@@ -45,6 +45,7 @@ struct ScheduleRenderingTests {
                 content:
                     VStack {
                         UnavailableTimeCard(block: travel).frame(height: 60)
+                        UnavailableTimeCard(block: travel, isDraft: true).frame(height: 60)
                         UnavailableTimeCard(block: third).frame(height: 24)
                         UnavailableTimeCard(block: breakBlock).frame(height: 15)
                         HStack(spacing: 0) {
