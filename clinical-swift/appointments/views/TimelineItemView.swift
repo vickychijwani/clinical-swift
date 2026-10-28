@@ -36,13 +36,6 @@ struct TimelineItemView: View {
             // and testMixedThreeColumnCardsKeepSeparateTapAreas().
             .contentShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
             .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
-            .overlay {
-                if case .appointment = item {
-                    RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                        .strokeBorder(AppColor.grid)
-                        .allowsHitTesting(false)
-                }
-            }
         }
         .buttonStyle(TimelineCardButtonStyle())
         .allowsHitTesting(interactionsEnabled)
