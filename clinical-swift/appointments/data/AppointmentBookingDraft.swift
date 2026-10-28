@@ -82,7 +82,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
 
         let opening = Bitehaus.opening.on(date: selectedDate, using: calendar)
         let closing = Bitehaus.closing.on(date: selectedDate, using: calendar)
-        guard start >= opening,
+        guard durationMinutes >= 15, start >= opening,
             let end = calendar.date(
                 byAdding: .minute,
                 value: durationMinutes,

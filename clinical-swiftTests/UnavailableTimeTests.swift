@@ -10,6 +10,135 @@ import Testing
 
 @MainActor
 struct UnavailableTimeTests {
+    @Test(arguments: [false, true])
+    func timelineChangesStayUnsavedUntilDone(editing: Bool) async throws {
+        let database = try makeDatabase()
+        let start = try instant("2026-10-02T12:00:00Z")
+        let nextDate = try instant("2026-10-03T00:00:00Z")
+        try await withDependencies {
+            $0.defaultDatabase = database
+            $0.calendar = utcCalendar
+            $0.date.now = start
+        } operation: {
+            let block = UnavailableTime(label: "Travel", start: start, durationMinutes: 60)
+            if editing {
+                try await database.write { db in
+                    try UnavailableTimeRecord.insert {
+                        UnavailableTimeRecord(
+                            id: block.id, label: block.label, start: block.start,
+                            durationMinutes: block.durationMinutes, createdAt: start,
+                            updatedAt: start)
+                    }.execute(db)
+                }
+            }
+            var savedDate: Date?
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: .unavailableTimeEditor(
+                        UnavailableTimeEditorRequest(
+                            purpose: editing ? .edit(block) : .create)),
+                    selectedDate: start, appointments: []
+                ) { savedDate = $0 })
+            guard case .unavailableTime(let model) = session.editor else { return }
+            #expect(model.isEditingLabel == !editing)
+            #expect(session.preview.id == .unavailableTime(model.blockID))
+            model.draft.label = " Holiday "
+            model.finishLabelEntry()
+            #expect(!model.isEditingLabel)
+            let initial = model.preview
+            session.beginAdjustment(.unavailableTime(initial), edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
+            #expect(model.draft.start == initial.start.addingTimeInterval(15 * 60))
+            model.adjustment.release()
+            #expect(!model.isEditingLabel)
+            session.beginAdjustment(.unavailableTime(initial), edge: .duration, items: [])
+            session.updateAdjustment(translation: -100, items: [])
+            #expect(model.draft.durationMinutes == 15)
+            model.adjustment.release()
+            model.selectDate(nextDate)
+            let expectedStart = TimeOfDay(date: initial.start, calendar: utcCalendar)
+                .on(date: nextDate, using: utcCalendar).addingTimeInterval(15 * 60)
+            #expect(model.preview.start == expectedStart)
+            #expect(model.preview.durationMinutes == 15)
+            #expect(model.hasUnsavedChanges)
+            #expect(savedDate == nil)
+            let blockID = model.blockID
+            let before = try await database.read { db in
+                try UnavailableTimeRecord.find(blockID).fetchOne(db)
+            }
+            #expect(before?.start == (editing ? start : nil))
+            #expect(before?.label == (editing ? "Travel" : nil))
+            // Reopening the label step must keep the dragged interval and remain unsaved.
+            model.isEditingLabel = true
+            model.draft.label = "Updated label"
+            model.finishLabelEntry()
+            #expect(model.preview.start == expectedStart)
+            #expect(model.preview.durationMinutes == 15)
+            #expect(model.preview.label == "Updated label")
+            await session.save()
+            #expect(model.errorMessage == nil)
+            #expect(!(await model.save()))
+            let after = try #require(
+                try await database.read { db in
+                    try UnavailableTimeRecord.find(blockID).fetchOne(db)
+                })
+            #expect(after.start == expectedStart)
+            #expect(after.durationMinutes == 15)
+            #expect(after.label == "Updated label")
+            #expect(after.createdAt == start)
+            #expect(savedDate == expectedStart)
+        }
+    }
+
+    @Test func timelineSaveFailureKeepsPreviewForRetryAndDiscardDoesNotWrite() async throws {
+        let database = try makeDatabase()
+        let start = try instant("2026-10-02T09:00:00Z")
+        try await withDependencies {
+            $0.defaultDatabase = database
+            $0.calendar = utcCalendar
+            $0.date.now = start
+        } operation: {
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create)),
+                    selectedDate: start, appointments: [], onFinished: { _ in }))
+            guard case .unavailableTime(let model) = session.editor else { return }
+            model.finishLabelEntry()
+            session.beginAdjustment(.unavailableTime(model.preview), edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
+            model.adjustment.release()
+            let preview = model.preview
+            try await database.write { db in
+                try db.execute(
+                    sql: """
+                        CREATE TRIGGER reject_blocks BEFORE INSERT ON unavailableTimes
+                        BEGIN SELECT RAISE(ABORT, 'test failure'); END
+                        """)
+            }
+            #expect(!(await model.save()))
+            #expect(model.preview == preview)
+            #expect(!model.isWorking)
+            #expect(!model.didFinish)
+            try await database.write { db in try db.execute(sql: "DROP TRIGGER reject_blocks") }
+            #expect(await model.save())
+            let discardedSession = try #require(
+                ScheduleEditorSession(
+                    request: .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create)),
+                    selectedDate: start, appointments: [], onFinished: { _ in }))
+            guard case .unavailableTime(let discarded) = discardedSession.editor else { return }
+            discarded.finishLabelEntry()
+            discardedSession.beginAdjustment(
+                .unavailableTime(discarded.preview), edge: .move, items: [])
+            discardedSession.updateAdjustment(translation: 30, items: [])
+            discarded.adjustment.release()
+            let discardedID = discarded.blockID
+            #expect(
+                try await database.read { db in
+                    try UnavailableTimeRecord.find(discardedID).fetchOne(db)
+                } == nil)
+        }
+    }
+
     @Test func createEditDeleteKeepIdentityAndTimestamps() async throws {
         let database = try makeDatabase()
         let date = try instant("2026-10-02T09:00:00Z")

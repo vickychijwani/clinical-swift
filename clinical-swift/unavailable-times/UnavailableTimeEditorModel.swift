@@ -42,8 +42,10 @@ final class UnavailableTimeEditorModel: Identifiable {
     let id: UUID
     let purpose: UnavailableTimeEditorPurpose
     let blockID: UUID
+    let adjustment = TimelineAdjustment()
     let originalDraft: UnavailableTimeDraft
     var draft: UnavailableTimeDraft
+    var isEditingLabel = false
     private(set) var isSaving = false
     private(set) var isDeleting = false
     private(set) var didFinish = false
@@ -55,6 +57,7 @@ final class UnavailableTimeEditorModel: Identifiable {
         @Dependency(\.calendar) var calendar
         self.id = id
         purpose = .create
+        isEditingLabel = true
         blockID = UUID()
         let initialDraft = UnavailableTimeDraft(
             label: "",
@@ -89,9 +92,16 @@ final class UnavailableTimeEditorModel: Identifiable {
         )
     }
 
+    func finishLabelEntry() {
+        guard !isWorking else { return }
+        isEditingLabel = false
+    }
+
     func selectDate(_ date: Date) {
         guard !calendar.isDate(date, inSameDayAs: draft.start), !isWorking else { return }
-        draft.move(to: date)
+        adjustment.release()
+        draft.start = TimeOfDay(date: draft.start, calendar: calendar).on(
+            date: date, using: calendar)
         draftPreviewScrollRequest += 1
     }
 
@@ -112,7 +122,7 @@ final class UnavailableTimeEditorModel: Identifiable {
 
     @discardableResult
     func save() async -> Bool {
-        guard !isWorking, !didFinish else { return false }
+        guard !isWorking, !didFinish, !adjustment.isDragging else { return false }
         isSaving = true
         defer { isSaving = false }
         errorMessage = nil
@@ -151,7 +161,9 @@ final class UnavailableTimeEditorModel: Identifiable {
 
     @discardableResult
     func delete() async -> Bool {
-        guard !isWorking, !didFinish, let targetID = purpose.editedID else { return false }
+        guard !isWorking, !didFinish, !adjustment.isDragging,
+            let targetID = purpose.editedID
+        else { return false }
         isDeleting = true
         defer { isDeleting = false }
         errorMessage = nil
@@ -173,6 +185,7 @@ final class UnavailableTimeEditorModel: Identifiable {
             return false
         }
     }
+
 }
 
 nonisolated enum UnavailableTimeEditorPurpose: Sendable {

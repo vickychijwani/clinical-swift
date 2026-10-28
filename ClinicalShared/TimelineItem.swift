@@ -38,6 +38,28 @@ nonisolated enum TimelineItem: Identifiable, Sendable {
         }
     }
 
+    var allowsAdjustment: Bool {
+        switch self {
+        case .appointment(let value): value.status == .scheduled || value.status == .draft
+        case .unavailableTime: true
+        }
+    }
+
+    func rescheduled(start: Date, durationMinutes: Int) -> Self {
+        switch self {
+        case .appointment(let value):
+            .appointment(
+                Appointment(
+                    id: value.id, patientName: value.patientName, start: start,
+                    durationMinutes: durationMinutes, status: value.status))
+        case .unavailableTime(let value):
+            .unavailableTime(
+                UnavailableTime(
+                    id: value.id, label: value.label, start: start, durationMinutes: durationMinutes
+                ))
+        }
+    }
+
     func end(using calendar: Calendar) -> Date {
         switch self {
         case .appointment(let value): value.end(using: calendar)

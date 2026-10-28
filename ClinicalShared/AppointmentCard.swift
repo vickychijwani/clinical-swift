@@ -3,10 +3,14 @@ import SwiftUI
 
 struct AppointmentCard: View {
     let appt: Appointment
+    var isDeemphasized = false
 
     var body: some View {
-        ScheduleCard(start: appt.start, label: appt.patientName, appearance: appearance)
-            .animation(.easeInOut(duration: 0.2), value: appt.status)
+        ScheduleCard(
+            start: appt.start, label: appt.patientName, appearance: appearance,
+            isDeemphasized: isDeemphasized
+        )
+        .animation(.easeInOut(duration: 0.2), value: appt.status)
     }
 
     private var appearance: ScheduleCard.Appearance {
@@ -15,20 +19,15 @@ struct AppointmentCard: View {
         case .draft:
             ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: Color.accentColor.opacity(0.08),
-                border: Color.accentColor.opacity(0.5),
-                borderStyle: StrokeStyle(
-                    lineWidth: 3,
-                    lineCap: .round,
-                    dash: [5, 10]
-                ),
-                contentOpacity: 1
+                background: .draft,
+                border: .accentColor.opacity(0.7),
+                borderStyle: StrokeStyle(lineWidth: 2)
             )
 
         case .scheduled:
             ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: .white,
+                background: .color(.white),
                 border: .gray.opacity(0.15),
                 borderStyle: StrokeStyle(lineWidth: 2),
                 contentOpacity: 1
@@ -37,7 +36,7 @@ struct AppointmentCard: View {
         case .completed:
             ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: Color(red: 0.95, green: 0.95, blue: 0.95),
+                background: .color(Color(red: 0.95, green: 0.95, blue: 0.95)),
                 border: .gray.opacity(0.1),
                 borderStyle: StrokeStyle(lineWidth: 2),
                 contentOpacity: 0.6
@@ -46,7 +45,7 @@ struct AppointmentCard: View {
         case .cancelled:
             ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: .clear,
+                background: .color(.clear),
                 border: .clear,
                 borderStyle: StrokeStyle(lineWidth: 0),
                 contentOpacity: 0

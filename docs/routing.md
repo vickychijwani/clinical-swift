@@ -11,6 +11,10 @@ new action. Moving within a details flow preserves its history; an external link
 replaces that history with a new root. Settings opens only when no sheet is active,
 so it cannot discard an editor.
 
+Closing a schedule editor's patient or label sheet keeps its editor session active.
+Sheet dismissal alone must not discard the timeline draft. If a new app-level
+action interrupts that dismissal, the normal replacement policy still applies.
+
 Late editor completions must identify the router session they belong to before
 changing presentation or date selection. An editor model's identity is not proof
 that its sheet is still current.

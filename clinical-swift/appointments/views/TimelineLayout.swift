@@ -1,9 +1,9 @@
 import ClinicalModels
-/// Layout Engine for Timeline view
-/// Must remain independent of SwiftUI
-
 import CoreGraphics
 import Foundation
+
+/// Layout Engine for Timeline view
+/// Must remain independent of SwiftUI
 
 struct TimelineMetrics {
     /// Height of 1 hour in pixels
@@ -32,9 +32,10 @@ struct TimelineMetrics {
     }
 
     func contentWidth(availableWidth: CGFloat) -> CGFloat {
-        availableWidth
-            - timeColumnWidth
-            - horizontalCardMargin * 2
+        max(
+            availableWidth
+                - timeColumnWidth
+                - horizontalCardMargin * 2, 0)
     }
 
     /// Number of vertical pixels representing 1 minute
@@ -51,8 +52,12 @@ struct TimelineScale {
 
     let breakPresentation: BreakPresentation
 
-    init(items: [TimelineItem]) {
-        breakPresentation =
+    init(items: [TimelineItem], breakPresentation: BreakPresentation? = nil) {
+        if let breakPresentation {
+            self.breakPresentation = breakPresentation
+            return
+        }
+        self.breakPresentation =
             items.contains { item in
                 (Bitehaus.break.start..<Bitehaus.break.end).contains(
                     item.start.timeOfDay
@@ -113,6 +118,26 @@ struct TimelineScale {
         max(yOffset(for: end) - yOffset(for: start), 0)
     }
 
+    /// Invert the same piecewise scale used to draw cards, including compact break minutes.
+    func time(at proposedY: CGFloat) -> TimeOfDay {
+        let y = min(max(proposedY, 0), totalHeight)
+        let breakY = yOffset(for: Bitehaus.break.start)
+        let minutes: CGFloat
+        if y <= breakY {
+            minutes = y / Timeline.metrics.hourHeight * 60
+        } else if y < breakY + breakHeight {
+            minutes =
+                CGFloat(Bitehaus.break.start.minutes(since: Bitehaus.opening))
+                + (y - breakY) / breakHeight
+                * CGFloat(Bitehaus.break.end.minutes(since: Bitehaus.break.start))
+        } else {
+            minutes =
+                CGFloat(Bitehaus.break.end.minutes(since: Bitehaus.opening))
+                + (y - breakY - breakHeight) / Timeline.metrics.hourHeight * 60
+        }
+        return Bitehaus.opening + Int(minutes.rounded())
+    }
+
     func showsTime(_ time: TimeOfDay) -> Bool {
         guard (Bitehaus.opening..<Bitehaus.closing).contains(time) else {
             return false
@@ -128,11 +153,14 @@ struct TimelineLayoutEngine {
     let scale: TimelineScale
 
     func layout(
-        items: [TimelineItem]
+        items: [TimelineItem], floatingID: TimelineItem.ID? = nil
     ) -> [TimelineItemLayoutInfo] {
-        overlappingGroups(for: items).flatMap { group in
+        // The held card uses the full content width and does not displace other cards.
+        let regular = items.filter { $0.id != floatingID }
+        let floating = items.filter { $0.id == floatingID }
+        return overlappingGroups(for: regular).flatMap { group in
             layout(group: group)
-        }
+        } + floating.flatMap { layout(group: [$0]) }
     }
 
     private func layout(group: [TimelineItem]) -> [TimelineItemLayoutInfo] {

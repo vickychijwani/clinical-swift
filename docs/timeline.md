@@ -13,11 +13,33 @@ the day unexpectedly. Compact break minutes retain proportional height; collapsi
 them to one point would give crossing items misleading durations. Drafts use the
 same scale so previews match saved items.
 
+During a drag, break expansion waits for a hold over the compact break. Scale
+changes must correct the scroll position so the card stays under the finger. Keep
+enough scroll range for that correction, and defer separate draft-reveal scrolling
+until the drag ends; competing scroll requests would move the card away from the
+touch.
+
 The break is a display preference, not a schedule item or a booking restriction.
 See [booking rules](appointment-booking.md).
 
 Time text takes priority over names in narrow overlap columns: the doctor must
 still be able to read when an appointment starts.
+
+## Direct editing
+
+Appointment and unavailable-time edits stay in one unsaved draft across gestures
+and date changes. Only Done saves these changes; a failed save keeps the draft for
+retry. This lets the doctor try positions across days without changing stored
+data at each release. The editor owns persistence and errors; a separate timeline
+save path could bypass its validation and session rules.
+
+Hide the stored version of the edited item on every date page until the session
+ends. Showing both versions would make one item appear to occupy two slots when
+its draft moves to another day.
+
+A timeline hold starts an appointment even over an existing card. Occupied time
+does not make booking invalid. Open patient selection after the first drag ends
+so presenting the sheet does not interrupt that gesture.
 
 ## Navigation
 

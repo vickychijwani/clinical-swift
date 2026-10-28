@@ -9,12 +9,23 @@ struct ScheduleView: View {
     @Dependency(\.calendar) private var calendar
     @Environment(Router.self) private var router
 
-    /// `nil` means normal schedule mode. A session owns the active editor and its preview.
+    /// `nil` means normal schedule mode. A session owns the editor and its draft preview.
     /// This value controls the sheet, draft rendering, card interactions, and creation buttons.
     @State private var editorSession: ScheduleEditorSession?
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
+
+    private var editorSheet: Binding<ScheduleEditorSession?> {
+        Binding(
+            get: {
+                guard editorSession?.isShowingSheet == true else { return nil }
+                return editorSession
+            },
+            set: { value in
+                editorSession?.isShowingSheet = value != nil
+            })
+    }
 
     init() {
         scheduleModel = ScheduleModel()
@@ -33,10 +44,28 @@ struct ScheduleView: View {
                     date: date,
                     items: visibleItems(for: date),
                     calendar: calendar,
-                    needsBookingClearance: editorIsActive,
-                    itemInteractionsEnabled: !editorIsActive,
+                    itemInteractionsEnabled: !hasEditor,
                     scrollPosition: scrollPositionBinding(for: date),
-                    onSelectItem: selectItem
+                    onSelectItem: selectItem,
+                    onSelectDraft: { editorSession?.isShowingSheet = true },
+                    allowsAdjustment: editorSession.map {
+                        $0.allowsDateSelection && !$0.isShowingSheet
+                    }
+                        ?? !hasEditor,
+                    editorSession: editorSession,
+                    isWorking: editorSession?.isWorking == true,
+                    onBeginBooking: { beginBooking(center: $0, on: date) },
+                    onBookingRelease: { released in
+                        editorSession?.releaseBooking(released)
+                    },
+                    onCancel: { editorSession?.adjustment.release() },
+                    onDiscard: {
+                        if let editorSession {
+                            finishEditor(editorSession.id, date: router.selectedScheduleDate)
+                        }
+                    },
+                    onDone: { await editorSession?.save() },
+                    onDelete: editorSession?.canDelete == true ? deleteEditor : nil
                 )
             }
         }
@@ -49,28 +78,48 @@ struct ScheduleView: View {
                     .day())
         )
         .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbar(editorSession != nil ? .hidden : .visible, for: .tabBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                BackupSettingsButton()
-            }
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
-            ToolbarItem(placement: .topBarTrailing) {
-                if !editorIsActive {
-                    Button("Unavailable Time", systemImage: "nosign") {
-                        router.requestUnavailableTimeCreation()
+            if editorSession == nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    BackupSettingsButton()
+                }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                ToolbarItem(placement: .topBarTrailing) {
+                    if !hasEditor {
+                        Button("Unavailable Time", systemImage: "nosign") {
+                            router.requestUnavailableTimeCreation()
+                        }
                     }
                 }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                // Display creation buttons only when no schedule editor is active.
-                if !editorIsActive {
-                    Button("Add", systemImage: "plus") {
-                        router.requestAppointmentBooking()
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Display creation buttons only when there is no schedule editor.
+                    if !hasEditor {
+                        Button("Add", systemImage: "plus") {
+                            router.requestAppointmentBooking()
+                        }
                     }
                 }
             }
         }
-        .sheet(item: $editorSession, onDismiss: router.presentationDidDismiss) { session in
+        .alert(
+            editorSession?.errorTitle ?? "Unable to save",
+            isPresented: Binding(
+                get: { editorSession?.errorMessage != nil },
+                set: { if !$0 { editorSession?.errorMessage = nil } }
+            )
+        ) {
+            Button("OK") { editorSession?.errorMessage = nil }
+        } message: {
+            Text(editorSession?.errorMessage ?? "")
+        }
+        .sheet(
+            item: editorSheet,
+            onDismiss: {
+                router.presentationDidDismiss(
+                    retainingScheduleEditor: editorSession?.id)
+            }
+        ) { session in
             ScheduleEditorSheet(session: session)
                 .onAppear { router.presentationDidAppear(session.id) }
         }
@@ -79,6 +128,8 @@ struct ScheduleView: View {
                 editorSession = nil
                 return
             }
+            // A timeline hold installs its session before the first drag update.
+            guard editorSession?.id != request.id else { return }
             editorSession = ScheduleEditorSession(
                 request: request, selectedDate: router.selectedScheduleDate,
                 appointments: scheduleModel.appointments(for: router.selectedScheduleDate)
@@ -87,7 +138,7 @@ struct ScheduleView: View {
             }
         }
         .task(id: editorSession?.id) {
-            guard editorSession != nil else { return }
+            guard let editorSession, !editorSession.adjustment.isDragging else { return }
 
             // Let SwiftUI lay out the draft and sheet clearance before animating to its position.
             await Task.yield()
@@ -131,6 +182,21 @@ struct ScheduleView: View {
             guard let previous, let current, previous.sessionID == current.sessionID else { return }
             scrollToEditorPreview()
         }
+        .timelineTuningOverlay(isVisible: showsCardLab)
+    }
+
+    private var showsCardLab: Bool {
+        guard router.selectedTab == .schedule, router.schedulePath.isEmpty,
+            editorSheet.wrappedValue == nil
+        else { return false }
+        switch router.activePresentation {
+        case nil:
+            return true
+        case .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
+            return editorSession?.isShowingSheet == false
+        default:
+            return false
+        }
     }
 
     private var selectedDateBinding: Binding<Date> {
@@ -143,7 +209,9 @@ struct ScheduleView: View {
     }
 
     private func selectDate(_ date: Date) {
-        guard editorSession?.allowsDateSelection != false else { return }
+        guard editorSession?.allowsDateSelection != false,
+            editorSession?.adjustment.isDragging != true
+        else { return }
         let selectedDate = date.startOfDay(using: calendar)
         router.selectScheduleDate(selectedDate)
         editorSession?.selectDate(selectedDate)
@@ -159,7 +227,7 @@ struct ScheduleView: View {
         }
     }
 
-    private var editorIsActive: Bool {
+    private var hasEditor: Bool {
         scheduleEditorRequest != nil || editorSession != nil
     }
 
@@ -192,12 +260,32 @@ struct ScheduleView: View {
     }
 
     private func selectItem(_ item: TimelineItem) {
+        guard !hasEditor else { return }
         switch item {
         case .appointment(let appointment):
             router.presentDetails(.appointment(appointment.id))
         case .unavailableTime(let block):
             router.requestUnavailableTimeEdit(block)
         }
+    }
+
+    private func beginBooking(center: TimeOfDay, on date: Date) -> ScheduleEditorSession? {
+        guard !hasEditor,
+            date.isSameDayAs(router.selectedScheduleDate)
+        else { return nil }
+        router.requestAppointmentBooking()
+        guard let request = scheduleEditorRequest else { return nil }
+        editorSession = ScheduleEditorSession(
+            bookingID: request.id, selectedDate: date, center: center,
+            items: visibleItems(for: date)
+        ) { savedDate in
+            finishEditor(request.id, date: savedDate)
+        }
+        return editorSession
+    }
+
+    private func deleteEditor() async {
+        await editorSession?.delete()
     }
 
     private func finishEditor(_ requestID: UUID, date: Date) {
@@ -253,129 +341,6 @@ private struct AppointmentDetailsScrollRequest: Equatable {
     let selectedDate: Date
 }
 
-@MainActor
-struct ScheduleEditorSession: Identifiable {
-    let id: UUID
-    let editor: Editor
-
-    enum Editor {
-        case appointment(AppointmentBookingModel)
-        case unavailableTime(UnavailableTimeEditorModel)
-    }
-
-    init?(
-        request: AppPresentation, selectedDate: Date, appointments: [Appointment],
-        onFinished: @escaping (Date) -> Void
-    ) {
-        id = request.id
-        switch request {
-        case .appointmentBooking(let request):
-            let model = AppointmentBookingModel(
-                selectedDate: selectedDate, selectedPatient: request.patient, onSaved: onFinished)
-            model.updateAppointments(appointments, for: selectedDate)
-            model.prefillFirstAvailableSlot()
-            // Install the model after prefilling slot - to ensure the sheet starts out displaying the
-            // pre-selected slot rather than briefly showing the clinic opening time.
-            editor = .appointment(model)
-        case .appointmentEdit(let request):
-            // Use the details that were already visible so the editor can start without another read.
-            // Saving still validates the current stored appointment before writing.
-            let model = AppointmentBookingModel(editing: request.details, onSaved: onFinished)
-            model.updateAppointments(appointments, for: selectedDate)
-            editor = .appointment(model)
-        case .unavailableTimeEditor(let request):
-            switch request.purpose {
-            case .create:
-                editor = .unavailableTime(
-                    UnavailableTimeEditorModel(
-                        id: request.id, selectedDate: selectedDate, onFinished: onFinished))
-            case .edit(let block):
-                editor = .unavailableTime(
-                    UnavailableTimeEditorModel(
-                        id: request.id, editing: block, onFinished: onFinished))
-            }
-        default:
-            return nil
-        }
-    }
-
-    var selectedDate: Date {
-        switch editor {
-        case .appointment(let model): model.selectedDate
-        case .unavailableTime(let model): model.selectedDate
-        }
-    }
-
-    var allowsDateSelection: Bool {
-        switch editor {
-        case .appointment: true
-        case .unavailableTime(let model): !model.isWorking
-        }
-    }
-
-    var preview: TimelineItem {
-        switch editor {
-        case .appointment(let model): .appointment(model.draftAppointment)
-        case .unavailableTime(let model): .unavailableTime(model.preview)
-        }
-    }
-
-    var scrollRequest: ScheduleEditorScrollRequest {
-        let revision: Int
-        switch editor {
-        case .appointment(let model): revision = model.draftPreviewScrollRequest
-        case .unavailableTime(let model): revision = model.draftPreviewScrollRequest
-        }
-        return ScheduleEditorScrollRequest(sessionID: id, date: selectedDate, revision: revision)
-    }
-
-    func selectDate(_ date: Date) {
-        switch editor {
-        case .appointment(let model): model.selectDate(date)
-        case .unavailableTime(let model): model.selectDate(date)
-        }
-    }
-
-    /// Only appointments use availability updates. Return whether the caller must reveal a draft.
-    func updateAppointments(_ appointments: [Appointment], for date: Date) -> Bool {
-        guard case .appointment(let model) = editor else { return false }
-        model.updateAppointments(appointments, for: date)
-        return true
-    }
-
-    func visibleItems(_ items: [TimelineItem], for date: Date) -> [TimelineItem] {
-        @Dependency(\.calendar) var calendar
-        let editedID: TimelineItem.ID?
-        switch editor {
-        case .appointment(let model):
-            // Keep the saved appointment visible on other pages until the edit is saved.
-            guard calendar.isDate(selectedDate, inSameDayAs: date) else { return items }
-            editedID = model.purpose.editedAppointmentID.map { .appointment($0) }
-        case .unavailableTime(let model):
-            editedID = model.purpose.editedID.map { .unavailableTime($0) }
-        }
-        var items = items.filter { $0.id != editedID }
-        let preview = preview
-        if calendar.isDate(preview.start, inSameDayAs: date) {
-            items.append(preview)
-        }
-        return items
-    }
-
-    func finish(using router: Router, date: Date) -> Bool {
-        // A late save must not close a newer presentation or change its date.
-        guard router.activePresentation?.id == id else { return false }
-        router.finishScheduleEditor(id, date: date)
-        return true
-    }
-}
-
-nonisolated struct ScheduleEditorScrollRequest: Equatable {
-    let sessionID: UUID
-    let date: Date
-    let revision: Int
-}
-
 private struct ScheduleEditorSheet: View {
     let session: ScheduleEditorSession
 
@@ -384,80 +349,6 @@ private struct ScheduleEditorSheet: View {
         case .appointment(let model): AppointmentBookingView(model: model)
         case .unavailableTime(let model): UnavailableTimeEditorView(model: model)
         }
-    }
-}
-
-private struct ScheduleTimelinePage: View {
-    let date: Date
-    let items: [TimelineItem]
-    let calendar: Calendar
-    let needsBookingClearance: Bool
-    let itemInteractionsEnabled: Bool
-    @Binding var scrollPosition: ScrollPosition
-    let onSelectItem: (TimelineItem) -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                Timeline(
-                    items: items,
-                    scale: TimelineScale(items: items),
-                    showsNowMarker: calendar.isDateInToday(date),
-                    itemInteractionsEnabled: itemInteractionsEnabled,
-                    onSelectItem: onSelectItem
-                )
-
-                if needsBookingClearance {
-                    // Leave room to scroll late appointments above the booking sheet.
-                    Color.clear
-                        .containerRelativeFrame(
-                            .vertical,
-                            count: 2,
-                            span: 1,
-                            spacing: 0
-                        )
-                }
-            }
-        }
-        .modifier(TimelineScrollModifier(scrollPosition: $scrollPosition))
-    }
-}
-
-private struct TimelineScrollModifier: ViewModifier {
-    @Binding var scrollPosition: ScrollPosition
-    @State private var isScrolled = false
-
-    func body(content: Content) -> some View {
-        content
-            .scrollBounceBehavior(.basedOnSize)
-            .scrollPosition($scrollPosition)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y > 1
-            } action: { _, isScrolled in
-                self.isScrolled = isScrolled
-            }
-            .overlay(alignment: .top) {
-                if isScrolled {
-                    TimelineTopScrollFade()
-                        .transition(.opacity)
-                }
-            }
-            .animation(.easeInOut(duration: 0.18), value: isScrolled)
-    }
-}
-
-private struct TimelineTopScrollFade: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                Color("AppBackground"),
-                Color("AppBackground").opacity(0),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: 20)
-        .allowsHitTesting(false)
     }
 }
 

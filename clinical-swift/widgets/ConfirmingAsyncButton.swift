@@ -9,6 +9,7 @@ struct ConfirmingAsyncButton<Label: View>: View {
     private let role: ButtonRole?
     private let confirmationActionLabel: LocalizedStringKey
     private let message: Text
+    private let onConfirmation: () -> Void
     private let action: @MainActor () async -> Void
     private let label: () -> Label
 
@@ -16,18 +17,21 @@ struct ConfirmingAsyncButton<Label: View>: View {
         _ confirmationActionLabel: LocalizedStringKey,
         role: ButtonRole? = nil,
         message: Text,
+        onConfirmation: @escaping () -> Void = {},
         action: @escaping @MainActor () async -> Void,
         @ViewBuilder label: @escaping () -> Label
     ) {
         self.confirmationActionLabel = confirmationActionLabel
         self.role = role
         self.message = message
+        self.onConfirmation = onConfirmation
         self.action = action
         self.label = label
     }
 
     var body: some View {
         Button(role: role) {
+            onConfirmation()
             isConfirming = true
         } label: {
             label()

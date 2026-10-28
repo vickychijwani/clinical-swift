@@ -87,6 +87,47 @@ struct BackupSnapshotTests {
         #expect(loaded.needsAttention(at: manifest.capturedAt.addingTimeInterval(172800)))
     }
 
+    @Test(arguments: [false, true])
+    func startupWithoutJournalUsesSavedRecoveryState(restored: Bool) throws {
+        let directory = try BackupFixture.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BackupStateStore(directory: directory)
+        var state = BackupState()
+        state.restored = restored
+        try store.save(state)
+        let restore = BackupRestore(store: store, databaseURL: directory.appending(path: "live.db"))
+
+        let policy = try restore.prepareForStartup()
+
+        #expect(policy.seedSamples)
+        #expect(policy.recoverySafe == restored)
+        #expect(policy.allowsBackgroundBackups)
+    }
+
+    @Test func startupProtectsDataWhenBackupStateIsUnreadable() throws {
+        let directory = try BackupFixture.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BackupStateStore(directory: directory)
+        try Data("invalid state".utf8).write(to: store.stateURL)
+        let restore = BackupRestore(store: store, databaseURL: directory.appending(path: "live.db"))
+
+        let policy = try restore.prepareForStartup()
+
+        #expect(policy.recoverySafe)
+        #expect(policy.allowsBackgroundBackups)
+    }
+
+    @Test func startupStopsWhenRecoveryJournalIsUnreadable() throws {
+        let directory = try BackupFixture.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let restore = BackupRestore(
+            store: BackupStateStore(directory: directory),
+            databaseURL: directory.appending(path: "live.db"))
+        try Data("invalid journal".utf8).write(to: restore.journalURL)
+
+        #expect(throws: DecodingError.self) { try restore.prepareForStartup() }
+    }
+
     @Test func restoreCanResumeAndRollBackWithoutLosingOriginalRows() async throws {
         let directory = try BackupFixture.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -118,8 +159,13 @@ struct BackupSnapshotTests {
             try restore.prepare(
                 snapshot: snapshot, expectedDatasetID: BackupFixture.datasetID,
                 recoveryDate: BackupFixture.capturedAt, confirmed: true)
-            try restore.installOrResume()
-            try restore.installOrResume()
+            let installedPolicy = try restore.prepareForStartup()
+            #expect(!installedPolicy.seedSamples)
+            #expect(installedPolicy.recoverySafe)
+            #expect(!installedPolicy.allowsBackgroundBackups)
+            let resumedPolicy = try restore.prepareForStartup()
+            #expect(resumedPolicy.recoverySafe)
+            #expect(!resumedPolicy.allowsBackgroundBackups)
             let restored = try DatabaseQueue(path: liveURL.path(percentEncoded: false))
             let contents = try BackupFixture.contents(restored)
             #expect(contents["patients"] == original["patients"])
@@ -166,7 +212,13 @@ struct BackupSnapshotTests {
             interrupted.phase = .rollingBack
             try BackupFiles.save(interrupted, to: restore.journalURL)
             try Data("interrupted rollback".utf8).write(to: liveURL)
-            try restore.installOrResume()
+            let rollbackPolicy = try restore.prepareForStartup()
+            #expect(rollbackPolicy.recoverySafe)
+            #expect(!rollbackPolicy.allowsBackgroundBackups)
+            let rolledBackPolicy = try restore.prepareForStartup()
+            #expect(!rolledBackPolicy.seedSamples)
+            #expect(rolledBackPolicy.recoverySafe)
+            #expect(!rolledBackPolicy.allowsBackgroundBackups)
             let rolledBack = try DatabaseQueue(path: liveURL.path(percentEncoded: false))
             #expect(try BackupFixture.contents(rolledBack) == before)
             try rolledBack.close()
@@ -176,7 +228,9 @@ struct BackupSnapshotTests {
             try BackupFiles.save(accepting, to: restore.journalURL)
             try FileManager.default.removeItem(
                 at: accepting.directory(in: store))
-            try restore.installOrResume()
+            let finalizedPolicy = try restore.prepareForStartup()
+            #expect(finalizedPolicy.seedSamples)
+            #expect(finalizedPolicy.allowsBackgroundBackups)
             #expect(
                 !FileManager.default.fileExists(
                     atPath: restore.journalURL.path(percentEncoded: false)))

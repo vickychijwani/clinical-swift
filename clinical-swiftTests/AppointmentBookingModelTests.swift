@@ -9,6 +9,165 @@ import Testing
 
 @MainActor
 struct AppointmentBookingModelTests {
+    @Test(arguments: [
+        (TimeOfDay(9, 0), TimeOfDay(9, 0)),
+        (TimeOfDay(9, 5), TimeOfDay(9, 0)),
+        (TimeOfDay(12, 0), TimeOfDay(11, 45)),
+        (TimeOfDay(12, 22), TimeOfDay(12, 0)),
+        (TimeOfDay(12, 23), TimeOfDay(12, 15)),
+        (TimeOfDay(12, 37), TimeOfDay(12, 15)),
+        (TimeOfDay(12, 38), TimeOfDay(12, 30)),
+        (TimeOfDay(14, 30), TimeOfDay(14, 15)),
+        (TimeOfDay(20, 59), TimeOfDay(20, 30)),
+        (TimeOfDay(21, 0), TimeOfDay(20, 30)),
+    ])
+    func timelineHoldSnapsCenteredStartToQuarterHourAndClampsAtClinicHours(
+        center: TimeOfDay, expectedStart: TimeOfDay
+    ) throws {
+        let date = try Date("2026-10-26T00:00:00Z", strategy: .iso8601)
+        withDependencies {
+            $0.calendar = gregorianCalendar
+            $0.date.now = date
+        } operation: {
+            let session = ScheduleEditorSession(
+                bookingID: UUID(), selectedDate: date, center: center, items: [],
+                onFinished: { _ in })
+            guard case .appointment(let model) = session.editor else { return }
+            #expect(
+                model.draftAppointment.start
+                    == expectedStart.on(date: date, using: gregorianCalendar))
+            #expect(model.draftAppointment.start.timeOfDay.totalMinutes % 15 == 0)
+            #expect(model.draftAppointment.durationMinutes == 30)
+            #expect(model.adjustment.isDragging)
+            #expect(!model.isSelectingPatient)
+            session.updateAdjustment(translation: 0, items: [])
+            #expect(
+                model.draftAppointment.start
+                    == expectedStart.on(date: date, using: gregorianCalendar))
+        }
+    }
+
+    @Test func timelineBookingKeepsDraggedTimeThroughPatientSelectionAndSavesOnlyWithDone()
+        async throws
+    {
+        let database = try testDatabase()
+        let date = try Date("2026-10-26T00:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+        }
+        try await withDependencies {
+            $0.calendar = gregorianCalendar
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            var savedDate: Date?
+            let session = ScheduleEditorSession(
+                bookingID: UUID(), selectedDate: date, center: TimeOfDay(12, 22), items: []
+            ) { savedDate = $0 }
+            guard case .appointment(let model) = session.editor else { return }
+            let conflict = Appointment(
+                patientName: "Other patient", start: date.addingTimeInterval(12 * 3600),
+                durationMinutes: 60, status: .scheduled)
+            session.updateAdjustment(translation: 7, items: [.appointment(conflict)])
+            let id = model.draftAppointment.id
+            let start = date.addingTimeInterval(12 * 3600 + 5 * 60)
+            #expect(model.draftAppointment.start == start)
+            #expect(model.draft.start == start)
+            #expect(!model.isSelectingPatient)
+            #expect(!(await model.saveAppointment()))
+            model.releaseTimelineBooking()
+            #expect(model.isSelectingPatient)
+            #expect(!model.adjustment.isDragging)
+            model.selectPatient(patient)
+            model.updateAppointments([conflict], for: date)
+            #expect(!model.isSelectingPatient)
+            #expect(model.draftAppointment.id == id)
+            #expect(model.draftAppointment.start == start)
+            #expect(model.draftAppointment.patientName == patient.displayName)
+            #expect(savedDate == nil)
+            #expect(try await database.read { try AppointmentRecord.fetchAll($0).isEmpty })
+            #expect(await model.saveAppointment())
+            let records = try await database.read { try AppointmentRecord.fetchAll($0) }
+            #expect(records.count == 1)
+            #expect(records.first?.id == id)
+            #expect(records.first?.start == start)
+            #expect(records.first?.durationMinutes == 30)
+            #expect(savedDate == start)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func timelineChangesStayUnsavedUntilDone(editing: Bool) async throws {
+        let database = try testDatabase()
+        let date = try Date("2026-10-25T12:00:00Z", strategy: .iso8601)
+        let nextDate = try Date("2026-10-26T12:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        let appointment = Appointment(
+            patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+            if editing {
+                let record = try AppointmentRecord.persisted(
+                    id: appointment.id, patientID: patient.id, start: date,
+                    durationMinutes: 30, status: .scheduled, createdAt: date, updatedAt: date)
+                try AppointmentRecord.insert { record }.execute(db)
+            }
+        }
+        try await withDependencies {
+            $0.calendar = gregorianCalendar
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            var savedDate: Date?
+            let request: AppPresentation =
+                editing
+                ? .appointmentEdit(
+                    AppointmentEditRequest(
+                        details: AppointmentDetails(
+                            appointment: appointment, patient: patient)))
+                : .appointmentBooking(AppointmentBookingRequest(patient: patient))
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: request, selectedDate: date, appointments: []
+                ) { savedDate = $0 })
+            guard case .appointment(let model) = session.editor else { return }
+            model.selectStart(date)
+            let draft = model.draftAppointment
+            session.beginAdjustment(.appointment(draft), edge: .move, items: [.appointment(draft)])
+            session.updateAdjustment(translation: 15, items: [.appointment(draft)])
+            #expect(model.draft.start == date.addingTimeInterval(15 * 60))
+            model.adjustment.release()
+            session.beginAdjustment(
+                .appointment(draft), edge: .duration, items: [.appointment(draft)])
+            session.updateAdjustment(translation: -100, items: [.appointment(draft)])
+            #expect(model.draft.durationMinutes == 15)
+            model.adjustment.release()
+            model.selectDate(nextDate)
+            let conflict = Appointment(
+                patientName: "Other patient", start: nextDate, durationMinutes: 120,
+                status: .scheduled)
+            model.updateAppointments([conflict], for: nextDate)
+            let expectedStart = nextDate.addingTimeInterval(15 * 60)
+            #expect(model.draftAppointment.start == expectedStart)
+            #expect(model.draftAppointment.durationMinutes == 15)
+            #expect(savedDate == nil)
+            let before = try await database.read { try AppointmentRecord.fetchAll($0) }
+            #expect(before.count == (editing ? 1 : 0))
+            #expect(before.first?.start == (editing ? date : nil))
+            #expect(before.first?.durationMinutes == (editing ? 30 : nil))
+
+            await session.save()
+            #expect(model.saveErrorMessage == nil)
+            let after = try await database.read { try AppointmentRecord.fetchAll($0) }
+            #expect(after.count == 1)
+            #expect(after.first?.start == expectedStart)
+            #expect(after.first?.durationMinutes == 15)
+            #expect(after.first?.patientID == patient.id)
+            #expect(savedDate == expectedStart)
+        }
+    }
+
     @Test func dateChangePreservesAvailableClockTime() throws {
         let calendar = gregorianCalendar
         let initialDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)

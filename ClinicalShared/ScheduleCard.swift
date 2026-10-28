@@ -1,20 +1,32 @@
 import SwiftUI
 
 struct ScheduleCard: View {
+    @Environment(\.scheduleCardTuning) private var tuning
+
     let start: Date
     let label: String
     let appearance: Appearance
+    var isDeemphasized = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                .fill(appearance.background)
+            switch appearance.background {
+            case .color(let color):
+                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                    .fill(color)
+            case .draft:
+                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                    .fill(.white)
+                    // Keep underlying card edges visible as possible conflict cues.
+                    .opacity(tuning.surfaceOpacity)
+            }
 
             ScheduleCardContent(start: start, label: label, appearance: appearance)
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .clipped()
-                .opacity(appearance.contentOpacity)
+                .opacity(
+                    appearance.contentOpacity * (isDeemphasized ? tuning.otherContentOpacity : 1))
 
             RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
                 .stroke(appearance.border, style: appearance.borderStyle)
@@ -24,12 +36,47 @@ struct ScheduleCard: View {
 
     struct Appearance {
         let systemImage: String
-        let background: Color
+        let background: Background
         let border: Color
         let borderStyle: StrokeStyle
         var contentOpacity: Double = 1
         var timeColor: Color? = nil
         var labelColor: Color = .primary
+    }
+
+    enum Background {
+        case color(Color)
+        case draft
+    }
+}
+
+struct ScheduleCardLift: ViewModifier {
+    @Environment(\.scheduleCardTuning) private var tuning
+    let isPressed: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                    .fill(.black)
+                    .shadow(
+                        color: .black.opacity(tuning.lift.shadowOpacity),
+                        radius: isPressed ? tuning.lift.shadowRadius : 0,
+                        y: isPressed ? 3 : 0
+                    )
+                    .overlay {
+                        // Remove the shadow's interior so it cannot darken the translucent fill.
+                        RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                            .fill(.black)
+                            .blendMode(.destinationOut)
+                    }
+                    .compositingGroup()
+                    .opacity(isPressed ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            // Keep the time edges fixed. Height and vertical position communicate the interval.
+            .scaleEffect(x: isPressed ? 1 + tuning.lift.width : 1, y: 1)
+            .animation(.smooth(duration: tuning.lift.duration), value: isPressed)
     }
 }
 

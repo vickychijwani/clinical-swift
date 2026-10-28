@@ -7,8 +7,10 @@ booking. A visiting dentist can work while the clinic owner is busy or away. Tim
 suggestions prefer free working hours because the clinic usually has one dentist;
 that preference must not become a save-time restriction.
 
-Opening an appointment for editing preserves its saved time. Applying creation-time
-suggestions here could silently move an appointment before the doctor changes it.
+Opening an appointment for editing preserves its saved time. Once timeline editing
+starts, date changes preserve the chosen clock time and duration, and schedule
+reloads do not apply suggestions. Otherwise, automatic prefilling could silently
+move an appointment away from the doctor's chosen time.
 
 ## Patient selection
 
@@ -22,6 +24,6 @@ follow the [routing policy](routing.md).
 
 ## Schedule context
 
-The full schedule stays visible during time selection so the doctor can place the
-appointment in context. The booking sheet uses explicit dismissal actions because
-swipe dismissal competes with scrolling the schedule behind it.
+Time selection stays on the full schedule so the doctor can place the appointment
+in context. Appointments and unavailable time follow the same
+[direct editing rules](timeline.md#direct-editing).
