@@ -38,7 +38,7 @@ struct UnavailableTimeTests {
                 : UnavailableTimeEditorModel(selectedDate: start) { savedDate = $0 }
             #expect(model.isEditingLabel == !editing)
             model.startTimelineEditing()
-            #expect(model.adjustment.selectedID == .unavailableTime(model.blockID))
+            #expect(model.adjustment.preview?.id == .unavailableTime(model.blockID))
             model.draft.label = " Holiday "
             model.finishLabelEntry()
             #expect(!model.isEditingLabel)
@@ -108,7 +108,7 @@ struct UnavailableTimeTests {
             }
             #expect(!(await model.save()))
             #expect(model.preview == preview)
-            #expect(model.adjustment.isActive)
+            #expect(model.adjustment.preview != nil)
             #expect(!model.isWorking)
             #expect(!model.didFinish)
             try await database.write { db in try db.execute(sql: "DROP TRIGGER reject_blocks") }

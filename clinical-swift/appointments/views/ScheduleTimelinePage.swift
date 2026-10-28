@@ -8,7 +8,7 @@ struct ScheduleTimelinePage: View {
     let itemInteractionsEnabled: Bool
     @Binding var scrollPosition: ScrollPosition
     let onSelectItem: (TimelineItem) -> Void
-    let onSelectActiveItem: () -> Void
+    let onSelectDraft: () -> Void
     let allowsAdjustment: Bool
     let adjustment: TimelineAdjustment?
     let isWorking: Bool
@@ -32,7 +32,7 @@ struct ScheduleTimelinePage: View {
                     showsNowMarker: calendar.isDateInToday(date),
                     itemInteractionsEnabled: itemInteractionsEnabled,
                     onSelectItem: onSelectItem,
-                    onSelectActiveItem: onSelectActiveItem,
+                    onSelectDraft: onSelectDraft,
                     allowsAdjustment: allowsAdjustment,
                     onDraggingChanged: {
                         isDragging = $0
@@ -72,8 +72,8 @@ struct ScheduleTimelinePage: View {
                 self.pendingScrollY = nil
             }
         }
-        .onChange(of: adjustment?.isActive, initial: true) {
-            needsAdjustmentClearance = adjustment?.isActive == true
+        .onChange(of: adjustment?.preview != nil, initial: true) {
+            needsAdjustmentClearance = adjustment?.preview != nil
         }
         .scrollDisabled(isDragging)
         .onScrollGeometryChange(for: CGFloat.self) {

@@ -109,7 +109,7 @@ final class UnavailableTimeEditorModel: Identifiable {
 
     func selectDate(_ date: Date) {
         guard !calendar.isDate(date, inSameDayAs: preview.start), !isWorking else { return }
-        if adjustment.isActive {
+        if adjustment.preview != nil {
             _ = adjustment.selectDate(date)
             applyTimelinePreview()
         } else {
@@ -124,7 +124,7 @@ final class UnavailableTimeEditorModel: Identifiable {
         let date = selectedDate
         draft.start = start
         draft.move(to: date)
-        if adjustment.isActive { adjustment.select(.unavailableTime(draftBlock)) }
+        if adjustment.preview != nil { adjustment.select(.unavailableTime(draftBlock)) }
         draftPreviewScrollRequest += 1
     }
 
@@ -133,7 +133,7 @@ final class UnavailableTimeEditorModel: Identifiable {
         applyTimelinePreview()
         draft.durationMinutes = minutes
         draft.move(to: selectedDate)
-        if adjustment.isActive { adjustment.select(.unavailableTime(draftBlock)) }
+        if adjustment.preview != nil { adjustment.select(.unavailableTime(draftBlock)) }
         draftPreviewScrollRequest += 1
     }
 

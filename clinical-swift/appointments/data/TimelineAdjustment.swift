@@ -19,14 +19,9 @@ final class TimelineAdjustment {
     private var anchorY: CGFloat = 0
     private var translation: CGFloat = 0
 
-    private(set) var selectedID: TimelineItem.ID?
-
-    var isActive: Bool { preview != nil }
-
     func select(_ item: TimelineItem) {
         guard !isDragging else { return }
         preview = item
-        selectedID = item.id
     }
 
     func items(_ items: [TimelineItem], on date: Date? = nil) -> [TimelineItem] {
@@ -55,12 +50,11 @@ final class TimelineAdjustment {
     func begin(_ item: TimelineItem, edge: Edge, items: [TimelineItem]) {
         guard !isDragging,
             item.allowsAdjustment,
-            selectedID == nil || selectedID == item.id
+            preview == nil || preview?.id == item.id
         else { return }
         let item = preview ?? item
         original = item
         preview = item
-        selectedID = item.id
         self.edge = edge
         expanded = TimelineScale(items: items).isBreakExpanded
         let time =
@@ -117,7 +111,6 @@ final class TimelineAdjustment {
         original = nil
         isDragging = false
         hoverRequest = nil
-        selectedID = nil
     }
 
     func selectDate(_ date: Date) -> TimelineItem? {

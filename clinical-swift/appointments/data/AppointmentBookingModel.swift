@@ -121,7 +121,7 @@ import SQLiteData
         }
 
         appointments = []
-        automaticallyPrefills = !adjustment.isActive
+        automaticallyPrefills = adjustment.preview == nil
         self.selectedDate = normalizedDate
         _ = adjustment.selectDate(normalizedDate)
         applyTimelinePreview()

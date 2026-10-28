@@ -3,7 +3,6 @@ import SwiftUI
 
 struct AppointmentCard: View {
     let appt: Appointment
-    var isAdjusting = false
     var isDeemphasized = false
 
     var body: some View {
@@ -16,25 +15,13 @@ struct AppointmentCard: View {
 
     private var appearance: ScheduleCard.Appearance {
         let systemImage = AppointmentStatusPresentation(status: appt.status).systemImage
-        if isAdjusting {
-            return ScheduleCard.Appearance(
-                systemImage: systemImage,
-                background: .active,
-                border: .accentColor.opacity(0.7),
-                borderStyle: StrokeStyle(lineWidth: 2))
-        }
         return switch appt.status {
         case .draft:
             ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: .color(Color.accentColor.opacity(0.08)),
-                border: Color.accentColor.opacity(0.5),
-                borderStyle: StrokeStyle(
-                    lineWidth: 3,
-                    lineCap: .round,
-                    dash: [5, 10]
-                ),
-                contentOpacity: 1
+                background: .draft,
+                border: .accentColor.opacity(0.7),
+                borderStyle: StrokeStyle(lineWidth: 2)
             )
 
         case .scheduled:

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Defaults match the active-card surface. The app can override them for local design checks.
+/// Defaults match the draft card surface. The app can override them for local design checks.
 struct ScheduleCardTuning: Codable, Equatable, Sendable {
     var surfaceOpacity = 0.8
     var otherContentOpacity = 0.3

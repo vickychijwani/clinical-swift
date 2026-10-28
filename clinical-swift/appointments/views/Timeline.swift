@@ -10,7 +10,7 @@ struct Timeline: View {
     var previewNowMarker: Date? = nil
     var itemInteractionsEnabled = true
     var onSelectItem: (TimelineItem) -> Void = { _ in }
-    var onSelectActiveItem: () -> Void = {}
+    var onSelectDraft: () -> Void = {}
     var allowsAdjustment = false
     var onDraggingChanged: (Bool) -> Void = { _ in }
     var onScaleChange: (CGFloat) -> Void = { _ in }
@@ -83,7 +83,7 @@ struct Timeline: View {
             )
             let layouts = engine.layout(
                 items: adjustment?.items(items, on: date) ?? items,
-                floatingID: adjustment?.selectedID)
+                floatingID: adjustment?.preview?.id)
 
             ZStack(alignment: .topLeading) {
                 TimelineBreakView(
@@ -97,15 +97,15 @@ struct Timeline: View {
                 )
 
                 ForEach(layouts) { layout in
-                    let selected = isSelected(layout.item)
+                    let draft = isDraft(layout.item)
                     TimelineItemView(
                         item: layout.item,
                         size: layout.rect.size,
-                        isSelected: selected,
-                        isDeemphasized: adjustment?.isActive == true && !selected,
+                        isDraft: draft,
+                        isDeemphasized: adjustment?.preview != nil && !draft,
                         interactionsEnabled: !isWorking
-                            && (itemInteractionsEnabled || (allowsAdjustment && selected)),
-                        showsAdjustmentControls: selected && allowsAdjustment,
+                            && (itemInteractionsEnabled || (allowsAdjustment && draft)),
+                        showsAdjustmentControls: draft && allowsAdjustment,
                         isDragging: adjustment?.isDragging == true,
                         isWorking: isWorking,
                         onSelect: { selectItem(layout.item) },
@@ -118,7 +118,7 @@ struct Timeline: View {
                         onDone: onDone,
                         onDelete: onDelete
                     )
-                    .zIndex(selected ? 1 : 0)
+                    .zIndex(draft ? 1 : 0)
                     .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
 
@@ -152,21 +152,21 @@ struct Timeline: View {
                         bookingDrag.release()
                         onBookingRelease(bookingDrag)
                     },
-                including: allowsAdjustment && (adjustment?.isActive != true || bookingDrag != nil)
+                including: allowsAdjustment && (adjustment?.preview == nil || bookingDrag != nil)
                     ? .all : .subviews
             )
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.3)
                     .onEnded { _ in
                         guard allowsAdjustment, itemInteractionsEnabled,
-                            adjustment?.isActive != true,
+                            adjustment?.preview == nil,
                             let touchStart
                         else { return }
                         let y = touchStart.y - geometry.frame(in: .global).minY
                         // Use the displayed scale, including a compact break, for touch mapping.
                         bookingDrag = onBeginBooking(scale.time(at: y))
                     },
-                including: allowsAdjustment && (adjustment?.isActive != true || bookingDrag != nil)
+                including: allowsAdjustment && (adjustment?.preview == nil || bookingDrag != nil)
                     ? .all : .subviews
             )
         }
@@ -174,14 +174,14 @@ struct Timeline: View {
         .padding(.vertical, Timeline.metrics.verticalPadding)
     }
 
-    private func isSelected(_ item: TimelineItem) -> Bool {
-        guard let id = adjustment?.selectedID else { return false }
+    private func isDraft(_ item: TimelineItem) -> Bool {
+        guard let id = adjustment?.preview?.id else { return false }
         return item.id == id
     }
 
     private func selectItem(_ item: TimelineItem) {
         // A hold can finish in the same event as the button release.
-        guard adjustment?.isActive != true,
+        guard adjustment?.preview == nil,
             lastDragEnd.map({ $0.duration(to: .now) > .milliseconds(150) }) ?? true
         else { return }
         onSelectItem(item)
@@ -191,7 +191,7 @@ struct Timeline: View {
         if abs(value.translation.height) > 10 || abs(value.translation.width) > 10 {
             lastDragEnd = .now
         }
-        guard let adjustment, !isWorking, isSelected(item) else { return }
+        guard let adjustment, !isWorking, isDraft(item) else { return }
         if !adjustment.isDragging {
             adjustment.begin(item, edge: .move, items: items)
         }
@@ -205,11 +205,11 @@ struct Timeline: View {
         if abs(value.translation.height) > 10 || abs(value.translation.width) > 10 {
             lastDragEnd = .now
         }
-        guard isSelected(item), adjustment.isDragging, adjustment.edge == .move else { return }
+        guard isDraft(item), adjustment.isDragging, adjustment.edge == .move else { return }
         onScaleChange(adjustment.update(translation: value.translation.height, items: items))
         releaseAdjustment()
         if abs(value.translation.height) < 5, abs(value.translation.width) < 5 {
-            onSelectActiveItem()
+            onSelectDraft()
         }
     }
 

@@ -3,7 +3,7 @@ import SwiftUI
 
 struct UnavailableTimeCard: View {
     let block: UnavailableTime
-    var isAdjusting = false
+    var isDraft = false
     var isDeemphasized = false
 
     var body: some View {
@@ -12,8 +12,8 @@ struct UnavailableTimeCard: View {
             label: block.displayLabel,
             appearance: .init(
                 systemImage: "nosign",
-                background: isAdjusting ? .active : .color(Color("UnavailableTimeBackground")),
-                border: isAdjusting ? .accentColor.opacity(0.7) : Color("UnavailableTimeBorder"),
+                background: isDraft ? .draft : .color(Color("UnavailableTimeBackground")),
+                border: isDraft ? .accentColor.opacity(0.7) : Color("UnavailableTimeBorder"),
                 borderStyle: StrokeStyle(lineWidth: 2),
                 timeColor: Color("UnavailableTimeTime"),
                 labelColor: Color("UnavailableTimeLabel")

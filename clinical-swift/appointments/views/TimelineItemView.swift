@@ -5,7 +5,7 @@ import SwiftUI
 struct TimelineItemView: View {
     let item: TimelineItem
     let size: CGSize
-    let isSelected: Bool
+    let isDraft: Bool
     let isDeemphasized: Bool
     let interactionsEnabled: Bool
     let showsAdjustmentControls: Bool
@@ -27,7 +27,7 @@ struct TimelineItemView: View {
         Button(action: onSelect) {
             ScheduleItemCard(
                 item: item,
-                isAdjusting: isSelected,
+                isDraft: isDraft,
                 isDeemphasized: isDeemphasized
             )
             .frame(width: size.width, height: size.height)
@@ -66,7 +66,7 @@ struct TimelineItemView: View {
                 )
             }
         }
-        .modifier(ScheduleCardLift(isPressed: isSelected && isDragging))
+        .modifier(ScheduleCardLift(isPressed: isDraft && isDragging))
         .overlay(alignment: .topLeading) {
             if showsAdjustmentControls, isDragging, !tooltipBelow {
                 TimelineAdjustmentTooltip(item: item)

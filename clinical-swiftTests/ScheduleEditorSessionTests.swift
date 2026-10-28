@@ -78,7 +78,7 @@ struct ScheduleEditorSessionTests {
             }
             await session.save()
             #expect(!session.adjustment.isDragging)
-            #expect(session.adjustment.isActive)
+            #expect(session.adjustment.preview != nil)
             #expect(session.preview.id == preview.id)
             #expect(session.preview.start == preview.start)
             #expect(session.preview.durationMinutes == preview.durationMinutes)
@@ -143,7 +143,7 @@ struct ScheduleEditorSessionTests {
             await session.save()
             #expect(!didFinish)
             #expect(session.errorMessage == "This appointment can no longer be edited.")
-            #expect(session.adjustment.isActive)
+            #expect(session.adjustment.preview != nil)
             #expect(session.preview.start == preview.start)
             let record = try #require(
                 try await database.read { try AppointmentRecord.find(appointment.id).fetchOne($0) })
@@ -200,7 +200,7 @@ struct ScheduleEditorSessionTests {
                         UnavailableTimeEditorRequest(
                             purpose: editing ? .edit(block) : .create)),
                     selectedDate: start, appointments: [], onFinished: { _ in }))
-            #expect(session.adjustment.isActive)
+            #expect(session.adjustment.preview != nil)
             #expect(session.isShowingSheet == !editing)
             #expect(session.preview.durationMinutes == 60)
             if !editing {
@@ -209,7 +209,7 @@ struct ScheduleEditorSessionTests {
             }
             session.isShowingSheet = false
             #expect(!session.isShowingSheet)
-            #expect(session.adjustment.isActive)
+            #expect(session.adjustment.preview != nil)
         }
     }
 

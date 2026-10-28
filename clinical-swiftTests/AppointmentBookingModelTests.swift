@@ -77,7 +77,7 @@ struct AppointmentBookingModelTests {
             model.selectPatient(patient)
             model.updateAppointments([conflict], for: date)
             #expect(!model.isSelectingPatient)
-            #expect(model.adjustment.isActive)
+            #expect(model.adjustment.preview != nil)
             #expect(model.draftAppointment.id == id)
             #expect(model.draftAppointment.start == start)
             #expect(model.draftAppointment.patientName == patient.displayName)

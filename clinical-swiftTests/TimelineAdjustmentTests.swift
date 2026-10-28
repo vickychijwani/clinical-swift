@@ -203,12 +203,37 @@ struct TimelineAdjustmentTests {
         }
         model.begin(.appointment(appointment), edge: .move, items: [.appointment(appointment)])
         model.release()
-        #expect(model.selectedID == .appointment(appointment.id))
+        #expect(model.preview?.id == .appointment(appointment.id))
         #expect(!model.isDragging)
-        #expect(model.isActive)
     }
 
-    @Test func releaseKeepsModeActiveUntilDone() throws {
+    @Test(arguments: [false, true])
+    func draftIdentityPreventsDraggingAnotherItem(unavailable: Bool) throws {
+        let appointment = try appointment()
+        let items: [TimelineItem] = [
+            .appointment(appointment),
+            .unavailableTime(
+                UnavailableTime(
+                    id: appointment.id, start: appointment.start, durationMinutes: 30)),
+        ]
+        withDependencies {
+            $0.calendar = .autoupdatingCurrent
+        } operation: {
+            let model = TimelineAdjustment()
+            let draft = items[unavailable ? 1 : 0]
+            let other = items[unavailable ? 0 : 1]
+            model.select(draft)
+            model.begin(other, edge: .move, items: items)
+            #expect(model.preview?.id == draft.id)
+            #expect(!model.isDragging)
+            model.finish()
+            model.begin(other, edge: .move, items: items)
+            #expect(model.preview?.id == other.id)
+            #expect(model.isDragging)
+        }
+    }
+
+    @Test func releaseKeepsDraftUntilDone() throws {
         let appointment = try appointment()
         let items = [TimelineItem.appointment(appointment)]
         let model = withDependencies {
@@ -219,15 +244,14 @@ struct TimelineAdjustmentTests {
         model.begin(.appointment(appointment), edge: .move, items: items)
         model.update(translation: 15, items: items)
         model.release()
-        #expect(model.isActive)
+        #expect(model.preview != nil)
         #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
         model.begin(.appointment(appointment), edge: .duration, items: items)
         model.update(translation: 10, items: items)
         #expect(model.preview?.start.timeOfDay == TimeOfDay(12, 15))
         #expect(model.preview?.durationMinutes == 40)
         model.finish()
-        #expect(!model.isActive)
-        #expect(model.selectedID == nil)
+        #expect(model.preview == nil)
     }
 
     @Test func dateSelectionPreservesTimeAndDurationAndMovesPreviewBetweenDays() throws {
