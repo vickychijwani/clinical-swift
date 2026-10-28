@@ -75,35 +75,34 @@ nonisolated struct AppPalette: Equatable {
 
     subscript(role: AppColor) -> Color {
         if let color = overrides[role] { return color }
-        switch role {
-        case .canvas: return Color("AppCanvas")
-        case .accent: return .accentColor
+        return switch role {
+        case .canvas: Color("AppCanvas")
+        case .accent: .accentColor
         // The lab needs a Color sample. Views use the semantic background in AppColor.resolve.
-        case .surface: return Color("LabAdaptiveWhiteBlack")
-        case .text: return .primary
-        case .secondaryText, .icon: return .secondary
-        case .tertiaryText: return Color.primary.opacity(0.3)
-        case .border: return self[.text].opacity(0.12)
-        case .card, .activeCard: return Color("LabAdaptiveWhiteBlack")
-        case .cardBorder: return .gray.opacity(0.15)
-        case .completedCard: return Color(red: 0.95, green: 0.95, blue: 0.95)
-        case .completedBorder: return .gray.opacity(0.1)
-        case .activeBorder: return self[.accent].opacity(0.7)
-        case .cardIcon: return self[.time]
-        case .time: return Color(red: 0.46, green: 0.49, blue: 0.47)
-        case .unavailable: return Color("UnavailableTimeBackground")
-        case .unavailableBorder: return Color("UnavailableTimeBorder")
-        case .unavailableTime: return Color("UnavailableTimeTime")
-        case .unavailableLabel: return Color("UnavailableTimeLabel")
-        case .grid: return .gray.opacity(0.15)
-        case .breakStripe: return .gray.opacity(0.12)
-        case .hour: return .gray
-        case .now: return self[.accent]
-        case .success: return .green
-        case .warning: return .orange
-        case .destructive: return .red
-        case .onAccent, .highlight: return .white
-        case .shadow: return .black
+        case .surface: Color("LabAdaptiveWhiteBlack")
+        case .text: .primary
+        case .secondaryText, .icon: .secondary
+        case .tertiaryText: .primary.opacity(0.3)
+        case .border: self[.text].opacity(0.12)
+        case .card, .activeCard: Color("LabAdaptiveWhiteBlack")
+        case .cardBorder: .gray.opacity(0.15)
+        case .completedCard: Color("AppCanvas").mix(with: .green, by: 0.05, in: .device)
+        case .completedBorder: Color("AppCanvas").mix(with: .green, by: 0.2, in: .device)
+        case .activeBorder: self[.accent].opacity(0.7)
+        case .cardIcon: self[.time]
+        case .time, .unavailableTime: Color(red: 0.46, green: 0.49, blue: 0.47)
+        case .unavailable: Color("AppCanvas").mix(with: .red, by: 0.05, in: .device)
+        case .unavailableBorder: Color("AppCanvas").mix(with: .red, by: 0.2, in: .device)
+        case .unavailableLabel: .primary
+        case .grid: .gray.opacity(0.15)
+        case .breakStripe: .gray.opacity(0.12)
+        case .hour: .gray
+        case .now: self[.accent]
+        case .success: .green
+        case .warning: .orange
+        case .destructive: .red
+        case .onAccent, .highlight: .white
+        case .shadow: .black
         }
     }
 }
