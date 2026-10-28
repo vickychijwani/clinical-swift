@@ -38,6 +38,7 @@ App-specific guides:
 - Assisted patient-data recovery procedure and limits: `docs/patient-data-restore.md`
 - Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`
 - Appointment booking validation and scheduling principles: `docs/appointment-booking.md`
+- Debug App Intents booking experiment and its data limits: `docs/booking-snippet-prototype.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
 - Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
 - Test structure, dependency overrides, and async database access: `docs/testing.md`

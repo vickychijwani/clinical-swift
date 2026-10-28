@@ -125,6 +125,14 @@ struct FindPatientFromContactIntent: AppIntent {
 
 struct ClinicalShortcuts: AppShortcutsProvider {
     nonisolated static var appShortcuts: [AppShortcut] {
+        #if DEBUG
+            AppShortcut(
+                intent: TrySnippetBookingIntent(),
+                phrases: ["Try booking in \(.applicationName)"],
+                shortTitle: "Try Snippet Booking",
+                systemImageName: "sparkles"
+            )
+        #endif
         AppShortcut(
             intent: BookAppointmentIntent(),
             phrases: [

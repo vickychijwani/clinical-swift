@@ -15,6 +15,9 @@ struct ScheduleView: View {
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
+    #if DEBUG
+        @State private var showsBookingPrototype = false
+    #endif
 
     init() {
         scheduleModel = ScheduleModel()
@@ -50,6 +53,13 @@ struct ScheduleView: View {
         )
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
+            #if DEBUG
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Booking prototype", systemImage: "sparkles") {
+                        showsBookingPrototype = true
+                    }
+                }
+            #endif
             ToolbarItem(placement: .topBarTrailing) {
                 BackupSettingsButton()
             }
@@ -70,6 +80,11 @@ struct ScheduleView: View {
                 }
             }
         }
+        #if DEBUG
+            .navigationDestination(isPresented: $showsBookingPrototype) {
+                BookingSnippetPlayground()
+            }
+        #endif
         .sheet(item: $editorSession, onDismiss: router.presentationDidDismiss) { session in
             ScheduleEditorSheet(session: session)
                 .onAppear { router.presentationDidAppear(session.id) }
