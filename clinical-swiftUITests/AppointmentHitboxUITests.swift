@@ -75,12 +75,25 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
     @MainActor
     func testUnavailableTimeEditorKeepsDateSelectionAndConfirmsDiscard() {
         let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-timeline-adjustment"]
         app.launch()
         let action = app.buttons["Unavailable Time"]
         XCTAssertTrue(action.waitForExistence(timeout: 5))
         action.tap()
         let label = app.textFields["Optional label"]
         XCTAssertTrue(label.waitForExistence(timeout: 5))
+        label.tap()
+        label.typeText("Draft travel")
+        app.buttons["Back"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+        XCTAssertFalse(label.exists)
+        let draft = app.buttons.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND identifier != %@", "unavailable-time-",
+                "unavailable-time-00000000-0000-0000-0000-000000000014")
+        ).firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 5))
+        let draftID = draft.identifier
         let calendar = Calendar.current
         let offset = calendar.component(.weekday, from: .now) == 1 ? 1 : -1
         guard let alternateDate = calendar.date(byAdding: .day, value: offset, to: .now) else {
@@ -92,8 +105,7 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         XCTAssertTrue(dateButton.exists)
         dateButton.tap()
         XCTAssertTrue((dateButton.value as? String)?.contains("Selected") == true)
-        label.tap()
-        label.typeText("Draft travel")
+        XCTAssertTrue(app.buttons[draftID].waitForExistence(timeout: 5))
         app.buttons["Cancel"].tap()
         let discard = app.buttons["Discard Changes"]
         XCTAssertTrue(discard.waitForExistence(timeout: 5))
@@ -103,14 +115,21 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
             // Native popovers use an outside-tap region for cancellation.
             app.otherElements["PopoverDismissRegion"].firstMatch.tap()
         }
+        XCTAssertTrue((dateButton.value as? String)?.contains("Selected") == true)
+        app.buttons[draftID].tap()
+        XCTAssertTrue(label.waitForExistence(timeout: 5))
         XCTAssertEqual(label.value as? String, "Draft travel")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Unavailable time editor"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        app.buttons["Back"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
         app.buttons["Cancel"].tap()
         XCTAssertTrue(discard.waitForExistence(timeout: 5))
         discard.tap()
         XCTAssertTrue(action.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons[draftID].exists)
+        XCTAssertTrue((dateButton.value as? String)?.contains("Selected") == true)
     }
 }
