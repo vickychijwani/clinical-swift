@@ -125,7 +125,7 @@ struct ColorLabRenderingTests {
         case .secondaryText, .icon: AnyShapeStyle(.secondary)
         case .tertiaryText: AnyShapeStyle(.tertiary)
         case .border: AnyShapeStyle(.primary.opacity(0.12))
-        case .card, .activeCard: AnyShapeStyle(Color.white)
+        case .card, .activeCard: AnyShapeStyle(Color("LabAdaptiveWhiteBlack"))
         case .cardBorder, .grid: AnyShapeStyle(Color.gray.opacity(0.15))
         case .completedCard: AnyShapeStyle(Color(red: 0.95, green: 0.95, blue: 0.95))
         case .completedBorder: AnyShapeStyle(Color.gray.opacity(0.1))

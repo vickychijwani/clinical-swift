@@ -84,7 +84,7 @@ nonisolated struct AppPalette: Equatable {
         case .secondaryText, .icon: return .secondary
         case .tertiaryText: return Color.primary.opacity(0.3)
         case .border: return self[.text].opacity(0.12)
-        case .card, .activeCard: return .white
+        case .card, .activeCard: return Color("LabAdaptiveWhiteBlack")
         case .cardBorder: return .gray.opacity(0.15)
         case .completedCard: return Color(red: 0.95, green: 0.95, blue: 0.95)
         case .completedBorder: return .gray.opacity(0.1)

@@ -127,7 +127,7 @@ import Testing
             #expect(palette[.now] == .accentColor)
             palette.overrides[.accent] = .purple
             #expect(palette[.now] == .purple)
-            #expect(palette[.activeCard] == .white)
+            #expect(palette[.activeCard] == Color("LabAdaptiveWhiteBlack"))
             #expect(palette[.activeBorder] == Color.purple.opacity(0.7))
             palette.overrides[.activeBorder] = .blue
             #expect(palette[.activeBorder] == .blue)
