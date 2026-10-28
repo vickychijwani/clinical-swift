@@ -32,23 +32,28 @@ struct UnavailableTimeTests {
                 }
             }
             var savedDate: Date?
-            let model =
-                editing
-                ? UnavailableTimeEditorModel(editing: block) { savedDate = $0 }
-                : UnavailableTimeEditorModel(selectedDate: start) { savedDate = $0 }
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: .unavailableTimeEditor(
+                        UnavailableTimeEditorRequest(
+                            purpose: editing ? .edit(block) : .create)),
+                    selectedDate: start, appointments: []
+                ) { savedDate = $0 })
+            guard case .unavailableTime(let model) = session.editor else { return }
             #expect(model.isEditingLabel == !editing)
-            model.startTimelineEditing()
-            #expect(model.adjustment.preview?.id == .unavailableTime(model.blockID))
+            #expect(session.preview.id == .unavailableTime(model.blockID))
             model.draft.label = " Holiday "
             model.finishLabelEntry()
             #expect(!model.isEditingLabel)
             let initial = model.preview
-            model.adjustment.begin(.unavailableTime(initial), edge: .move, items: [])
-            model.adjustment.update(translation: 15, items: [])
+            session.beginAdjustment(.unavailableTime(initial), edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
+            #expect(model.draft.start == initial.start.addingTimeInterval(15 * 60))
             model.adjustment.release()
             #expect(!model.isEditingLabel)
-            model.adjustment.begin(.unavailableTime(initial), edge: .duration, items: [])
-            model.adjustment.update(translation: -100, items: [])
+            session.beginAdjustment(.unavailableTime(initial), edge: .duration, items: [])
+            session.updateAdjustment(translation: -100, items: [])
+            #expect(model.draft.durationMinutes == 15)
             model.adjustment.release()
             model.selectDate(nextDate)
             let expectedStart = TimeOfDay(date: initial.start, calendar: utcCalendar)
@@ -70,7 +75,8 @@ struct UnavailableTimeTests {
             #expect(model.preview.start == expectedStart)
             #expect(model.preview.durationMinutes == 15)
             #expect(model.preview.label == "Updated label")
-            #expect(await model.save())
+            await session.save()
+            #expect(model.errorMessage == nil)
             #expect(!(await model.save()))
             let after = try #require(
                 try await database.read { db in
@@ -92,11 +98,14 @@ struct UnavailableTimeTests {
             $0.calendar = utcCalendar
             $0.date.now = start
         } operation: {
-            let model = UnavailableTimeEditorModel(selectedDate: start) { _ in }
-            model.startTimelineEditing()
+            let session = try #require(
+                ScheduleEditorSession(
+                    request: .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create)),
+                    selectedDate: start, appointments: [], onFinished: { _ in }))
+            guard case .unavailableTime(let model) = session.editor else { return }
             model.finishLabelEntry()
-            model.adjustment.begin(.unavailableTime(model.preview), edge: .move, items: [])
-            model.adjustment.update(translation: 15, items: [])
+            session.beginAdjustment(.unavailableTime(model.preview), edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
             model.adjustment.release()
             let preview = model.preview
             try await database.write { db in
@@ -108,18 +117,20 @@ struct UnavailableTimeTests {
             }
             #expect(!(await model.save()))
             #expect(model.preview == preview)
-            #expect(model.adjustment.preview != nil)
             #expect(!model.isWorking)
             #expect(!model.didFinish)
             try await database.write { db in try db.execute(sql: "DROP TRIGGER reject_blocks") }
             #expect(await model.save())
-            let discarded = UnavailableTimeEditorModel(selectedDate: start) { _ in }
-            discarded.startTimelineEditing()
+            let discardedSession = try #require(
+                ScheduleEditorSession(
+                    request: .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create)),
+                    selectedDate: start, appointments: [], onFinished: { _ in }))
+            guard case .unavailableTime(let discarded) = discardedSession.editor else { return }
             discarded.finishLabelEntry()
-            discarded.adjustment.begin(.unavailableTime(discarded.preview), edge: .move, items: [])
-            discarded.adjustment.update(translation: 30, items: [])
+            discardedSession.beginAdjustment(
+                .unavailableTime(discarded.preview), edge: .move, items: [])
+            discardedSession.updateAdjustment(translation: 30, items: [])
             discarded.adjustment.release()
-            discarded.adjustment.finish()
             let discardedID = discarded.blockID
             #expect(
                 try await database.read { db in

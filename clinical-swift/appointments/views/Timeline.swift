@@ -14,7 +14,7 @@ struct Timeline: View {
     var allowsAdjustment = false
     var onDraggingChanged: (Bool) -> Void = { _ in }
     var onScaleChange: (CGFloat) -> Void = { _ in }
-    var onBeginBooking: (TimeOfDay) -> TimelineAdjustment? = { _ in nil }
+    var onBeginBooking: (TimeOfDay) -> ScheduleEditorSession? = { _ in nil }
     var onBookingRelease: (TimelineAdjustment) -> Void = { _ in }
     var onCancel: () -> Void = {}
     var onDiscard: () -> Void = {}
@@ -22,13 +22,13 @@ struct Timeline: View {
     var onDelete: (@MainActor () async -> Void)? = nil
 
     var date: Date = .now
-    // The session owns this reference. View state would keep the previous session's adjustment.
-    var adjustment: TimelineAdjustment?
+    // The parent supplies the session. View state would keep the previous editor's draft.
+    var editorSession: ScheduleEditorSession?
     var isWorking = false
     @State private var lastDragEnd: ContinuousClock.Instant?
     @State private var touchStart: CGPoint?
     // Keep the first touch attached while Schedule installs the new booking session.
-    @State private var bookingDrag: TimelineAdjustment?
+    @State private var bookingDrag: ScheduleEditorSession?
 
     static let metrics = TimelineMetrics(
         hourHeight: 60,
@@ -53,37 +53,39 @@ struct Timeline: View {
                 timelineContent(now: nil)
             }
         }
-        .task(id: adjustment?.hoverRequest) {
-            guard let adjustment, adjustment.hoverRequest != nil,
-                adjustment.preview?.start.isSameDayAs(date) == true
+        .task(id: editorSession?.adjustment.hoverRequest) {
+            guard let editorSession, editorSession.adjustment.hoverRequest != nil,
+                editorSession.preview.start.isSameDayAs(date)
             else { return }
             do { try await Task.sleep(for: .milliseconds(550)) } catch { return }
             withAnimation(.smooth(duration: 0.22)) {
-                onScaleChange(adjustment.expandBreak(items: items))
+                onScaleChange(editorSession.expandBreak(items: items))
             }
         }
-        .onChange(of: adjustment?.isDragging) { _, dragging in
+        .onChange(of: editorSession?.adjustment.isDragging) { _, dragging in
             if dragging != true {
                 bookingDrag = nil
                 touchStart = nil
             }
             onDraggingChanged(dragging == true)
         }
-        .sensoryFeedback(.impact(weight: .light), trigger: adjustment?.isDragging == true)
-        .sensoryFeedback(.selection, trigger: adjustment?.preview?.start)
-        .sensoryFeedback(.selection, trigger: adjustment?.preview?.durationMinutes)
+        .sensoryFeedback(
+            .impact(weight: .light), trigger: editorSession?.adjustment.isDragging == true
+        )
+        .sensoryFeedback(.selection, trigger: editorSession?.preview.start)
+        .sensoryFeedback(.selection, trigger: editorSession?.preview.durationMinutes)
     }
 
     private func timelineContent(now: Date?) -> some View {
-        let scale = allowsAdjustment ? adjustment?.scale(items, on: date) ?? scale : scale
+        let scale = allowsAdjustment ? editorSession?.scale(items, on: date) ?? scale : scale
         return GeometryReader { geometry in
             let engine = TimelineLayoutEngine(
                 availableWidth: geometry.size.width,
                 scale: scale
             )
             let layouts = engine.layout(
-                items: adjustment?.items(items, on: date) ?? items,
-                floatingID: adjustment?.preview?.id)
+                items: items,
+                floatingID: editorSession?.preview.id)
 
             ZStack(alignment: .topLeading) {
                 TimelineBreakView(
@@ -102,11 +104,11 @@ struct Timeline: View {
                         item: layout.item,
                         size: layout.rect.size,
                         isDraft: draft,
-                        isDeemphasized: adjustment?.preview != nil && !draft,
+                        isDeemphasized: editorSession != nil && !draft,
                         interactionsEnabled: !isWorking
                             && (itemInteractionsEnabled || (allowsAdjustment && draft)),
                         showsAdjustmentControls: draft && allowsAdjustment,
-                        isDragging: adjustment?.isDragging == true,
+                        isDragging: editorSession?.adjustment.isDragging == true,
                         isWorking: isWorking,
                         onSelect: { selectItem(layout.item) },
                         onMoveChanged: { move(layout.item, value: $0) },
@@ -135,7 +137,7 @@ struct Timeline: View {
                         touchStart = value.startLocation
                         if let bookingDrag {
                             onScaleChange(
-                                bookingDrag.update(
+                                bookingDrag.updateAdjustment(
                                     translation: value.translation.height, items: items))
                         }
                     }
@@ -144,29 +146,29 @@ struct Timeline: View {
                         guard let bookingDrag else { return }
                         self.bookingDrag = nil
                         // Done or Cancel can end the drag before the finger lifts.
-                        guard bookingDrag.isDragging else { return }
+                        guard bookingDrag.adjustment.isDragging else { return }
                         lastDragEnd = .now
                         onScaleChange(
-                            bookingDrag.update(
+                            bookingDrag.updateAdjustment(
                                 translation: value.translation.height, items: items))
-                        bookingDrag.release()
-                        onBookingRelease(bookingDrag)
+                        bookingDrag.adjustment.release()
+                        onBookingRelease(bookingDrag.adjustment)
                     },
-                including: allowsAdjustment && (adjustment?.preview == nil || bookingDrag != nil)
+                including: allowsAdjustment && (editorSession == nil || bookingDrag != nil)
                     ? .all : .subviews
             )
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.3)
                     .onEnded { _ in
                         guard allowsAdjustment, itemInteractionsEnabled,
-                            adjustment?.preview == nil,
+                            editorSession == nil,
                             let touchStart
                         else { return }
                         let y = touchStart.y - geometry.frame(in: .global).minY
                         // Use the displayed scale, including a compact break, for touch mapping.
                         bookingDrag = onBeginBooking(scale.time(at: y))
                     },
-                including: allowsAdjustment && (adjustment?.preview == nil || bookingDrag != nil)
+                including: allowsAdjustment && (editorSession == nil || bookingDrag != nil)
                     ? .all : .subviews
             )
         }
@@ -175,13 +177,13 @@ struct Timeline: View {
     }
 
     private func isDraft(_ item: TimelineItem) -> Bool {
-        guard let id = adjustment?.preview?.id else { return false }
+        guard let id = editorSession?.preview.id else { return false }
         return item.id == id
     }
 
     private func selectItem(_ item: TimelineItem) {
         // A hold can finish in the same event as the button release.
-        guard adjustment?.preview == nil,
+        guard editorSession == nil,
             lastDragEnd.map({ $0.duration(to: .now) > .milliseconds(150) }) ?? true
         else { return }
         onSelectItem(item)
@@ -191,22 +193,26 @@ struct Timeline: View {
         if abs(value.translation.height) > 10 || abs(value.translation.width) > 10 {
             lastDragEnd = .now
         }
-        guard let adjustment, !isWorking, isDraft(item) else { return }
+        guard let editorSession, !isWorking, isDraft(item) else { return }
+        let adjustment = editorSession.adjustment
         if !adjustment.isDragging {
-            adjustment.begin(item, edge: .move, items: items)
+            editorSession.beginAdjustment(item, edge: .move, items: items)
         }
         if adjustment.isDragging, adjustment.edge == .move {
-            onScaleChange(adjustment.update(translation: value.translation.height, items: items))
+            onScaleChange(
+                editorSession.updateAdjustment(translation: value.translation.height, items: items))
         }
     }
 
     private func endMove(_ item: TimelineItem, value: DragGesture.Value) {
-        guard let adjustment else { return }
+        guard let editorSession else { return }
+        let adjustment = editorSession.adjustment
         if abs(value.translation.height) > 10 || abs(value.translation.width) > 10 {
             lastDragEnd = .now
         }
         guard isDraft(item), adjustment.isDragging, adjustment.edge == .move else { return }
-        onScaleChange(adjustment.update(translation: value.translation.height, items: items))
+        onScaleChange(
+            editorSession.updateAdjustment(translation: value.translation.height, items: items))
         releaseAdjustment()
         if abs(value.translation.height) < 5, abs(value.translation.width) < 5 {
             onSelectDraft()
@@ -216,13 +222,16 @@ struct Timeline: View {
     private func drag(
         _ item: TimelineItem, edge: TimelineAdjustment.Edge, value: DragGesture.Value
     ) {
-        guard let adjustment, !isWorking else { return }
-        if !adjustment.isDragging { adjustment.begin(item, edge: edge, items: items) }
-        onScaleChange(adjustment.update(translation: value.translation.height, items: items))
+        guard let editorSession, !isWorking else { return }
+        if !editorSession.adjustment.isDragging {
+            editorSession.beginAdjustment(item, edge: edge, items: items)
+        }
+        onScaleChange(
+            editorSession.updateAdjustment(translation: value.translation.height, items: items))
     }
 
     private func releaseAdjustment() {
-        guard let adjustment, adjustment.isDragging else { return }
+        guard let adjustment = editorSession?.adjustment, adjustment.isDragging else { return }
         lastDragEnd = .now
         adjustment.release()
     }
@@ -233,7 +242,7 @@ struct Timeline: View {
         }
 
         let time = now.timeOfDay
-        let scale = allowsAdjustment ? adjustment?.scale(items, on: date) ?? scale : scale
+        let scale = allowsAdjustment ? editorSession?.scale(items, on: date) ?? scale : scale
         guard scale.showsTime(time) else {
             return nil
         }

@@ -9,6 +9,135 @@ import Testing
 
 @MainActor
 struct ScheduleEditorSessionTests {
+    @Test(arguments: [false, true])
+    func draftIdentityPreventsDraggingAnotherItem(unavailable: Bool) throws {
+        let start = try Date("2026-10-02T12:00:00Z", strategy: .iso8601)
+        try withDependencies {
+            $0.calendar = utcCalendar
+        } operation: {
+            let session = try editingSession(unavailable: unavailable, start: start)
+            let draft = session.preview
+            let other: TimelineItem =
+                switch draft.id {
+                case .appointment(let id):
+                    .unavailableTime(UnavailableTime(id: id, start: start, durationMinutes: 30))
+                case .unavailableTime(let id):
+                    .appointment(
+                        Appointment(
+                            id: id, patientName: "Other", start: start, durationMinutes: 30,
+                            status: .scheduled))
+                }
+            session.beginAdjustment(other, edge: .move, items: [draft, other])
+            session.updateAdjustment(translation: 15, items: [draft, other])
+            #expect(!session.adjustment.isDragging)
+            #expect(session.preview.id == draft.id)
+            #expect(session.preview.start == start)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func dateSelectionPreservesDraftAndMovesItBetweenPages(unavailable: Bool) throws {
+        let calendar = Calendar.autoupdatingCurrent
+        let start = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+            .setTime(14, 0, using: calendar)
+        let nextStart = start.date(byAddingDays: 1, using: calendar).setTime(14, 0, using: calendar)
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let session = try editingSession(unavailable: unavailable, start: start)
+            let original = session.preview
+            session.beginAdjustment(original, edge: .move, items: [original])
+            session.adjustment.release()
+            session.selectDate(nextStart)
+            #expect(session.preview.id == original.id)
+            #expect(session.preview.start == nextStart)
+            #expect(session.preview.durationMinutes == original.durationMinutes)
+            #expect(session.visibleItems([original], for: start).isEmpty)
+            #expect(session.visibleItems([], for: nextStart).map(\.id) == [original.id])
+            #expect(session.scale([], on: nextStart).isBreakExpanded)
+            #expect(!session.scale([], on: start).isBreakExpanded)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func dateSelectionKeepsClockTimeAcrossDaylightSavingChange(unavailable: Bool) throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "America/New_York"))
+        let start = try Date("2026-10-31T16:00:00Z", strategy: .iso8601)
+        let nextStart = try Date("2026-11-01T17:00:00Z", strategy: .iso8601)
+        try withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let session = try editingSession(unavailable: unavailable, start: start)
+            session.selectDate(nextStart)
+            #expect(session.preview.start == nextStart)
+            #expect(session.preview.durationMinutes == 45)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func nextGestureUsesDraftControlAndMetadataChanges(unavailable: Bool) throws {
+        let start = try Date("2026-10-02T12:00:00Z", strategy: .iso8601)
+        let selectedStart = try Date("2026-10-02T16:00:00Z", strategy: .iso8601)
+        try withDependencies {
+            $0.calendar = utcCalendar
+        } operation: {
+            let session = try editingSession(unavailable: unavailable, start: start)
+            let staleItem = session.preview
+            session.beginAdjustment(staleItem, edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
+            session.adjustment.release()
+            let patient = Patient(name: "Changed patient", createdDate: start)
+            let conflict = Appointment(
+                patientName: "Other", start: selectedStart, durationMinutes: 60,
+                status: .scheduled)
+            switch session.editor {
+            case .appointment(let model):
+                model.selectPatient(patient)
+                model.selectStart(selectedStart)
+                model.selectDuration(45)
+                model.updateAppointments([conflict], for: start)
+            case .unavailableTime(let model):
+                model.draft.label = "Changed label"
+                model.finishLabelEntry()
+                model.selectStart(selectedStart)
+                model.selectDuration(45)
+                #expect(model.hasUnsavedChanges)
+            }
+            #expect(session.preview.start == selectedStart)
+            #expect(session.preview.durationMinutes == 45)
+            session.beginAdjustment(staleItem, edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
+            #expect(session.preview.start == selectedStart.addingTimeInterval(15 * 60))
+            #expect(session.preview.durationMinutes == 45)
+            switch session.preview {
+            case .appointment(let appointment):
+                #expect(appointment.patientName == patient.displayName)
+            case .unavailableTime(let block):
+                #expect(block.label == "Changed label")
+            }
+        }
+    }
+
+    private func editingSession(unavailable: Bool, start: Date) throws -> ScheduleEditorSession {
+        let request: AppPresentation =
+            unavailable
+            ? .unavailableTimeEditor(
+                UnavailableTimeEditorRequest(
+                    purpose: .edit(
+                        UnavailableTime(label: "Travel", start: start, durationMinutes: 45))))
+            : .appointmentEdit(
+                AppointmentEditRequest(
+                    details: AppointmentDetails(
+                        appointment: Appointment(
+                            patientName: "Patient", start: start, durationMinutes: 45,
+                            status: .scheduled),
+                        patient: Patient(name: "Patient", createdDate: start))))
+        return try #require(
+            ScheduleEditorSession(
+                request: request, selectedDate: start, appointments: [], onFinished: { _ in }))
+    }
+
     @Test func initialHoldUsesItsOwnAdjustmentAndDoneRequiresPatientSelection() async throws {
         let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
         await withDependencies {
@@ -65,8 +194,8 @@ struct ScheduleEditorSessionTests {
                     request: request, selectedDate: date, appointments: []
                 ) { finishedDates.append($0) })
             session.isShowingSheet = false
-            session.adjustment.begin(session.preview, edge: .move, items: [])
-            session.adjustment.update(translation: 15, items: [])
+            session.beginAdjustment(session.preview, edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
             let preview = session.preview
             let table = unavailable ? "unavailableTimes" : "appointments"
             try await database.write { db in
@@ -78,7 +207,6 @@ struct ScheduleEditorSessionTests {
             }
             await session.save()
             #expect(!session.adjustment.isDragging)
-            #expect(session.adjustment.preview != nil)
             #expect(session.preview.id == preview.id)
             #expect(session.preview.start == preview.start)
             #expect(session.preview.durationMinutes == preview.durationMinutes)
@@ -137,13 +265,12 @@ struct ScheduleEditorSessionTests {
                     ),
                     selectedDate: date, appointments: [appointment]
                 ) { _ in didFinish = true })
-            session.adjustment.begin(session.preview, edge: .move, items: [])
-            session.adjustment.update(translation: 15, items: [])
+            session.beginAdjustment(session.preview, edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
             let preview = session.preview
             await session.save()
             #expect(!didFinish)
             #expect(session.errorMessage == "This appointment can no longer be edited.")
-            #expect(session.adjustment.preview != nil)
             #expect(session.preview.start == preview.start)
             let record = try #require(
                 try await database.read { try AppointmentRecord.find(appointment.id).fetchOne($0) })
@@ -178,8 +305,8 @@ struct ScheduleEditorSessionTests {
                 ) { finishedDates.append($0) })
             #expect(session.canDelete)
             session.selectDate(nextDate)
-            session.adjustment.begin(session.preview, edge: .move, items: [])
-            session.adjustment.update(translation: 15, items: [])
+            session.beginAdjustment(session.preview, edge: .move, items: [])
+            session.updateAdjustment(translation: 15, items: [])
             await session.delete()
             #expect(!session.adjustment.isDragging)
             #expect(finishedDates == [nextDate])
@@ -200,7 +327,6 @@ struct ScheduleEditorSessionTests {
                         UnavailableTimeEditorRequest(
                             purpose: editing ? .edit(block) : .create)),
                     selectedDate: start, appointments: [], onFinished: { _ in }))
-            #expect(session.adjustment.preview != nil)
             #expect(session.isShowingSheet == !editing)
             #expect(session.preview.durationMinutes == 60)
             if !editing {
@@ -209,7 +335,6 @@ struct ScheduleEditorSessionTests {
             }
             session.isShowingSheet = false
             #expect(!session.isShowingSheet)
-            #expect(session.adjustment.preview != nil)
         }
     }
 

@@ -3,7 +3,7 @@ import Dependencies
 import Foundation
 import Observation
 
-/// Gesture release and date selection change only the preview in memory.
+/// Gestures change only the editor's draft in memory.
 /// The editor owns saving and errors.
 @MainActor @Observable
 final class TimelineAdjustment {
@@ -11,7 +11,6 @@ final class TimelineAdjustment {
 
     @ObservationIgnored @Dependency(\.calendar) private var calendar
     private(set) var original: TimelineItem?
-    private(set) var preview: TimelineItem?
     private(set) var edge: Edge = .move
     private(set) var isDragging = false
     private(set) var hoverRequest: UUID?
@@ -19,27 +18,23 @@ final class TimelineAdjustment {
     private var anchorY: CGFloat = 0
     private var translation: CGFloat = 0
 
-    func select(_ item: TimelineItem) {
-        guard !isDragging else { return }
-        preview = item
-    }
-
-    func items(_ items: [TimelineItem], on date: Date? = nil) -> [TimelineItem] {
-        guard let preview else { return items }
-        let date = date ?? items.first?.start ?? preview.start
-        var items = items.filter { $0.id != preview.id }
-        if calendar.isDate(preview.start, inSameDayAs: date) {
-            items.append(preview)
+    func items(_ items: [TimelineItem], draft: TimelineItem, on date: Date? = nil) -> [TimelineItem]
+    {
+        let date = date ?? items.first?.start ?? draft.start
+        var items = items.filter { $0.id != draft.id }
+        if calendar.isDate(draft.start, inSameDayAs: date) {
+            items.append(draft)
         }
         return items
     }
 
-    func scale(_ items: [TimelineItem], on date: Date? = nil) -> TimelineScale {
-        let displayed = self.items(items, on: date)
+    func scale(_ items: [TimelineItem], draft: TimelineItem, on date: Date? = nil) -> TimelineScale
+    {
+        let displayed = self.items(items, draft: draft, on: date)
         guard isDragging,
-            displayed.contains(where: { $0.id == preview?.id })
+            displayed.contains(where: { $0.id == draft.id })
         else { return TimelineScale(items: displayed) }
-        let others = displayed.filter { $0.id != preview?.id }
+        let others = displayed.filter { $0.id != draft.id }
         return TimelineScale(
             items: others,
             breakPresentation: expanded || TimelineScale(items: others).isBreakExpanded
@@ -48,32 +43,30 @@ final class TimelineAdjustment {
     }
 
     func begin(_ item: TimelineItem, edge: Edge, items: [TimelineItem]) {
-        guard !isDragging,
-            item.allowsAdjustment,
-            preview == nil || preview?.id == item.id
-        else { return }
-        let item = preview ?? item
+        guard !isDragging, item.allowsAdjustment else { return }
         original = item
-        preview = item
         self.edge = edge
         expanded = TimelineScale(items: items).isBreakExpanded
         let time =
             edge == .duration
             ? TimeOfDay(date: item.start, calendar: calendar) + item.durationMinutes
             : TimeOfDay(date: item.start, calendar: calendar)
-        anchorY = scale(items).yOffset(for: time)
+        anchorY = scale(items, draft: item).yOffset(for: time)
         translation = 0
         isDragging = true
     }
 
     /// Return a scroll correction so a scale change does not move the card away from the finger.
     @discardableResult
-    func update(translation: CGFloat, items: [TimelineItem]) -> CGFloat {
+    func update(_ draft: inout TimelineItem, translation: CGFloat, items: [TimelineItem]) -> CGFloat
+    {
         // A tap can reopen label or patient selection. Keep stored times exact until movement.
-        guard isDragging, translation != 0 || self.translation != 0 else { return 0 }
+        guard isDragging, original?.id == draft.id,
+            translation != 0 || self.translation != 0
+        else { return 0 }
         self.translation = translation
-        let oldScale = scale(items)
-        updatePreview(scale: oldScale)
+        let oldScale = scale(items, draft: draft)
+        updateDraft(&draft, scale: oldScale)
         let y = anchorY + translation
         let breakY = oldScale.yOffset(for: Bitehaus.break.start)
         let overBreak = y >= breakY && y < breakY + oldScale.breakHeight
@@ -82,22 +75,22 @@ final class TimelineAdjustment {
         } else {
             hoverRequest = nil
         }
-        if expanded, !overBreak, let preview,
+        if expanded, !overBreak,
             !(Bitehaus.break.start..<Bitehaus.break.end).contains(
-                TimeOfDay(date: preview.start, calendar: calendar))
+                TimeOfDay(date: draft.start, calendar: calendar))
         {
             expanded = false
-            return rebase(from: oldScale, items: items)
+            return rebase(from: oldScale, draft: draft, items: items)
         }
         return 0
     }
 
-    func expandBreak(items: [TimelineItem]) -> CGFloat {
+    func expandBreak(draft: TimelineItem, items: [TimelineItem]) -> CGFloat {
         guard isDragging, hoverRequest != nil else { return 0 }
-        let oldScale = scale(items)
+        let oldScale = scale(items, draft: draft)
         expanded = true
         hoverRequest = nil
-        return rebase(from: oldScale, items: items)
+        return rebase(from: oldScale, draft: draft, items: items)
     }
 
     func release() {
@@ -106,38 +99,19 @@ final class TimelineAdjustment {
         original = nil
     }
 
-    func finish() {
-        preview = nil
-        original = nil
-        isDragging = false
-        hoverRequest = nil
-    }
-
-    func selectDate(_ date: Date) -> TimelineItem? {
-        guard let preview,
-            !calendar.isDate(preview.start, inSameDayAs: date)
-        else { return nil }
-        self.preview = preview.rescheduled(
-            start: TimeOfDay(date: preview.start, calendar: calendar).on(
-                date: date, using: calendar),
-            durationMinutes: preview.durationMinutes)
-        hoverRequest = nil
-        isDragging = false
-        return self.preview
-    }
-
-    private func rebase(from oldScale: TimelineScale, items: [TimelineItem]) -> CGFloat {
-        guard let preview else { return 0 }
+    private func rebase(from oldScale: TimelineScale, draft: TimelineItem, items: [TimelineItem])
+        -> CGFloat
+    {
         let time =
             edge == .duration
-            ? TimeOfDay(date: preview.start, calendar: calendar) + preview.durationMinutes
-            : TimeOfDay(date: preview.start, calendar: calendar)
-        let delta = scale(items).yOffset(for: time) - oldScale.yOffset(for: time)
+            ? TimeOfDay(date: draft.start, calendar: calendar) + draft.durationMinutes
+            : TimeOfDay(date: draft.start, calendar: calendar)
+        let delta = scale(items, draft: draft).yOffset(for: time) - oldScale.yOffset(for: time)
         anchorY += delta
         return delta
     }
 
-    private func updatePreview(scale: TimelineScale) {
+    private func updateDraft(_ draft: inout TimelineItem, scale: TimelineScale) {
         guard let original else { return }
         let proposed = scale.time(at: anchorY + translation).totalMinutes
         let snapped = Int((Double(proposed) / 5).rounded()) * 5
@@ -154,7 +128,7 @@ final class TimelineAdjustment {
             start = originalStart
             end = min(max(snapped, originalStart + 15), Bitehaus.closing.totalMinutes)
         }
-        preview = original.rescheduled(
+        draft = draft.rescheduled(
             start: TimeOfDay(start / 60, start % 60).on(date: original.start, using: calendar),
             durationMinutes: end - start)
     }

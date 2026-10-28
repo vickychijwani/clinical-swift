@@ -83,57 +83,40 @@ final class UnavailableTimeEditorModel: Identifiable {
     }
 
     var isWorking: Bool { isSaving || isDeleting }
-    var hasUnsavedChanges: Bool {
-        UnavailableTimeDraft(
-            label: draft.label, start: preview.start, durationMinutes: preview.durationMinutes)
-            != originalDraft
-    }
-    var selectedDate: Date { calendar.startOfDay(for: preview.start) }
+    var hasUnsavedChanges: Bool { draft != originalDraft }
+    var selectedDate: Date { calendar.startOfDay(for: draft.start) }
     var preview: UnavailableTime {
         UnavailableTime(
-            id: blockID, label: draft.label, start: adjustment.preview?.start ?? draft.start,
-            durationMinutes: adjustment.preview?.durationMinutes ?? draft.durationMinutes
+            id: blockID, label: draft.label, start: draft.start,
+            durationMinutes: draft.durationMinutes
         )
-    }
-
-    func startTimelineEditing() {
-        adjustment.select(.unavailableTime(preview))
     }
 
     func finishLabelEntry() {
         guard !isWorking else { return }
-        applyTimelinePreview()
-        adjustment.select(.unavailableTime(draftBlock))
         isEditingLabel = false
     }
 
     func selectDate(_ date: Date) {
-        guard !calendar.isDate(date, inSameDayAs: preview.start), !isWorking else { return }
-        if adjustment.preview != nil {
-            _ = adjustment.selectDate(date)
-            applyTimelinePreview()
-        } else {
-            draft.move(to: date)
-        }
+        guard !calendar.isDate(date, inSameDayAs: draft.start), !isWorking else { return }
+        adjustment.release()
+        draft.start = TimeOfDay(date: draft.start, calendar: calendar).on(
+            date: date, using: calendar)
         draftPreviewScrollRequest += 1
     }
 
     func selectStart(_ start: Date) {
         guard !isWorking else { return }
-        applyTimelinePreview()
         let date = selectedDate
         draft.start = start
         draft.move(to: date)
-        if adjustment.preview != nil { adjustment.select(.unavailableTime(draftBlock)) }
         draftPreviewScrollRequest += 1
     }
 
     func selectDuration(_ minutes: Int) {
         guard !isWorking else { return }
-        applyTimelinePreview()
         draft.durationMinutes = minutes
         draft.move(to: selectedDate)
-        if adjustment.preview != nil { adjustment.select(.unavailableTime(draftBlock)) }
         draftPreviewScrollRequest += 1
     }
 
@@ -143,7 +126,6 @@ final class UnavailableTimeEditorModel: Identifiable {
         isSaving = true
         defer { isSaving = false }
         errorMessage = nil
-        applyTimelinePreview()
         do {
             try draft.validate()
             let record = UnavailableTimeRecord(
@@ -204,17 +186,6 @@ final class UnavailableTimeEditorModel: Identifiable {
         }
     }
 
-    private var draftBlock: UnavailableTime {
-        UnavailableTime(
-            id: blockID, label: draft.label, start: draft.start,
-            durationMinutes: draft.durationMinutes)
-    }
-
-    private func applyTimelinePreview() {
-        guard let preview = adjustment.preview else { return }
-        draft.start = preview.start
-        draft.durationMinutes = preview.durationMinutes
-    }
 }
 
 nonisolated enum UnavailableTimeEditorPurpose: Sendable {

@@ -10,9 +10,9 @@ struct ScheduleTimelinePage: View {
     let onSelectItem: (TimelineItem) -> Void
     let onSelectDraft: () -> Void
     let allowsAdjustment: Bool
-    let adjustment: TimelineAdjustment?
+    let editorSession: ScheduleEditorSession?
     let isWorking: Bool
-    let onBeginBooking: (TimeOfDay) -> TimelineAdjustment?
+    let onBeginBooking: (TimeOfDay) -> ScheduleEditorSession?
     let onBookingRelease: (TimelineAdjustment) -> Void
     let onCancel: () -> Void
     let onDiscard: () -> Void
@@ -49,7 +49,7 @@ struct ScheduleTimelinePage: View {
                     onDone: onDone,
                     onDelete: onDelete,
                     date: date,
-                    adjustment: adjustment,
+                    editorSession: editorSession,
                     isWorking: isWorking
                 )
 
@@ -72,8 +72,8 @@ struct ScheduleTimelinePage: View {
                 self.pendingScrollY = nil
             }
         }
-        .onChange(of: adjustment?.preview != nil, initial: true) {
-            needsAdjustmentClearance = adjustment?.preview != nil
+        .onChange(of: editorSession != nil, initial: true) {
+            needsAdjustmentClearance = editorSession != nil
         }
         .scrollDisabled(isDragging)
         .onScrollGeometryChange(for: CGFloat.self) {

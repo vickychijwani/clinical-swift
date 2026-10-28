@@ -52,7 +52,7 @@ struct ScheduleView: View {
                         $0.allowsDateSelection && !$0.isShowingSheet
                     }
                         ?? !hasEditor,
-                    adjustment: editorSession?.adjustment,
+                    editorSession: editorSession,
                     isWorking: editorSession?.isWorking == true,
                     onBeginBooking: { beginBooking(center: $0, on: date) },
                     onBookingRelease: { released in
@@ -269,7 +269,7 @@ struct ScheduleView: View {
         }
     }
 
-    private func beginBooking(center: TimeOfDay, on date: Date) -> TimelineAdjustment? {
+    private func beginBooking(center: TimeOfDay, on date: Date) -> ScheduleEditorSession? {
         guard !hasEditor,
             date.isSameDayAs(router.selectedScheduleDate)
         else { return nil }
@@ -281,7 +281,7 @@ struct ScheduleView: View {
         ) { savedDate in
             finishEditor(request.id, date: savedDate)
         }
-        return editorSession?.adjustment
+        return editorSession
     }
 
     private func deleteEditor() async {

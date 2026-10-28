@@ -22,11 +22,7 @@ import SQLiteData
     /// editing starts, manual choices also stay fixed across date and schedule changes.
     private var automaticallyPrefills: Bool
 
-    var selectedDate: Date {
-        didSet {
-            draft.selectDate(selectedDate)
-        }
-    }
+    var selectedDate: Date { draft.selectedDate }
 
     var draft: AppointmentBookingDraft
     private(set) var appointments: [Appointment] = []
@@ -44,13 +40,11 @@ import SQLiteData
         self.isSelectingPatient = selectedPatient == nil
         self.draftAppointmentID = UUID()
         self.automaticallyPrefills = true
-        self.selectedDate = selectedDate
         self.draft = AppointmentBookingDraft(
             selectedPatient: selectedPatient,
             selectedDate: selectedDate
         )
         self.onSaved = onSaved
-        self.selectedDate = draft.selectedDate
     }
 
     init(
@@ -62,7 +56,6 @@ import SQLiteData
         self.isSelectingPatient = false
         self.draftAppointmentID = appointment.id
         self.automaticallyPrefills = false
-        self.selectedDate = appointment.start
         self.draft = AppointmentBookingDraft(
             selectedPatient: details.patient,
             selectedDate: appointment.start,
@@ -70,22 +63,20 @@ import SQLiteData
             durationMinutes: appointment.durationMinutes
         )
         self.onSaved = onSaved
-        self.selectedDate = draft.selectedDate
     }
 
     var draftAppointment: Appointment {
         Appointment(
             id: draftAppointmentID,
             patientName: draft.selectedPatient?.displayName ?? "<Select a patient>",
-            start: adjustment.preview?.start ?? draft.start,
-            durationMinutes: adjustment.preview?.durationMinutes ?? draft.durationMinutes,
+            start: draft.start,
+            durationMinutes: draft.durationMinutes,
             status: .draft
         )
     }
 
     func startTimelineEditing() {
         automaticallyPrefills = false
-        adjustment.select(.appointment(draftAppointment))
     }
 
     func beginTimelineBooking(center: TimeOfDay, items: [TimelineItem]) {
@@ -109,7 +100,6 @@ import SQLiteData
     func selectPatient(_ patient: Patient) {
         draft.selectedPatient = patient
         searchText = ""
-        adjustment.select(.appointment(draftAppointment))
         isSelectingPatient = false
     }
 
@@ -121,10 +111,8 @@ import SQLiteData
         }
 
         appointments = []
-        automaticallyPrefills = adjustment.preview == nil
-        self.selectedDate = normalizedDate
-        _ = adjustment.selectDate(normalizedDate)
-        applyTimelinePreview()
+        adjustment.release()
+        draft.selectDate(normalizedDate)
     }
 
     func selectStart(_ start: Date) {
@@ -136,8 +124,9 @@ import SQLiteData
     func selectDuration(_ durationMinutes: Int) {
         let previousStart = draft.start
         draft.selectDuration(durationMinutes)
-        automaticallyPrefills = true
-        prefillFirstAvailableSlot(preservingStartIfAvailable: draft.start)
+        if automaticallyPrefills {
+            prefillFirstAvailableSlot(preservingStartIfAvailable: draft.start)
+        }
         requestDraftPreviewScrollIfNeeded(previousStart: previousStart)
     }
 
@@ -171,7 +160,6 @@ import SQLiteData
         guard !isSaving, !adjustment.isDragging else { return false }
         isSaving = true
         defer { isSaving = false }
-        applyTimelinePreview()
         do {
             try draft.normalized.validate()
             // Reset error message
@@ -244,12 +232,6 @@ import SQLiteData
                 }
             return false
         }
-    }
-
-    private func applyTimelinePreview() {
-        guard let preview = adjustment.preview else { return }
-        draft.start = preview.start
-        draft.durationMinutes = preview.durationMinutes
     }
 
     private var availability: AppointmentAvailability {

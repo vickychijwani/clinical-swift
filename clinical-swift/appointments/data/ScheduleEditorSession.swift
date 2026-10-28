@@ -55,9 +55,6 @@ struct ScheduleEditorSession: Identifiable {
                     UnavailableTimeEditorModel(
                         id: request.id, editing: block, onFinished: onFinished))
             }
-            if case .unavailableTime(let model) = editor {
-                model.startTimelineEditing()
-            }
         default:
             return nil
         }
@@ -142,6 +139,37 @@ struct ScheduleEditorSession: Identifiable {
         case .unavailableTime(let model): revision = model.draftPreviewScrollRequest
         }
         return ScheduleEditorScrollRequest(sessionID: id, date: selectedDate, revision: revision)
+    }
+
+    func beginAdjustment(_ item: TimelineItem, edge: TimelineAdjustment.Edge, items: [TimelineItem])
+    {
+        guard !isWorking, item.id == preview.id else { return }
+        adjustment.begin(preview, edge: edge, items: items)
+    }
+
+    @discardableResult
+    func updateAdjustment(translation: CGFloat, items: [TimelineItem]) -> CGFloat {
+        guard !isWorking else { return 0 }
+        var draft = preview
+        let correction = adjustment.update(&draft, translation: translation, items: items)
+        // Keep gesture changes in the editor draft. Only Done writes them to storage.
+        switch editor {
+        case .appointment(let model):
+            model.draft.start = draft.start
+            model.draft.durationMinutes = draft.durationMinutes
+        case .unavailableTime(let model):
+            model.draft.start = draft.start
+            model.draft.durationMinutes = draft.durationMinutes
+        }
+        return correction
+    }
+
+    func expandBreak(items: [TimelineItem]) -> CGFloat {
+        adjustment.expandBreak(draft: preview, items: items)
+    }
+
+    func scale(_ items: [TimelineItem], on date: Date) -> TimelineScale {
+        adjustment.scale(items, draft: preview, on: date)
     }
 
     func selectDate(_ date: Date) {
