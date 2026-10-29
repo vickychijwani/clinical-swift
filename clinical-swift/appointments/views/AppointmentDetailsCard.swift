@@ -54,6 +54,7 @@ struct AppointmentDetailsSummary: View {
 
     var body: some View {
         HStack(alignment: .center) {
+            var statusColor = palette[statusPresentation.statusColor]
             Image(systemName: statusPresentation.systemImage)
                 .font(.system(size: 32))
                 .frame(width: 32, height: 32)
@@ -74,7 +75,7 @@ struct AppointmentDetailsSummary: View {
                 Text(formattedTimeRange)
                     .font(.title3)
                     .bold()
-                    .foregroundStyle(timeColor)
+                    .foregroundStyle(palette[statusPresentation.timeColor])
             }
         }
     }
@@ -101,26 +102,6 @@ struct AppointmentDetailsSummary: View {
 
     private var statusPresentation: AppointmentStatusPresentation {
         AppointmentStatusPresentation(status: appointment.status)
-    }
-
-    private var statusColor: Color {
-        switch statusPresentation.treatment {
-        case .active:
-            palette[.success]
-        case .accent:
-            palette[.accent]
-        case .muted:
-            palette[.secondaryText]
-        }
-    }
-
-    private var timeColor: Color {
-        switch statusPresentation.treatment {
-        case .active, .accent:
-            palette[.text]
-        case .muted:
-            palette[.secondaryText]
-        }
     }
 }
 

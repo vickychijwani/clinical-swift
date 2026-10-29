@@ -82,20 +82,20 @@ nonisolated struct AppPalette: Equatable {
         case .surface: Color("LabAdaptiveWhiteBlack")
         case .text: .primary
         case .secondaryText, .icon: .secondary
-        case .tertiaryText: .primary.opacity(0.3)
+        case .tertiaryText: .primary.mixWithCanvas(0.3)
         case .border: self[.text].opacity(0.12)
-        case .card, .activeCard: Color("LabAdaptiveWhiteBlack")
-        case .cardBorder: .gray.opacity(0.15)
-        case .completedCard: Color("AppCanvas").mix(with: .green, by: 0.05, in: .device)
-        case .completedBorder: Color("AppCanvas").mix(with: .green, by: 0.2, in: .device)
-        case .activeBorder: self[.accent].opacity(0.7)
+        case .card, .activeCard: Color("Card")
+        case .cardBorder: .gray.mixWithCanvas(0.15)
+        case .completedCard: .green.mixWithCanvas(0.05)
+        case .completedBorder: .green.mixWithCanvas(0.2)
+        case .activeBorder: .accentColor.mixWithCanvas(0.7)
         case .cardIcon: self[.time]
         case .time, .unavailableTime: Color(red: 0.46, green: 0.49, blue: 0.47)
-        case .unavailable: Color("AppCanvas").mix(with: .red, by: 0.05, in: .device)
-        case .unavailableBorder: Color("AppCanvas").mix(with: .red, by: 0.2, in: .device)
+        case .unavailable: .red.mixWithCanvas(0.05)
+        case .unavailableBorder: .red.mixWithCanvas(0.2)
         case .unavailableLabel: .primary
-        case .grid: .gray.opacity(0.15)
-        case .breakStripe: .gray.opacity(0.12)
+        case .grid: .gray.mixWithCanvas(0.15)
+        case .breakStripe: .gray.mixWithCanvas(0.12)
         case .hour: .gray
         case .now: self[.accent]
         case .success: .green
@@ -104,6 +104,12 @@ nonisolated struct AppPalette: Equatable {
         case .onAccent, .highlight: .white
         case .shadow: .black
         }
+    }
+}
+
+nonisolated extension Color {
+    fileprivate func mixWithCanvas(_ strength: Double) -> Color {
+        Color("AppCanvas").mix(with: self, by: strength, in: .device)
     }
 }
 

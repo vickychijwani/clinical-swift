@@ -151,16 +151,20 @@ struct PatientAppointmentTimelineTests {
 
         #expect(scheduled.label == "Scheduled")
         #expect(scheduled.systemImage == "clock")
-        #expect(scheduled.treatment == .active)
+        #expect(scheduled.statusColor == .accent)
+        #expect(scheduled.timeColor == .text)
         #expect(completed.label == "Completed")
         #expect(completed.systemImage == "checkmark.circle")
-        #expect(completed.treatment == .muted)
+        #expect(completed.statusColor == .success)
+        #expect(completed.timeColor == .secondaryText)
         #expect(draft.label == "Draft")
         #expect(draft.systemImage == "clock")
-        #expect(draft.treatment == .accent)
+        #expect(draft.statusColor == .accent)
+        #expect(draft.timeColor == .text)
         #expect(cancelled.label == "Cancelled")
         #expect(cancelled.systemImage == "xmark.circle")
-        #expect(cancelled.treatment == .muted)
+        #expect(cancelled.statusColor == .secondaryText)
+        #expect(cancelled.timeColor == .secondaryText)
     }
 
     @Test func navigationTitleChangesWhenThePatientNameLeavesTheViewport() {

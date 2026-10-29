@@ -122,19 +122,20 @@ import Testing
                     == .init(red: 1, green: 0, blue: 0))
         }
 
-        @Test func defaultAccentRolesFollowAccentUntilOverridden() {
+        @Test func accentOverridesAffectNowMarkerButLeaveDefaultActiveBorderUnchanged() {
             var palette = AppPalette()
+            let activeBorder = Color("AppCanvas").mix(with: .accentColor, by: 0.7, in: .device)
             #expect(palette[.now] == .accentColor)
             palette.overrides[.accent] = .purple
             #expect(palette[.now] == .purple)
-            #expect(palette[.activeCard] == Color("LabAdaptiveWhiteBlack"))
-            #expect(palette[.activeBorder] == Color.purple.opacity(0.7))
+            #expect(palette[.activeCard] == Color("Card"))
+            #expect(palette[.activeBorder] == activeBorder)
             palette.overrides[.activeBorder] = .blue
             #expect(palette[.activeBorder] == .blue)
             palette.overrides[.accent] = .green
             #expect(palette[.activeBorder] == .blue)
             palette.overrides.removeValue(forKey: .activeBorder)
-            #expect(palette[.activeBorder] == Color.green.opacity(0.7))
+            #expect(palette[.activeBorder] == activeBorder)
         }
     }
 #endif

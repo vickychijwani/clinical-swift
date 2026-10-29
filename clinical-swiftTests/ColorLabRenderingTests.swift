@@ -41,13 +41,14 @@ struct ColorLabRenderingTests {
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
-    func defaultsMatchOriginalStyles(scheme: ColorScheme) throws {
+    func defaultsMatchExpectedStyles(scheme: ColorScheme) throws {
+        let canvas =
+            scheme == .light
+            ? Color(.sRGB, red: 249.0 / 255, green: 249.0 / 255, blue: 250.0 / 255)
+            : Color(.sRGB, red: 9.0 / 255, green: 9.0 / 255, blue: 11.0 / 255)
         #expect(
             try pixels(Rectangle().fill(AppColor.canvas), scheme: scheme)
-                == pixels(
-                    Rectangle().fill(
-                        Color(.sRGB, red: 249.0 / 255, green: 249.0 / 255, blue: 250.0 / 255)),
-                    scheme: scheme))
+                == pixels(Rectangle().fill(canvas), scheme: scheme))
         #expect(
             try pixels(Rectangle().fill(Color("AccentColor")), scheme: scheme)
                 == pixels(
@@ -125,17 +126,24 @@ struct ColorLabRenderingTests {
         case .secondaryText, .icon: AnyShapeStyle(.secondary)
         case .tertiaryText: AnyShapeStyle(.tertiary)
         case .border: AnyShapeStyle(.primary.opacity(0.12))
-        case .card, .activeCard: AnyShapeStyle(Color("LabAdaptiveWhiteBlack"))
-        case .cardBorder, .grid: AnyShapeStyle(Color.gray.opacity(0.15))
-        case .completedCard: AnyShapeStyle(Color(red: 0.95, green: 0.95, blue: 0.95))
-        case .completedBorder: AnyShapeStyle(Color.gray.opacity(0.1))
-        case .activeBorder: AnyShapeStyle(Color.accentColor.opacity(0.7))
-        case .time, .cardIcon: AnyShapeStyle(Color(red: 0.46, green: 0.49, blue: 0.47))
-        case .unavailable: AnyShapeStyle(Color("UnavailableTimeBackground"))
-        case .unavailableBorder: AnyShapeStyle(Color("UnavailableTimeBorder"))
-        case .unavailableTime: AnyShapeStyle(Color("UnavailableTimeTime"))
-        case .unavailableLabel: AnyShapeStyle(Color("UnavailableTimeLabel"))
-        case .breakStripe: AnyShapeStyle(Color.gray.opacity(0.12))
+        case .card, .activeCard: AnyShapeStyle(Color("Card"))
+        case .cardBorder, .grid:
+            AnyShapeStyle(Color("AppCanvas").mix(with: .gray, by: 0.15, in: .device))
+        case .completedCard:
+            AnyShapeStyle(Color("AppCanvas").mix(with: .green, by: 0.05, in: .device))
+        case .completedBorder:
+            AnyShapeStyle(Color("AppCanvas").mix(with: .green, by: 0.2, in: .device))
+        case .activeBorder:
+            AnyShapeStyle(Color("AppCanvas").mix(with: .accentColor, by: 0.7, in: .device))
+        case .time, .cardIcon, .unavailableTime:
+            AnyShapeStyle(Color(red: 0.46, green: 0.49, blue: 0.47))
+        case .unavailable:
+            AnyShapeStyle(Color("AppCanvas").mix(with: .red, by: 0.05, in: .device))
+        case .unavailableBorder:
+            AnyShapeStyle(Color("AppCanvas").mix(with: .red, by: 0.2, in: .device))
+        case .unavailableLabel: AnyShapeStyle(Color.primary)
+        case .breakStripe:
+            AnyShapeStyle(Color("AppCanvas").mix(with: .gray, by: 0.12, in: .device))
         case .hour: AnyShapeStyle(Color.gray)
         case .now: AnyShapeStyle(Color.accentColor)
         case .success: AnyShapeStyle(Color.green)

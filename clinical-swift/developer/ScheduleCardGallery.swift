@@ -42,10 +42,10 @@
             }
             let date = Date.now
             let patients = [
-                Patient(name: "Completed · Anjali Desai", createdDate: date),
-                Patient(name: "Scheduled · Priya Narayanan", createdDate: date),
-                Patient(name: "Overlap · Kabir Malhotra", createdDate: date),
-                Patient(name: "Short · Meera Subramanian", createdDate: date),
+                Patient(name: "Anjali Desai", createdDate: date),
+                Patient(name: "Priya Narayanan", createdDate: date),
+                Patient(name: "Kabir Malhotra", createdDate: date),
+                Patient(name: "Meera Subramanian", createdDate: date),
             ]
             let appointments = [
                 Appointment(
@@ -63,7 +63,7 @@
             ]
             let blocks = [
                 UnavailableTime(
-                    label: "Unavailable · Travel", start: date.setTime(11, 30),
+                    label: "Travel", start: date.setTime(11, 30),
                     durationMinutes: 60),
                 UnavailableTime(start: date.setTime(12, 30), durationMinutes: 30),
             ]

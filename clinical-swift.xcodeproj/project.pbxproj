@@ -25,6 +25,24 @@
 		8BE2A0462FE0000000000005 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0362FE0000000000005 /* Perception */; };
 		8BE2A0472FE0000000000005 /* Sharing in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0372FE0000000000005 /* Sharing */; };
 		8BE2A0482FE0000000000005 /* StructuredQueriesSQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */; };
+		9852A7C230934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7C330934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7C430934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7C530934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7C630934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7C730934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7C830934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7C930934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7CA30934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		9852A7CB30934A9F006C0066 /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0202FE0000000000005 /* SQLiteData */; };
+		9852A7CC30934A9F006C0066 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0312FE0000000000005 /* GRDB */; };
+		9852A7CD30934A9F006C0066 /* ConcurrencyExtras in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0322FE0000000000005 /* ConcurrencyExtras */; };
+		9852A7CE30934A9F006C0066 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0332FE0000000000005 /* Dependencies */; };
+		9852A7CF30934A9F006C0066 /* IssueReporting in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0342FE0000000000005 /* IssueReporting */; };
+		9852A7D030934A9F006C0066 /* OrderedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0352FE0000000000005 /* OrderedCollections */; };
+		9852A7D130934A9F006C0066 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0362FE0000000000005 /* Perception */; };
+		9852A7D230934A9F006C0066 /* Sharing in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0372FE0000000000005 /* Sharing */; };
+		9852A7D330934A9F006C0066 /* StructuredQueriesSQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */; };
 		B2000000000000000000000C /* ClinicalWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ClinicalWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B2000000000000000000000F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0292FE0000000000005 /* GRDB */; };
 		B20000000000000000000010 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02B2FE0000000000005 /* Dependencies */; };
@@ -78,9 +96,9 @@
 /* Begin PBXFileReference section */
 		79438C432FD2D07100C0E6EF /* clinical-swift.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "clinical-swift.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		8BE2A0172FE0000000000005 /* clinical-swiftTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "clinical-swiftTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
-		D30000000000000000000005 /* clinical-swiftBackupTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "clinical-swiftBackupTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000001 /* clinical-swiftUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "clinical-swiftUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000001 /* ClinicalWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClinicalWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D30000000000000000000005 /* clinical-swiftBackupTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "clinical-swiftBackupTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -114,11 +132,6 @@
 			path = "clinical-swiftTests";
 			sourceTree = "<group>";
 		};
-		D30000000000000000000001 /* clinical-swiftBackupTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "clinical-swiftBackupTests";
-			sourceTree = "<group>";
-		};
 		A10000000000000000000002 /* clinical-swiftUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "clinical-swiftUITests";
@@ -135,6 +148,11 @@
 				B20000000000000000000011 /* Exceptions for "ClinicalWidget" folder in "ClinicalWidgetExtension" target */,
 			);
 			path = ClinicalWidget;
+			sourceTree = "<group>";
+		};
+		D30000000000000000000001 /* clinical-swiftBackupTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "clinical-swiftBackupTests";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -176,24 +194,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D30000000000000000000003 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				E40000000000000000000121 /* ClinicalPersistence in Frameworks */,
-				E40000000000000000000120 /* ClinicalModels in Frameworks */,
-				8BE2A01D2FE0000000000005 /* SQLiteData in Frameworks */,
-				8BE2A0412FE0000000000005 /* GRDB in Frameworks */,
-				8BE2A0422FE0000000000005 /* ConcurrencyExtras in Frameworks */,
-				8BE2A0432FE0000000000005 /* Dependencies in Frameworks */,
-				8BE2A0442FE0000000000005 /* IssueReporting in Frameworks */,
-				8BE2A0452FE0000000000005 /* OrderedCollections in Frameworks */,
-				8BE2A0462FE0000000000005 /* Perception in Frameworks */,
-				8BE2A0472FE0000000000005 /* Sharing in Frameworks */,
-				8BE2A0482FE0000000000005 /* StructuredQueriesSQLite in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		A10000000000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -208,6 +208,33 @@
 				E40000000000000000000130 /* ClinicalModels in Frameworks */,
 				B2000000000000000000000F /* GRDB in Frameworks */,
 				B20000000000000000000010 /* Dependencies in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9852A7CE30934A9F006C0066 /* Dependencies in Frameworks */,
+				9852A7CF30934A9F006C0066 /* IssueReporting in Frameworks */,
+				E40000000000000000000121 /* ClinicalPersistence in Frameworks */,
+				9852A7D030934A9F006C0066 /* OrderedCollections in Frameworks */,
+				9852A7D330934A9F006C0066 /* StructuredQueriesSQLite in Frameworks */,
+				E40000000000000000000120 /* ClinicalModels in Frameworks */,
+				9852A7C230934A9F006C0066 /* (null) in Frameworks */,
+				9852A7CD30934A9F006C0066 /* ConcurrencyExtras in Frameworks */,
+				9852A7C330934A9F006C0066 /* (null) in Frameworks */,
+				9852A7C430934A9F006C0066 /* (null) in Frameworks */,
+				9852A7CC30934A9F006C0066 /* GRDB in Frameworks */,
+				9852A7C530934A9F006C0066 /* (null) in Frameworks */,
+				9852A7CB30934A9F006C0066 /* SQLiteData in Frameworks */,
+				9852A7C630934A9F006C0066 /* (null) in Frameworks */,
+				9852A7C730934A9F006C0066 /* (null) in Frameworks */,
+				9852A7C830934A9F006C0066 /* (null) in Frameworks */,
+				9852A7D230934A9F006C0066 /* Sharing in Frameworks */,
+				9852A7D130934A9F006C0066 /* Perception in Frameworks */,
+				9852A7C930934A9F006C0066 /* (null) in Frameworks */,
+				9852A7CA30934A9F006C0066 /* (null) in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -312,40 +339,6 @@
 			productReference = 8BE2A0172FE0000000000005 /* clinical-swiftTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		D30000000000000000000006 /* clinical-swiftBackupTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = D30000000000000000000007 /* Build configuration list for PBXNativeTarget "clinical-swiftBackupTests" */;
-			buildPhases = (
-				D30000000000000000000002 /* Sources */,
-				D30000000000000000000003 /* Frameworks */,
-				D30000000000000000000004 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				8BE2A0162FE0000000000005 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				D30000000000000000000001 /* clinical-swiftBackupTests */,
-			);
-			name = "clinical-swiftBackupTests";
-			packageProductDependencies = (
-				E40000000000000000000002 /* ClinicalModels */,
-				E40000000000000000000003 /* ClinicalPersistence */,
-				8BE2A0202FE0000000000005 /* SQLiteData */,
-				8BE2A0312FE0000000000005 /* GRDB */,
-				8BE2A0322FE0000000000005 /* ConcurrencyExtras */,
-				8BE2A0332FE0000000000005 /* Dependencies */,
-				8BE2A0342FE0000000000005 /* IssueReporting */,
-				8BE2A0352FE0000000000005 /* OrderedCollections */,
-				8BE2A0362FE0000000000005 /* Perception */,
-				8BE2A0372FE0000000000005 /* Sharing */,
-				8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */,
-			);
-			productName = "clinical-swiftBackupTests";
-			productReference = D30000000000000000000005 /* clinical-swiftBackupTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 		A10000000000000000000008 /* clinical-swiftUITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000000000000000000009 /* Build configuration list for PBXNativeTarget "clinical-swiftUITests" */;
@@ -394,6 +387,40 @@
 			productName = ClinicalWidgetExtension;
 			productReference = B20000000000000000000001 /* ClinicalWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		D30000000000000000000006 /* clinical-swiftBackupTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D30000000000000000000007 /* Build configuration list for PBXNativeTarget "clinical-swiftBackupTests" */;
+			buildPhases = (
+				D30000000000000000000002 /* Sources */,
+				D30000000000000000000003 /* Frameworks */,
+				D30000000000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8BE2A0162FE0000000000005 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D30000000000000000000001 /* clinical-swiftBackupTests */,
+			);
+			name = "clinical-swiftBackupTests";
+			packageProductDependencies = (
+				E40000000000000000000002 /* ClinicalModels */,
+				E40000000000000000000003 /* ClinicalPersistence */,
+				8BE2A0202FE0000000000005 /* SQLiteData */,
+				8BE2A0312FE0000000000005 /* GRDB */,
+				8BE2A0322FE0000000000005 /* ConcurrencyExtras */,
+				8BE2A0332FE0000000000005 /* Dependencies */,
+				8BE2A0342FE0000000000005 /* IssueReporting */,
+				8BE2A0352FE0000000000005 /* OrderedCollections */,
+				8BE2A0362FE0000000000005 /* Perception */,
+				8BE2A0372FE0000000000005 /* Sharing */,
+				8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */,
+			);
+			productName = "clinical-swiftBackupTests";
+			productReference = D30000000000000000000005 /* clinical-swiftBackupTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -481,13 +508,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D30000000000000000000004 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		A10000000000000000000004 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -496,6 +516,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B20000000000000000000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000000000000000000004 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -519,13 +546,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D30000000000000000000002 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		A10000000000000000000005 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -534,6 +554,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B20000000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -771,34 +798,6 @@
 			};
 			name = Debug;
 		};
-		D30000000000000000000008 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = WM7GP7FBL7;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "in.bitehaus.clinical-swiftBackupTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(CLINICAL_INTERNAL_CONDITIONS)";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/clinical-swift.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/clinical-swift";
-			};
-			name = Debug;
-		};
 		8BE2A01B2FE0000000000005 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -816,34 +815,6 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "in.bitehaus.clinical-swiftTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/clinical-swift.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/clinical-swift";
-			};
-			name = Release;
-		};
-		D30000000000000000000009 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = WM7GP7FBL7;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "in.bitehaus.clinical-swiftBackupTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(CLINICAL_INTERNAL_CONDITIONS)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -974,6 +945,62 @@
 			};
 			name = Release;
 		};
+		D30000000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WM7GP7FBL7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "in.bitehaus.clinical-swiftBackupTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(CLINICAL_INTERNAL_CONDITIONS)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/clinical-swift.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/clinical-swift";
+			};
+			name = Debug;
+		};
+		D30000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WM7GP7FBL7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "in.bitehaus.clinical-swiftBackupTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(CLINICAL_INTERNAL_CONDITIONS)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/clinical-swift.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/clinical-swift";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1004,15 +1031,6 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D30000000000000000000007 /* Build configuration list for PBXNativeTarget "clinical-swiftBackupTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				D30000000000000000000008 /* Debug */,
-				D30000000000000000000009 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		A10000000000000000000009 /* Build configuration list for PBXNativeTarget "clinical-swiftUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1027,6 +1045,15 @@
 			buildConfigurations = (
 				B20000000000000000000009 /* Debug */,
 				B2000000000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D30000000000000000000007 /* Build configuration list for PBXNativeTarget "clinical-swiftBackupTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D30000000000000000000008 /* Debug */,
+				D30000000000000000000009 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1116,15 +1143,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		E40000000000000000000002 /* ClinicalModels */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = ClinicalModels;
-		};
-		E40000000000000000000003 /* ClinicalPersistence */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = ClinicalPersistence;
-		};
-
 		8BE2A01E2FE0000000000005 /* SQLiteData */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8BE2A01F2FE0000000000005 /* XCRemoteSwiftPackageReference "sqlite-data" */;
@@ -1214,6 +1232,14 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
 			productName = StructuredQueriesSQLite;
+		};
+		E40000000000000000000002 /* ClinicalModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ClinicalModels;
+		};
+		E40000000000000000000003 /* ClinicalPersistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ClinicalPersistence;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
