@@ -315,13 +315,6 @@ struct PersistenceTests {
         #expect(deletedAppointment == nil)
     }
 
-    private func testDatabase() throws -> DatabaseQueue {
-        let configuration = clinicalDatabaseConfiguration()
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
-    }
-
     private struct AppointmentSeed {
         let id: Appointment.ID
         let patientID: Patient.ID

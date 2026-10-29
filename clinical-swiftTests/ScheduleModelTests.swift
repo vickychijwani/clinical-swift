@@ -106,14 +106,6 @@ struct ScheduleModelTests {
         }
     }
 
-    private func testDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
-    }
-
     private struct AppointmentSeed {
         let id: Appointment.ID
         let start: Date

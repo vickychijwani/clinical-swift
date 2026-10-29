@@ -26,8 +26,7 @@ nonisolated enum PaymentsFixture {
     }
 
     static func database() throws -> DatabaseQueue {
-        let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
-        try migrateDatabase(database)
+        let database = try testDatabase()
         try database.write { db in
             for id in [patientID, otherPatientID] {
                 try PatientRecord.insert {

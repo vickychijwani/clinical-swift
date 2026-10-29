@@ -9,7 +9,7 @@ struct SampleCalendarSyncPersistenceTests {
     #if DEBUG
         @MainActor
         @Test func debugSamplesExistWithoutQueuedCalendarDelivery() throws {
-            let database = try migratedDatabase()
+            let database = try testDatabase()
 
             try database.seedSampleDataIfNeeded()
 
@@ -27,17 +27,4 @@ struct SampleCalendarSyncPersistenceTests {
             #expect(counts.blockDelivery == 0)
         }
     #endif
-
-    private func emptyDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
-        return try DatabaseQueue(configuration: configuration)
-    }
-
-    private func migratedDatabase() throws -> DatabaseQueue {
-        let database = try emptyDatabase()
-        try migrateDatabase(database)
-        return database
-    }
-
 }

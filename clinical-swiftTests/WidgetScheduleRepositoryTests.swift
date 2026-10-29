@@ -110,14 +110,6 @@ struct WidgetScheduleRepositoryTests {
         #expect(snapshot.nextRefreshDate(using: calendar) == appointment.end(using: calendar))
     }
 
-    private func testDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
-    }
-
     private func appointment(
         patientID: Patient.ID,
         start: String,

@@ -11,7 +11,7 @@ import Testing
 @MainActor
 struct UnavailableTimeTests {
     @Test func createEditDeleteKeepIdentityAndTimestamps() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
         try await withDependencies {
             $0.defaultDatabase = database
@@ -73,7 +73,7 @@ struct UnavailableTimeTests {
     }
 
     @Test func validationAllowsBreaksAndRejectsInvalidIntervals() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
         try await withDependencies {
             $0.defaultDatabase = database
@@ -97,7 +97,7 @@ struct UnavailableTimeTests {
     }
 
     @Test func missingRowsAndWriteFailuresKeepEditorOpen() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let start = try instant("2026-10-02T14:07:00Z")
         try await withDependencies {
             $0.defaultDatabase = database
@@ -138,8 +138,7 @@ struct UnavailableTimeTests {
         let start = try instant("2026-10-02T09:00:00Z")
         let id = UUID()
         do {
-            let database = try DatabaseQueue(path: url.path)
-            try migrateDatabase(database)
+            let database = try testDatabase(path: url.path)
             try database.write { db in
                 try UnavailableTimeRecord.insert {
                     UnavailableTimeRecord(
@@ -148,8 +147,7 @@ struct UnavailableTimeTests {
                 }.execute(db)
             }
         }
-        let reopened = try DatabaseQueue(path: url.path)
-        try migrateDatabase(reopened)
+        let reopened = try testDatabase(path: url.path)
         #expect(
             try reopened.read { db in try UnavailableTimeRecord.find(id).fetchOne(db)?.label }
                 == "Travel")
@@ -161,7 +159,7 @@ struct UnavailableTimeTests {
     }
 
     @Test func triggersPreserveLinksAndIgnoreTimestampOnlyUpdates() throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let start = try instant("2026-10-02T09:00:00Z")
         let id = UUID()
         try database.write { db in
@@ -209,7 +207,7 @@ struct UnavailableTimeTests {
     @Test(arguments: [(false, false), (true, false), (true, true)])
     func competingActionsAreRejectedWhileWriteIsPending(editing: Bool, deleting: Bool) async throws
     {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
         let block = UnavailableTime(label: "Travel", start: date, durationMinutes: 60)
         let gate = WriteGate()
@@ -277,7 +275,7 @@ struct UnavailableTimeTests {
     }
 
     @Test func failedEditAndDeleteKeepTheRowAndItsDeliveryRevision() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
         try await withDependencies {
             $0.defaultDatabase = database
@@ -353,11 +351,6 @@ struct UnavailableTimeTests {
             throw UnavailableTimeError.missingRecord
         }
         return model
-    }
-    private func makeDatabase() throws -> DatabaseQueue {
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
-        return database
     }
 
     // SQLite calls this gate synchronously. Protect its state across the database and test tasks.

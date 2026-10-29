@@ -11,7 +11,7 @@ import Testing
 struct ScheduleEditorSessionTests {
     @Test(arguments: [false, true])
     func concurrentSavesFinishOnceAndPreventFurtherChanges(unavailable: Bool) async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
@@ -251,7 +251,7 @@ struct ScheduleEditorSessionTests {
 
     @Test(arguments: [false, true])
     func saveReleasesDragAndKeepsFailedPreviewForRetry(unavailable: Bool) async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
@@ -316,7 +316,7 @@ struct ScheduleEditorSessionTests {
     func editingTerminalAppointmentKeepsPreviewAndReportsError(status: Appointment.Status)
         async throws
     {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         let appointment = Appointment(
@@ -357,7 +357,7 @@ struct ScheduleEditorSessionTests {
     }
 
     @Test func deletingMovedBlockUsesItsSavedIdentity() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
         let nextDate = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
         let block = UnavailableTime(label: "Travel", start: date, durationMinutes: 60)
@@ -626,7 +626,7 @@ struct ScheduleEditorSessionTests {
     func switchingSavesOnlyActiveTypeAndKeepsPatientRecord(hold: Bool, unavailable: Bool)
         async throws
     {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
@@ -768,7 +768,7 @@ struct ScheduleEditorSessionTests {
     @Test func timelineBookingKeepsDraggedTimeThroughPatientSelectionAndSavesOnlyWithDone()
         async throws
     {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try Date("2026-10-26T00:00:00Z", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
@@ -818,7 +818,7 @@ struct ScheduleEditorSessionTests {
 
     @Test(arguments: [false, true], [false, true])
     func timelineChangesStayUnsavedUntilDone(unavailable: Bool, editing: Bool) async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let date = try Date("2026-10-25T12:00:00Z", strategy: .iso8601)
         let nextDate = try Date("2026-10-26T12:00:00Z", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
@@ -905,11 +905,6 @@ struct ScheduleEditorSessionTests {
             #expect(after.first?.2 == date)
             #expect(savedDate == expectedStart)
         }
-    }
-    private func makeDatabase() throws -> DatabaseQueue {
-        let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
-        try migrateDatabase(database)
-        return database
     }
 
     private var utcCalendar: Calendar {

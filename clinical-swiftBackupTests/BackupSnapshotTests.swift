@@ -166,7 +166,9 @@ struct BackupSnapshotTests {
             let resumedPolicy = try restore.prepareForStartup()
             #expect(resumedPolicy.recoverySafe)
             #expect(!resumedPolicy.allowsBackgroundBackups)
-            let restored = try DatabaseQueue(path: liveURL.path(percentEncoded: false))
+            let restored = try DatabaseQueue(
+                path: liveURL.path(percentEncoded: false),
+                configuration: clinicalDatabaseConfiguration())
             let contents = try BackupFixture.contents(restored)
             #expect(contents["patients"] == original["patients"])
             #expect(contents["appointments"] == original["appointments"])
@@ -219,7 +221,9 @@ struct BackupSnapshotTests {
             #expect(!rolledBackPolicy.seedSamples)
             #expect(rolledBackPolicy.recoverySafe)
             #expect(!rolledBackPolicy.allowsBackgroundBackups)
-            let rolledBack = try DatabaseQueue(path: liveURL.path(percentEncoded: false))
+            let rolledBack = try DatabaseQueue(
+                path: liveURL.path(percentEncoded: false),
+                configuration: clinicalDatabaseConfiguration())
             #expect(try BackupFixture.contents(rolledBack) == before)
             try rolledBack.close()
             var accepting = try BackupFiles.load(
@@ -284,7 +288,8 @@ struct BackupSnapshotTests {
             do {
                 try ClinicalDatabaseAccess.withReplacement(at: url) {}
                 break
-            } catch ClinicalSharedDatabaseError.databaseAccessUnavailable where clock.now < deadline {
+            } catch ClinicalSharedDatabaseError.databaseAccessUnavailable where clock.now < deadline
+            {
                 try await Task.sleep(for: .milliseconds(10))
             }
         }
@@ -401,7 +406,8 @@ struct BackupSnapshotTests {
             store: finalStore, databaseURL: finalGroup.appending(path: "live.db"))
         try finalRestore.rollBack()
         let rolledBack = try DatabaseQueue(
-            path: finalRestore.databaseURL.path(percentEncoded: false))
+            path: finalRestore.databaseURL.path(percentEncoded: false),
+            configuration: clinicalDatabaseConfiguration())
         #expect(try BackupFixture.contents(rolledBack) == original)
         try rolledBack.close()
         let previous = try finalStore.load()

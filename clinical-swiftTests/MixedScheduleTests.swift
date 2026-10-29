@@ -76,8 +76,7 @@ struct MixedScheduleTests {
 
     @Test func widgetReadsMixedItemsAndRefreshesAtFirstEnd() throws {
         let calendar = utcCalendar
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
+        let database = try testDatabase()
         let now = try instant("2026-10-02T10:30:00Z")
         let patient = Patient(name: "Patient", createdDate: now)
         let appointment = try AppointmentRecord.persisted(
@@ -206,8 +205,7 @@ struct MixedScheduleTests {
     }
 
     @Test func observedBlocksPageWithoutChangingBookingAvailability() async throws {
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
+        let database = try testDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
         try await withDependencies {
             $0.defaultDatabase = database
@@ -253,8 +251,7 @@ struct MixedScheduleTests {
     }
 
     @Test func committedBlockWritesReloadWidgetsAndRollbacksDoNot() async throws {
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
+        let database = try testDatabase()
         let reloads = Mutex(0)
         let invalidator = WidgetTimelineInvalidator(
             database: database,
@@ -290,8 +287,7 @@ struct MixedScheduleTests {
     }
 
     @Test func calendarBlockURLLoadsItsStoredDate() async throws {
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
+        let database = try testDatabase()
         let start = try instant("2026-10-04T14:00:00Z")
         let block = UnavailableTimeRecord(
             id: UUID(), start: start, durationMinutes: 60, createdAt: start, updatedAt: start)

@@ -172,12 +172,4 @@ struct PatientEditorModelTests {
         #expect(record?.createdAt == savedPatient.createdDate)
         #expect(record?.updatedAt == now)
     }
-
-    private func testDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
-    }
 }

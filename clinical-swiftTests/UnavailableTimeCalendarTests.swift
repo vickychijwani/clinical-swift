@@ -11,7 +11,7 @@ import Testing
 @MainActor
 struct UnavailableTimeCalendarTests {
     @Test func createReplaceDeleteUsesBlockContractWithoutContacts() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let block = try insertBlock(into: database, label: "Travel")
         let recorder = BlockCalendarRecorder()
         let coordinator = makeCoordinator(database, recorder)
@@ -44,7 +44,7 @@ struct UnavailableTimeCalendarTests {
     }
 
     @Test func deleteBeforeDeliveryDoesNotCreateAnEvent() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let block = try insertBlock(into: database)
         try await database.write { db in
             try UnavailableTimeRecord.find(block.id).delete().execute(db)
@@ -58,7 +58,7 @@ struct UnavailableTimeCalendarTests {
     }
 
     @Test func matchingUUIDsKeepIndependentLinksAndAppointmentWorkRunsFirst() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let block = try insertBlock(into: database)
         let patient = Patient(name: "Patient", createdDate: block.start)
         let appointment = try AppointmentRecord.persisted(
@@ -89,7 +89,7 @@ struct UnavailableTimeCalendarTests {
     func permissionOrTargetFailureStaysPendingAndRetriesAfterRestart(
         _ granted: Bool, _ target: Bool
     ) async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let block = try insertBlock(into: database)
         let denied = BlockCalendarRecorder()
         denied.granted = granted
@@ -104,7 +104,7 @@ struct UnavailableTimeCalendarTests {
     }
 
     @Test func newerChangesKeepCreatedLinkForPendingRetry() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let block = try insertBlock(into: database)
         let recorder = BlockCalendarRecorder()
         recorder.onReplace = { index in
@@ -128,7 +128,7 @@ struct UnavailableTimeCalendarTests {
     }
 
     @Test func deletionDuringReplacementUsesTheCreatedEventLink() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let block = try insertBlock(into: database)
         let recorder = BlockCalendarRecorder()
         recorder.onReplace = { index in
@@ -145,7 +145,7 @@ struct UnavailableTimeCalendarTests {
     }
 
     @Test func staleDeletionCannotClearRecreatedBlockWork() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let block = try insertBlock(into: database)
         try await database.write { db in
             try UnavailableTimeRecord.find(block.id).delete().execute(db)
@@ -163,7 +163,7 @@ struct UnavailableTimeCalendarTests {
     }
 
     @Test func linkPersistenceFailureKeepsPendingWork() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let block = try insertBlock(into: database)
         try await database.write { db in
             try db.execute(
@@ -183,7 +183,7 @@ struct UnavailableTimeCalendarTests {
     }
 
     @Test func oneFailedBlockDoesNotStopTheNextBlock() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let failed = try insertBlock(into: database, label: "Failed")
         let next = try insertBlock(into: database, label: "Next")
         try await database.write { db in
@@ -239,12 +239,6 @@ struct UnavailableTimeCalendarTests {
             try await Task.sleep(for: .milliseconds(5))
         }
         Issue.record("Calendar work did not finish.")
-    }
-
-    private func makeDatabase() throws -> DatabaseQueue {
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
-        return database
     }
 
     private func insertBlock(into database: DatabaseQueue, label: String? = nil) throws

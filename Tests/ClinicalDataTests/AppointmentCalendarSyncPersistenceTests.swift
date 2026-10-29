@@ -6,7 +6,7 @@ import Testing
 
 struct AppointmentCalendarSyncPersistenceTests {
     @Test func appointmentChangesQueueWithoutLosingEventLink() throws {
-        let database = try migratedDatabase()
+        let database = try testDatabase()
         let fixture = try insertFixture(into: database)
         let linkedStart = fixture.start
         try markSynced(
@@ -36,7 +36,7 @@ struct AppointmentCalendarSyncPersistenceTests {
     }
 
     @Test func completionDoesNotQueueButCancellationDoes() throws {
-        let database = try migratedDatabase()
+        let database = try testDatabase()
         let completedFixture = try insertFixture(into: database)
         try markSynced(
             completedFixture.appointmentID,
@@ -89,7 +89,7 @@ struct AppointmentCalendarSyncPersistenceTests {
     }
 
     @Test func patientChangeQueuesAppointmentsAndCascadeDeletionRetainsLinks() throws {
-        let database = try migratedDatabase()
+        let database = try testDatabase()
         let fixture = try insertFixture(into: database)
         try markSynced(
             fixture.appointmentID,
@@ -131,12 +131,6 @@ struct AppointmentCalendarSyncPersistenceTests {
         #expect(deletionSync.needsSync)
         #expect(deletionSync.eventIdentifier == "event-2")
         #expect(deletionSync.eventStart == fixture.start)
-    }
-
-    private func migratedDatabase() throws -> DatabaseQueue {
-        let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
-        try migrateDatabase(database)
-        return database
     }
 
     private func insertFixture(

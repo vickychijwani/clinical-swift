@@ -56,13 +56,4 @@ struct BookingPersistenceTests {
         #expect(appointment.durationMinutes == 45)
         #expect(appointment.status == .scheduled)
     }
-
-    private func testDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
-    }
-
 }
