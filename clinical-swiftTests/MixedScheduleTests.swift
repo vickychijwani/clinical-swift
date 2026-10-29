@@ -220,11 +220,12 @@ struct MixedScheduleTests {
             try await database.write { db in
                 try PatientRecord.insert { PatientRecord(patient) }.execute(db)
             }
-            let booking = AppointmentBookingModel(selectedDate: date, selectedPatient: patient) {
-                _ in
-            }
-            booking.updateAppointments(model.appointments(for: date), for: date)
-            let before = booking.draft.start
+            let booking = try #require(
+                ScheduleEditorSession(
+                    request: .appointmentBooking(AppointmentBookingRequest(patient: patient)),
+                    selectedDate: date, appointments: model.appointments(for: date),
+                    onFinished: { _ in }))
+            let before = booking.preview.start
             let blocks = (-3...4).map { day in
                 UnavailableTimeRecord(
                     id: UUID(), label: nil,
@@ -241,9 +242,8 @@ struct MixedScheduleTests {
             #expect(model.unavailableTimes(for: date).count == 1)
             #expect(model.unavailableTimes(for: blocks[0].start).count == 1)
             #expect(model.unavailableTimes(for: blocks[7].start).isEmpty)
-            booking.updateAppointments(model.appointments(for: date), for: date)
-            #expect(booking.draft.start == before)
-            #expect(await booking.saveAppointment())
+            #expect(booking.preview.start == before)
+            #expect(await booking.save())
             #expect(
                 try await database.read { db in try AppointmentRecord.count().fetchOne(db) } == 1)
             try await model.loadVisibleDays(centeredOn: blocks[7].start, dayRadius: 3)

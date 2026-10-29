@@ -15,7 +15,9 @@ struct RouterTests {
         router.presentationDidDismiss(retainingScheduleEditor: id)
         #expect(router.activePresentation?.id == id)
         router.requestScheduleCreation()
-        #expect(router.scheduleCreationRequest != nil)
+        let replacementID = try #require(router.scheduleCreationRequest?.id)
+        #expect(replacementID != id)
+        #expect(router.activePresentation?.id == replacementID)
     }
 
     @Test func interruptedPatientSelectionDismissalActivatesReplacement() throws {
@@ -24,8 +26,11 @@ struct RouterTests {
         let id = try #require(router.activePresentation?.id)
         router.presentationDidAppear(id)
         router.requestScheduleCreation()
+        #expect(router.activePresentation == nil)
         router.presentationDidDismiss(retainingScheduleEditor: id)
-        #expect(router.scheduleCreationRequest != nil)
+        let replacementID = try #require(router.scheduleCreationRequest?.id)
+        #expect(replacementID != id)
+        #expect(router.activePresentation?.id == replacementID)
     }
 
     @Test func settingsDoesNotReplaceAnActiveEditor() throws {

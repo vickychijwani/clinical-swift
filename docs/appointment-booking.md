@@ -7,10 +7,10 @@ booking. A visiting dentist can work while the clinic owner is busy or away. Tim
 suggestions prefer free working hours because the clinic usually has one dentist;
 that preference must not become a save-time restriction.
 
-Opening an appointment for editing preserves its saved time. Once timeline editing
-starts, date changes preserve the chosen clock time and duration, and schedule
-reloads do not apply suggestions. Otherwise, automatic prefilling could silently
-move an appointment away from the doctor's chosen time.
+Opening an appointment for editing preserves its saved time. New sessions apply a
+time suggestion once. Later date changes preserve the chosen clock time and
+duration, and schedule reloads do not apply suggestions. Otherwise, automatic
+prefilling could silently move an appointment away from the doctor's chosen time.
 
 ## Patient selection
 

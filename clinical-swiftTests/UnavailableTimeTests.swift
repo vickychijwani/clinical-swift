@@ -19,15 +19,15 @@ struct UnavailableTimeTests {
             $0.date.now = date
         } operation: {
             var finishedDates: [Date] = []
-            let create = UnavailableTimeEditorModel(start: date, durationMinutes: 30) {
+            let (create, createModel) = try creatingSession(start: date, durationMinutes: 30) {
                 finishedDates.append($0)
             }
-            #expect(create.draft.start == date)
-            #expect(create.draft.durationMinutes == 30)
-            create.draft.label = " \n "
+            #expect(createModel.draft.start == date)
+            #expect(createModel.draft.durationMinutes == 30)
+            createModel.draft.label = " \n "
             #expect(await create.save())
             #expect(!(await create.save()))
-            let createdID = create.blockID
+            let createdID = createModel.blockID
             let record = try #require(
                 try await database.read { db in
                     try UnavailableTimeRecord.find(createdID).fetchOne(db)
@@ -35,16 +35,16 @@ struct UnavailableTimeTests {
             #expect(record.label == nil)
             #expect(record.unavailableTime.displayLabel == "Blocked")
             let editDate = date.addingTimeInterval(3600)
-            let edit = withDependencies {
+            let (edit, editModel) = try withDependencies {
                 $0.date.now = editDate
             } operation: {
-                UnavailableTimeEditorModel(editing: record.unavailableTime) {
+                try editingSession(record.unavailableTime) {
                     finishedDates.append($0)
                 }
             }
-            #expect(edit.draft.start == record.start)
-            edit.draft.label = " Travel "
-            edit.draft.durationMinutes = 120
+            #expect(editModel.draft.start == record.start)
+            editModel.draft.label = " Travel "
+            editModel.draft.durationMinutes = 120
             #expect(
                 await withDependencies {
                     $0.date.now = editDate
@@ -60,7 +60,7 @@ struct UnavailableTimeTests {
             #expect(updated.updatedAt == editDate)
             #expect(updated.label == "Travel")
             #expect(updated.durationMinutes == 120)
-            let delete = UnavailableTimeEditorModel(editing: updated.unavailableTime) {
+            let (delete, _) = try editingSession(updated.unavailableTime) {
                 finishedDates.append($0)
             }
             #expect(await delete.delete())
@@ -80,11 +80,11 @@ struct UnavailableTimeTests {
             $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
-            let model = UnavailableTimeEditorModel(start: date, durationMinutes: 30) { _ in }
+            let (session, model) = try creatingSession(start: date, durationMinutes: 30) { _ in }
             model.draft.start = try instant("2026-10-02T13:00:00Z")
             model.draft.durationMinutes = 120
             try model.draft.validate()
-            #expect(await model.save())
+            #expect(await session.save())
             for (start, duration) in [
                 ("2026-10-02T08:59:00Z", 30), ("2026-10-02T20:30:00Z", 60),
                 ("2026-10-02T09:00:00Z", 0),
@@ -106,13 +106,13 @@ struct UnavailableTimeTests {
         } operation: {
             let block = UnavailableTime(start: start, durationMinutes: 45)
             var didFinish = false
-            let model = UnavailableTimeEditorModel(editing: block) { _ in didFinish = true }
+            let (session, model) = try editingSession(block) { _ in didFinish = true }
             #expect(model.draft.start == start)
-            #expect(!(await model.save()))
-            #expect(!(await model.delete()))
-            #expect(model.state.errorMessage == "This unavailable time no longer exists.")
+            #expect(!(await session.save()))
+            #expect(!(await session.delete()))
+            #expect(session.errorMessage == "This unavailable time no longer exists.")
             #expect(!didFinish)
-            let create = UnavailableTimeEditorModel(start: start, durationMinutes: 30) { _ in
+            let (create, _) = try creatingSession(start: start, durationMinutes: 30) { _ in
                 didFinish = true
             }
             try await database.write { db in
@@ -122,8 +122,8 @@ struct UnavailableTimeTests {
                 )
             }
             #expect(!(await create.save()))
-            #expect(create.state.errorMessage != nil)
-            #expect(!create.state.isWorking)
+            #expect(create.errorMessage != nil)
+            #expect(!create.isWorking)
             #expect(!didFinish)
             #expect(
                 try await database.read { db in
@@ -215,7 +215,7 @@ struct UnavailableTimeTests {
             $0.date.now = date
         } operation: {
             var finished = 0
-            let create = UnavailableTimeEditorModel(start: date, durationMinutes: 30) { _ in
+            let (create, createModel) = try creatingSession(start: date, durationMinutes: 30) { _ in
                 finished += 1
             }
             let first = Task { await create.save() }
@@ -223,18 +223,18 @@ struct UnavailableTimeTests {
             let results = await [first.value, second.value]
             #expect(results.filter { $0 }.count == 1)
             #expect(finished == 1)
-            let recordID = create.blockID
+            let recordID = createModel.blockID
             let block = try #require(
                 try await database.read { db in
                     try UnavailableTimeRecord.find(recordID).fetchOne(db)?.unavailableTime
                 })
-            let edit = UnavailableTimeEditorModel(editing: block) { _ in finished += 1 }
+            let (edit, _) = try editingSession(block) { _ in finished += 1 }
             let save = Task { await edit.save() }
             let delete = Task { await edit.delete() }
             let editResults = await [save.value, delete.value]
             #expect(editResults.filter { $0 }.count == 1)
             #expect(finished == 2)
-            #expect(!edit.state.isWorking)
+            #expect(!edit.isWorking)
         }
     }
 
@@ -246,9 +246,10 @@ struct UnavailableTimeTests {
             $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
-            let create = UnavailableTimeEditorModel(start: date, durationMinutes: 30) { _ in }
+            let (create, createModel) = try creatingSession(start: date, durationMinutes: 30) { _ in
+            }
             #expect(await create.save())
-            let recordID = create.blockID
+            let recordID = createModel.blockID
             let block = try #require(
                 try await database.read { db in
                     try UnavailableTimeRecord.find(recordID).fetchOne(db)?.unavailableTime
@@ -264,12 +265,12 @@ struct UnavailableTimeTests {
                 )
             }
             var didFinish = false
-            let edit = UnavailableTimeEditorModel(editing: block) { _ in didFinish = true }
-            edit.draft.label = "Travel"
+            let (edit, editModel) = try editingSession(block) { _ in didFinish = true }
+            editModel.draft.label = "Travel"
             #expect(!(await edit.save()))
             #expect(!(await edit.delete()))
             #expect(!didFinish)
-            #expect(!edit.state.isWorking)
+            #expect(!edit.isWorking)
             #expect(
                 try await database.read { db in
                     try UnavailableTimeRecord.find(recordID).fetchOne(db)?.unavailableTime
@@ -283,6 +284,38 @@ struct UnavailableTimeTests {
         }
     }
 
+    private func creatingSession(
+        start: Date, durationMinutes: Int, onFinished: @escaping (Date) -> Void
+    ) throws -> (ScheduleEditorSession, UnavailableTimeEditorModel) {
+        let session = try #require(
+            ScheduleEditorSession(
+                request: .scheduleCreation(ScheduleCreationRequest()), selectedDate: start,
+                appointments: [], onFinished: onFinished))
+        session.selectType(.unavailableTime)
+        let model = try unavailableModel(session)
+        model.draft.start = start
+        model.draft.durationMinutes = durationMinutes
+        return (session, model)
+    }
+
+    private func editingSession(
+        _ block: UnavailableTime, onFinished: @escaping (Date) -> Void
+    ) throws -> (ScheduleEditorSession, UnavailableTimeEditorModel) {
+        let session = try #require(
+            ScheduleEditorSession(
+                request: .unavailableTimeEditor(UnavailableTimeEditorRequest(block: block)),
+                selectedDate: block.start, appointments: [], onFinished: onFinished))
+        return (session, try unavailableModel(session))
+    }
+
+    private func unavailableModel(_ session: ScheduleEditorSession) throws
+        -> UnavailableTimeEditorModel
+    {
+        guard case .unavailableTime(let model) = session.editor else {
+            throw UnavailableTimeError.missingRecord
+        }
+        return model
+    }
     private func makeDatabase() throws -> DatabaseQueue {
         let database = try DatabaseQueue()
         try migrateDatabase(database)

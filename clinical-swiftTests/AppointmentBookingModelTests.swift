@@ -9,68 +9,6 @@ import Testing
 
 @MainActor
 struct AppointmentBookingModelTests {
-    @Test func dateChangePreservesAvailableClockTime() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let newDate = try Date("2026-04-22T00:00:00Z", strategy: .iso8601)
-
-        withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let model = AppointmentBookingModel(selectedDate: initialDate) { _ in }
-            model.selectStart(initialDate.setTime(11, 0, using: calendar))
-
-            model.selectDate(newDate)
-            model.updateAppointments([], for: newDate)
-
-            #expect(model.draft.start == newDate.setTime(11, 0, using: calendar))
-        }
-    }
-
-    @Test func dateChangeFallsBackWhenClockTimeIsUnavailable() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let newDate = try Date("2026-04-22T00:00:00Z", strategy: .iso8601)
-        let existingAppointment = Appointment(
-            patientName: "Aarav Mehta",
-            start: newDate.setTime(11, 0, using: calendar),
-            durationMinutes: 30,
-            status: .scheduled
-        )
-
-        withDependencies {
-            $0.calendar = calendar
-            $0.date.now = initialDate
-        } operation: {
-            let model = AppointmentBookingModel(selectedDate: initialDate) { _ in }
-            model.selectStart(initialDate.setTime(11, 0, using: calendar))
-
-            model.selectDate(newDate)
-            model.updateAppointments([existingAppointment], for: newDate)
-
-            #expect(model.draft.start == newDate.setTime(10, 0, using: calendar))
-        }
-    }
-
-    @Test func dateChangeFallsBackWhenClockTimeCrossesBreak() throws {
-        let calendar = gregorianCalendar
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let now = try Date("2026-04-20T00:00:00Z", strategy: .iso8601)
-
-        withDependencies {
-            $0.calendar = calendar
-            $0.date.now = now
-        } operation: {
-            let model = AppointmentBookingModel(selectedDate: selectedDate) { _ in }
-            model.selectDuration(60)
-            model.selectStart(selectedDate.setTime(12, 30, using: calendar))
-
-            model.updateAppointments([], for: selectedDate)
-
-            #expect(model.draft.start == selectedDate.setTime(10, 0, using: calendar))
-        }
-    }
-
     @Test func todayInitialPrefillStartsAtNextFiveMinuteBoundary() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
@@ -94,15 +32,12 @@ struct AppointmentBookingModelTests {
         ]
 
         for example in examples {
-            withDependencies {
+            try withDependencies {
                 $0.calendar = calendar
                 $0.date.now = example.now
             } operation: {
-                let model = AppointmentBookingModel(selectedDate: selectedDate) { _ in }
-
-                model.prefillFirstAvailableSlot()
-
-                #expect(model.draft.start == example.expectedStart)
+                let session = try bookingSession(date: selectedDate)
+                #expect(session.preview.start == example.expectedStart)
             }
         }
     }
@@ -113,172 +48,14 @@ struct AppointmentBookingModelTests {
         let yesterday = try Date("2026-04-20T00:00:00Z", strategy: .iso8601)
         let now = try Date("2026-04-21T16:13:00Z", strategy: .iso8601)
 
-        withDependencies {
+        try withDependencies {
             $0.calendar = calendar
             $0.date.now = now
         } operation: {
-            let tomorrowModel = AppointmentBookingModel(selectedDate: tomorrow) { _ in }
-            tomorrowModel.prefillFirstAvailableSlot()
-
-            let yesterdayModel = AppointmentBookingModel(selectedDate: yesterday) { _ in }
-            yesterdayModel.prefillFirstAvailableSlot()
-
-            #expect(tomorrowModel.draft.start == tomorrow.setTime(10, 0, using: calendar))
-            #expect(yesterdayModel.draft.start == yesterday.setTime(10, 0, using: calendar))
-        }
-    }
-
-    @Test func dateChangeToTodayPreservesAvailableClockTimeEvenWhenPastCurrentTime() throws {
-        let calendar = gregorianCalendar
-        let today = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let tomorrow = try Date("2026-04-22T00:00:00Z", strategy: .iso8601)
-        let now = try Date("2026-04-21T16:13:00Z", strategy: .iso8601)
-
-        withDependencies {
-            $0.calendar = calendar
-            $0.date.now = now
-        } operation: {
-            let model = AppointmentBookingModel(selectedDate: tomorrow) { _ in }
-            model.selectStart(tomorrow.setTime(11, 0, using: calendar))
-
-            model.selectDate(today)
-            model.updateAppointments([], for: today)
-
-            #expect(model.draft.start == today.setTime(11, 0, using: calendar))
-        }
-    }
-
-    @Test func durationChangePreservesStartWhenAppointmentStillFits() throws {
-        let calendar = gregorianCalendar
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let existingAppointment = Appointment(
-            patientName: "Aarav Mehta",
-            start: selectedDate.setTime(13, 0, using: calendar),
-            durationMinutes: 30,
-            status: .scheduled
-        )
-
-        withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let model = AppointmentBookingModel(selectedDate: selectedDate) { _ in }
-            model.updateAppointments([existingAppointment], for: selectedDate)
-            model.selectStart(selectedDate.setTime(11, 0, using: calendar))
-
-            model.selectDuration(60)
-
-            #expect(model.draft.start == selectedDate.setTime(11, 0, using: calendar))
-        }
-    }
-
-    @Test func availabilityFallbackRequestsDraftPreviewScroll() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let newDate = try Date("2026-04-22T00:00:00Z", strategy: .iso8601)
-        let existingAppointment = Appointment(
-            patientName: "Aarav Mehta",
-            start: newDate.setTime(11, 0, using: calendar),
-            durationMinutes: 30,
-            status: .scheduled
-        )
-
-        withDependencies {
-            $0.calendar = calendar
-            $0.date.now = initialDate
-        } operation: {
-            let model = AppointmentBookingModel(selectedDate: initialDate) { _ in }
-            model.selectStart(initialDate.setTime(11, 0, using: calendar))
-            let scrollRequestBeforeFallback = model.state.scrollRevision
-
-            model.selectDate(newDate)
-            model.updateAppointments([existingAppointment], for: newDate)
-
-            #expect(model.draft.start == newDate.setTime(10, 0, using: calendar))
-            #expect(model.state.scrollRevision == scrollRequestBeforeFallback + 1)
-        }
-    }
-
-    @Test func manualStartSelectionRequestsDraftPreviewScroll() throws {
-        let calendar = gregorianCalendar
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-
-        withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let model = AppointmentBookingModel(selectedDate: selectedDate) { _ in }
-            #expect(model.state.scrollRevision == 0)
-
-            model.selectStart(selectedDate.setTime(12, 0, using: calendar))
-
-            #expect(model.draft.start == selectedDate.setTime(12, 0, using: calendar))
-            #expect(model.state.scrollRevision == 1)
-        }
-    }
-
-    @Test func staleAppointmentUpdateAfterDateChangeIsIgnored() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let newDate = try Date("2026-04-22T00:00:00Z", strategy: .iso8601)
-        let staleAppointment = Appointment(
-            patientName: "Aarav Mehta",
-            start: initialDate.setTime(11, 0, using: calendar),
-            durationMinutes: 30,
-            status: .scheduled
-        )
-
-        withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let model = AppointmentBookingModel(selectedDate: initialDate) { _ in }
-            model.updateAppointments([staleAppointment], for: initialDate)
-
-            model.selectDate(newDate)
-            model.updateAppointments([staleAppointment], for: initialDate)
-
-            #expect(model.appointments.isEmpty)
-            #expect(model.draft.selectedDate == newDate)
-        }
-    }
-
-    @Test func editingPreservesSavedDraftAndExcludesPersistedAppointment() throws {
-        let calendar = gregorianCalendar
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
-        let patient = Patient(name: "Aarav Mehta")
-        let appointment = Appointment(
-            patientName: patient.displayName,
-            start: selectedDate.setTime(11, 0, using: calendar),
-            durationMinutes: 45,
-            status: .scheduled
-        )
-        let overlappingAppointment = Appointment(
-            patientName: "Anjali Desai",
-            start: appointment.start,
-            durationMinutes: 30,
-            status: .scheduled
-        )
-
-        withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let model = AppointmentBookingModel(
-                editing: AppointmentDetails(appointment: appointment, patient: patient)
-            ) { _ in }
-
-            model.updateAppointments(
-                [appointment, overlappingAppointment],
-                for: selectedDate
-            )
-            model.updateAppointments(
-                [appointment, overlappingAppointment],
-                for: selectedDate
-            )
-
-            #expect(model.purpose == .edit(appointment.id))
-            #expect(model.draft.selectedPatient == patient)
-            #expect(model.draft.start == appointment.start)
-            #expect(model.draft.durationMinutes == appointment.durationMinutes)
-            #expect(model.draftAppointment.id == appointment.id)
-            #expect(model.appointments.map(\.id) == [overlappingAppointment.id])
+            let tomorrowSession = try bookingSession(date: tomorrow)
+            let yesterdaySession = try bookingSession(date: yesterday)
+            #expect(tomorrowSession.preview.start == tomorrow.setTime(10, 0, using: calendar))
+            #expect(yesterdaySession.preview.start == yesterday.setTime(10, 0, using: calendar))
         }
     }
 
@@ -311,27 +88,27 @@ struct AppointmentBookingModelTests {
         }
 
         var savedDate: Date?
-        let didSave = await withDependencies {
+        let didSave = try await withDependencies {
             $0.calendar = calendar
             $0.date.now = updatedAt
             $0.defaultDatabase = database
         } operation: {
-            let model = AppointmentBookingModel(
-                editing: AppointmentDetails(
-                    appointment: Appointment(
-                        id: appointmentID,
-                        patientName: originalPatient.displayName,
-                        start: originalStart,
-                        durationMinutes: 30,
-                        status: .scheduled
-                    ),
-                    patient: originalPatient
-                )
-            ) { savedDate = $0 }
+            let details = AppointmentDetails(
+                appointment: Appointment(
+                    id: appointmentID,
+                    patientName: originalPatient.displayName,
+                    start: originalStart,
+                    durationMinutes: 30,
+                    status: .scheduled
+                ),
+                patient: originalPatient
+            )
+            let session = try editingSession(details) { savedDate = $0 }
+            guard case .appointment(let model) = session.editor else { return false }
             model.draft.selectedPatient = newPatient
-            model.selectStart(editedStart)
-            model.selectDuration(60)
-            return await model.saveAppointment()
+            model.draft.selectStart(editedStart)
+            model.draft.selectDuration(60)
+            return await session.save()
         }
 
         let record = try await database.read { db in
@@ -356,23 +133,22 @@ struct AppointmentBookingModelTests {
         let patient = Patient(name: "Aarav Mehta", createdDate: selectedDate)
         var didCallSave = false
 
-        let result = await withDependencies {
+        let result = try await withDependencies {
             $0.calendar = calendar
             $0.date.now = selectedDate
             $0.defaultDatabase = database
         } operation: {
-            let model = AppointmentBookingModel(
-                editing: AppointmentDetails(
-                    appointment: Appointment(
-                        patientName: patient.displayName,
-                        start: selectedDate.setTime(10, 0, using: calendar),
-                        durationMinutes: 30,
-                        status: .scheduled
-                    ),
-                    patient: patient
-                )
-            ) { _ in didCallSave = true }
-            return (await model.saveAppointment(), model.state.errorMessage)
+            let details = AppointmentDetails(
+                appointment: Appointment(
+                    patientName: patient.displayName,
+                    start: selectedDate.setTime(10, 0, using: calendar),
+                    durationMinutes: 30,
+                    status: .scheduled
+                ),
+                patient: patient
+            )
+            let session = try editingSession(details) { _ in didCallSave = true }
+            return (await session.save(), session.errorMessage)
         }
 
         #expect(!result.0)
@@ -408,13 +184,14 @@ struct AppointmentBookingModelTests {
                 try saveAccountEntries(AccountEntryBatch(inserts: [charge]), in: db)
             }
             var didSave = false
-            let model = AppointmentBookingModel(
-                editing: AppointmentDetails(appointment: appointment, patient: patient)
+            let session = try editingSession(
+                AppointmentDetails(appointment: appointment, patient: patient)
             ) { _ in didSave = true }
+            guard case .appointment(let model) = session.editor else { return }
             model.draft.selectedPatient = other
-            #expect(await model.saveAppointment() == false)
+            #expect(await session.save() == false)
             #expect(
-                model.state.errorMessage
+                session.errorMessage
                     == "This appointment has charges. Remove its linked charges before changing the patient."
             )
             #expect(!didSave)
@@ -424,12 +201,27 @@ struct AppointmentBookingModelTests {
             #expect(saved?.patientID == patient.id)
             // A charge must not prevent a schedule edit for the same patient.
             model.draft.selectedPatient = patient
-            model.selectStart(now.setTime(11, 0, using: calendar))
-            #expect(await model.saveAppointment())
+            model.draft.selectStart(now.setTime(11, 0, using: calendar))
+            #expect(await session.save())
             #expect(didSave)
         }
     }
 
+    private func bookingSession(date: Date) throws -> ScheduleEditorSession {
+        try #require(
+            ScheduleEditorSession(
+                request: .scheduleCreation(ScheduleCreationRequest()), selectedDate: date,
+                appointments: [], onFinished: { _ in }))
+    }
+
+    private func editingSession(
+        _ details: AppointmentDetails, onFinished: @escaping (Date) -> Void
+    ) throws -> ScheduleEditorSession {
+        try #require(
+            ScheduleEditorSession(
+                request: .appointmentEdit(AppointmentEditRequest(details: details)),
+                selectedDate: details.appointment.start, appointments: [], onFinished: onFinished))
+    }
     private var gregorianCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

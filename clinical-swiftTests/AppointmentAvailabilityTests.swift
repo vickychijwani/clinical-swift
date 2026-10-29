@@ -5,7 +5,7 @@ import Testing
 @testable import clinical_swift
 
 struct AppointmentAvailabilityTests {
-    @Test func manualStartCanFitEvenWhenItIsBeforePreferredAutomaticStart() throws {
+    @Test func initialSuggestionUsesPreferredAutomaticStart() throws {
         let calendar = gregorianCalendar
         let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
         let availability = AppointmentAvailability(
@@ -14,12 +14,6 @@ struct AppointmentAvailabilityTests {
             calendar: calendar
         )
 
-        #expect(
-            availability.canPrefill(
-                start: selectedDate.setTime(9, 30, using: calendar),
-                durationMinutes: 30
-            )
-        )
         #expect(
             availability.firstAvailableSlot(neededDurationMinutes: 30)
                 == selectedDate.setTime(10, 0, using: calendar)
@@ -42,10 +36,10 @@ struct AppointmentAvailabilityTests {
         )
 
         #expect(
-            !availability.canPrefill(
-                start: selectedDate.setTime(11, 0, using: calendar),
-                durationMinutes: 45
-            )
+            availability.firstAvailableSlot(
+                neededDurationMinutes: 45,
+                earliestStart: selectedDate.setTime(11, 0, using: calendar)
+            ) == selectedDate.setTime(12, 0, using: calendar)
         )
     }
 
@@ -59,10 +53,10 @@ struct AppointmentAvailabilityTests {
         )
 
         #expect(
-            !availability.canPrefill(
-                start: selectedDate.setTime(12, 30, using: calendar),
-                durationMinutes: 60
-            )
+            availability.firstAvailableSlot(
+                neededDurationMinutes: 60,
+                earliestStart: selectedDate.setTime(12, 30, using: calendar)
+            ) == Bitehaus.break.end.on(date: selectedDate, using: calendar)
         )
     }
 

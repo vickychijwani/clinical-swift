@@ -1,25 +1,22 @@
 import ClinicalModels
+import ClinicalPersistence
 import Dependencies
 import Foundation
 import Observation
 
 /// Shared state survives a type change. Only the active domain model owns a draft.
 @MainActor @Observable
-final class ScheduleEditorState {
-    let adjustment = TimelineAdjustment()
-    var isShowingSheet = false
-    var isWorking = false
-    var didFinish = false
-    var errorMessage: String?
-    var scrollRevision = 0
-}
-
-@MainActor @Observable
 final class ScheduleEditorSession: Identifiable {
     let id: UUID
     let allowsTypeSelection: Bool
     private(set) var editor: Editor
-    let state: ScheduleEditorState
+    let adjustment = TimelineAdjustment()
+    var isShowingSheet = false
+    private(set) var isWorking = false
+    private(set) var didFinish = false
+    var errorMessage: String?
+    /// A counter keeps repeated scroll requests distinct; it has no domain meaning.
+    private var scrollRevision = 0
     private let onFinished: (Date) -> Void
 
     enum Editor {
@@ -39,9 +36,8 @@ final class ScheduleEditorSession: Identifiable {
         id = bookingID
         allowsTypeSelection = true
         self.onFinished = onFinished
-        state = ScheduleEditorState()
         let model = AppointmentBookingModel(
-            selectedDate: selectedDate, state: state, onSaved: onFinished)
+            selectedDate: selectedDate)
         // Clamp the centered interval at clinic boundaries, then keep the manual time on reload.
         let minutes = center.totalMinutes - model.draft.durationMinutes / 2
         // Only the initial start uses 15-minute steps. Later drags use five-minute steps.
@@ -49,7 +45,6 @@ final class ScheduleEditorSession: Identifiable {
         @Dependency(\.calendar) var calendar
         model.draft.selectStart(
             TimeOfDay(snapped / 60, snapped % 60).on(date: selectedDate, using: calendar))
-        model.startTimelineEditing()
         editor = .appointment(model)
         adjustment.begin(preview, edge: .move, items: items)
     }
@@ -60,7 +55,6 @@ final class ScheduleEditorSession: Identifiable {
     ) {
         id = request.id
         self.onFinished = onFinished
-        state = ScheduleEditorState()
         switch request {
         case .scheduleCreation, .appointmentBooking:
             let patient: Patient?
@@ -70,31 +64,44 @@ final class ScheduleEditorSession: Identifiable {
             } else {
                 patient = nil
                 allowsTypeSelection = true
-                state.isShowingSheet = true
+                isShowingSheet = true
             }
             let model = AppointmentBookingModel(
-                selectedDate: selectedDate, selectedPatient: patient, state: state,
-                onSaved: onFinished)
-            model.updateAppointments(appointments, for: selectedDate)
-            model.prefillFirstAvailableSlot()
+                selectedDate: selectedDate, selectedPatient: patient)
+            @Dependency(\.calendar) var calendar
+            @Dependency(\.date.now) var now
+            let earliestStart: Date?
+            if calendar.isDate(selectedDate, inSameDayAs: now) {
+                let minutes = TimeOfDay(date: now, calendar: calendar).totalMinutes
+                earliestStart = now.startOfDay(using: calendar).addMinutes(
+                    ((minutes + 4) / 5) * 5, using: calendar)
+            } else {
+                earliestStart = nil
+            }
+            let availability = AppointmentAvailability(
+                searchDate: selectedDate, appointments: appointments, calendar: calendar)
+            // Suggest once. Later date and schedule changes must keep manual choices, even
+            // when they overlap another appointment or cross a clinic break.
+            if let start = availability.firstAvailableSlot(
+                neededDurationMinutes: model.draft.durationMinutes, earliestStart: earliestStart)
+            {
+                model.draft.start = start
+            }
             // Install the model after prefilling slot - to ensure the sheet starts out displaying the
             // pre-selected slot rather than briefly showing the clinic opening time.
-            model.startTimelineEditing()
             editor = .appointment(model)
         case .appointmentEdit(let request):
             allowsTypeSelection = false
             // Use the details that were already visible so the editor can start without another read.
             // Saving still validates the current stored appointment before writing.
             let model = AppointmentBookingModel(
-                editing: request.details, state: state, onSaved: onFinished)
-            model.updateAppointments(appointments, for: selectedDate)
-            model.startTimelineEditing()
+                editing: request.details)
             editor = .appointment(model)
         case .unavailableTimeEditor(let request):
             allowsTypeSelection = false
             editor = .unavailableTime(
                 UnavailableTimeEditorModel(
-                    editing: request.block, state: state, onFinished: onFinished))
+                    editing: request.block))
         default:
             return nil
         }
@@ -108,10 +115,10 @@ final class ScheduleEditorSession: Identifiable {
     }
 
     func selectType(_ type: ItemType) {
-        guard allowsTypeSelection, type != itemType, !isWorking, !state.didFinish else { return }
+        guard allowsTypeSelection, type != itemType, !isWorking, !didFinish else { return }
         adjustment.release()
         let interval = preview
-        state.errorMessage = nil
+        errorMessage = nil
         switch editor {
         case .appointment(let model):
             model.draft.selectedPatient = nil
@@ -122,19 +129,17 @@ final class ScheduleEditorSession: Identifiable {
         switch type {
         case .appointment:
             let model = AppointmentBookingModel(
-                selectedDate: interval.start, state: state, onSaved: onFinished)
+                selectedDate: interval.start)
             model.draft.start = interval.start
             model.draft.durationMinutes = interval.durationMinutes
-            model.startTimelineEditing()
             editor = .appointment(model)
         case .unavailableTime:
             editor = .unavailableTime(
                 UnavailableTimeEditorModel(
-                    start: interval.start, durationMinutes: interval.durationMinutes,
-                    state: state, onFinished: onFinished))
+                    start: interval.start, durationMinutes: interval.durationMinutes))
         }
         // Replace the old model so its fields cannot return on a round trip.
-        state.scrollRevision += 1
+        scrollRevision += 1
     }
 
     var selectedDate: Date {
@@ -142,13 +147,7 @@ final class ScheduleEditorSession: Identifiable {
         return calendar.startOfDay(for: preview.start)
     }
 
-    var adjustment: TimelineAdjustment { state.adjustment }
-    var isShowingSheet: Bool {
-        get { state.isShowingSheet }
-        set { state.isShowingSheet = newValue }
-    }
-    var isWorking: Bool { state.isWorking }
-    var allowsDateSelection: Bool { !isWorking && !state.didFinish }
+    var allowsDateSelection: Bool { !isWorking && !didFinish }
 
     var canDelete: Bool {
         guard case .unavailableTime(let model) = editor else { return false }
@@ -162,11 +161,6 @@ final class ScheduleEditorSession: Identifiable {
         }
     }
 
-    var errorMessage: String? {
-        get { state.errorMessage }
-        set { state.errorMessage = newValue }
-    }
-
     var preview: TimelineItem {
         switch editor {
         case .appointment(let model): .appointment(model.draftAppointment)
@@ -176,12 +170,14 @@ final class ScheduleEditorSession: Identifiable {
 
     var scrollRequest: ScheduleEditorScrollRequest {
         ScheduleEditorScrollRequest(
-            sessionID: id, date: selectedDate, revision: state.scrollRevision)
+            sessionID: id, date: selectedDate, revision: scrollRevision)
     }
 
     func selectPatient(_ patient: Patient) {
-        guard !isWorking, case .appointment(let model) = editor else { return }
-        model.selectPatient(patient)
+        guard !isWorking, !didFinish, case .appointment(let model) = editor else { return }
+        model.draft.selectedPatient = patient
+        model.searchText = ""
+        isShowingSheet = false
     }
 
     func beginAdjustment(_ item: TimelineItem, edge: TimelineAdjustment.Edge, items: [TimelineItem])
@@ -228,7 +224,7 @@ final class ScheduleEditorSession: Identifiable {
         let start = TimeOfDay(date: preview.start, calendar: calendar).on(
             date: date, using: calendar)
         setInterval(start: start, duration: preview.durationMinutes)
-        state.scrollRevision += 1
+        scrollRevision += 1
     }
 
     func releaseBooking(_ released: TimelineAdjustment) {
@@ -238,32 +234,64 @@ final class ScheduleEditorSession: Identifiable {
     }
 
     /// Done is the only action that writes these changes to storage.
-    func save() async {
-        guard !isWorking, !state.didFinish else { return }
-        adjustment.release()
-        switch editor {
-        case .appointment(let model):
-            if model.draft.selectedPatient == nil {
-                isShowingSheet = true
-                return
+    @discardableResult
+    func save() async -> Bool {
+        guard !isWorking, !didFinish else { return false }
+        if case .appointment(let model) = editor, model.draft.selectedPatient == nil {
+            adjustment.release()
+            isShowingSheet = true
+            return false
+        }
+        return await perform {
+            switch editor {
+            case .appointment(let model): try await model.save()
+            case .unavailableTime(let model): try await model.save()
             }
-            _ = await model.saveAppointment()
-        case .unavailableTime(let model):
-            _ = await model.save()
         }
     }
 
-    func delete() async {
-        guard canDelete, !isWorking, case .unavailableTime(let model) = editor else { return }
-        adjustment.release()
-        _ = await model.delete()
+    @discardableResult
+    func delete() async -> Bool {
+        guard canDelete, !isWorking, !didFinish,
+            case .unavailableTime(let model) = editor
+        else { return false }
+        return await perform(deleting: true) { try await model.delete() }
     }
 
-    /// Only appointments use availability updates. Return whether the caller must reveal a draft.
-    func updateAppointments(_ appointments: [Appointment], for date: Date) -> Bool {
-        guard case .appointment(let model) = editor else { return false }
-        model.updateAppointments(appointments, for: date)
-        return true
+    private func perform(
+        deleting: Bool = false, operation: () async throws -> Date
+    ) async -> Bool {
+        isWorking = true
+        defer { isWorking = false }
+        adjustment.release()
+        errorMessage = nil
+        do {
+            let date = try await operation()
+            didFinish = true
+            onFinished(date)
+            return true
+        } catch {
+            switch editor {
+            case .appointment:
+                errorMessage =
+                    switch error {
+                    case AppointmentBookingValidationError.missingPatient: "Select a patient."
+                    case AppointmentBookingValidationError.invalidTime:
+                        "Choose a time within clinic hours."
+                    case AccountEntryError.appointmentHasCharges:
+                        "This appointment has charges. Remove its linked charges before changing the patient."
+                    case is AppointmentEditingError: "This appointment can no longer be edited."
+                    default: "The appointment could not be saved."
+                    }
+            case .unavailableTime:
+                errorMessage =
+                    (error as? UnavailableTimeError)?.message
+                    ?? (deleting
+                        ? "The unavailable time could not be deleted."
+                        : "The unavailable time could not be saved.")
+            }
+            return false
+        }
     }
 
     func visibleItems(_ items: [TimelineItem], for date: Date) -> [TimelineItem] {

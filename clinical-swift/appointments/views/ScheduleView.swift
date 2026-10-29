@@ -142,7 +142,7 @@ struct ScheduleView: View {
         .task(id: visibleAppointmentDetailsScrollRequest) {
             scrollToVisibleAppointmentDetails()
         }
-        // Update displayed appointments and re-calculate suggested slot for booking, if any
+        // Load the visible days without changing the doctor's chosen draft interval.
         .task(id: router.selectedScheduleDate) {
             let requestedDate = router.selectedScheduleDate
             do {
@@ -160,17 +160,14 @@ struct ScheduleView: View {
 
                 scrollToVisibleAppointmentDetails()
 
-                if editorSession?.updateAppointments(
-                    scheduleModel.appointments(for: requestedDate), for: requestedDate
-                ) == true {
+                if editorSession != nil {
                     scrollToEditorPreview()
                 }
             } catch {
                 return
             }
         }
-        // Date, time, and duration changes can move the preview. Availability updates can also
-        // move an appointment to a suggested slot. Keep the model's repeated scroll requests.
+        // Date and type changes can move the preview. Keep the session's repeated scroll requests.
         .onChange(of: editorSession?.scrollRequest) { previous, current in
             // Initial presentation scrolls after layout in the session task above.
             guard let previous, let current, previous.sessionID == current.sessionID else { return }
