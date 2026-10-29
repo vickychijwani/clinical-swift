@@ -10,10 +10,20 @@
 		8BE2A01C2FE0000000000005 /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A01E2FE0000000000005 /* SQLiteData */; };
 		8BE2A01D2FE0000000000005 /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0202FE0000000000005 /* SQLiteData */; };
 		8BE2A0392FE0000000000005 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0292FE0000000000005 /* GRDB */; };
+		8BE2A03A2FE0000000000005 /* ConcurrencyExtras in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02A2FE0000000000005 /* ConcurrencyExtras */; };
 		8BE2A03B2FE0000000000005 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02B2FE0000000000005 /* Dependencies */; };
+		8BE2A03C2FE0000000000005 /* IssueReporting in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02C2FE0000000000005 /* IssueReporting */; };
+		8BE2A03D2FE0000000000005 /* OrderedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02D2FE0000000000005 /* OrderedCollections */; };
+		8BE2A03E2FE0000000000005 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02E2FE0000000000005 /* Perception */; };
+		8BE2A03F2FE0000000000005 /* Sharing in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A02F2FE0000000000005 /* Sharing */; };
 		8BE2A0402FE0000000000005 /* StructuredQueriesSQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0302FE0000000000005 /* StructuredQueriesSQLite */; };
 		8BE2A0412FE0000000000005 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0312FE0000000000005 /* GRDB */; };
+		8BE2A0422FE0000000000005 /* ConcurrencyExtras in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0322FE0000000000005 /* ConcurrencyExtras */; };
 		8BE2A0432FE0000000000005 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0332FE0000000000005 /* Dependencies */; };
+		8BE2A0442FE0000000000005 /* IssueReporting in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0342FE0000000000005 /* IssueReporting */; };
+		8BE2A0452FE0000000000005 /* OrderedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0352FE0000000000005 /* OrderedCollections */; };
+		8BE2A0462FE0000000000005 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0362FE0000000000005 /* Perception */; };
+		8BE2A0472FE0000000000005 /* Sharing in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0372FE0000000000005 /* Sharing */; };
 		8BE2A0482FE0000000000005 /* StructuredQueriesSQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */; };
 		9852A7C230934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		9852A7C330934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
@@ -26,7 +36,12 @@
 		9852A7CA30934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		9852A7CB30934A9F006C0066 /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0202FE0000000000005 /* SQLiteData */; };
 		9852A7CC30934A9F006C0066 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0312FE0000000000005 /* GRDB */; };
+		9852A7CD30934A9F006C0066 /* ConcurrencyExtras in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0322FE0000000000005 /* ConcurrencyExtras */; };
 		9852A7CE30934A9F006C0066 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0332FE0000000000005 /* Dependencies */; };
+		9852A7CF30934A9F006C0066 /* IssueReporting in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0342FE0000000000005 /* IssueReporting */; };
+		9852A7D030934A9F006C0066 /* OrderedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0352FE0000000000005 /* OrderedCollections */; };
+		9852A7D130934A9F006C0066 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0362FE0000000000005 /* Perception */; };
+		9852A7D230934A9F006C0066 /* Sharing in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0372FE0000000000005 /* Sharing */; };
 		9852A7D330934A9F006C0066 /* StructuredQueriesSQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */; };
 		B2000000000000000000000C /* ClinicalWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ClinicalWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B2000000000000000000000F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0292FE0000000000005 /* GRDB */; };
@@ -151,7 +166,12 @@
 				E40000000000000000000100 /* ClinicalModels in Frameworks */,
 				8BE2A01C2FE0000000000005 /* SQLiteData in Frameworks */,
 				8BE2A0392FE0000000000005 /* GRDB in Frameworks */,
+				8BE2A03A2FE0000000000005 /* ConcurrencyExtras in Frameworks */,
 				8BE2A03B2FE0000000000005 /* Dependencies in Frameworks */,
+				8BE2A03C2FE0000000000005 /* IssueReporting in Frameworks */,
+				8BE2A03D2FE0000000000005 /* OrderedCollections in Frameworks */,
+				8BE2A03E2FE0000000000005 /* Perception in Frameworks */,
+				8BE2A03F2FE0000000000005 /* Sharing in Frameworks */,
 				8BE2A0402FE0000000000005 /* StructuredQueriesSQLite in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -164,7 +184,12 @@
 				E40000000000000000000110 /* ClinicalModels in Frameworks */,
 				8BE2A01D2FE0000000000005 /* SQLiteData in Frameworks */,
 				8BE2A0412FE0000000000005 /* GRDB in Frameworks */,
+				8BE2A0422FE0000000000005 /* ConcurrencyExtras in Frameworks */,
 				8BE2A0432FE0000000000005 /* Dependencies in Frameworks */,
+				8BE2A0442FE0000000000005 /* IssueReporting in Frameworks */,
+				8BE2A0452FE0000000000005 /* OrderedCollections in Frameworks */,
+				8BE2A0462FE0000000000005 /* Perception in Frameworks */,
+				8BE2A0472FE0000000000005 /* Sharing in Frameworks */,
 				8BE2A0482FE0000000000005 /* StructuredQueriesSQLite in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -191,10 +216,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				9852A7CE30934A9F006C0066 /* Dependencies in Frameworks */,
+				9852A7CF30934A9F006C0066 /* IssueReporting in Frameworks */,
 				E40000000000000000000121 /* ClinicalPersistence in Frameworks */,
+				9852A7D030934A9F006C0066 /* OrderedCollections in Frameworks */,
 				9852A7D330934A9F006C0066 /* StructuredQueriesSQLite in Frameworks */,
 				E40000000000000000000120 /* ClinicalModels in Frameworks */,
 				9852A7C230934A9F006C0066 /* (null) in Frameworks */,
+				9852A7CD30934A9F006C0066 /* ConcurrencyExtras in Frameworks */,
 				9852A7C330934A9F006C0066 /* (null) in Frameworks */,
 				9852A7C430934A9F006C0066 /* (null) in Frameworks */,
 				9852A7CC30934A9F006C0066 /* GRDB in Frameworks */,
@@ -203,6 +231,8 @@
 				9852A7C630934A9F006C0066 /* (null) in Frameworks */,
 				9852A7C730934A9F006C0066 /* (null) in Frameworks */,
 				9852A7C830934A9F006C0066 /* (null) in Frameworks */,
+				9852A7D230934A9F006C0066 /* Sharing in Frameworks */,
+				9852A7D130934A9F006C0066 /* Perception in Frameworks */,
 				9852A7C930934A9F006C0066 /* (null) in Frameworks */,
 				9852A7CA30934A9F006C0066 /* (null) in Frameworks */,
 			);
@@ -263,7 +293,12 @@
 				E40000000000000000000003 /* ClinicalPersistence */,
 				8BE2A01E2FE0000000000005 /* SQLiteData */,
 				8BE2A0292FE0000000000005 /* GRDB */,
+				8BE2A02A2FE0000000000005 /* ConcurrencyExtras */,
 				8BE2A02B2FE0000000000005 /* Dependencies */,
+				8BE2A02C2FE0000000000005 /* IssueReporting */,
+				8BE2A02D2FE0000000000005 /* OrderedCollections */,
+				8BE2A02E2FE0000000000005 /* Perception */,
+				8BE2A02F2FE0000000000005 /* Sharing */,
 				8BE2A0302FE0000000000005 /* StructuredQueriesSQLite */,
 			);
 			productName = "clinical-swift";
@@ -292,7 +327,12 @@
 				E40000000000000000000003 /* ClinicalPersistence */,
 				8BE2A0202FE0000000000005 /* SQLiteData */,
 				8BE2A0312FE0000000000005 /* GRDB */,
+				8BE2A0322FE0000000000005 /* ConcurrencyExtras */,
 				8BE2A0332FE0000000000005 /* Dependencies */,
+				8BE2A0342FE0000000000005 /* IssueReporting */,
+				8BE2A0352FE0000000000005 /* OrderedCollections */,
+				8BE2A0362FE0000000000005 /* Perception */,
+				8BE2A0372FE0000000000005 /* Sharing */,
 				8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */,
 			);
 			productName = "clinical-swiftTests";
@@ -370,7 +410,12 @@
 				E40000000000000000000003 /* ClinicalPersistence */,
 				8BE2A0202FE0000000000005 /* SQLiteData */,
 				8BE2A0312FE0000000000005 /* GRDB */,
+				8BE2A0322FE0000000000005 /* ConcurrencyExtras */,
 				8BE2A0332FE0000000000005 /* Dependencies */,
+				8BE2A0342FE0000000000005 /* IssueReporting */,
+				8BE2A0352FE0000000000005 /* OrderedCollections */,
+				8BE2A0362FE0000000000005 /* Perception */,
+				8BE2A0372FE0000000000005 /* Sharing */,
 				8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */,
 			);
 			productName = "clinical-swiftBackupTests";
@@ -427,6 +472,11 @@
 				8BE2A01F2FE0000000000005 /* XCRemoteSwiftPackageReference "sqlite-data" */,
 				8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */,
 				8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
+				8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */,
+				8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */,
+				8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */,
+				8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */,
+				8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */,
 				8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -1042,6 +1092,46 @@
 				version = 1.17.1;
 			};
 		};
+		8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-concurrency-extras";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.4.0;
+			};
+		};
+		8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/xctest-dynamic-overlay";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.0;
+			};
+		};
+		8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-collections";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-perception";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+		8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-sharing";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.3.0;
+			};
+		};
 		8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pointfreeco/swift-structured-queries";
@@ -1068,10 +1158,35 @@
 			package = 8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
 		};
+		8BE2A02A2FE0000000000005 /* ConcurrencyExtras */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */;
+			productName = ConcurrencyExtras;
+		};
 		8BE2A02B2FE0000000000005 /* Dependencies */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
 			productName = Dependencies;
+		};
+		8BE2A02C2FE0000000000005 /* IssueReporting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */;
+			productName = IssueReporting;
+		};
+		8BE2A02D2FE0000000000005 /* OrderedCollections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = OrderedCollections;
+		};
+		8BE2A02E2FE0000000000005 /* Perception */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */;
+			productName = Perception;
+		};
+		8BE2A02F2FE0000000000005 /* Sharing */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */;
+			productName = Sharing;
 		};
 		8BE2A0302FE0000000000005 /* StructuredQueriesSQLite */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1083,10 +1198,35 @@
 			package = 8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
 		};
+		8BE2A0322FE0000000000005 /* ConcurrencyExtras */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */;
+			productName = ConcurrencyExtras;
+		};
 		8BE2A0332FE0000000000005 /* Dependencies */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
 			productName = Dependencies;
+		};
+		8BE2A0342FE0000000000005 /* IssueReporting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */;
+			productName = IssueReporting;
+		};
+		8BE2A0352FE0000000000005 /* OrderedCollections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = OrderedCollections;
+		};
+		8BE2A0362FE0000000000005 /* Perception */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */;
+			productName = Perception;
+		};
+		8BE2A0372FE0000000000005 /* Sharing */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */;
+			productName = Sharing;
 		};
 		8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */ = {
 			isa = XCSwiftPackageProductDependency;
