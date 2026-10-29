@@ -20,13 +20,13 @@ struct TimelineBreakView: View {
     private var breakContent: some View {
         ZStack {
             DiagonalStripePattern()
-                .stroke(.gray.opacity(0.12), lineWidth: 6)
+                .stroke(AppColor.breakStripe, lineWidth: 6)
 
             if !scale.isBreakExpanded {
                 Text("• \(Bitehaus.break.title.uppercased()) · \(timeRange) •")
                     .font(.caption)
                     .bold()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColor.secondaryText)
                     .tracking(2)
             }
         }

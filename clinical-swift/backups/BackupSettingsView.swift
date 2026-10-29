@@ -20,7 +20,7 @@ struct BackupSettingsView: View {
                         LabeledContent("Last successful snapshot", value: "None")
                     }
                     if let problem = backups.problem {
-                        Text(problem).foregroundStyle(.orange)
+                        Text(problem).foregroundStyle(AppColor.warning)
                     }
                 }
                 Section("Google Drive") {

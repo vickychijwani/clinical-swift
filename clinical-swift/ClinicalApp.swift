@@ -112,7 +112,9 @@ private struct AppStartup {
         do {
             #if DEBUG
                 // Keep gesture tests away from clinic data and its background integrations.
-                if CommandLine.arguments.contains("--ui-testing-timeline-adjustment") {
+                if CommandLine.arguments.contains("--ui-testing-timeline-adjustment")
+                    || CommandLine.arguments.contains("--ui-testing-color-lab")
+                {
                     return try timelineAdjustmentTest()
                 }
             #endif

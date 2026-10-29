@@ -1,33 +1,34 @@
 import ClinicalModels
+
 nonisolated struct AppointmentStatusPresentation: Equatable, Sendable {
     let label: String
     let systemImage: String
-    let treatment: Treatment
+    let statusColor: AppColor
+    let timeColor: AppColor
 
     init(status: Appointment.Status) {
         switch status {
-        case .scheduled:
-            label = "Scheduled"
-            systemImage = "clock"
-            treatment = .active
-        case .completed:
-            label = "Completed"
-            systemImage = "checkmark.circle"
-            treatment = .muted
         case .draft:
             label = "Draft"
             systemImage = "clock"
-            treatment = .accent
+            statusColor = .accent
+            timeColor = .text
+        case .scheduled:
+            label = "Scheduled"
+            systemImage = "clock"
+            statusColor = .accent
+            timeColor = .text
+        case .completed:
+            label = "Completed"
+            systemImage = "checkmark.circle"
+            statusColor = .success
+            timeColor = .secondaryText
+        // Cancelled appointments aren't displayed anywhere; configured just for completeness
         case .cancelled:
             label = "Cancelled"
             systemImage = "xmark.circle"
-            treatment = .muted
+            statusColor = .secondaryText
+            timeColor = .secondaryText
         }
-    }
-
-    enum Treatment: Equatable, Sendable {
-        case active
-        case accent
-        case muted
     }
 }

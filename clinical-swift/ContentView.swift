@@ -73,6 +73,7 @@ struct ContentView: View {
             router.open(url)
         }
         .timelineTuningRoot()
+        .colorLabRoot()
     }
 
     private var detailsPresentationBinding: Binding<DetailsPresentation?> {

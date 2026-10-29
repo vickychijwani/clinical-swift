@@ -60,6 +60,7 @@ Plans, implemented specs, and validation reports are historical context, not cur
 - Give each decision one home and link to it. Do not repeat it as an invariant, warning, and edge case.
 - Omit implementation inventories, ordinary UI details, test lists/results, and change summaries. Keep runnable setup and recovery procedures.
 - When editing a guide, remove duplicate and obsolete text instead of appending a feature summary.
+- Do not maintain documentation for local design tools, such as Card lab and Color lab. These temporary development controls do not need architecture guides.
 
 ## Core instructions
 

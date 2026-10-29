@@ -16,7 +16,7 @@ struct ScheduleCard: View {
                     .fill(color)
             case .draft:
                 RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                    .fill(.white)
+                    .fill(AppColor.activeCard)
                     // Keep underlying card edges visible as possible conflict cues.
                     .opacity(tuning.surfaceOpacity)
             }
@@ -41,7 +41,7 @@ struct ScheduleCard: View {
         let borderStyle: StrokeStyle
         var contentOpacity: Double = 1
         var timeColor: Color? = nil
-        var labelColor: Color = .primary
+        var labelColor: Color? = nil
     }
 
     enum Background {
@@ -51,6 +51,7 @@ struct ScheduleCard: View {
 }
 
 struct ScheduleCardLift: ViewModifier {
+    @Environment(\.appPalette) private var palette
     @Environment(\.scheduleCardTuning) private var tuning
     let isPressed: Bool
 
@@ -60,7 +61,7 @@ struct ScheduleCardLift: ViewModifier {
                 RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
                     .fill(.black)
                     .shadow(
-                        color: .black.opacity(tuning.lift.shadowOpacity),
+                        color: palette[.shadow].opacity(tuning.lift.shadowOpacity),
                         radius: isPressed ? tuning.lift.shadowRadius : 0,
                         y: isPressed ? 3 : 0
                     )
@@ -117,12 +118,14 @@ private struct ScheduleCardContent: View {
 }
 
 private struct ScheduleCardTime: View {
+    @Environment(\.appPalette) private var palette
     let start: Date
     let appearance: ScheduleCard.Appearance
 
     var body: some View {
         HStack(spacing: 2) {
             Image(systemName: appearance.systemImage)
+                .foregroundStyle(appearance.timeColor ?? palette[.cardIcon])
             Text(start.formatted(.dateTime.hour().minute()))
         }
         .styleAppointmentTime(color: appearance.timeColor)
@@ -132,13 +135,14 @@ private struct ScheduleCardTime: View {
 }
 
 private struct ScheduleCardLabel: View {
+    @Environment(\.appPalette) private var palette
     let label: String
-    let color: Color
+    let color: Color?
 
     var body: some View {
         Text(label)
             .styleBodyBold()
-            .foregroundStyle(color)
+            .foregroundStyle(color ?? palette[.text])
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .minimumScaleFactor(0.5)

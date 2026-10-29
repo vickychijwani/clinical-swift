@@ -21,7 +21,7 @@ struct AppointmentDetailsCard: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background)
+            .background(AppColor.surface)
             .clipShape(.rect(cornerRadius: 32))
 
         case .patientTimeline(let onSelectAppointment):
@@ -31,7 +31,7 @@ struct AppointmentDetailsCard: View {
                 AppointmentDetailsSummary(appointment: appointment)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.background)
+                    .background(AppColor.surface)
                     .clipShape(.rect(cornerRadius: 32))
             }
             .buttonStyle(.plain)
@@ -47,12 +47,14 @@ struct AppointmentDetailsCard: View {
 }
 
 struct AppointmentDetailsSummary: View {
+    @Environment(\.appPalette) private var palette
     @Dependency(\.locale) private var locale
 
     let appointment: Appointment
 
     var body: some View {
         HStack(alignment: .center) {
+            var statusColor = palette[statusPresentation.statusColor]
             Image(systemName: statusPresentation.systemImage)
                 .font(.system(size: 32))
                 .frame(width: 32, height: 32)
@@ -65,7 +67,7 @@ struct AppointmentDetailsSummary: View {
                     Text(formattedDate)
                         .font(.subheadline)
                         .bold()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColor.secondaryText)
 
                     Spacer()
                 }
@@ -73,7 +75,7 @@ struct AppointmentDetailsSummary: View {
                 Text(formattedTimeRange)
                     .font(.title3)
                     .bold()
-                    .foregroundStyle(timeColor)
+                    .foregroundStyle(palette[statusPresentation.timeColor])
             }
         }
     }
@@ -101,26 +103,6 @@ struct AppointmentDetailsSummary: View {
     private var statusPresentation: AppointmentStatusPresentation {
         AppointmentStatusPresentation(status: appointment.status)
     }
-
-    private var statusColor: Color {
-        switch statusPresentation.treatment {
-        case .active:
-            .green
-        case .accent:
-            .accentColor
-        case .muted:
-            .secondary
-        }
-    }
-
-    private var timeColor: Color {
-        switch statusPresentation.treatment {
-        case .active, .accent:
-            .primary
-        case .muted:
-            .secondary
-        }
-    }
 }
 
 #Preview("Standard") {
@@ -136,7 +118,7 @@ struct AppointmentDetailsSummary: View {
             )
         )
         .padding()
-        .background(Color("AppBackground"))
+        .background(AppColor.canvas)
     }
 }
 
@@ -150,7 +132,7 @@ struct AppointmentDetailsSummary: View {
             variant: .patientTimeline(onSelectAppointment: {})
         )
         .padding()
-        .background(Color("AppBackground"))
+        .background(AppColor.canvas)
     }
 }
 

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct InsetPanel<Content: View>: View {
+    @Environment(\.appPalette) private var palette
     let content: Content
     let cornerRadius: CGFloat
 
@@ -15,12 +16,12 @@ struct InsetPanel<Content: View>: View {
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(.clear)
-                    .shadow(color: .black.opacity(0.18), radius: 3, x: 0, y: 2)
-                    .shadow(color: .white.opacity(0.6), radius: 4, x: 0, y: -1)
+                    .shadow(color: palette[.shadow].opacity(0.18), radius: 3, x: 0, y: 2)
+                    .shadow(color: palette[.highlight].opacity(0.6), radius: 4, x: 0, y: -1)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(.primary.opacity(0.12), lineWidth: 1)
+                    .stroke(AppColor.border, lineWidth: 1)
             }
     }
 }
@@ -29,8 +30,8 @@ struct InsetPanel<Content: View>: View {
     InsetPanel(cornerRadius: 16) {
         VStack {}
             .frame(width: 300, height: 300)
-            .background(Color("AppBackground"))
+            .background(AppColor.canvas)
     }
     .frame(width: 400, height: 400)
-    .background(Color("AccentColor").opacity(0.3))
+    .background(AppColor.accent.opacity(0.3))
 }

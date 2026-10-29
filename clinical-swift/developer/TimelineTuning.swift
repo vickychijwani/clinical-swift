@@ -140,6 +140,7 @@ extension View {
                 @Bindable var tuning = tuning
                 Section("Design tools") {
                     Toggle("Card lab", isOn: $tuning.state.isEnabled)
+                    ColorLabSettings()
                 }
             }
         }

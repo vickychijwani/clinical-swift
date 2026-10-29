@@ -19,7 +19,7 @@ struct AppointmentBookingView: View {
         }
         .interactiveDismissDisabled()
         .presentationDragIndicator(.hidden)
-        .presentationBackground(Color("AppBackground"))
+        .presentationBackground(AppColor.canvas)
         .presentationBackgroundInteraction(.disabled)
         // Refresh when the app returns: an appointment may now be in the past.
         // Skip this when the app is inactive or patient selection is closed.
@@ -52,7 +52,7 @@ private struct AppointmentBookingForm: View {
             .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color("AppBackground"))
+        .background(AppColor.canvas)
         .navigationTitle("Select Patient")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -114,7 +114,7 @@ private struct AppointmentBookingPatientSelectionStep: View {
             VStack(spacing: 12) {
                 HStack {
                     Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColor.secondaryText)
 
                     TextField(
                         "Search patient by name",
@@ -129,11 +129,11 @@ private struct AppointmentBookingPatientSelectionStep: View {
                             searchText = ""
                         }
                         .labelStyle(.iconOnly)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColor.secondaryText)
                     }
                 }
                 .padding(10)
-                .background(.background)
+                .background(AppColor.surface)
                 .clipShape(.capsule)
 
                 LazyVStack(spacing: 0) {
@@ -159,7 +159,7 @@ private struct AppointmentBookingPatientSelectionStep: View {
                         AppointmentBookingCreatePatientRow(name: name, create: createPatient)
                     }
                 }
-                .background(.background)
+                .background(AppColor.surface)
                 .clipShape(.rect(cornerRadius: 18))
             }
         }
@@ -191,9 +191,9 @@ private struct AppointmentBookingCreatePatientRow: View {
                 Image(systemName: "plus")
                     .font(.headline.pointSize(13))
                     .bold()
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppColor.success)
                     .frame(width: 34, height: 34)
-                    .background(.green.opacity(0.16))
+                    .background(AppColor.success.opacity(0.16))
                     .clipShape(.circle)
 
                 VStack(alignment: .leading, spacing: 4) {

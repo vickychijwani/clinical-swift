@@ -187,7 +187,7 @@ private struct AppointmentDetailsActionsView: View {
                     Label("Complete", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.appGlassProminent)
 
                 Button {
                     onReschedule()

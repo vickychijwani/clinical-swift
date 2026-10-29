@@ -109,11 +109,12 @@ private struct TimelineScrollModifier: ViewModifier {
 }
 
 private struct TimelineTopScrollFade: View {
+    @Environment(\.appPalette) private var palette
     var body: some View {
         LinearGradient(
             colors: [
-                Color("AppBackground"),
-                Color("AppBackground").opacity(0),
+                palette[.canvas],
+                palette[.canvas].opacity(0),
             ],
             startPoint: .top,
             endPoint: .bottom

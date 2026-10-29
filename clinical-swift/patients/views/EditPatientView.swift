@@ -38,7 +38,7 @@ struct EditPatientView: View {
             }
         }
         .modifier(FittedSheetModifier(fitsVertically: true))
-        .background(Color("AppBackground"))
+        .background(AppColor.canvas)
         .alert(
             "Unable to save patient",
             isPresented: Binding(
@@ -159,12 +159,12 @@ private struct PatientDOBField: View {
         } label: {
             HStack {
                 Text(title)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppColor.text)
 
                 Spacer()
 
                 Text(selection?.formatted(.dateTime.day().month().year()) ?? "Add")
-                    .foregroundStyle(selection == nil ? .secondary : .primary)
+                    .foregroundStyle(selection == nil ? AppColor.secondaryText : AppColor.text)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(.rect)

@@ -24,6 +24,6 @@ struct DetailsRouteView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color("AppBackground"))
+        .background(AppColor.canvas)
     }
 }

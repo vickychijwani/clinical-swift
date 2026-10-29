@@ -165,6 +165,8 @@ private enum WeekPageOffset: Int, CaseIterable, Identifiable {
 }
 
 private struct WeekDatePage: View {
+    @Environment(\.appPalette) private var palette
+    @Environment(\.self) private var environment
     let weekStart: Date
     let selectedDate: Date
     let today: Date
@@ -195,7 +197,9 @@ private struct WeekDatePage: View {
                     .frame(width: 44, height: displayMode.cellMinHeight)
                     .glassEffect(
                         .regular.tint(
-                            selectedDate.isSameDayAs(today) ? .accentColor.opacity(0.2) : nil
+                            selectedDate.isSameDayAs(today)
+                                ? palette.opaqueAccent(in: environment)
+                                    .opacity(palette.todaySelection.highlightOpacity) : nil
                         )
                         .interactive(),
                         in: .rect(cornerRadius: displayMode.cornerRadius, style: .continuous)
@@ -211,6 +215,8 @@ private struct WeekDatePage: View {
 }
 
 private struct DateStripCell: View {
+    @Environment(\.appPalette) private var palette
+    @Environment(\.self) private var environment
     let date: Date
     let isSelected: Bool
     let isToday: Bool
@@ -260,17 +266,18 @@ private struct DateStripCell: View {
 
     private var foregroundStyle: Color {
         if isToday {
-            .accentColor
+            let accent = palette.opaqueAccent(in: environment)
+            return isSelected ? palette.todaySelection.textColor(accent: accent) : accent
         } else if isSelected {
-            .primary
+            return palette[.text]
         } else {
-            .secondary
+            return palette[.secondaryText]
         }
     }
 
     private var sheetBackgroundStyle: AnyShapeStyle {
         if isSelected {
-            AnyShapeStyle(Color.accentColor.opacity(0.2))
+            AnyShapeStyle(palette[.accent].opacity(0.2))
         } else {
             AnyShapeStyle(.background)
         }
@@ -307,12 +314,12 @@ private struct DateStripCell: View {
     @Previewable @State var selectedDate = Date.now.startOfDay()
 
     WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .schedule)
-        .background(Color("AppBackground"))
+        .background(AppColor.canvas)
 }
 
 #Preview("displayMode: sheet", traits: .sizeThatFitsLayout) {
     @Previewable @State var selectedDate = Date.now.startOfDay()
 
     WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .sheet)
-        .background(Color("AppBackground"))
+        .background(AppColor.canvas)
 }

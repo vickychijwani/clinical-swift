@@ -2,6 +2,7 @@ import ClinicalModels
 import SwiftUI
 
 struct AppointmentCard: View {
+    @Environment(\.appPalette) private var palette
     let appt: Appointment
     var isDeemphasized = false
 
@@ -20,15 +21,15 @@ struct AppointmentCard: View {
             ScheduleCard.Appearance(
                 systemImage: systemImage,
                 background: .draft,
-                border: .accentColor.opacity(0.7),
+                border: palette[.activeBorder],
                 borderStyle: StrokeStyle(lineWidth: 2)
             )
 
         case .scheduled:
             ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: .color(.white),
-                border: .gray.opacity(0.15),
+                background: .color(palette[.card]),
+                border: palette[.cardBorder],
                 borderStyle: StrokeStyle(lineWidth: 2),
                 contentOpacity: 1
             )
@@ -36,8 +37,8 @@ struct AppointmentCard: View {
         case .completed:
             ScheduleCard.Appearance(
                 systemImage: systemImage,
-                background: .color(Color(red: 0.95, green: 0.95, blue: 0.95)),
-                border: .gray.opacity(0.1),
+                background: .color(palette[.completedCard]),
+                border: palette[.completedBorder],
                 borderStyle: StrokeStyle(lineWidth: 2),
                 contentOpacity: 0.6
             )
@@ -74,7 +75,7 @@ struct AppointmentCard: View {
             Color.clear.frame(height: 8)
         }
         .padding(.horizontal, 16)
-        .background(Color("AppBackground"))
+        .background(AppColor.canvas)
     }
 
     #Preview(traits: .sizeThatFitsLayout) {

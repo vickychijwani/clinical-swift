@@ -6,6 +6,7 @@ import SwiftUI
 private let scheduleDayRadius = 3
 
 struct ScheduleView: View {
+    @Environment(\.appPalette) private var palette
     @Dependency(\.calendar) private var calendar
     @Environment(Router.self) private var router
 
@@ -69,7 +70,7 @@ struct ScheduleView: View {
                 )
             }
         }
-        .background(Color("AppBackground"))
+        .background(palette[.canvas])
         .navigationTitle(
             router.selectedScheduleDate.formatted(
                 .dateTime
@@ -182,10 +183,11 @@ struct ScheduleView: View {
             guard let previous, let current, previous.sessionID == current.sessionID else { return }
             scrollToEditorPreview()
         }
-        .timelineTuningOverlay(isVisible: showsCardLab)
+        .timelineTuningOverlay(isVisible: showsDesignLabs)
+        .colorLabOverlay(isVisible: showsDesignLabs)
     }
 
-    private var showsCardLab: Bool {
+    private var showsDesignLabs: Bool {
         guard router.selectedTab == .schedule, router.schedulePath.isEmpty,
             editorSheet.wrappedValue == nil
         else { return false }
