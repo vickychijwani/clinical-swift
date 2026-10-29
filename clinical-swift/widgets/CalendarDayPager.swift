@@ -6,6 +6,7 @@ struct CalendarDayPager<Content: View>: View {
 
     let calendar: Calendar
     let dayRadius: Int
+    let isPagingEnabled: Bool
     let content: (Date) -> Content
 
     @State private var visibleDate: Date
@@ -17,11 +18,13 @@ struct CalendarDayPager<Content: View>: View {
         selectedDate: Binding<Date>,
         calendar: Calendar = .autoupdatingCurrent,
         dayRadius: Int,
+        isPagingEnabled: Bool = true,
         @ViewBuilder content: @escaping (Date) -> Content
     ) {
         self._selectedDate = selectedDate
         self.calendar = calendar
         self.dayRadius = max(dayRadius, 1)
+        self.isPagingEnabled = isPagingEnabled
         self.content = content
         self._visibleDate = State(
             initialValue: selectedDate.wrappedValue.startOfDay(using: calendar)
@@ -48,6 +51,21 @@ struct CalendarDayPager<Content: View>: View {
         .scrollPosition(id: $visiblePage)
         .scrollIndicators(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 30)
+                .onEnded { value in
+                    // Timeline touch tracking can prevent the scroll view's pan from starting.
+                    guard isPagingEnabled, !isScrollActive, visiblePage == .current,
+                        abs(value.translation.width) > 50,
+                        abs(value.translation.width) > abs(value.translation.height) * 2
+                    else { return }
+                    isScrollActive = true
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        visiblePage = CalendarDayPageOffset(
+                            dayOffset: value.translation.width < 0 ? 1 : -1)
+                    }
+                }
+        )
         .onAppear(perform: normalizeSelection)
         .onChange(of: visiblePage) {
             guard let visiblePage else {
