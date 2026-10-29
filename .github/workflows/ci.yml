@@ -17,6 +17,8 @@ jobs:
         run: apt-get update && apt-get install -y libsqlite3-dev openssl
       - name: Test App Store Connect signing
         run: swift scripts/test_app_store_connect.swift
+      - name: Resolve Linux package dependencies
+        run: swift package resolve
       - name: Check shared package versions
         run: swift scripts/check_package_versions.swift
       - name: Check architecture
@@ -30,7 +32,7 @@ jobs:
 
   architecture:
     name: Architecture
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
@@ -44,7 +46,7 @@ jobs:
         run: sh scripts/test_architecture.sh
 
   ios-build:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1

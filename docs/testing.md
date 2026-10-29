@@ -13,6 +13,11 @@
 See [backup setup and release](backups.md#verification-and-release) for credentials
 and the release gate. The [Makefile](../Makefile) owns command options and schemes.
 
+On Linux, run `swift package resolve` before `make data-test`. The dependency
+graph includes OpenCombine only on Linux, so a lockfile resolved on macOS can
+omit it. CI resolves first, then checks shared versions and revisions against the
+app lockfile before it runs tests with automatic resolution disabled.
+
 ## Test boundaries
 
 Package tests use public imports to check the same API boundary as the app. Tests
