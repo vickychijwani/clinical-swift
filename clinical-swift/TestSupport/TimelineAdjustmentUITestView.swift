@@ -1,6 +1,7 @@
 #if DEBUG
     import ClinicalModels
     import ClinicalPersistence
+    import GRDB
     import SQLiteData
     import SwiftUI
 
@@ -34,6 +35,19 @@
                         label: "Travel", start: Date.now.setTime(11, 0), durationMinutes: 30,
                         createdAt: .now, updatedAt: .now)
                 }.execute(db)
+                if CommandLine.arguments.contains("--ui-testing-delayed-save") {
+                    // Pause the test writer so the UI can swipe while the real save is pending.
+                    db.add(
+                        function: GRDB.DatabaseFunction("ui_test_delay", argumentCount: 0) { _ in
+                            Thread.sleep(forTimeInterval: 8)
+                            return 0
+                        })
+                    try db.execute(
+                        sql: """
+                            CREATE TEMP TRIGGER delay_appointment_save BEFORE INSERT ON appointments
+                            BEGIN SELECT ui_test_delay(); END
+                            """)
+                }
             }
             return database
         }

@@ -42,7 +42,6 @@ struct ScheduleView: View {
                 dayRadius: scheduleDayRadius,
                 isPagingEnabled: editorSession?.allowsDateSelection != false
                     && editorSession?.adjustment.isDragging != true
-                    && editorSession?.isWorking != true
             ) { date in
                 ScheduleTimelinePage(
                     date: date,

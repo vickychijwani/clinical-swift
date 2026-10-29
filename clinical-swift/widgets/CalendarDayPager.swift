@@ -10,8 +10,8 @@ struct CalendarDayPager<Content: View>: View {
     let content: (Date) -> Content
 
     @State private var visibleDate: Date
-    @State private var visiblePage: CalendarDayPageOffset? = .current
-    @State private var pendingPage: CalendarDayPageOffset?
+    @State private var visiblePage: Int? = 0
+    @State private var pendingPage: Int?
     @State private var isScrollActive = false
 
     init(
@@ -34,10 +34,10 @@ struct CalendarDayPager<Content: View>: View {
     var body: some View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
-                ForEach(pageOffsets) { page in
+                ForEach(-dayRadius...dayRadius, id: \.self) { page in
                     content(
                         visibleDate.date(
-                            byAddingDays: page.dayOffset,
+                            byAddingDays: page,
                             using: calendar
                         )
                     )
@@ -48,6 +48,7 @@ struct CalendarDayPager<Content: View>: View {
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.paging)
+        .scrollDisabled(!isPagingEnabled)
         .scrollPosition(id: $visiblePage)
         .scrollIndicators(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -55,14 +56,13 @@ struct CalendarDayPager<Content: View>: View {
             DragGesture(minimumDistance: 30)
                 .onEnded { value in
                     // Timeline touch tracking can prevent the scroll view's pan from starting.
-                    guard isPagingEnabled, !isScrollActive, visiblePage == .current,
+                    guard isPagingEnabled, !isScrollActive, visiblePage == 0,
                         abs(value.translation.width) > 50,
                         abs(value.translation.width) > abs(value.translation.height) * 2
                     else { return }
                     isScrollActive = true
                     withAnimation(.easeOut(duration: 0.25)) {
-                        visiblePage = CalendarDayPageOffset(
-                            dayOffset: value.translation.width < 0 ? 1 : -1)
+                        visiblePage = value.translation.width < 0 ? 1 : -1
                     }
                 }
         )
@@ -72,7 +72,7 @@ struct CalendarDayPager<Content: View>: View {
                 return
             }
 
-            pendingPage = visiblePage == .current ? nil : visiblePage
+            pendingPage = visiblePage == 0 ? nil : visiblePage
 
             if !isScrollActive {
                 commitPendingPage()
@@ -97,19 +97,15 @@ struct CalendarDayPager<Content: View>: View {
             }
 
             visibleDate = normalizedDate
-            visiblePage = .current
+            visiblePage = 0
             pendingPage = nil
         }
-    }
-
-    private var pageOffsets: [CalendarDayPageOffset] {
-        (-dayRadius...dayRadius).map(CalendarDayPageOffset.init)
     }
 
     private func normalizeSelection() {
         selectedDate = selectedDate.startOfDay(using: calendar)
         visibleDate = selectedDate
-        visiblePage = .current
+        visiblePage = 0
         pendingPage = nil
     }
 
@@ -129,18 +125,8 @@ struct CalendarDayPager<Content: View>: View {
             return
         }
 
-        moveVisibleDay(by: pendingPage.dayOffset)
+        moveVisibleDay(by: pendingPage)
         self.pendingPage = nil
-        visiblePage = .current
-    }
-}
-
-private struct CalendarDayPageOffset: Hashable, Identifiable {
-    static let current = CalendarDayPageOffset(dayOffset: 0)
-
-    let dayOffset: Int
-
-    var id: Int {
-        dayOffset
+        visiblePage = 0
     }
 }
