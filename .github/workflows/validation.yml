@@ -1,12 +1,17 @@
-name: CI
+name: Validation
 
 on:
   pull_request:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  linux:
+  data-checks:
+    name: Data and repository checks (Linux)
     runs-on: ubuntu-24.04
     container: swift:6.4.1-noble
     steps:
@@ -17,6 +22,13 @@ jobs:
         run: apt-get update && apt-get install -y libsqlite3-dev openssl
       - name: Test App Store Connect signing
         run: swift scripts/test_app_store_connect.swift
+      - name: Cache SwiftPM dependencies and build state
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-v1-${{ runner.os }}-${{ runner.arch }}-swift-6.4.1-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            spm-v1-${{ runner.os }}-${{ runner.arch }}-swift-6.4.1-
       - name: Resolve Linux package dependencies
         run: swift package resolve
       - name: Check shared package versions
@@ -44,20 +56,3 @@ jobs:
         run: sh scripts/check_architecture.sh
       - name: Test architecture checker
         run: sh scripts/test_architecture.sh
-
-  ios-build:
-    runs-on: xcode-27
-    steps:
-      - uses: actions/checkout@v4
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '27.1'
-      - name: Apply Xcode CI setup
-        run: sh ci_scripts/ci_post_clone.sh
-      - name: Build app, widget, and unit test bundle
-        run: >-
-          xcodebuild -project clinical-swift.xcodeproj
-          -scheme clinical-swift-UnitTests
-          -destination 'generic/platform=iOS Simulator'
-          -disableAutomaticPackageResolution
-          CODE_SIGNING_ALLOWED=NO build-for-testing
