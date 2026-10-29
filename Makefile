@@ -33,12 +33,10 @@ LOG_DIR := $(BUILD_DIR)/logs
 APP_PATH := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)-iphonesimulator/$(SCHEME).app
 ARCHIVE_DIR := $(BUILD_DIR)/Archives
 EXPORT_DIR := $(BUILD_DIR)/Exports
-RELEASE_ASSETS_DIR := $(BUILD_DIR)/ReleaseAssets
 LATEST_ARCHIVE_FILE := $(ARCHIVE_DIR)/.latest-archive
 ARCHIVE_PATH := $(ARCHIVE_DIR)/$(APP_NAME)-$(BUILD_NUMBER).xcarchive
 EXPORT_PATH := $(EXPORT_DIR)/$(APP_NAME)-$(BUILD_NUMBER)
 TESTFLIGHT_EXPORT_OPTIONS := $(CURDIR)/TestFlightExportOptions.plist
-BACKUP_ARCHIVE_SCRIPT := $(CURDIR)/scripts/backup_archive_to_github.sh
 APP_STORE_CONNECT_SCRIPT := $(CURDIR)/scripts/app_store_connect.swift
 
 DESTINATION := platform=iOS Simulator,id=$(SIMULATOR_ID)
@@ -66,7 +64,7 @@ BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" 
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
-.PHONY: backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-github-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number backup-archive backup-archive-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
+.PHONY: backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
 
 help:
 	@printf "%s\n" \
@@ -87,13 +85,12 @@ help:
 		"  make xcode-cloud-build  Start the configured workflow on its default branch" \
 		"" \
 		"TestFlight workflow:" \
-		"  make release-testflight  Archive, upload, back up, and remove locally" \
+		"  make release-testflight  Archive, upload, and remove locally" \
 		"" \
 		"Individual TestFlight steps:" \
 		"  make next-build-number  Show the next App Store Connect build number" \
 		"  make archive            Create a signed App Store archive" \
 		"  make upload-testflight  Upload the latest existing archive only" \
-		"  make backup-archive     Back up the latest archive; preserve it locally" \
 		"  make remove-archive     Remove the latest local archive" \
 		"  BUILD_NUMBER=N          Override automatic build-number selection" \
 		"" \
@@ -124,7 +121,7 @@ diagnose:
 	@printf "xcbeautify:    %s\n" "$$(command -v $(firstword $(XCBEAUTIFY)))"
 
 prepare:
-	@mkdir -p "$(DERIVED_DATA)" "$(SOURCE_PACKAGES)" "$(MODULE_CACHE)" "$(TMPDIR_PATH)" "$(LOG_DIR)" "$(ARCHIVE_DIR)" "$(EXPORT_DIR)" "$(RELEASE_ASSETS_DIR)"
+	@mkdir -p "$(DERIVED_DATA)" "$(SOURCE_PACKAGES)" "$(MODULE_CACHE)" "$(TMPDIR_PATH)" "$(LOG_DIR)" "$(ARCHIVE_DIR)" "$(EXPORT_DIR)"
 
 check-tools:
 	@command -v xcodebuild >/dev/null
@@ -139,13 +136,6 @@ check-app-store-connect-tools:
 	@command -v $(firstword $(SWIFT)) >/dev/null
 	@command -v openssl >/dev/null
 	@test -f "$(APP_STORE_CONNECT_SCRIPT)" || { echo "App Store Connect script is missing: $(APP_STORE_CONNECT_SCRIPT)"; exit 1; }
-
-check-github-tools:
-	@command -v gh >/dev/null || { echo "GitHub CLI is required. Install it with: brew install gh"; exit 1; }
-	@command -v ditto >/dev/null
-	@command -v shasum >/dev/null
-	@test -x "$(BACKUP_ARCHIVE_SCRIPT)" || { echo "Archive backup script is missing or not executable: $(BACKUP_ARCHIVE_SCRIPT)"; exit 1; }
-	@gh auth status >/dev/null
 
 check-build-number:
 	@test -n "$(BUILD_NUMBER)" || { echo "BUILD_NUMBER is required. Example: make upload-testflight BUILD_NUMBER=2"; exit 2; }
@@ -253,20 +243,6 @@ archive-with-build-number: check-tools check-build-number prepare
 	@printf '%s\n' "$(BUILD_NUMBER)" > "$(LATEST_ARCHIVE_FILE).tmp"
 	@mv "$(LATEST_ARCHIVE_FILE).tmp" "$(LATEST_ARCHIVE_FILE)"
 
-backup-archive: check-github-tools prepare
-	@number="$(BUILD_NUMBER)"; \
-	if [[ -z "$$number" ]]; then \
-		test -f "$(LATEST_ARCHIVE_FILE)" || { echo "No latest archive is recorded. Run make archive first or pass BUILD_NUMBER=N."; exit 1; }; \
-		number="$$(< "$(LATEST_ARCHIVE_FILE)")"; \
-	fi; \
-	$(MAKE) --no-print-directory backup-archive-with-build-number BUILD_NUMBER="$$number"
-
-backup-archive-with-build-number: check-github-tools check-build-number prepare
-	@test -d "$(ARCHIVE_PATH)" || { echo "Missing archive at $(ARCHIVE_PATH)"; exit 1; }
-	@archive_build="$$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleVersion' "$(ARCHIVE_PATH)/Info.plist")"; \
-	[[ "$$archive_build" == "$(BUILD_NUMBER)" ]] || { echo "Archive contains build $$archive_build, expected $(BUILD_NUMBER)"; exit 1; }
-	@"$(BACKUP_ARCHIVE_SCRIPT)" "$(ARCHIVE_PATH)" "$(RELEASE_ASSETS_DIR)"
-
 upload-testflight: check-tools prepare
 	@number="$(BUILD_NUMBER)"; \
 	if [[ -z "$$number" ]]; then \
@@ -308,12 +284,11 @@ remove-archive-with-build-number: check-build-number prepare
 	fi
 	@if [[ -f "$(LATEST_ARCHIVE_FILE)" ]] && [[ "$$(< "$(LATEST_ARCHIVE_FILE)")" == "$(BUILD_NUMBER)" ]]; then rm -f "$(LATEST_ARCHIVE_FILE)"; fi
 
-release-testflight: check-tools check-github-tools prepare
+release-testflight: check-tools prepare
 	@number="$(BUILD_NUMBER)"; \
 	if [[ -z "$$number" ]]; then number="$$($(RESOLVE_BUILD_NUMBER))" || exit; fi; \
 	$(MAKE) --no-print-directory archive-with-build-number BUILD_NUMBER="$$number" && \
 	$(MAKE) --no-print-directory upload-testflight-with-build-number BUILD_NUMBER="$$number" && \
-	$(MAKE) --no-print-directory backup-archive-with-build-number BUILD_NUMBER="$$number" && \
 	$(MAKE) --no-print-directory remove-archive-with-build-number BUILD_NUMBER="$$number"
 
 boot: check-tools check-simulator

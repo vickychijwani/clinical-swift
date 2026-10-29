@@ -2,7 +2,7 @@
 
 ## Summary
 
-Implement the [pending spec](../specs/unavailable-time.md) and the [Unavailable time artboard](https://www.figma.com/design/SE5qfKLHQwGJvN20qSc89l/Clinical?node-id=42-137).
+Implement the [pending spec](../specs/unavailable-time.md) and the Unavailable time artboard from Figma.
 
 The clinic owner can create, edit, and delete unavailable-time blocks from Schedule. Blocks appear on the app timeline, in the schedule widget, and in the existing Calendar integration. They do not affect appointment suggestions or saving.
 
