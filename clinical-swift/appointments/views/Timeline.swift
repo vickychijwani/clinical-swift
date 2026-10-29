@@ -183,16 +183,18 @@ struct Timeline: View {
 
     private func selectItem(_ item: TimelineItem) {
         // A hold can finish in the same event as the button release.
-        guard editorSession == nil,
-            lastDragEnd.map({ $0.duration(to: .now) > .milliseconds(150) }) ?? true
+        guard lastDragEnd.map({ $0.duration(to: .now) > .milliseconds(150) }) ?? true
         else { return }
+        if isDraft(item) {
+            onSelectDraft()
+            return
+        }
+        guard editorSession == nil else { return }
         onSelectItem(item)
     }
 
     private func move(_ item: TimelineItem, value: DragGesture.Value) {
-        if abs(value.translation.height) > 10 || abs(value.translation.width) > 10 {
-            lastDragEnd = .now
-        }
+        lastDragEnd = .now
         guard let editorSession, !isWorking, isDraft(item) else { return }
         let adjustment = editorSession.adjustment
         if !adjustment.isDragging {
@@ -207,16 +209,11 @@ struct Timeline: View {
     private func endMove(_ item: TimelineItem, value: DragGesture.Value) {
         guard let editorSession else { return }
         let adjustment = editorSession.adjustment
-        if abs(value.translation.height) > 10 || abs(value.translation.width) > 10 {
-            lastDragEnd = .now
-        }
+        lastDragEnd = .now
         guard isDraft(item), adjustment.isDragging, adjustment.edge == .move else { return }
         onScaleChange(
             editorSession.updateAdjustment(translation: value.translation.height, items: items))
         releaseAdjustment()
-        if abs(value.translation.height) < 5, abs(value.translation.width) < 5 {
-            onSelectDraft()
-        }
     }
 
     private func drag(

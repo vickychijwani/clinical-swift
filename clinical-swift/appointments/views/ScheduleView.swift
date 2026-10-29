@@ -92,17 +92,10 @@ struct ScheduleView: View {
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .topBarTrailing) {
-                    if !hasEditor {
-                        Button("Unavailable Time", systemImage: "nosign") {
-                            router.requestUnavailableTimeCreation()
-                        }
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    // Display creation buttons only when there is no schedule editor.
+                    // Display the creation button only when there is no schedule editor.
                     if !hasEditor {
                         Button("Add", systemImage: "plus") {
-                            router.requestAppointmentBooking()
+                            router.requestScheduleCreation()
                         }
                     }
                 }
@@ -154,7 +147,7 @@ struct ScheduleView: View {
         .task(id: visibleAppointmentDetailsScrollRequest) {
             scrollToVisibleAppointmentDetails()
         }
-        // Update displayed appointments and re-calculate suggested slot for booking, if any
+        // Load the visible days without changing the doctor's chosen draft interval.
         .task(id: router.selectedScheduleDate) {
             let requestedDate = router.selectedScheduleDate
             do {
@@ -172,17 +165,14 @@ struct ScheduleView: View {
 
                 scrollToVisibleAppointmentDetails()
 
-                if editorSession?.updateAppointments(
-                    scheduleModel.appointments(for: requestedDate), for: requestedDate
-                ) == true {
+                if editorSession != nil {
                     scrollToEditorPreview()
                 }
             } catch {
                 return
             }
         }
-        // Date, time, and duration changes can move the preview. Availability updates can also
-        // move an appointment to a suggested slot. Keep the model's repeated scroll requests.
+        // Date and type changes can move the preview. Keep the session's repeated scroll requests.
         .onChange(of: editorSession?.scrollRequest) { previous, current in
             // Initial presentation scrolls after layout in the session task above.
             guard let previous, let current, previous.sessionID == current.sessionID else { return }
@@ -199,7 +189,7 @@ struct ScheduleView: View {
         switch router.activePresentation {
         case nil:
             return true
-        case .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
+        case .scheduleCreation, .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
             return editorSession?.isShowingSheet == false
         default:
             return false
@@ -227,7 +217,7 @@ struct ScheduleView: View {
     private var scheduleEditorRequest: AppPresentation? {
         // All schedule editors use the router's single active presentation and one sheet host.
         switch router.activePresentation {
-        case .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
+        case .scheduleCreation, .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
             router.activePresentation
         default:
             nil
@@ -280,8 +270,8 @@ struct ScheduleView: View {
         guard !hasEditor,
             date.isSameDayAs(router.selectedScheduleDate)
         else { return nil }
-        router.requestAppointmentBooking()
-        guard let request = scheduleEditorRequest else { return nil }
+        router.requestScheduleCreation()
+        guard let request = router.scheduleCreationRequest else { return nil }
         editorSession = ScheduleEditorSession(
             bookingID: request.id, selectedDate: date, center: center,
             items: visibleItems(for: date)
@@ -346,17 +336,6 @@ struct ScheduleView: View {
 private struct AppointmentDetailsScrollRequest: Equatable {
     let appointmentID: Appointment.ID
     let selectedDate: Date
-}
-
-private struct ScheduleEditorSheet: View {
-    let session: ScheduleEditorSession
-
-    var body: some View {
-        switch session.editor {
-        case .appointment(let model): AppointmentBookingView(model: model)
-        case .unavailableTime(let model): UnavailableTimeEditorView(model: model)
-        }
-    }
 }
 
 #Preview {

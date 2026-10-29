@@ -3,7 +3,7 @@ import ClinicalPersistence
 import Foundation
 import SQLiteData
 
-struct UnavailableTimeDraft: Equatable {
+struct UnavailableTimeDraft {
     var label: String
     var start: Date
     var durationMinutes: Int
@@ -19,71 +19,38 @@ struct UnavailableTimeDraft: Equatable {
         else { throw UnavailableTimeError.invalidTime }
     }
 
-    mutating func move(to date: Date) {
-        @Dependency(\.calendar) var calendar
-        let clock = TimeOfDay(date: start, calendar: calendar)
-        let latest = Bitehaus.closing.totalMinutes - durationMinutes
-        let minutes = max(Bitehaus.opening.totalMinutes, min(clock.totalMinutes, latest))
-        start = TimeOfDay(minutes / 60, minutes % 60).on(date: date, using: calendar)
-    }
-
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.label.nilIfBlank == rhs.label.nilIfBlank
-            && lhs.start == rhs.start && lhs.durationMinutes == rhs.durationMinutes
-    }
 }
 
 @MainActor @Observable
-final class UnavailableTimeEditorModel: Identifiable {
+final class UnavailableTimeEditorModel {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.date.now) private var now
 
-    let id: UUID
     let purpose: UnavailableTimeEditorPurpose
     let blockID: UUID
-    let adjustment = TimelineAdjustment()
-    let originalDraft: UnavailableTimeDraft
     var draft: UnavailableTimeDraft
-    var isEditingLabel = false
-    private(set) var isSaving = false
-    private(set) var isDeleting = false
-    private(set) var didFinish = false
-    private(set) var draftPreviewScrollRequest = 0
-    var errorMessage: String?
-    var onFinished: (Date) -> Void
 
-    init(id: UUID = UUID(), selectedDate: Date, onFinished: @escaping (Date) -> Void) {
-        @Dependency(\.calendar) var calendar
-        self.id = id
+    init(
+        start: Date, durationMinutes: Int
+    ) {
         purpose = .create
-        isEditingLabel = true
         blockID = UUID()
-        let initialDraft = UnavailableTimeDraft(
-            label: "",
-            start: Bitehaus.opening.on(date: selectedDate, using: calendar),
-            durationMinutes: 60
-        )
-        draft = initialDraft
-        originalDraft = initialDraft
-        self.onFinished = onFinished
+        draft = UnavailableTimeDraft(
+            label: "", start: start, durationMinutes: durationMinutes)
     }
 
-    init(id: UUID = UUID(), editing block: UnavailableTime, onFinished: @escaping (Date) -> Void) {
-        self.id = id
+    init(
+        editing block: UnavailableTime
+    ) {
         purpose = .edit(block)
         blockID = block.id
         // Keep stored values unchanged until the user changes a schedule control.
-        let initialDraft = UnavailableTimeDraft(
+        draft = UnavailableTimeDraft(
             label: block.label ?? "", start: block.start, durationMinutes: block.durationMinutes
         )
-        draft = initialDraft
-        originalDraft = initialDraft
-        self.onFinished = onFinished
     }
 
-    var isWorking: Bool { isSaving || isDeleting }
-    var hasUnsavedChanges: Bool { draft != originalDraft }
     var selectedDate: Date { calendar.startOfDay(for: draft.start) }
     var preview: UnavailableTime {
         UnavailableTime(
@@ -92,98 +59,41 @@ final class UnavailableTimeEditorModel: Identifiable {
         )
     }
 
-    func finishLabelEntry() {
-        guard !isWorking else { return }
-        isEditingLabel = false
-    }
-
-    func selectDate(_ date: Date) {
-        guard !calendar.isDate(date, inSameDayAs: draft.start), !isWorking else { return }
-        adjustment.release()
-        draft.start = TimeOfDay(date: draft.start, calendar: calendar).on(
-            date: date, using: calendar)
-        draftPreviewScrollRequest += 1
-    }
-
-    func selectStart(_ start: Date) {
-        guard !isWorking else { return }
-        let date = selectedDate
-        draft.start = start
-        draft.move(to: date)
-        draftPreviewScrollRequest += 1
-    }
-
-    func selectDuration(_ minutes: Int) {
-        guard !isWorking else { return }
-        draft.durationMinutes = minutes
-        draft.move(to: selectedDate)
-        draftPreviewScrollRequest += 1
-    }
-
-    @discardableResult
-    func save() async -> Bool {
-        guard !isWorking, !didFinish, !adjustment.isDragging else { return false }
-        isSaving = true
-        defer { isSaving = false }
-        errorMessage = nil
-        do {
-            try draft.validate()
-            let record = UnavailableTimeRecord(
-                id: blockID, label: draft.label.nilIfBlank, start: draft.start,
-                durationMinutes: draft.durationMinutes, createdAt: now, updatedAt: now
-            )
-            let isEditing = purpose.editedID != nil
-            try await database.write { db in
-                if isEditing {
-                    guard try UnavailableTimeRecord.find(record.id).fetchOne(db) != nil else {
-                        throw UnavailableTimeError.missingRecord
-                    }
-                    try UnavailableTimeRecord.find(record.id).update {
-                        $0.label = record.label
-                        $0.start = record.start
-                        $0.durationMinutes = record.durationMinutes
-                        $0.updatedAt = record.updatedAt
-                    }.execute(db)
-                } else {
-                    try UnavailableTimeRecord.insert { record }.execute(db)
-                }
-            }
-            didFinish = true
-            onFinished(record.start)
-            return true
-        } catch {
-            errorMessage =
-                (error as? UnavailableTimeError)?.message
-                ?? "The unavailable time could not be saved."
-            return false
-        }
-    }
-
-    @discardableResult
-    func delete() async -> Bool {
-        guard !isWorking, !didFinish, !adjustment.isDragging,
-            let targetID = purpose.editedID
-        else { return false }
-        isDeleting = true
-        defer { isDeleting = false }
-        errorMessage = nil
-        let date = selectedDate
-        do {
-            try await database.write { db in
-                guard try UnavailableTimeRecord.find(targetID).fetchOne(db) != nil else {
+    func save() async throws -> Date {
+        try draft.validate()
+        let record = UnavailableTimeRecord(
+            id: blockID, label: draft.label.nilIfBlank, start: draft.start,
+            durationMinutes: draft.durationMinutes, createdAt: now, updatedAt: now
+        )
+        let isEditing = purpose.editedID != nil
+        try await database.write { db in
+            if isEditing {
+                guard try UnavailableTimeRecord.find(record.id).fetchOne(db) != nil else {
                     throw UnavailableTimeError.missingRecord
                 }
-                try UnavailableTimeRecord.find(targetID).delete().execute(db)
+                try UnavailableTimeRecord.find(record.id).update {
+                    $0.label = record.label
+                    $0.start = record.start
+                    $0.durationMinutes = record.durationMinutes
+                    $0.updatedAt = record.updatedAt
+                }.execute(db)
+            } else {
+                try UnavailableTimeRecord.insert { record }.execute(db)
             }
-            didFinish = true
-            onFinished(date)
-            return true
-        } catch {
-            errorMessage =
-                (error as? UnavailableTimeError)?.message
-                ?? "The unavailable time could not be deleted."
-            return false
         }
+        return record.start
+    }
+
+    func delete() async throws -> Date {
+        guard let targetID = purpose.editedID else { throw UnavailableTimeError.missingRecord }
+        let date = selectedDate
+        try await database.write { db in
+            guard try UnavailableTimeRecord.find(targetID).fetchOne(db) != nil else {
+                throw UnavailableTimeError.missingRecord
+            }
+            try UnavailableTimeRecord.find(targetID).delete().execute(db)
+        }
+        return date
     }
 
 }
@@ -197,7 +107,6 @@ nonisolated enum UnavailableTimeEditorPurpose: Sendable {
         return block.id
     }
 
-    var title: String { editedID == nil ? "Unavailable Time" : "Edit Unavailable Time" }
 }
 
 nonisolated enum UnavailableTimeError: Error {

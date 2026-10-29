@@ -16,18 +16,6 @@ nonisolated struct AppointmentAvailability {
         self.calendar = calendar
     }
 
-    func canPrefill(start: Date, durationMinutes: Int) -> Bool {
-        guard let end = start.addMinutes(durationMinutes, using: calendar),
-            fitsWithinWorkingSegment(start: start, end: end)
-        else {
-            return false
-        }
-
-        return !busyIntervals.contains { interval in
-            start < interval.end && end > interval.start
-        }
-    }
-
     func firstAvailableSlot(
         neededDurationMinutes: Int,
         earliestStart: Date? = nil
@@ -62,16 +50,6 @@ nonisolated struct AppointmentAvailability {
                 return (appointment.start, end)
             }
             .sorted { $0.start < $1.start }
-    }
-
-    private func fitsWithinWorkingSegment(start: Date, end: Date) -> Bool {
-        let firstShiftStart = Bitehaus.opening.on(date: searchDate, using: calendar)
-        let firstShiftEnd = Bitehaus.break.start.on(date: searchDate, using: calendar)
-        let secondShiftStart = Bitehaus.break.end.on(date: searchDate, using: calendar)
-        let secondShiftEnd = Bitehaus.closing.on(date: searchDate, using: calendar)
-
-        return (start >= firstShiftStart && end <= firstShiftEnd)
-            || (start >= secondShiftStart && end <= secondShiftEnd)
     }
 
     private func firstAvailableSlot(

@@ -170,16 +170,16 @@ struct MixedScheduleTests {
             $0.calendar = utcCalendar
         } operation: {
             let router = Router(selectedScheduleDate: date)
-            router.requestUnavailableTimeCreation()
-            let editor = try #require(router.unavailableTimeEditorRequest)
+            router.requestScheduleCreation()
+            let editor = try #require(router.activePresentation)
             router.presentationDidAppear(editor.id)
-            router.requestAppointmentBooking()
+            router.requestScheduleCreation()
             #expect(router.activePresentation == nil)
             router.presentationDidDismiss()
-            #expect(router.appointmentBookingRequest != nil)
+            #expect(router.activePresentation != nil)
             router.finishScheduleEditor(editor.id, date: date.addingTimeInterval(24 * 60 * 60))
             #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: date))
-            #expect(router.appointmentBookingRequest != nil)
+            #expect(router.activePresentation != nil)
             let block = UnavailableTime(
                 start: date.addingTimeInterval(24 * 60 * 60), durationMinutes: 60)
             #expect(router.open((try #require(ClinicalURL.unavailableTime(block.id).url))))
@@ -191,7 +191,7 @@ struct MixedScheduleTests {
             router.completeUnavailableTimeNavigation(
                 try #require(router.unavailableTimeNavigationRequest), block: block)
             #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: block.start))
-            #expect(router.unavailableTimeEditorRequest == nil)
+            #expect(router.activePresentation == nil)
             router.openUnavailableTime(UUID())
             router.completeUnavailableTimeNavigation(
                 try #require(router.unavailableTimeNavigationRequest), block: nil)
@@ -220,11 +220,12 @@ struct MixedScheduleTests {
             try await database.write { db in
                 try PatientRecord.insert { PatientRecord(patient) }.execute(db)
             }
-            let booking = AppointmentBookingModel(selectedDate: date, selectedPatient: patient) {
-                _ in
-            }
-            booking.updateAppointments(model.appointments(for: date), for: date)
-            let before = booking.draft.start
+            let booking = try #require(
+                ScheduleEditorSession(
+                    request: .appointmentBooking(AppointmentBookingRequest(patient: patient)),
+                    selectedDate: date, appointments: model.appointments(for: date),
+                    onFinished: { _ in }))
+            let before = booking.preview.start
             let blocks = (-3...4).map { day in
                 UnavailableTimeRecord(
                     id: UUID(), label: nil,
@@ -241,9 +242,8 @@ struct MixedScheduleTests {
             #expect(model.unavailableTimes(for: date).count == 1)
             #expect(model.unavailableTimes(for: blocks[0].start).count == 1)
             #expect(model.unavailableTimes(for: blocks[7].start).isEmpty)
-            booking.updateAppointments(model.appointments(for: date), for: date)
-            #expect(booking.draft.start == before)
-            #expect(await booking.saveAppointment())
+            #expect(booking.preview.start == before)
+            #expect(await booking.save())
             #expect(
                 try await database.read { db in try AppointmentRecord.count().fetchOne(db) } == 1)
             try await model.loadVisibleDays(centeredOn: blocks[7].start, dayRadius: 3)
@@ -301,7 +301,7 @@ struct MixedScheduleTests {
             $0.defaultDatabase = database
         } operation: {
             let router = Router()
-            router.requestUnavailableTimeCreation()
+            router.requestScheduleCreation()
             router.openUnavailableTime(block.id)
             let request = try #require(router.unavailableTimeNavigationRequest)
             await router.resolveUnavailableTime(request)

@@ -7,10 +7,10 @@ booking. A visiting dentist can work while the clinic owner is busy or away. Tim
 suggestions prefer free working hours because the clinic usually has one dentist;
 that preference must not become a save-time restriction.
 
-Opening an appointment for editing preserves its saved time. Once timeline editing
-starts, date changes preserve the chosen clock time and duration, and schedule
-reloads do not apply suggestions. Otherwise, automatic prefilling could silently
-move an appointment away from the doctor's chosen time.
+Opening an appointment for editing preserves its saved time. New sessions apply a
+time suggestion once. Later date changes preserve the chosen clock time and
+duration, and schedule reloads do not apply suggestions. Otherwise, automatic
+prefilling could silently move an appointment away from the doctor's chosen time.
 
 ## Patient selection
 
@@ -27,3 +27,15 @@ follow the [routing policy](routing.md).
 Time selection stays on the full schedule so the doctor can place the appointment
 in context. Appointments and unavailable time follow the same
 [direct editing rules](timeline.md#direct-editing).
+
+## Shared creation
+
+Toolbar Add and a timeline hold share one generic creation session. Type changes
+preserve the chosen interval without another suggestion. They clear the fields
+for the type being left so stale patient or label values cannot return on a round
+trip. They do not write data or delete a patient. Patient-specific booking and
+saved-item editing keep their type.
+
+Closing the shared sheet keeps the session and its entries. Only Done on the
+timeline saves the active type; Cancel confirms before discarding. This keeps the
+commit boundary where the doctor can check placement in context.

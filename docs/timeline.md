@@ -30,16 +30,17 @@ still be able to read when an appointment starts.
 Appointment and unavailable-time edits stay in one unsaved draft across gestures
 and date changes. Only Done saves these changes; a failed save keeps the draft for
 retry. This lets the doctor try positions across days without changing stored
-data at each release. The editor owns persistence and errors; a separate timeline
-save path could bypass its validation and session rules.
+data at each release. The session owns gesture, sheet, save, and error state.
+Only its active domain draft is rendered or saved; a second timeline save path
+could bypass validation.
 
 Hide the stored version of the edited item on every date page until the session
 ends. Showing both versions would make one item appear to occupy two slots when
 its draft moves to another day.
 
-A timeline hold starts an appointment even over an existing card. Occupied time
-does not make booking invalid. Open patient selection after the first drag ends
-so presenting the sheet does not interrupt that gesture.
+A timeline hold starts shared creation even over an existing card. Occupied time
+does not make booking invalid. Open the [creation sheet](appointment-booking.md#shared-creation)
+after the first drag ends so presentation does not interrupt that gesture.
 
 ## Navigation
 

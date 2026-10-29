@@ -77,9 +77,10 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing-timeline-adjustment"]
         app.launch()
-        let action = app.buttons["Unavailable Time"]
+        let action = app.buttons["Add"]
         XCTAssertTrue(action.waitForExistence(timeout: 5))
         action.tap()
+        app.segmentedControls.buttons["Unavailable Time"].tap()
         let label = app.textFields["Optional label"]
         XCTAssertTrue(label.waitForExistence(timeout: 5))
         label.tap()

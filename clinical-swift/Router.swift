@@ -61,31 +61,21 @@ final class Router {
         return presentation
     }
 
-    var appointmentBookingRequest: AppointmentBookingRequest? {
-        guard case .appointmentBooking(let request) = activePresentation else { return nil }
+    var scheduleCreationRequest: ScheduleCreationRequest? {
+        guard case .scheduleCreation(let request) = activePresentation else { return nil }
         return request
     }
 
-    var appointmentEditRequest: AppointmentEditRequest? {
-        guard case .appointmentEdit(let request) = activePresentation else { return nil }
-        return request
-    }
-
-    var unavailableTimeEditorRequest: UnavailableTimeEditorRequest? {
-        guard case .unavailableTimeEditor(let request) = activePresentation else { return nil }
-        return request
-    }
-
-    func requestUnavailableTimeCreation() {
+    func requestScheduleCreation() {
         selectedTab = .schedule
-        requestPresentation(.unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create)))
+        requestPresentation(.scheduleCreation(ScheduleCreationRequest()))
     }
 
     func requestUnavailableTimeEdit(_ block: UnavailableTime) {
         selectedTab = .schedule
         selectedScheduleDate = calendar.startOfDay(for: block.start)
         requestPresentation(
-            .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .edit(block))))
+            .unavailableTimeEditor(UnavailableTimeEditorRequest(block: block)))
     }
 
     func finishScheduleEditor(_ presentationID: UUID, date: Date) {
@@ -211,7 +201,7 @@ final class Router {
         requestPresentation(.appointmentEdit(AppointmentEditRequest(details: details)))
     }
 
-    func requestAppointmentBooking(for patient: Patient? = nil) {
+    func requestAppointmentBooking(for patient: Patient) {
         selectedTab = .schedule
         requestPresentation(.appointmentBooking(AppointmentBookingRequest(patient: patient)))
     }
@@ -264,7 +254,7 @@ final class Router {
 
         switch clinicalURL {
         case .bookAppointment:
-            requestAppointmentBooking()
+            requestScheduleCreation()
         case .appointment(let id):
             openAppointment(id: id)
         case .schedule(let day):
@@ -442,6 +432,7 @@ final class Router {
 enum AppPresentation {
     case settings(SettingsRequest)
     case details(DetailsPresentation)
+    case scheduleCreation(ScheduleCreationRequest)
     case appointmentBooking(AppointmentBookingRequest)
     case appointmentEdit(AppointmentEditRequest)
     case appointmentMessage(AppointmentMessageRequest)
@@ -454,6 +445,8 @@ enum AppPresentation {
             request.id
         case .details(let presentation):
             presentation.id
+        case .scheduleCreation(let request):
+            request.id
         case .appointmentBooking(let request):
             request.id
         case .appointmentEdit(let request):
@@ -527,10 +520,10 @@ nonisolated struct AppointmentEditRequest: Identifiable, Equatable, Sendable {
 
 nonisolated struct AppointmentBookingRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
-    let patient: Patient?
+    let patient: Patient
 
-    var patientID: Patient.ID? {
-        patient?.id
+    var patientID: Patient.ID {
+        patient.id
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -571,7 +564,11 @@ nonisolated struct PatientSearchRequest: Identifiable, Equatable, Sendable {
 
 nonisolated struct UnavailableTimeEditorRequest: Identifiable, Sendable {
     let id = UUID()
-    let purpose: UnavailableTimeEditorPurpose
+    let block: UnavailableTime
+}
+
+nonisolated struct ScheduleCreationRequest: Identifiable, Sendable {
+    let id = UUID()
 }
 
 nonisolated struct UnavailableTimeNavigationRequest: Identifiable, Equatable, Sendable {

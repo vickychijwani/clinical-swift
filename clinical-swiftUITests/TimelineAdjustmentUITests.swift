@@ -118,14 +118,15 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         attach(app, "Unavailable time with shared card controls")
         app.buttons["Cancel"].tap()
         app.buttons["Discard Changes"].tap()
-        XCTAssertTrue(app.buttons["Unavailable Time"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 3))
         XCTAssertEqual(time(block), "11:00 AM")
         XCTAssertEqual(block.value as? String, "30 min")
     }
 
     @MainActor func testUnavailableTimeCreationLabelReturnsToDraftAndCanReopen() {
         let app = launch()
-        app.buttons["Unavailable Time"].tap()
+        app.buttons["Add"].tap()
+        app.segmentedControls.buttons["Unavailable Time"].tap()
         let label = app.textFields["Optional label"]
         XCTAssertTrue(label.waitForExistence(timeout: 3))
         label.tap()
@@ -137,22 +138,21 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
                 format: "identifier BEGINSWITH %@ AND identifier != %@", "unavailable-time-",
                 "unavailable-time-00000000-0000-0000-0000-000000000014")
         ).firstMatch
-        XCTAssertEqual(time(block), "9:00 AM")
-        XCTAssertEqual(block.value as? String, "60 min")
+        XCTAssertEqual(block.value as? String, "30 min")
         XCTAssertFalse(app.buttons["Delete"].exists)
         drag(block, by: 15)
-        XCTAssertEqual(time(block), "9:15 AM")
+        let movedTime = time(block)
         XCTAssertFalse(label.exists)
         block.tap()
         XCTAssertTrue(label.waitForExistence(timeout: 3))
         XCTAssertEqual(label.value as? String, "Holiday")
         app.buttons["Back"].tap()
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
-        XCTAssertEqual(time(block), "9:15 AM")
+        XCTAssertEqual(time(block), movedTime)
         let id = block.identifier
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["Unavailable Time"].waitForExistence(timeout: 3))
-        XCTAssertEqual(time(app.buttons[id]), "9:15 AM")
+        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 3))
+        XCTAssertEqual(time(app.buttons[id]), movedTime)
     }
 
     @MainActor func testUnavailableTimeDeleteConfirmsAtCard() {
@@ -168,7 +168,7 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertTrue(block.exists)
         attach(app, "Unavailable time delete confirmation")
         confirm.tap()
-        XCTAssertTrue(app.buttons["Unavailable Time"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 3))
         XCTAssertFalse(block.exists)
     }
 
@@ -270,6 +270,115 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Add"].exists)
     }
 
+    @MainActor func testPatientListSurvivesTypeChangesAndSheetReopening() {
+        let app = launch()
+        app.buttons["Add"].tap()
+        let search = app.textFields["Search patient by name"]
+        let patient = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Test Patient")
+        ).firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        XCTAssertTrue(patient.waitForExistence(timeout: 3))
+
+        for _ in 0..<2 {
+            search.typeText("No matching patient")
+            XCTAssertFalse(patient.exists)
+            app.segmentedControls.buttons["Unavailable Time"].tap()
+            XCTAssertTrue(app.textFields["Optional label"].waitForExistence(timeout: 3))
+            app.segmentedControls.buttons["Appointment"].tap()
+            XCTAssertTrue(search.waitForExistence(timeout: 3))
+            XCTAssertEqual(search.value as? String, "Search patient by name")
+            XCTAssertTrue(patient.waitForExistence(timeout: 3))
+        }
+
+        app.buttons["Back"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
+        draft(app).tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        XCTAssertTrue(patient.waitForExistence(timeout: 3))
+        search.typeText("Test")
+        XCTAssertTrue(patient.waitForExistence(timeout: 3))
+        patient.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
+        XCTAssertTrue(draft(app).label.contains("Test Patient"))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor func testSharedSheetSwitchesFocusAndSwipeKeepsDraft() {
+        let app = launch()
+        app.buttons["Add"].tap()
+        let search = app.textFields["Search patient by name"]
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        // Typing without a tap verifies that the visible field received focus.
+        search.typeText("Temporary search")
+        app.segmentedControls.buttons["Unavailable Time"].tap()
+        let label = app.textFields["Optional label"]
+        XCTAssertTrue(label.waitForExistence(timeout: 3))
+        label.typeText("Travel")
+        XCTAssertFalse(search.exists)
+        app.segmentedControls.buttons["Appointment"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        XCTAssertEqual(search.value as? String, "Search patient by name")
+        search.typeText("New search")
+        app.segmentedControls.buttons["Unavailable Time"].tap()
+        XCTAssertTrue(label.waitForExistence(timeout: 3))
+        XCTAssertEqual(label.value as? String, "Optional label")
+        label.typeText("Kept label")
+        let bar = app.navigationBars["Unavailable Time"]
+        let top = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+        top.press(forDuration: 0.1, thenDragTo: top.withOffset(CGVector(dx: 0, dy: 650)))
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
+        XCTAssertFalse(label.exists)
+        let block = newBlock(app)
+        XCTAssertTrue(block.exists)
+        XCTAssertEqual(block.value as? String, "30 min")
+        block.tap()
+        XCTAssertTrue(label.waitForExistence(timeout: 3))
+        XCTAssertEqual(label.value as? String, "Kept label")
+        attach(app, "Shared creation sheet after swipe and reopen")
+    }
+
+    @MainActor func testHoldSwitchToUnavailableTimeKeepsFirstDrag() {
+        let app = launch()
+        hold(original(app), move: 17)
+        XCTAssertTrue(
+            app.segmentedControls.buttons["Unavailable Time"].waitForExistence(timeout: 3))
+        app.segmentedControls.buttons["Unavailable Time"].tap()
+        app.buttons["Continue"].tap()
+        let block = newBlock(app)
+        XCTAssertTrue(block.waitForExistence(timeout: 3))
+        XCTAssertEqual(time(block), "12:15 PM")
+        XCTAssertEqual(block.value as? String, "30 min")
+        XCTAssertFalse(draft(app).exists)
+        attach(app, "Hold draft after type switch")
+    }
+
+    @MainActor func testPatientCreationCancelKeepsSharedAppointmentSession() {
+        let app = launch()
+        app.buttons["Add"].tap()
+        let search = app.textFields["Search patient by name"]
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        search.typeText("New patient")
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Add new patient")).firstMatch
+            .tap()
+        XCTAssertTrue(app.navigationBars["New Patient"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.segmentedControls.buttons["Unavailable Time"].isHittable)
+        app.buttons["Cancel"].tap()
+        let keep = app.buttons["Discard Changes"]
+        if keep.waitForExistence(timeout: 1) { keep.tap() }
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        XCTAssertEqual(search.value as? String, "New patient")
+        XCTAssertTrue(app.segmentedControls.buttons["Appointment"].isSelected)
+    }
+
+    @MainActor private func newBlock(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND identifier != %@", "unavailable-time-",
+                "unavailable-time-00000000-0000-0000-0000-000000000014")
+        ).firstMatch
+    }
     @MainActor func testTapStillOpensDetails() {
         let app = launch()
         original(app).tap()

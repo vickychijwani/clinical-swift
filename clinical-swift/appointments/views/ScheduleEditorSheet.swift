@@ -4,99 +4,114 @@ import Dependencies
 import SQLiteData
 import SwiftUI
 
-struct AppointmentBookingView: View {
+struct ScheduleEditorSheet: View {
     @Environment(\.scenePhase) private var scenePhase
     @Dependency(\.date.now) private var now
-
-    @FetchAll
-    private var patientRows: [PatientDetailsSelection]
-
-    @Bindable var model: AppointmentBookingModel
+    // Keep the loaded query when a type change rebuilds the sheet value.
+    @State private var patientRows = FetchAll<PatientDetailsSelection>()
+    @Bindable var session: ScheduleEditorSession
+    @FocusState private var focusedField: ScheduleEditorSession.ItemType?
+    @State private var patientCreationRequest: PatientCreationRequest?
 
     var body: some View {
         NavigationStack {
-            AppointmentBookingForm(model: model, patientItems: patientRows.map(\.details))
+            VStack {
+                if session.allowsTypeSelection {
+                    Picker(
+                        "Type",
+                        selection: Binding(
+                            get: { session.itemType }, set: { session.selectType($0) }
+                        )
+                    ) {
+                        ForEach(ScheduleEditorSession.ItemType.allCases, id: \.self) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding([.horizontal, .top])
+                    .disabled(session.isWorking || patientCreationRequest != nil)
+                }
+                ScrollView {
+                    switch session.editor {
+                    case .appointment(let model):
+                        AppointmentBookingPatientSelectionStep(
+                            searchText: Binding(
+                                get: { model.searchText }, set: { model.searchText = $0 }),
+                            patientItems: filteredPatientItems(search: model.searchText),
+                            searchIsFocused: $focusedField,
+                            selectPatient: { session.selectPatient($0.patient) },
+                            createPatient: {
+                                focusedField = nil
+                                patientCreationRequest = PatientCreationRequest(
+                                    initialDraft: PatientDraft(name: model.searchText.nilIfBlank))
+                            }
+                        )
+                        .padding()
+                    case .unavailableTime(let model):
+                        ScheduleEditorSection(title: "Label") {
+                            TextField(
+                                "Optional label",
+                                text: Binding(
+                                    get: { model.draft.label }, set: { model.draft.label = $0 })
+                            )
+                            .focused($focusedField, equals: .unavailableTime)
+                            .submitLabel(.continue)
+                            .onSubmit { session.isShowingSheet = false }
+                        }
+                        .padding()
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(AppColor.canvas)
+            .navigationTitle(
+                session.itemType == .appointment ? "Select Patient" : "Unavailable Time"
+            )
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Back", systemImage: "chevron.left") { session.isShowingSheet = false }
+                }
+                if session.itemType == .unavailableTime {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Continue", systemImage: "checkmark") {
+                            session.isShowingSheet = false
+                        }
+                    }
+                }
+            }
+            .disabled(session.isWorking)
         }
-        .interactiveDismissDisabled()
-        .presentationDragIndicator(.hidden)
         .presentationBackground(AppColor.canvas)
         .presentationBackgroundInteraction(.disabled)
+        .task(id: session.itemType) {
+            focusedField = nil
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            focusedField = session.itemType
+        }
         // Refresh when the app returns: an appointment may now be in the past.
         // Skip this when the app is inactive or patient selection is closed.
         .task(id: scenePhase == .active) {
             guard scenePhase == .active else { return }
             // Refresh the time boundary on entry, then let database observation keep rows current.
             // Search text changes must not restart the query or change its time boundary.
-            _ = try? await $patientRows.load(appointmentBookingPatientRowsQuery(now: now))
+            _ = try? await patientRows.load(appointmentBookingPatientRowsQuery(now: now))
         }
-    }
-}
-
-private struct AppointmentBookingForm: View {
-    @Bindable var model: AppointmentBookingModel
-
-    @FocusState private var patientSearchIsFocused: Bool
-    @State private var patientCreationRequest: PatientCreationRequest?
-
-    let patientItems: [PatientDetails]
-
-    var body: some View {
-        ScrollView {
-            AppointmentBookingPatientSelectionStep(
-                searchText: $model.searchText,
-                patientItems: filteredPatientItems,
-                searchIsFocused: $patientSearchIsFocused,
-                selectPatient: selectPatient,
-                createPatient: createPatient
-            )
-            .padding()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(AppColor.canvas)
-        .navigationTitle("Select Patient")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Back", systemImage: "chevron.left") {
-                    model.isSelectingPatient = false
-                }
-            }
-        }
-        .task {
-            patientSearchIsFocused = true
-        }
-        .sheet(item: $patientCreationRequest) { request in
+        .sheet(item: $patientCreationRequest, onDismiss: { focusedField = session.itemType }) {
+            request in
             EditPatientView(initialDraft: request.initialDraft) { patient in
-                selectPatient(patient)
+                session.selectPatient(patient)
             }
         }
     }
 
-    private var filteredPatientItems: [PatientDetails] {
-        guard let query = model.searchText.nilIfBlank else {
-            return patientItems
-        }
-
-        return patientItems.filter { item in
-            PatientNameSearch.matches(item.patient.name, searchText: query)
-        }
-    }
-
-    private func selectPatient(_ patient: PatientDetails) {
-        selectPatient(patient.patient)
-    }
-
-    private func selectPatient(_ patient: Patient) {
-        model.selectPatient(patient)
-    }
-
-    private func createPatient() {
-        patientCreationRequest = PatientCreationRequest(
-            initialDraft: PatientDraft(name: model.searchText.nilIfBlank)
-        )
+    private func filteredPatientItems(search: String) -> [PatientDetails] {
+        let items = patientRows.wrappedValue.map(\.details)
+        guard let query = search.nilIfBlank else { return items }
+        return items.filter { PatientNameSearch.matches($0.patient.name, searchText: query) }
     }
 }
-
 private struct PatientCreationRequest: Identifiable {
     let id = UUID()
     let initialDraft: PatientDraft
@@ -105,7 +120,7 @@ private struct PatientCreationRequest: Identifiable {
 private struct AppointmentBookingPatientSelectionStep: View {
     @Binding var searchText: String
     let patientItems: [PatientDetails]
-    let searchIsFocused: FocusState<Bool>.Binding
+    let searchIsFocused: FocusState<ScheduleEditorSession.ItemType?>.Binding
     let selectPatient: (PatientDetails) -> Void
     let createPatient: () -> Void
 
@@ -122,7 +137,7 @@ private struct AppointmentBookingPatientSelectionStep: View {
                     )
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()
-                    .focused(searchIsFocused)
+                    .focused(searchIsFocused, equals: .appointment)
 
                     if !searchText.isEmpty {
                         Button("Clear", systemImage: "xmark.circle.fill") {
@@ -211,16 +226,4 @@ private struct AppointmentBookingCreatePatientRow: View {
         }
         .buttonStyle(.plain)
     }
-}
-
-#Preview {
-    let _ = try! prepareDependencies {
-        $0.defaultDatabase = try appDatabase(seedSamples: true)
-    }
-    let model = AppointmentBookingModel(
-        selectedDate: .now,
-        selectedPatient: samplePatients.first(where: { $0.name != nil })!
-    ) { _ in }
-
-    AppointmentBookingView(model: model)
 }
