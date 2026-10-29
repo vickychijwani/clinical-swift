@@ -1022,32 +1022,32 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pointfreeco/sqlite-data";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.0;
+				kind = exactVersion;
+				version = 1.12.1;
 			};
 		};
 		8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 7.6.0;
+				kind = exactVersion;
+				version = 7.11.1;
 			};
 		};
 		8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pointfreeco/swift-dependencies";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.9.0;
+				kind = exactVersion;
+				version = 1.17.1;
 			};
 		};
 		8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pointfreeco/swift-structured-queries";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.31.0;
+				kind = exactVersion;
+				version = 0.39.2;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

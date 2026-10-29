@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.4
 
 import PackageDescription
 
@@ -11,10 +11,10 @@ let package = Package(
     ],
     dependencies: [
         // Keep these versions aligned with the app's Package.resolved.
-        .package(url: "https://github.com/pointfreeco/sqlite-data", exact: "1.6.6"),
-        .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.0"),
-        .package(url: "https://github.com/pointfreeco/swift-dependencies", exact: "1.13.1"),
-        .package(url: "https://github.com/pointfreeco/swift-structured-queries", exact: "0.31.2"),
+        .package(url: "https://github.com/pointfreeco/sqlite-data", exact: "1.12.1"),
+        .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1"),
+        .package(url: "https://github.com/pointfreeco/swift-dependencies", exact: "1.17.1"),
+        .package(url: "https://github.com/pointfreeco/swift-structured-queries", exact: "0.39.2"),
     ],
     targets: [
         .target(

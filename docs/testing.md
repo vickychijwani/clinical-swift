@@ -3,7 +3,7 @@
 ## Entry points
 
 - `make data-test`: package model and persistence tests without an app host or
-  simulator. Requires Swift 6.2 or later.
+  simulator. Requires Swift 6.4 or later.
 - `make test`: package and app unit tests. UI and backup tests stay outside its
   build graph so routine checks need neither extra test hosts nor account setup.
 - `make ui-test`: UI tests only.

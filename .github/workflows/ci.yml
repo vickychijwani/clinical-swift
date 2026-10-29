@@ -8,7 +8,7 @@ on:
 jobs:
   linux:
     runs-on: ubuntu-24.04
-    container: swift:6.2.3-noble
+    container: swift:6.4.1-noble
     steps:
       - uses: actions/checkout@v4
       - name: Trust the container checkout
@@ -33,6 +33,9 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '27.1'
       - name: Test App Store Connect signing
         run: swift scripts/test_app_store_connect.swift
       - name: Check architecture
@@ -44,6 +47,9 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '27.1'
       - name: Apply Xcode CI setup
         run: sh ci_scripts/ci_post_clone.sh
       - name: Build app, widget, and unit test bundle
