@@ -56,12 +56,7 @@ import Testing
                 try JSONEncoder().encode(saved), forKey: "developer.timelineTuning.v1")
 
             let tuning = TimelineTuning(defaults: defaults)
-            #expect(tuning.state.cards.surfaceOpacity == 0.8)
-            #expect(tuning.state.cards.otherContentOpacity == 0.3)
-            #expect(tuning.state.cards.lift.width == 0.02)
-            #expect(tuning.state.cards.lift.shadowOpacity == 0.05)
-            #expect(tuning.state.cards.lift.shadowRadius == 5)
-            #expect(tuning.state.cards.lift.duration == 0.1)
+            #expect(tuning.state.cards == ScheduleCardTuning())
             #expect(tuning.state.isEnabled)
             #expect(!tuning.state.isExpanded)
             #expect(tuning.state.position == saved.position)

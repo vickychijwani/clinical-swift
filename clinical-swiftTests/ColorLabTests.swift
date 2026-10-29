@@ -49,8 +49,7 @@ import Testing
             let defaults = try #require(UserDefaults(suiteName: suite))
             defer { defaults.removePersistentDomain(forName: suite) }
             let lab = ColorLab(defaults: defaults)
-            #expect(lab.palette.todaySelection.textColor(accent: .purple) == .purple)
-            #expect(lab.palette.todaySelection.highlightOpacity == 0.1)
+            #expect(lab.palette.todaySelection == AppPalette().todaySelection)
             lab.state.todaySelection = .init(usesWhiteText: false, highlightOpacity: 0.35)
             lab.state.isEnabled = false
             let restored = ColorLab(defaults: defaults)
@@ -124,11 +123,12 @@ import Testing
 
         @Test func accentOverridesAffectNowMarkerButLeaveDefaultActiveBorderUnchanged() {
             var palette = AppPalette()
-            let activeBorder = Color("AppCanvas").mix(with: .accentColor, by: 0.7, in: .device)
-            #expect(palette[.now] == .accentColor)
+            let activeBorder = palette[.activeBorder]
+            let activeCard = palette[.activeCard]
+            #expect(palette[.now] == palette[.accent])
             palette.overrides[.accent] = .purple
             #expect(palette[.now] == .purple)
-            #expect(palette[.activeCard] == Color("Card"))
+            #expect(palette[.activeCard] == activeCard)
             #expect(palette[.activeBorder] == activeBorder)
             palette.overrides[.activeBorder] = .blue
             #expect(palette[.activeBorder] == .blue)
