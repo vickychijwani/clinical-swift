@@ -39,7 +39,9 @@ struct ScheduleView: View {
             CalendarDayPager(
                 selectedDate: selectedDateBinding,
                 calendar: calendar,
-                dayRadius: scheduleDayRadius
+                dayRadius: scheduleDayRadius,
+                isPagingEnabled: editorSession?.allowsDateSelection != false
+                    && editorSession?.adjustment.isDragging != true
             ) { date in
                 ScheduleTimelinePage(
                     date: date,
@@ -69,6 +71,7 @@ struct ScheduleView: View {
                     onDelete: editorSession?.canDelete == true ? deleteEditor : nil
                 )
             }
+            .accessibilityIdentifier("schedule-day-pager")
         }
         .background(palette[.canvas])
         .navigationTitle(

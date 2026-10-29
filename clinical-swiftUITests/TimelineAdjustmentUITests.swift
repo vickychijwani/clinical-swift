@@ -1,9 +1,9 @@
 import XCTest
 
 nonisolated final class TimelineAdjustmentUITests: XCTestCase {
-    @MainActor private func launch() -> XCUIApplication {
+    @MainActor private func launch(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing-timeline-adjustment"]
+        app.launchArguments = ["--ui-testing-timeline-adjustment"] + arguments
         app.launch()
         XCTAssertTrue(original(app).waitForExistence(timeout: 5))
         return app
@@ -286,5 +286,99 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["details-opened"].exists)
         XCTAssertFalse(draft(app).exists)
         XCTAssertFalse(app.textFields["Search patient by name"].exists)
+    }
+
+    @MainActor func testTimelineSwipeChangesDayAndReturnsToOriginalAppointments() {
+        let app = launch()
+        let point = original(app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        point.press(
+            forDuration: 0.05, thenDragTo: point.withOffset(CGVector(dx: -200, dy: 0)),
+            withVelocity: .fast, thenHoldForDuration: 0)
+        let next = app.buttons["appointment-00000000-0000-0000-0000-00000000000C"]
+        let nextDay = dayButton(app, offset: 1)
+        let selected = NSPredicate(format: "value CONTAINS %@", "Selected")
+        expectation(for: selected, evaluatedWith: nextDay)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(next.isHittable)
+        XCTAssertFalse(app.textFields["Search patient by name"].exists)
+        let back = next.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
+        back.press(
+            forDuration: 0.05, thenDragTo: back.withOffset(CGVector(dx: 200, dy: 0)),
+            withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(original(app).waitForExistence(timeout: 5))
+        let today = dayButton(app, offset: 0)
+        expectation(for: selected, evaluatedWith: today)
+        waitForExpectations(timeout: 5)
+    }
+
+    @MainActor private func dayButton(_ app: XCUIApplication, offset: Int) -> XCUIElement {
+        guard let date = Calendar.current.date(byAdding: .day, value: offset, to: .now) else {
+            preconditionFailure("The calendar must support day navigation.")
+        }
+        return app.buttons[date.formatted(.dateTime.weekday(.wide).month(.wide).day().year())]
+    }
+
+    @MainActor private func swipeTimeline(_ app: XCUIApplication, left: Bool) {
+        let timeline = app.scrollViews["schedule-day-pager"]
+        let start = timeline.coordinate(
+            withNormalizedOffset: CGVector(dx: left ? 0.8 : 0.2, dy: 0.6))
+        let end = timeline.coordinate(withNormalizedOffset: CGVector(dx: left ? 0.2 : 0.8, dy: 0.6))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+    }
+
+    @MainActor func testTimelineSwipesAcrossWeekBoundaryAndEmptyDays() {
+        let app = launch()
+        let selected = NSPredicate(format: "value CONTAINS %@", "Selected")
+        for offset in 1...7 {
+            swipeTimeline(app, left: true)
+            expectation(for: selected, evaluatedWith: dayButton(app, offset: offset))
+            waitForExpectations(timeout: 5)
+        }
+        for offset in (0...6).reversed() {
+            swipeTimeline(app, left: false)
+            expectation(for: selected, evaluatedWith: dayButton(app, offset: offset))
+            waitForExpectations(timeout: 5)
+        }
+        XCTAssertTrue(original(app).isHittable)
+        XCTAssertFalse(draft(app).exists)
+    }
+
+    @MainActor func testTimelineSwipeDuringSaveKeepsVisibleDay() {
+        let app = launch(arguments: ["--ui-testing-delayed-save"])
+        hold(original(app))
+        selectPatient(app)
+        let id = draft(app).identifier
+        app.buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["Add"].exists)
+        swipeTimeline(app, left: true)
+        XCTAssertTrue((dayButton(app, offset: 0).value as? String)?.contains("Selected") == true)
+        XCTAssertTrue(original(app).isHittable, "The current day must remain visible while saving.")
+        XCTAssertFalse(app.buttons["Add"].exists, "The save must still be pending after the swipe.")
+        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons[id].isHittable)
+    }
+
+    @MainActor func testTimelineSwipeCarriesUnsavedDraft() {
+        let app = launch()
+        hold(original(app), move: 17)
+        selectPatient(app)
+        let id = draft(app).identifier
+        swipeTimeline(app, left: true)
+        expectation(
+            for: NSPredicate(format: "value CONTAINS %@", "Selected"),
+            evaluatedWith: dayButton(app, offset: 1))
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(time(app.buttons[id]), "12:15 PM")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons[id].isHittable)
+        XCTAssertEqual(time(app.buttons[id]), "12:15 PM")
+        swipeTimeline(app, left: false)
+        expectation(
+            for: NSPredicate(format: "value CONTAINS %@", "Selected"),
+            evaluatedWith: dayButton(app, offset: 0))
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(time(original(app)), "12:00 PM")
+        XCTAssertFalse(app.buttons[id].isHittable)
     }
 }
