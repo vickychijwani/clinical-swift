@@ -8,15 +8,23 @@ import Testing
 struct SampleCalendarSyncPersistenceTests {
     #if DEBUG
         @MainActor
-        @Test func debugSampleAppointmentsAreNotQueuedForCalendarExport() throws {
+        @Test func debugSamplesExistWithoutQueuedCalendarDelivery() throws {
             let database = try migratedDatabase()
 
             try database.seedSampleDataIfNeeded()
 
-            let syncCount = try database.read { db in
-                try AppointmentCalendarSyncRecord.count().fetchOne(db) ?? 0
+            let counts = try database.read { db in
+                (
+                    appointments: try AppointmentRecord.count().fetchOne(db) ?? 0,
+                    blocks: try UnavailableTimeRecord.count().fetchOne(db) ?? 0,
+                    appointmentDelivery: try AppointmentCalendarSyncRecord.count().fetchOne(db),
+                    blockDelivery: try UnavailableTimeCalendarSyncRecord.count().fetchOne(db)
+                )
             }
-            #expect(syncCount == 0)
+            #expect(counts.appointments > 0)
+            #expect(counts.blocks > 0)
+            #expect(counts.appointmentDelivery == 0)
+            #expect(counts.blockDelivery == 0)
         }
     #endif
 

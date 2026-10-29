@@ -8,7 +8,7 @@ import Testing
 struct TimelineLayoutTests {
     private let availableWidth: CGFloat = 300
 
-    @Test func nonOverlappingAppointmentsUseFullWidth() throws {
+    @Test func appointmentsTouchingAtBoundaryUseFullWidth() throws {
         let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
         let layouts = engine.layout(items: [
@@ -95,21 +95,6 @@ struct TimelineLayoutTests {
         #expect(first.rect.width == columnWidth)
         #expect(second.rect.width == columnWidth)
         #expect(third.rect.width == columnWidth)
-    }
-
-    @Test func appointmentsTouchingAtBoundaryDoNotSplitWidth() throws {
-        let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
-        let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
-        let layouts = engine.layout(items: [
-            appointment(id: firstID, startHour: 9, startMinute: 0, duration: 30),
-            appointment(id: secondID, startHour: 9, startMinute: 30, duration: 30),
-        ])
-
-        let first = try layout(for: firstID, in: layouts)
-        let second = try layout(for: secondID, in: layouts)
-
-        #expect(first.rect.width == contentWidth)
-        #expect(second.rect.width == contentWidth)
     }
 
     @Test func verticalPositionAndHeightUseExistingMinuteMath() throws {

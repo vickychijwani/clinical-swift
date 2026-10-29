@@ -182,17 +182,6 @@ struct UnavailableTimeCalendarTests {
         #expect(try syncRow(block.id, database)?.needsSync == false)
     }
 
-    @Test func samplesDoNotQueueCalendarDelivery() throws {
-        let database = try makeDatabase()
-        try database.seedSampleDataIfNeeded()
-        #expect(try database.read { db in try UnavailableTimeRecord.count().fetchOne(db) } == 1)
-        #expect(
-            try database.read { db in try UnavailableTimeCalendarSyncRecord.count().fetchOne(db) }
-                == 0)
-        #expect(
-            try database.read { db in try AppointmentCalendarSyncRecord.count().fetchOne(db) } == 0)
-    }
-
     @Test func oneFailedBlockDoesNotStopTheNextBlock() async throws {
         let database = try makeDatabase()
         let failed = try insertBlock(into: database, label: "Failed")
