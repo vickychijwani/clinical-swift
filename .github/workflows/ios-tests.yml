@@ -41,7 +41,17 @@ jobs:
             spm-v1-${{ runner.os }}-${{ runner.arch }}-xcode-27.1-
       - name: Apply Xcode CI setup
         run: sh ci_scripts/ci_post_clone.sh
+      - name: Boot test simulator
+        # Let first-boot setup finish before XCTest loads Accessibility.
+        run: |
+          simulator_id=$(xcrun simctl create 'Clinical CI' \
+            com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
+            com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+          echo "TEST_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl boot "$simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
       - name: Run simulator tests
+        # Ad hoc signing preserves Keychain and App Group entitlements without a certificate.
         env:
           TEST_SCHEME: ${{ matrix.scheme }}
           TEST_SUITE: ${{ matrix.suite }}
@@ -53,12 +63,13 @@ jobs:
           xcodebuild -project clinical-swift.xcodeproj \
             -scheme "$TEST_SCHEME" \
             -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/build/SourcePackages" \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' \
+            -destination "platform=iOS Simulator,id=$TEST_SIMULATOR_ID" \
             -destination-timeout 120 \
             -disableAutomaticPackageResolution \
             -parallel-testing-enabled NO \
             -resultBundlePath TestResults.xcresult \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_ALLOWED=YES \
             "${test_options[@]}" test
       - name: Upload failed test results
         if: failure()
