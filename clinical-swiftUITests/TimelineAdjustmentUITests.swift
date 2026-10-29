@@ -269,6 +269,41 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Add"].exists)
     }
 
+    @MainActor func testPatientListSurvivesTypeChangesAndSheetReopening() {
+        let app = launch()
+        app.buttons["Add"].tap()
+        let search = app.textFields["Search patient by name"]
+        let patient = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Test Patient")
+        ).firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        XCTAssertTrue(patient.waitForExistence(timeout: 3))
+
+        for _ in 0..<2 {
+            search.typeText("No matching patient")
+            XCTAssertFalse(patient.exists)
+            app.segmentedControls.buttons["Unavailable Time"].tap()
+            XCTAssertTrue(app.textFields["Optional label"].waitForExistence(timeout: 3))
+            app.segmentedControls.buttons["Appointment"].tap()
+            XCTAssertTrue(search.waitForExistence(timeout: 3))
+            XCTAssertEqual(search.value as? String, "Search patient by name")
+            XCTAssertTrue(patient.waitForExistence(timeout: 3))
+        }
+
+        app.buttons["Back"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
+        draft(app).tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        XCTAssertTrue(patient.waitForExistence(timeout: 3))
+        search.typeText("Test")
+        XCTAssertTrue(patient.waitForExistence(timeout: 3))
+        patient.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 3))
+        XCTAssertTrue(draft(app).label.contains("Test Patient"))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Add"].waitForExistence(timeout: 3))
+    }
+
     @MainActor func testSharedSheetSwitchesFocusAndSwipeKeepsDraft() {
         let app = launch()
         app.buttons["Add"].tap()

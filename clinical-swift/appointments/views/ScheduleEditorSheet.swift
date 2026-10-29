@@ -7,7 +7,8 @@ import SwiftUI
 struct ScheduleEditorSheet: View {
     @Environment(\.scenePhase) private var scenePhase
     @Dependency(\.date.now) private var now
-    @FetchAll private var patientRows: [PatientDetailsSelection]
+    // Keep the loaded query when a type change rebuilds the sheet value.
+    @State private var patientRows = FetchAll<PatientDetailsSelection>()
     @Bindable var session: ScheduleEditorSession
     @FocusState private var focusedField: ScheduleEditorSession.ItemType?
     @State private var patientCreationRequest: PatientCreationRequest?
@@ -95,7 +96,7 @@ struct ScheduleEditorSheet: View {
             guard scenePhase == .active else { return }
             // Refresh the time boundary on entry, then let database observation keep rows current.
             // Search text changes must not restart the query or change its time boundary.
-            _ = try? await $patientRows.load(appointmentBookingPatientRowsQuery(now: now))
+            _ = try? await patientRows.load(appointmentBookingPatientRowsQuery(now: now))
         }
         .sheet(item: $patientCreationRequest, onDismiss: { focusedField = session.itemType }) {
             request in
@@ -106,7 +107,7 @@ struct ScheduleEditorSheet: View {
     }
 
     private func filteredPatientItems(search: String) -> [PatientDetails] {
-        let items = patientRows.map(\.details)
+        let items = patientRows.wrappedValue.map(\.details)
         guard let query = search.nilIfBlank else { return items }
         return items.filter { PatientNameSearch.matches($0.patient.name, searchText: query) }
     }
