@@ -14,3 +14,16 @@ build/
 # CocoaPods
 Pods/
 
+# Local credentials and private signing keys
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Backup authorization exports
+check-credentials.json
+backup-check-credentials.json
