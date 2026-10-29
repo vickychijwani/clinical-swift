@@ -69,7 +69,7 @@ enum ArchitecturePolicy {
     ]
     // Outer screens own observed queries. Their child display components receive domain values.
     static let queryScreens: Set<String> = [
-        "clinical-swift/appointments/views/AppointmentBookingView.swift",
+        "clinical-swift/appointments/views/ScheduleEditorSheet.swift",
         "clinical-swift/patients/views/PatientDetailsView.swift",
         "clinical-swift/patients/views/PatientsView.swift",
     ]
