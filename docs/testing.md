@@ -3,7 +3,7 @@
 ## Entry points
 
 - `make data-test`: package model and persistence tests without an app host or
-  simulator. Requires Swift 6.2 or later.
+  simulator. Requires Swift 6.4 or later.
 - `make test`: package and app unit tests. UI and backup tests stay outside its
   build graph so routine checks need neither extra test hosts nor account setup.
 - `make ui-test`: UI tests only.
@@ -12,6 +12,11 @@
 
 See [backup setup and release](backups.md#verification-and-release) for credentials
 and the release gate. The [Makefile](../Makefile) owns command options and schemes.
+
+On Linux, run `swift package resolve` before `make data-test`. The dependency
+graph includes OpenCombine only on Linux, so a lockfile resolved on macOS can
+omit it. CI resolves first, then checks shared versions and revisions against the
+app lockfile before it runs tests with automatic resolution disabled.
 
 ## Test boundaries
 

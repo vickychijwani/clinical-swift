@@ -43,8 +43,9 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
 
     @MainActor private func hold(_ card: XCUIElement, move: CGFloat = 0) {
         let point = card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+        // Leave time for the 0.3-second recognizer to run on a busy CI simulator before release.
         point.press(
-            forDuration: 0.45, thenDragTo: point.withOffset(CGVector(dx: 0, dy: move)),
+            forDuration: 1, thenDragTo: point.withOffset(CGVector(dx: 0, dy: move)),
             withVelocity: .slow, thenHoldForDuration: 0)
     }
 
@@ -176,7 +177,7 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         let card = original(app)
         let point = card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
             .withOffset(CGVector(dx: 0, dy: -120))
-        point.press(forDuration: 0.45)
+        point.press(forDuration: 1)
         selectPatient(app)
         XCTAssertEqual(time(draft(app)), "10:00 AM")
         XCTAssertEqual(draft(app).value as? String, "30 min")

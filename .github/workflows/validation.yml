@@ -1,0 +1,50 @@
+name: Validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  data-checks:
+    name: Data tests (Linux)
+    runs-on: ubuntu-24.04
+    container: swift:6.4.1-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trust the container checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Install test dependencies
+        run: apt-get update && apt-get install -y libsqlite3-dev
+      - name: Cache SwiftPM dependencies and build state
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-v1-${{ runner.os }}-${{ runner.arch }}-swift-6.4.1-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            spm-v1-${{ runner.os }}-${{ runner.arch }}-swift-6.4.1-
+      - name: Resolve Linux package dependencies
+        run: swift package resolve
+      - name: Check shared package versions
+        run: swift scripts/check_package_versions.swift
+      - name: Test package
+        run: >-
+          swift test --disable-automatic-resolution
+          --explicit-target-dependency-import-check error
+
+  architecture:
+    name: Architecture
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '27.1'
+      - name: Check architecture
+        run: sh scripts/check_architecture.sh
+      - name: Test architecture checker
+        run: sh scripts/test_architecture.sh

@@ -1,0 +1,81 @@
+name: iOS tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ios-tests:
+    name: ${{ matrix.name }}
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    runs-on: xcode-27
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            name: App unit tests
+            scheme: clinical-swift-UnitTests
+          - suite: backup
+            name: Local backup tests
+            scheme: clinical-swift-Backups
+          - suite: ui
+            name: UI tests
+            scheme: clinical-swift-UITests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '27.1'
+      - name: Cache Xcode package downloads
+        uses: actions/cache@v4
+        with:
+          path: build/SourcePackages
+          key: spm-v1-${{ runner.os }}-${{ runner.arch }}-xcode-27.1-${{ hashFiles('Package.swift', 'clinical-swift.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-v1-${{ runner.os }}-${{ runner.arch }}-xcode-27.1-
+      - name: Apply Xcode CI setup
+        run: sh ci_scripts/ci_post_clone.sh
+      - name: Boot test simulator
+        # Let first-boot setup finish before XCTest loads Accessibility.
+        run: |
+          simulator_id=$(xcrun simctl create 'Clinical CI' \
+            com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
+            com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+          echo "TEST_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl boot "$simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
+      - name: Run simulator tests
+        # Ad hoc signing preserves Keychain and App Group entitlements without a certificate.
+        env:
+          TEST_SCHEME: ${{ matrix.scheme }}
+          TEST_SUITE: ${{ matrix.suite }}
+        run: |
+          test_options=()
+          if [[ "$TEST_SUITE" == backup ]]; then
+            test_options+=(-skip-testing:clinical-swiftBackupTests/BackupDriveTests)
+          fi
+          xcodebuild -project clinical-swift.xcodeproj \
+            -scheme "$TEST_SCHEME" \
+            -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/build/SourcePackages" \
+            -destination "platform=iOS Simulator,id=$TEST_SIMULATOR_ID" \
+            -destination-timeout 120 \
+            -disableAutomaticPackageResolution \
+            -parallel-testing-enabled NO \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_ALLOWED=YES \
+            "${test_options[@]}" test
+      - name: Upload failed test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.suite }}
+          path: TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

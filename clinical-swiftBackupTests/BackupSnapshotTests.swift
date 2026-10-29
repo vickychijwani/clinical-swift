@@ -254,7 +254,7 @@ struct BackupSnapshotTests {
         try ClinicalDatabaseAccess.withReplacement(at: url) {}
     }
 
-    @Test func suspendedWriterHoldsNoFileLockButStillPreventsReplacement() throws {
+    @Test func suspendedWriterHoldsNoFileLockButStillPreventsReplacement() async throws {
         let directory = try BackupFixture.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appending(path: "source.db")
@@ -274,10 +274,20 @@ struct BackupSnapshotTests {
             try ClinicalDatabaseAccess.withReplacement(at: url) {}
         }
         NotificationCenter.default.post(name: Database.resumeNotification, object: nil)
-        try writer?.write { try $0.execute(sql: "INSERT INTO probe VALUES (1)") }
+        try await writer?.write { try $0.execute(sql: "INSERT INTO probe VALUES (1)") }
         try writer?.close()
         writer = nil
-        try ClinicalDatabaseAccess.withReplacement(at: url) {}
+        // GRDB's queue context can retain the database configuration until queue cleanup runs.
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        while true {
+            do {
+                try ClinicalDatabaseAccess.withReplacement(at: url) {}
+                break
+            } catch ClinicalSharedDatabaseError.databaseAccessUnavailable where clock.now < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
     }
 
     @Test func failedReadAndReplacementReleaseAccess() throws {
