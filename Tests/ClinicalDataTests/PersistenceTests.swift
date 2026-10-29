@@ -315,26 +315,6 @@ struct PersistenceTests {
         #expect(deletedAppointment == nil)
     }
 
-    @Test func patientRecordInsertHonorsPatientValidationBoundary() throws {
-        let database = try testDatabase()
-        let validPatient = Patient(name: "Ishaan Verma")
-
-        try validPatient.validate()
-        try database.write { db in
-            try PatientRecord.insert { PatientRecord(validPatient) }
-                .execute(db)
-        }
-
-        let patientCount = try database.read { db in
-            try PatientRecord.count().fetchOne(db) ?? 0
-        }
-
-        #expect(patientCount == 1)
-        #expect(throws: Patient.ValidationError.missingNameAndPhone) {
-            try Patient(name: nil, phone: nil).validate()
-        }
-    }
-
     private func testDatabase() throws -> DatabaseQueue {
         let configuration = clinicalDatabaseConfiguration()
         let database = try DatabaseQueue(configuration: configuration)

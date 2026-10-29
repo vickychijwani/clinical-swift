@@ -206,35 +206,73 @@ struct UnavailableTimeTests {
         #expect(try database.read { db in try AppointmentRecord.count().fetchOne(db) } == 0)
     }
 
-    @Test func repeatedConcurrentSaveAndDeleteHaveOnlyOneResult() async throws {
+    @Test(arguments: [(false, false), (true, false), (true, true)])
+    func competingActionsAreRejectedWhileWriteIsPending(editing: Bool, deleting: Bool) async throws
+    {
         let database = try makeDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
+        let block = UnavailableTime(label: "Travel", start: date, durationMinutes: 60)
+        let gate = WriteGate()
+        defer { gate.release() }
+        try await database.write { db in
+            if editing {
+                try UnavailableTimeRecord.insert {
+                    UnavailableTimeRecord(
+                        id: block.id, label: block.label, start: date, durationMinutes: 60,
+                        createdAt: date, updatedAt: date)
+                }.execute(db)
+            }
+            db.add(
+                function: DatabaseFunction("hold_write", argumentCount: 0) { _ in
+                    try gate.hold()
+                    return nil
+                })
+            for action in ["INSERT", "UPDATE", "DELETE"] {
+                try db.execute(
+                    sql: """
+                        CREATE TEMP TRIGGER hold_\(action) BEFORE \(action) ON unavailableTimes
+                        BEGIN SELECT hold_write(); END
+                        """)
+            }
+        }
         try await withDependencies {
             $0.defaultDatabase = database
             $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
-            var finished = 0
-            let (create, createModel) = try creatingSession(start: date, durationMinutes: 30) { _ in
-                finished += 1
+            var finishedDates: [Date] = []
+            let (session, model) =
+                try editing
+                ? editingSession(block) { finishedDates.append($0) }
+                : creatingSession(start: date, durationMinutes: 60) { finishedDates.append($0) }
+            model.draft.label = "Updated"
+            let preview = model.preview
+            let first = Task { deleting ? await session.delete() : await session.save() }
+            let clock = ContinuousClock()
+            let deadline = clock.now.advanced(by: .seconds(2))
+            while !gate.isWaiting, clock.now < deadline {
+                try await Task.sleep(for: .milliseconds(10))
             }
-            let first = Task { await create.save() }
-            let second = Task { await create.save() }
-            let results = await [first.value, second.value]
-            #expect(results.filter { $0 }.count == 1)
-            #expect(finished == 1)
-            let recordID = createModel.blockID
-            let block = try #require(
-                try await database.read { db in
-                    try UnavailableTimeRecord.find(recordID).fetchOne(db)?.unavailableTime
-                })
-            let (edit, _) = try editingSession(block) { _ in finished += 1 }
-            let save = Task { await edit.save() }
-            let delete = Task { await edit.delete() }
-            let editResults = await [save.value, delete.value]
-            #expect(editResults.filter { $0 }.count == 1)
-            #expect(finished == 2)
-            #expect(!edit.isWorking)
+            try #require(gate.isWaiting, "The editor did not reach the database write")
+            #expect(session.isWorking)
+            #expect(!session.didFinish)
+            #expect(finishedDates.isEmpty)
+            #expect(!(await session.save()))
+            #expect(!(await session.delete()))
+            #expect(session.isWorking)
+            #expect(!session.didFinish)
+            #expect(finishedDates.isEmpty)
+
+            gate.release()
+            #expect(await first.value)
+            #expect(finishedDates == [deleting ? utcCalendar.startOfDay(for: date) : date])
+            #expect(session.didFinish)
+            #expect(!session.isWorking)
+            let recordID = model.blockID
+            let saved = try await database.read { db in
+                try UnavailableTimeRecord.find(recordID).fetchOne(db)?.unavailableTime
+            }
+            #expect(saved == (deleting ? nil : preview))
         }
     }
 
@@ -320,6 +358,38 @@ struct UnavailableTimeTests {
         let database = try DatabaseQueue()
         try migrateDatabase(database)
         return database
+    }
+
+    // SQLite calls this gate synchronously. Protect its state across the database and test tasks.
+    private nonisolated final class WriteGate: @unchecked Sendable {
+        private let condition = NSCondition()
+        private var entered = false
+        private var released = false
+
+        var isWaiting: Bool {
+            condition.lock()
+            defer { condition.unlock() }
+            return entered && !released
+        }
+
+        func hold() throws {
+            condition.lock()
+            defer { condition.unlock() }
+            entered = true
+            let deadline = Date.now.addingTimeInterval(5)
+            while !released {
+                guard condition.wait(until: deadline) else { throw Timeout() }
+            }
+        }
+
+        func release() {
+            condition.lock()
+            defer { condition.unlock() }
+            released = true
+            condition.broadcast()
+        }
+
+        private struct Timeout: Error {}
     }
 
     private var utcCalendar: Calendar {

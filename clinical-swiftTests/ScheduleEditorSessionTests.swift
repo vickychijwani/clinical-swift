@@ -609,7 +609,10 @@ struct ScheduleEditorSessionTests {
             #expect(session.preview.start == interval.start)
             #expect(session.preview.durationMinutes == interval.durationMinutes)
             session.selectType(.unavailableTime)
-            guard case .unavailableTime(let returnedBlock) = session.editor else { return }
+            guard case .unavailableTime(let returnedBlock) = session.editor else {
+                Issue.record("Expected an unavailable-time editor")
+                return
+            }
             #expect(returnedBlock.draft.label.isEmpty)
             #expect(session.visibleItems([], for: nextDate).count == 1)
             let fresh = try genericSession(
@@ -744,7 +747,10 @@ struct ScheduleEditorSessionTests {
             let session = ScheduleEditorSession(
                 bookingID: UUID(), selectedDate: date, center: center, items: [],
                 onFinished: { _ in })
-            guard case .appointment(let model) = session.editor else { return }
+            guard case .appointment(let model) = session.editor else {
+                Issue.record("Expected an appointment editor")
+                return
+            }
             #expect(
                 model.draftAppointment.start
                     == expectedStart.on(date: date, using: utcCalendar))
@@ -777,7 +783,10 @@ struct ScheduleEditorSessionTests {
             let session = ScheduleEditorSession(
                 bookingID: UUID(), selectedDate: date, center: TimeOfDay(12, 22), items: []
             ) { savedDate = $0 }
-            guard case .appointment(let model) = session.editor else { return }
+            guard case .appointment(let model) = session.editor else {
+                Issue.record("Expected an appointment editor")
+                return
+            }
             let conflict = Appointment(
                 patientName: "Other patient", start: date.addingTimeInterval(12 * 3600),
                 durationMinutes: 60, status: .scheduled)
