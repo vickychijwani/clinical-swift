@@ -79,6 +79,8 @@ struct ScheduleView: View {
                     .day())
         )
         .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbarBackground(palette[.canvas], for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(editorSession != nil ? .hidden : .visible, for: .tabBar)
         .toolbar {
             if editorSession == nil {
