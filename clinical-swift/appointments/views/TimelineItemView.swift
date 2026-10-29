@@ -36,19 +36,20 @@ struct TimelineItemView: View {
             // and testMixedThreeColumnCardsKeepSeparateTapAreas().
             .contentShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
             .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
+            // Taps use the button action. A zero-distance drag can also consume Done or Cancel.
+            .simultaneousGesture(
+                // Measure from touch-down so the hold does not lose the first movement.
+                // A swipe must cancel selection even when the day is too short to scroll.
+                DragGesture(minimumDistance: 5, coordinateSpace: .global)
+                    .onChanged(onMoveChanged)
+                    .onEnded(onMoveEnded)
+            )
         }
         .buttonStyle(TimelineCardButtonStyle())
         .allowsHitTesting(interactionsEnabled)
         // UI tests use the item type and ID to select each card.
         .accessibilityIdentifier(item.id.sortKey)
         .accessibilityValue("\(item.durationMinutes) min")
-        .simultaneousGesture(
-            // Measure from touch-down so the hold does not lose the first movement.
-            // A swipe must cancel selection even when the day is too short to scroll.
-            DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                .onChanged(onMoveChanged)
-                .onEnded(onMoveEnded)
-        )
         .overlay {
             // Handles sit outside the body gesture so a resize cannot start a move.
             if showsAdjustmentControls, item.allowsAdjustment {

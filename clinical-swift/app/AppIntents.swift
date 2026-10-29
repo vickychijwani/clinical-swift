@@ -15,7 +15,7 @@ final class ClinicalAppActions {
     }
 
     func bookAppointment() {
-        router.requestAppointmentBooking()
+        router.requestScheduleCreation()
     }
 
     func findPatient(phoneNumbers: Set<String>) async throws -> PatientContactMatch {

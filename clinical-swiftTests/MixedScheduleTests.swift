@@ -170,16 +170,16 @@ struct MixedScheduleTests {
             $0.calendar = utcCalendar
         } operation: {
             let router = Router(selectedScheduleDate: date)
-            router.requestUnavailableTimeCreation()
-            let editor = try #require(router.unavailableTimeEditorRequest)
+            router.requestScheduleCreation()
+            let editor = try #require(router.activePresentation)
             router.presentationDidAppear(editor.id)
-            router.requestAppointmentBooking()
+            router.requestScheduleCreation()
             #expect(router.activePresentation == nil)
             router.presentationDidDismiss()
-            #expect(router.appointmentBookingRequest != nil)
+            #expect(router.activePresentation != nil)
             router.finishScheduleEditor(editor.id, date: date.addingTimeInterval(24 * 60 * 60))
             #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: date))
-            #expect(router.appointmentBookingRequest != nil)
+            #expect(router.activePresentation != nil)
             let block = UnavailableTime(
                 start: date.addingTimeInterval(24 * 60 * 60), durationMinutes: 60)
             #expect(router.open((try #require(ClinicalURL.unavailableTime(block.id).url))))
@@ -191,7 +191,7 @@ struct MixedScheduleTests {
             router.completeUnavailableTimeNavigation(
                 try #require(router.unavailableTimeNavigationRequest), block: block)
             #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: block.start))
-            #expect(router.unavailableTimeEditorRequest == nil)
+            #expect(router.activePresentation == nil)
             router.openUnavailableTime(UUID())
             router.completeUnavailableTimeNavigation(
                 try #require(router.unavailableTimeNavigationRequest), block: nil)
@@ -301,7 +301,7 @@ struct MixedScheduleTests {
             $0.defaultDatabase = database
         } operation: {
             let router = Router()
-            router.requestUnavailableTimeCreation()
+            router.requestScheduleCreation()
             router.openUnavailableTime(block.id)
             let request = try #require(router.unavailableTimeNavigationRequest)
             await router.resolveUnavailableTime(request)

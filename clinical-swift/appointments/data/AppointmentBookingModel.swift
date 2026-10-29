@@ -3,19 +3,14 @@ import ClinicalPersistence
 import Foundation
 import SQLiteData
 
-@MainActor @Observable class AppointmentBookingModel: Identifiable {
+@MainActor @Observable final class AppointmentBookingModel {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @Dependency(\.date.now) private var now
 
-    /// This id lets the parent SwiftUI View (e.g., a sheet) identify whether the same or different
-    /// item is being presented if the parent's item is re-assigned
-    let id = UUID()
     let purpose: AppointmentBookingPurpose
     private let draftAppointmentID: Appointment.ID
-    let adjustment = TimelineAdjustment()
-    var isSelectingPatient: Bool
-    private(set) var isSaving = false
+    let state: ScheduleEditorState
 
     /// Prevent schedule reloads from moving an edited appointment just because its saved time
     /// overlaps another appointment or crosses a preferred scheduling boundary. Once timeline
@@ -27,17 +22,16 @@ import SQLiteData
     var draft: AppointmentBookingDraft
     private(set) var appointments: [Appointment] = []
     var searchText = ""
-    var saveErrorMessage: String?
-    var draftPreviewScrollRequest = 0
-    var onSaved: (Date) -> Void
+    private let onSaved: (Date) -> Void
 
     init(
         selectedDate: Date,
         selectedPatient: Patient? = nil,
+        state: ScheduleEditorState = ScheduleEditorState(),
         onSaved: @escaping (Date) -> Void
     ) {
         self.purpose = .create
-        self.isSelectingPatient = selectedPatient == nil
+        self.state = state
         self.draftAppointmentID = UUID()
         self.automaticallyPrefills = true
         self.draft = AppointmentBookingDraft(
@@ -49,11 +43,12 @@ import SQLiteData
 
     init(
         editing details: AppointmentDetails,
+        state: ScheduleEditorState = ScheduleEditorState(),
         onSaved: @escaping (Date) -> Void
     ) {
         let appointment = details.appointment
         self.purpose = .edit(appointment.id)
-        self.isSelectingPatient = false
+        self.state = state
         self.draftAppointmentID = appointment.id
         self.automaticallyPrefills = false
         self.draft = AppointmentBookingDraft(
@@ -79,28 +74,10 @@ import SQLiteData
         automaticallyPrefills = false
     }
 
-    func beginTimelineBooking(center: TimeOfDay, items: [TimelineItem]) {
-        // Clamp the centered interval at clinic boundaries, then keep the manual time on reload.
-        let minutes = center.totalMinutes - draft.durationMinutes / 2
-        // Only the initial start uses 15-minute steps. Later drags use five-minute steps.
-        let snapped = Int((Double(minutes) / 15).rounded()) * 15
-        draft.selectStart(
-            TimeOfDay(max(snapped, 0) / 60, max(snapped, 0) % 60)
-                .on(date: selectedDate, using: calendar))
-        isSelectingPatient = false
-        startTimelineEditing()
-        adjustment.begin(.appointment(draftAppointment), edge: .move, items: items)
-    }
-
-    func releaseTimelineBooking() {
-        adjustment.release()
-        isSelectingPatient = draft.selectedPatient == nil
-    }
-
     func selectPatient(_ patient: Patient) {
         draft.selectedPatient = patient
         searchText = ""
-        isSelectingPatient = false
+        state.isShowingSheet = false
     }
 
     func selectDate(_ selectedDate: Date) {
@@ -111,7 +88,7 @@ import SQLiteData
         }
 
         appointments = []
-        adjustment.release()
+        state.adjustment.release()
         draft.selectDate(normalizedDate)
     }
 
@@ -157,21 +134,21 @@ import SQLiteData
     }
 
     func saveAppointment() async -> Bool {
-        guard !isSaving, !adjustment.isDragging else { return false }
-        isSaving = true
-        defer { isSaving = false }
+        guard !state.isWorking, !state.didFinish, !state.adjustment.isDragging else { return false }
+        state.isWorking = true
+        defer { state.isWorking = false }
         do {
             try draft.normalized.validate()
             // Reset error message
-            saveErrorMessage = nil
+            state.errorMessage = nil
         } catch AppointmentBookingValidationError.missingPatient {
-            saveErrorMessage = "Select a patient."
+            state.errorMessage = "Select a patient."
             return false
         } catch AppointmentBookingValidationError.invalidTime {
-            saveErrorMessage = "Choose a time within clinic hours."
+            state.errorMessage = "Choose a time within clinic hours."
             return false
         } catch {
-            saveErrorMessage = "Check the appointment details and try again."
+            state.errorMessage = "Check the appointment details and try again."
             return false
         }
 
@@ -219,10 +196,11 @@ import SQLiteData
                 }
             }
 
+            state.didFinish = true
             onSaved(savedDate)
             return true
         } catch {
-            saveErrorMessage =
+            state.errorMessage =
                 if let error = error as? AccountEntryError, error == .appointmentHasCharges {
                     "This appointment has charges. Remove its linked charges before changing the patient."
                 } else if error is AppointmentEditingError {
@@ -284,7 +262,7 @@ import SQLiteData
     /// any domain meaning.
     private func requestDraftPreviewScrollIfNeeded(previousStart: Date) {
         if draft.start != previousStart {
-            draftPreviewScrollRequest += 1
+            state.scrollRevision += 1
         }
     }
 }
@@ -292,15 +270,6 @@ import SQLiteData
 nonisolated enum AppointmentBookingPurpose: Equatable, Sendable {
     case create
     case edit(Appointment.ID)
-
-    var title: String {
-        switch self {
-        case .create:
-            "New Appointment"
-        case .edit:
-            "Edit Appointment"
-        }
-    }
 
     var editedAppointmentID: Appointment.ID? {
         guard case .edit(let id) = self else { return nil }

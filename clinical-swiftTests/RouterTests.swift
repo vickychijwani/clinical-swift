@@ -9,32 +9,32 @@ import Testing
 struct RouterTests {
     @Test func patientSelectionDismissalRetainsEditorAndAllowsImmediateInterruption() throws {
         let router = makeRouter()
-        router.requestAppointmentBooking()
+        router.requestScheduleCreation()
         let id = try #require(router.activePresentation?.id)
         router.presentationDidAppear(id)
         router.presentationDidDismiss(retainingScheduleEditor: id)
         #expect(router.activePresentation?.id == id)
-        router.requestUnavailableTimeCreation()
-        #expect(router.unavailableTimeEditorRequest != nil)
+        router.requestScheduleCreation()
+        #expect(router.scheduleCreationRequest != nil)
     }
 
     @Test func interruptedPatientSelectionDismissalActivatesReplacement() throws {
         let router = makeRouter()
-        router.requestAppointmentBooking()
+        router.requestScheduleCreation()
         let id = try #require(router.activePresentation?.id)
         router.presentationDidAppear(id)
-        router.requestUnavailableTimeCreation()
+        router.requestScheduleCreation()
         router.presentationDidDismiss(retainingScheduleEditor: id)
-        #expect(router.unavailableTimeEditorRequest != nil)
+        #expect(router.scheduleCreationRequest != nil)
     }
 
     @Test func settingsDoesNotReplaceAnActiveEditor() throws {
         let router = makeRouter()
-        router.requestAppointmentBooking()
-        let editorID = try #require(router.appointmentBookingRequest?.id)
+        router.requestScheduleCreation()
+        let editorID = try #require(router.activePresentation?.id)
         router.requestSettings()
         #expect(router.settingsRequest == nil)
-        #expect(router.appointmentBookingRequest?.id == editorID)
+        #expect(router.activePresentation?.id == editorID)
     }
 
     @Test func detailsHistoryPreservesRepeatedRoutes() throws {
@@ -264,10 +264,10 @@ struct RouterTests {
         #expect(router.activePresentation?.id == nil)
 
         router.openAppointment(id: UUID())
-        router.requestAppointmentBooking()
+        router.requestScheduleCreation()
         router.presentationDidDismiss()
 
-        #expect(router.appointmentBookingRequest != nil)
+        #expect(router.scheduleCreationRequest != nil)
         #expect(router.detailsPresentation == nil)
         #expect(router.patientEditRequest == nil)
 
@@ -315,8 +315,12 @@ struct RouterTests {
         let details = appointmentDetails()
 
         let bookingRouter = makeRouter()
-        bookingRouter.requestAppointmentBooking()
+        bookingRouter.requestScheduleCreation()
         assertExternalAppointmentInterrupts(bookingRouter)
+
+        let patientBookingRouter = makeRouter()
+        patientBookingRouter.requestAppointmentBooking(for: patient)
+        assertExternalAppointmentInterrupts(patientBookingRouter)
 
         let editRouter = makeRouter()
         editRouter.requestAppointmentEdit(details)
@@ -345,18 +349,18 @@ struct RouterTests {
 
     @Test func anUnpresentedActionIsReplacedImmediatelyWithoutWaitingForDismissal() {
         let router = makeRouter()
-        router.requestAppointmentBooking()
+        router.requestScheduleCreation()
         let appointmentID = UUID()
 
         router.openAppointment(id: appointmentID)
 
         #expect(router.detailsPresentation?.root == .appointment(appointmentID))
-        #expect(router.appointmentBookingRequest == nil)
+        #expect(router.scheduleCreationRequest == nil)
     }
 
     @Test func externalPatientSearchInterruptsPresentationAndNormalizesPhones() throws {
         let router = makeRouter()
-        router.requestAppointmentBooking()
+        router.requestScheduleCreation()
         if let presentationID = router.activePresentation?.id {
             router.presentationDidAppear(presentationID)
         }

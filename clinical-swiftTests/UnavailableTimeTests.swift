@@ -10,135 +10,6 @@ import Testing
 
 @MainActor
 struct UnavailableTimeTests {
-    @Test(arguments: [false, true])
-    func timelineChangesStayUnsavedUntilDone(editing: Bool) async throws {
-        let database = try makeDatabase()
-        let start = try instant("2026-10-02T12:00:00Z")
-        let nextDate = try instant("2026-10-03T00:00:00Z")
-        try await withDependencies {
-            $0.defaultDatabase = database
-            $0.calendar = utcCalendar
-            $0.date.now = start
-        } operation: {
-            let block = UnavailableTime(label: "Travel", start: start, durationMinutes: 60)
-            if editing {
-                try await database.write { db in
-                    try UnavailableTimeRecord.insert {
-                        UnavailableTimeRecord(
-                            id: block.id, label: block.label, start: block.start,
-                            durationMinutes: block.durationMinutes, createdAt: start,
-                            updatedAt: start)
-                    }.execute(db)
-                }
-            }
-            var savedDate: Date?
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: .unavailableTimeEditor(
-                        UnavailableTimeEditorRequest(
-                            purpose: editing ? .edit(block) : .create)),
-                    selectedDate: start, appointments: []
-                ) { savedDate = $0 })
-            guard case .unavailableTime(let model) = session.editor else { return }
-            #expect(model.isEditingLabel == !editing)
-            #expect(session.preview.id == .unavailableTime(model.blockID))
-            model.draft.label = " Holiday "
-            model.finishLabelEntry()
-            #expect(!model.isEditingLabel)
-            let initial = model.preview
-            session.beginAdjustment(.unavailableTime(initial), edge: .move, items: [])
-            session.updateAdjustment(translation: 15, items: [])
-            #expect(model.draft.start == initial.start.addingTimeInterval(15 * 60))
-            model.adjustment.release()
-            #expect(!model.isEditingLabel)
-            session.beginAdjustment(.unavailableTime(initial), edge: .duration, items: [])
-            session.updateAdjustment(translation: -100, items: [])
-            #expect(model.draft.durationMinutes == 15)
-            model.adjustment.release()
-            model.selectDate(nextDate)
-            let expectedStart = TimeOfDay(date: initial.start, calendar: utcCalendar)
-                .on(date: nextDate, using: utcCalendar).addingTimeInterval(15 * 60)
-            #expect(model.preview.start == expectedStart)
-            #expect(model.preview.durationMinutes == 15)
-            #expect(model.hasUnsavedChanges)
-            #expect(savedDate == nil)
-            let blockID = model.blockID
-            let before = try await database.read { db in
-                try UnavailableTimeRecord.find(blockID).fetchOne(db)
-            }
-            #expect(before?.start == (editing ? start : nil))
-            #expect(before?.label == (editing ? "Travel" : nil))
-            // Reopening the label step must keep the dragged interval and remain unsaved.
-            model.isEditingLabel = true
-            model.draft.label = "Updated label"
-            model.finishLabelEntry()
-            #expect(model.preview.start == expectedStart)
-            #expect(model.preview.durationMinutes == 15)
-            #expect(model.preview.label == "Updated label")
-            await session.save()
-            #expect(model.errorMessage == nil)
-            #expect(!(await model.save()))
-            let after = try #require(
-                try await database.read { db in
-                    try UnavailableTimeRecord.find(blockID).fetchOne(db)
-                })
-            #expect(after.start == expectedStart)
-            #expect(after.durationMinutes == 15)
-            #expect(after.label == "Updated label")
-            #expect(after.createdAt == start)
-            #expect(savedDate == expectedStart)
-        }
-    }
-
-    @Test func timelineSaveFailureKeepsPreviewForRetryAndDiscardDoesNotWrite() async throws {
-        let database = try makeDatabase()
-        let start = try instant("2026-10-02T09:00:00Z")
-        try await withDependencies {
-            $0.defaultDatabase = database
-            $0.calendar = utcCalendar
-            $0.date.now = start
-        } operation: {
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create)),
-                    selectedDate: start, appointments: [], onFinished: { _ in }))
-            guard case .unavailableTime(let model) = session.editor else { return }
-            model.finishLabelEntry()
-            session.beginAdjustment(.unavailableTime(model.preview), edge: .move, items: [])
-            session.updateAdjustment(translation: 15, items: [])
-            model.adjustment.release()
-            let preview = model.preview
-            try await database.write { db in
-                try db.execute(
-                    sql: """
-                        CREATE TRIGGER reject_blocks BEFORE INSERT ON unavailableTimes
-                        BEGIN SELECT RAISE(ABORT, 'test failure'); END
-                        """)
-            }
-            #expect(!(await model.save()))
-            #expect(model.preview == preview)
-            #expect(!model.isWorking)
-            #expect(!model.didFinish)
-            try await database.write { db in try db.execute(sql: "DROP TRIGGER reject_blocks") }
-            #expect(await model.save())
-            let discardedSession = try #require(
-                ScheduleEditorSession(
-                    request: .unavailableTimeEditor(UnavailableTimeEditorRequest(purpose: .create)),
-                    selectedDate: start, appointments: [], onFinished: { _ in }))
-            guard case .unavailableTime(let discarded) = discardedSession.editor else { return }
-            discarded.finishLabelEntry()
-            discardedSession.beginAdjustment(
-                .unavailableTime(discarded.preview), edge: .move, items: [])
-            discardedSession.updateAdjustment(translation: 30, items: [])
-            discarded.adjustment.release()
-            let discardedID = discarded.blockID
-            #expect(
-                try await database.read { db in
-                    try UnavailableTimeRecord.find(discardedID).fetchOne(db)
-                } == nil)
-        }
-    }
-
     @Test func createEditDeleteKeepIdentityAndTimestamps() async throws {
         let database = try makeDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
@@ -148,12 +19,12 @@ struct UnavailableTimeTests {
             $0.date.now = date
         } operation: {
             var finishedDates: [Date] = []
-            let create = UnavailableTimeEditorModel(selectedDate: date) { finishedDates.append($0) }
+            let create = UnavailableTimeEditorModel(start: date, durationMinutes: 30) {
+                finishedDates.append($0)
+            }
             #expect(create.draft.start == date)
-            #expect(create.draft.durationMinutes == 60)
-            #expect(!create.hasUnsavedChanges)
+            #expect(create.draft.durationMinutes == 30)
             create.draft.label = " \n "
-            #expect(!create.hasUnsavedChanges)
             #expect(await create.save())
             #expect(!(await create.save()))
             let createdID = create.blockID
@@ -171,10 +42,9 @@ struct UnavailableTimeTests {
                     finishedDates.append($0)
                 }
             }
-            #expect(!edit.hasUnsavedChanges)
             #expect(edit.draft.start == record.start)
             edit.draft.label = " Travel "
-            edit.selectDuration(120)
+            edit.draft.durationMinutes = 120
             #expect(
                 await withDependencies {
                     $0.date.now = editDate
@@ -202,7 +72,7 @@ struct UnavailableTimeTests {
         }
     }
 
-    @Test func validationAndDateChangesKeepClockAndAllowBreaks() async throws {
+    @Test func validationAllowsBreaksAndRejectsInvalidIntervals() async throws {
         let database = try makeDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
         try await withDependencies {
@@ -210,14 +80,10 @@ struct UnavailableTimeTests {
             $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
-            let model = UnavailableTimeEditorModel(selectedDate: date) { _ in }
-            model.selectStart(try instant("2026-10-02T20:00:00Z"))
+            let model = UnavailableTimeEditorModel(start: date, durationMinutes: 30) { _ in }
+            model.draft.start = try instant("2026-10-02T13:00:00Z")
+            model.draft.durationMinutes = 120
             try model.draft.validate()
-            model.selectDuration(120)
-            #expect(model.draft.start == (try instant("2026-10-02T19:00:00Z")))
-            model.selectDate(try instant("2026-10-03T00:00:00Z"))
-            #expect(model.draft.start == (try instant("2026-10-03T19:00:00Z")))
-            model.selectStart(try instant("2026-10-03T13:00:00Z"))
             #expect(await model.save())
             for (start, duration) in [
                 ("2026-10-02T08:59:00Z", 30), ("2026-10-02T20:30:00Z", 60),
@@ -242,12 +108,13 @@ struct UnavailableTimeTests {
             var didFinish = false
             let model = UnavailableTimeEditorModel(editing: block) { _ in didFinish = true }
             #expect(model.draft.start == start)
-            #expect(!model.hasUnsavedChanges)
             #expect(!(await model.save()))
             #expect(!(await model.delete()))
-            #expect(model.errorMessage == "This unavailable time no longer exists.")
+            #expect(model.state.errorMessage == "This unavailable time no longer exists.")
             #expect(!didFinish)
-            let create = UnavailableTimeEditorModel(selectedDate: start) { _ in didFinish = true }
+            let create = UnavailableTimeEditorModel(start: start, durationMinutes: 30) { _ in
+                didFinish = true
+            }
             try await database.write { db in
                 try db.execute(
                     sql:
@@ -255,8 +122,8 @@ struct UnavailableTimeTests {
                 )
             }
             #expect(!(await create.save()))
-            #expect(create.errorMessage != nil)
-            #expect(!create.isWorking)
+            #expect(create.state.errorMessage != nil)
+            #expect(!create.state.isWorking)
             #expect(!didFinish)
             #expect(
                 try await database.read { db in
@@ -348,7 +215,9 @@ struct UnavailableTimeTests {
             $0.date.now = date
         } operation: {
             var finished = 0
-            let create = UnavailableTimeEditorModel(selectedDate: date) { _ in finished += 1 }
+            let create = UnavailableTimeEditorModel(start: date, durationMinutes: 30) { _ in
+                finished += 1
+            }
             let first = Task { await create.save() }
             let second = Task { await create.save() }
             let results = await [first.value, second.value]
@@ -365,7 +234,7 @@ struct UnavailableTimeTests {
             let editResults = await [save.value, delete.value]
             #expect(editResults.filter { $0 }.count == 1)
             #expect(finished == 2)
-            #expect(!edit.isWorking)
+            #expect(!edit.state.isWorking)
         }
     }
 
@@ -377,7 +246,7 @@ struct UnavailableTimeTests {
             $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
-            let create = UnavailableTimeEditorModel(selectedDate: date) { _ in }
+            let create = UnavailableTimeEditorModel(start: date, durationMinutes: 30) { _ in }
             #expect(await create.save())
             let recordID = create.blockID
             let block = try #require(
@@ -400,8 +269,7 @@ struct UnavailableTimeTests {
             #expect(!(await edit.save()))
             #expect(!(await edit.delete()))
             #expect(!didFinish)
-            #expect(edit.hasUnsavedChanges)
-            #expect(!edit.isWorking)
+            #expect(!edit.state.isWorking)
             #expect(
                 try await database.read { db in
                     try UnavailableTimeRecord.find(recordID).fetchOne(db)?.unavailableTime
