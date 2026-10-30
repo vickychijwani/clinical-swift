@@ -17,6 +17,18 @@ struct ContentView: View {
                     PatientsView()
                 }
             }
+
+            Tab("Payments", systemImage: "indianrupeesign", value: AppTab.payments) {
+                NavigationStack(path: $router.paymentsPath) {
+                    Rectangle()
+                        .fill(AppColor.canvas)
+                        .ignoresSafeArea()
+                        .navigationTitle("Payments")
+                        .toolbarTitleDisplayMode(.inlineLarge)
+                        .toolbarBackground(AppColor.canvas, for: .navigationBar)
+                        .toolbarBackground(.visible, for: .navigationBar)
+                }
+            }
         }
         .sheet(
             item: detailsPresentationBinding,
