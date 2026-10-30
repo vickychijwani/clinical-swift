@@ -15,7 +15,9 @@ struct PaymentsView: View {
                     Section {
                         if day.items.isEmpty {
                             Text("No payments")
+                                .font(.system(size: 14))
                                 .foregroundStyle(AppColor.secondaryText)
+                                .padding(.leading, 6)
                                 .paymentRowInsets()
                         } else {
                             ForEach(day.items) { item in
@@ -56,17 +58,15 @@ struct PaymentRow: View {
                 .clipShape(.circle)
             VStack(alignment: .leading) {
                 Text(item.title)
-                    .font(.headline)
-                    .foregroundStyle(AppColor.text)
+                    .styleBodyBold()
                 if let method = item.method {
                     Text(method)
-                        .font(.subheadline)
-                        .foregroundStyle(AppColor.secondaryText)
+                        .styleCaption()
                 }
             }
             Spacer(minLength: 0)
             Text(item.amount)
-                .bold()
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(item.isReceipt ? AppColor.receipt : .expense)
                 .fixedSize(horizontal: true, vertical: false)
         }
@@ -108,6 +108,7 @@ private struct PaymentDayTotals: View {
                     .foregroundStyle(AppColor.expense)
             }
         }
+        .styleCaption()
         .fixedSize(horizontal: true, vertical: false)
     }
 }

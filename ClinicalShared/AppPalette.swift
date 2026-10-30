@@ -105,7 +105,7 @@ nonisolated struct AppPalette: Equatable {
         case .success: .green
         case .warning: .orange
         case .receipt: self[.success]
-        case .expense: self[.warning]
+        case .expense: self[.warning].mix(with: .gray, by: 0.35, in: .device)
         case .receiptBackground: self[.receipt].opacity(0.16)
         case .expenseBackground: self[.expense].opacity(0.16)
         case .destructive: .red
