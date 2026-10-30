@@ -28,6 +28,10 @@ nonisolated enum AppColor: String, CaseIterable, Codable, Identifiable, ShapeSty
     case now = "Now marker"
     case success = "Success and avatars"
     case warning = "Warning"
+    case receipt = "Payment receipts"
+    case expense = "Payment expenses"
+    case receiptBackground = "Receipt badge background"
+    case expenseBackground = "Expense badge background"
     case destructive = "Error"
     case onAccent = "Text on accent"
     case shadow = "Shadow"
@@ -100,6 +104,10 @@ nonisolated struct AppPalette: Equatable {
         case .now: self[.accent]
         case .success: .green
         case .warning: .orange
+        case .receipt: self[.success]
+        case .expense: self[.warning]
+        case .receiptBackground: self[.receipt].opacity(0.16)
+        case .expenseBackground: self[.expense].opacity(0.16)
         case .destructive: .red
         case .onAccent, .highlight: .white
         case .shadow: .black

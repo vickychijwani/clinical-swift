@@ -1,4 +1,6 @@
+import ClinicalModels
 import CoreGraphics
+import Foundation
 import SwiftUI
 import Testing
 
@@ -57,6 +59,29 @@ struct ColorLabRenderingTests {
     }
 
     #if DEBUG
+        @Test(arguments: [ColorScheme.light, .dark])
+        func visiblePaymentRowsFollowColorLabChangesAndReset(scheme: ColorScheme) throws {
+            let suite = "ColorLabRenderingTests.\(UUID())"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let lab = ColorLab(defaults: defaults)
+            let date = try Date("2026-10-30T12:00:00Z", strategy: .iso8601)
+            for details: AccountEntry.Details in [
+                .receipt(source: .otherReceipts, paymentMethod: .upi),
+                .expense(category: .materials, paymentMethod: nil),
+            ] {
+                let item = PaymentItem(
+                    entry: AccountEntry(
+                        details: details, amount: 100000, entryDate: date, createdDate: date))
+                let row = PaymentRow(item: item).modifier(ColorLabRoot(lab: lab))
+                let original = try pixels(row, scheme: scheme)
+                lab.state.colors[item.isReceipt ? .receipt : .expense] = .system(.purple)
+                #expect(try pixels(row, scheme: scheme) != original)
+                lab.reset()
+                #expect(try pixels(row, scheme: scheme) == original)
+            }
+        }
+
         @Test(arguments: [ColorScheme.light, .dark])
         func accentOverrideLeavesNativeControlsUnchanged(scheme: ColorScheme) throws {
             let suite = "ColorLabRenderingTests.\(UUID())"
