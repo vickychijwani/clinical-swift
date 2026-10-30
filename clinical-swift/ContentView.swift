@@ -17,6 +17,12 @@ struct ContentView: View {
                     PatientsView()
                 }
             }
+
+            Tab("Payments", systemImage: "indianrupeesign", value: AppTab.payments) {
+                NavigationStack(path: $router.paymentsPath) {
+                    PaymentsView()
+                }
+            }
         }
         .sheet(
             item: detailsPresentationBinding,

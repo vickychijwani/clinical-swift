@@ -11,7 +11,11 @@ struct SampleCalendarSyncPersistenceTests {
         @Test func debugSamplesExistWithoutQueuedCalendarDelivery() throws {
             let database = try testDatabase()
 
-            try database.seedSampleDataIfNeeded()
+            try withDependencies {
+                $0.date.now = .now
+            } operation: {
+                try database.seedSampleDataIfNeeded()
+            }
 
             let counts = try database.read { db in
                 (

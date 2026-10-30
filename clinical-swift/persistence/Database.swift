@@ -117,6 +117,7 @@ nonisolated private let databaseLogger = Logger(
                         .execute(db)
                 }
             }
+            try seedSamplePaymentsIfNeeded()
         }
     }
 #endif
