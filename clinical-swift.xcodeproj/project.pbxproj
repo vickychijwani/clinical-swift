@@ -473,7 +473,7 @@
 				8BE2A0212FE0000000000005 /* XCRemoteSwiftPackageReference "GRDB" */,
 				8BE2A0222FE0000000000005 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
 				8BE2A0232FE0000000000005 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */,
-				8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */,
+				8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "swift-issue-reporting" */,
 				8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */,
 				8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */,
 				8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */,
@@ -1100,12 +1100,12 @@
 				minimumVersion = 1.4.0;
 			};
 		};
-		8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */ = {
+		8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "swift-issue-reporting" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pointfreeco/xctest-dynamic-overlay";
+			repositoryURL = "https://github.com/pointfreeco/swift-issue-reporting";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 1.5.0;
+				minimumVersion = 2.1.2;
 			};
 		};
 		8BE2A0252FE0000000000005 /* XCRemoteSwiftPackageReference "swift-collections" */ = {
@@ -1170,7 +1170,7 @@
 		};
 		8BE2A02C2FE0000000000005 /* IssueReporting */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */;
+			package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "swift-issue-reporting" */;
 			productName = IssueReporting;
 		};
 		8BE2A02D2FE0000000000005 /* OrderedCollections */ = {
@@ -1210,7 +1210,7 @@
 		};
 		8BE2A0342FE0000000000005 /* IssueReporting */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "xctest-dynamic-overlay" */;
+			package = 8BE2A0242FE0000000000005 /* XCRemoteSwiftPackageReference "swift-issue-reporting" */;
 			productName = IssueReporting;
 		};
 		8BE2A0352FE0000000000005 /* OrderedCollections */ = {
