@@ -21,6 +21,11 @@ Late editor completions must identify the router session they belong to before
 changing presentation or date selection. An editor model's identity is not proof
 that its sheet is still current.
 
+Completion payment drafts belong to one appointment-details visit. Back keeps the
+draft; leaving that visit discards it. A payment save must match the active session,
+draft instance, and originating path before dismissing details. The session ID
+alone is insufficient because an in-place root replacement reuses it.
+
 Appointment details must agree with the selected Schedule day before they appear.
 Keep the sheet neutral while resolving the record and aligning the schedule.
 Enforce this at the route boundary so every entry point gets the same behavior.
