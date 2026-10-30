@@ -19,8 +19,7 @@ struct AppointmentCompletionTests {
         }
     }
     @Test(arguments: [
-        "-500", "500.50", "+500", "abc", "₹", "1,0000", "100,000", "1,,000", "1,00", "1,000,000",
-        "9,22,33,72,03,68,54,77,5808", String(Int.max) + "0",
+        "-500", "500.50", "+500", "abc", "₹", "1,0000", "100,000", "1,,000", "1,00",
     ])
     func rejectsInvalidAmounts(_ text: String) {
         #expect(CompletionAmount.parse(text) == nil)
@@ -29,6 +28,24 @@ struct AppointmentCompletionTests {
         #expect(!model.canSave)
         #expect(model.buttonTitle == "Complete Appointment")
         #expect(model.buttonSymbol == "checkmark.circle")
+    }
+
+    @Test func overflowingAmountsDoNotParse() {
+        #expect(CompletionAmount.parse(String(Int.max) + "0") == nil)
+    }
+
+    @Test func sixDigitLimitIgnoresExtraDigitsWithoutAnError() {
+        let model = makeModel()
+        model.setAmountText("999999")
+        model.setAmountText("9999999")
+        #expect(model.amountText == "999999")
+        #expect(model.buttonTitle == "₹9,99,999 Paid · Complete Appointment")
+        #expect(model.errorMessage == nil)
+        #expect(model.canSave)
+        model.setAmountText("10,00,000")
+        #expect(model.amountText == "999999")
+        model.setAmountText("9,99,999")
+        #expect(model.amount == 999999)
     }
 
     @Test func inputTextIsKeptWithoutRewritingNativeEdits() {

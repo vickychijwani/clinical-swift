@@ -6,6 +6,14 @@ struct AppointmentCompletionView: View {
     @Bindable var model: AppointmentCompletionModel
     let presentationID: UUID
     @FocusState private var amountIsFocused: Bool
+    @State private var amountText: String
+
+    init(model: AppointmentCompletionModel, presentationID: UUID) {
+        self.model = model
+        self.presentationID = presentationID
+        _amountText = State(initialValue: model.amountText)
+    }
+
     var body: some View {
         Form {
             Section {
@@ -13,7 +21,7 @@ struct AppointmentCompletionView: View {
                     Text("₹")
                     TextField(
                         "Amount paid",
-                        text: Binding(get: { model.amountText }, set: { model.setAmountText($0) }),
+                        text: $amountText,
                         prompt: Text("0")
                     )
                     .keyboardType(.numberPad)
@@ -48,11 +56,16 @@ struct AppointmentCompletionView: View {
                         router.finishAppointmentCompletion(model, presentationID: presentationID)
                     }
                 } label: {
-                    Label(model.buttonTitle, systemImage: model.buttonSymbol)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.3)
-                        .frame(maxWidth: .infinity)
-                        .contentShape(.rect)
+                    Label {
+                        Text(model.buttonTitle)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .accessibilityIdentifier("completion-action-title")
+                    } icon: {
+                        Image(systemName: model.buttonSymbol)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.appGlassProminent)
                 .labelStyle(.titleAndIcon)
@@ -67,6 +80,10 @@ struct AppointmentCompletionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.isSaving)
         .task { amountIsFocused = true }
+        .onChange(of: amountText) {
+            model.setAmountText(amountText)
+            if amountText != model.amountText { amountText = model.amountText }
+        }
         .alert(
             "Unable to complete appointment",
             isPresented: Binding(

@@ -71,7 +71,9 @@ final class AppointmentCompletionModel: Identifiable {
     }
 
     func setAmountText(_ text: String) {
-        guard !isSaving && !didSave else { return }
+        guard !isSaving && !didSave, text.filter(CompletionAmount.isDigit).count <= 6 else {
+            return
+        }
         amountText = text
     }
     func selectMethod(_ method: AccountEntry.PaymentMethod?) {

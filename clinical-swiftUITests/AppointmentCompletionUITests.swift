@@ -58,6 +58,8 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         XCTAssertTrue(methods.buttons.allElementsBoundByIndex.allSatisfy { !$0.isSelected })
         let action = app.buttons["complete-appointment"]
         XCTAssertEqual(action.label, "No Dues · Complete Appointment")
+        let title = app.staticTexts["completion-action-title"]
+        let singleLineHeight = title.frame.height
         XCTAssertTrue(action.isHittable)
         XCTAssertGreaterThan(action.frame.width, app.frame.width * 0.8)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
@@ -72,15 +74,17 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         field.typeText("100000")
         XCTAssertEqual(field.value as? String, "100000")
         XCTAssertEqual(action.label, "₹1,00,000 Paid · Complete Appointment")
-        let title = action.staticTexts.firstMatch
-        XCTAssertLessThan(action.frame.height, 44)
+        XCTAssertLessThanOrEqual(title.frame.height, singleLineHeight + 1)
         XCTAssertLessThanOrEqual(title.frame.maxX, action.frame.maxX)
         XCTAssertTrue(action.isHittable)
         swipeSheetDown(app)
-        replaceAmount(app, with: String(Int.max))
-        XCTAssertEqual(field.value as? String, String(Int.max))
-        XCTAssertEqual(action.label, "₹9,22,33,72,03,68,54,77,807 Paid · Complete Appointment")
-        XCTAssertLessThan(action.frame.height, 44)
+        replaceAmount(app, with: "999999")
+        XCTAssertEqual(field.value as? String, "999999")
+        field.typeText("9")
+        XCTAssertEqual(field.value as? String, "999999")
+        XCTAssertFalse(app.staticTexts["Enter a valid whole-rupee amount."].exists)
+        XCTAssertEqual(action.label, "₹9,99,999 Paid · Complete Appointment")
+        XCTAssertLessThanOrEqual(title.frame.height, singleLineHeight + 1)
         XCTAssertLessThanOrEqual(title.frame.maxX, action.frame.maxX)
     }
 

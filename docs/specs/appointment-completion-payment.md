@@ -62,7 +62,9 @@ styling for the primary action, consistent with the existing prominent app butto
   the text or move the cursor during entry.
 - Clearing the field restores the empty state. An explicitly entered zero, including
   leading zeros, has the same save behavior as an empty amount.
-- Accept only nonnegative whole rupees that fit the existing integer amount model.
+- Limit the input to six digits (`999999`). Ignore edits that exceed this limit,
+  with no extra validation message. This is an input limit, not a new database rule.
+  Accept only nonnegative whole rupees that fit the existing integer amount model.
   Keep checked arithmetic at the persistence boundary.
 - Accept a pasted whole amount with valid Indian grouping and an optional rupee
   prefix. Ignore surrounding whitespace. Reject decimal fractions, negative values,
