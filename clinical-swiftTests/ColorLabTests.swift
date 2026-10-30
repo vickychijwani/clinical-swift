@@ -12,8 +12,9 @@ import Testing
             let defaults = try #require(UserDefaults(suiteName: suite))
             defer { defaults.removePersistentDomain(forName: suite) }
             let lab = ColorLab(defaults: defaults)
+            let expense = Color.orange.mix(with: .gray, by: 0.35, in: .device)
             #expect(lab.palette[.receipt] == lab.palette[.success])
-            #expect(lab.palette[.expense] == lab.palette[.warning])
+            #expect(lab.palette[.expense] == expense)
             lab.state.colors[.receipt] = .system(.purple)
             lab.state.colors[.expense] = .system(.blue)
             #expect(lab.palette[.receiptBackground] == Color.purple.opacity(0.16))
@@ -22,7 +23,7 @@ import Testing
             lab.reset()
             #expect(lab.palette == AppPalette())
             #expect(lab.palette[.receiptBackground] == Color.green.opacity(0.16))
-            #expect(lab.palette[.expenseBackground] == Color.orange.opacity(0.16))
+            #expect(lab.palette[.expenseBackground] == expense.opacity(0.16))
         }
 
         @Test func restoresColorsAndPanelStateWithoutChangingCardLab() throws {
