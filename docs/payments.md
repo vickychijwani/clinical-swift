@@ -29,6 +29,13 @@ Cancellation keeps linked charges. Financial history prevents patient deletion
 even when settled; linked charges prevent appointment deletion or patient changes.
 Schedule changes must not erase or reassign the clinic's financial history.
 
+Appointment completion reads the scheduled status, patient, and linked charges in
+the same transaction as the ledger batch and status update. It rejects repeat
+completion, changed patients, and multiple linked charges. This keeps a stale or
+competing request from recording another receipt. The entered payment replaces
+the linked charge amount, or removes the charge for zero. Existing receipts stay
+unchanged, so ledger validation can reject either operation.
+
 ## Derived balances
 
 Current balance summaries are rebuildable, device-local data maintained by ledger
