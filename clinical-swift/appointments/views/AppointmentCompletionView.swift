@@ -62,9 +62,6 @@ struct AppointmentCompletionView: View {
                     }
                     .pickerStyle(.segmented)
                     .accessibilityIdentifier("completion-method")
-                    .padding()
-                    .background(AppColor.surface)
-                    .clipShape(.capsule)
                 }
                 GlassEffectContainer {
                     AsyncButton {
