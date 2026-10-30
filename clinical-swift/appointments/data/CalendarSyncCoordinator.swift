@@ -16,7 +16,7 @@ final class CalendarSyncCoordinator {
     private var observation: AnyDatabaseCancellable?
     private var isActivating = false
     private var isReady = false
-    private var isDraining = false
+    private var drain: Task<Void, Never>?
     private var drainRequested = false
     private var eventChanges: Task<Void, Never>?
 
@@ -88,15 +88,25 @@ final class CalendarSyncCoordinator {
 
     private func requestDrain() async {
         drainRequested = true
-        guard isReady, !isDraining else { return }
-
-        isDraining = true
-        defer { isDraining = false }
-
-        repeat {
-            drainRequested = false
-            await drainPendingRecords()
-        } while drainRequested
+        guard isReady else { return }
+        if let drain {
+            await drain.value
+            return
+        }
+        // Activation must also wait for a drain that a database change started.
+        let task = Task {
+            defer { drain = nil }
+            repeat {
+                drainRequested = false
+                await drainPendingRecords()
+            } while drainRequested
+        }
+        drain = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func drainPendingRecords() async {

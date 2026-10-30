@@ -98,7 +98,7 @@ struct AppointmentDetailsModelTests {
         let gate = StatusUpdateGate()
         let updatedAt = Date(timeIntervalSinceReferenceDate: 2_000)
 
-        let results = await withDependencies {
+        let results = try await withDependencies {
             $0.defaultDatabase = database
             $0.date.now = updatedAt
         } operation: {
@@ -113,9 +113,15 @@ struct AppointmentDetailsModelTests {
             let firstUpdate = Task {
                 await model.updateStatus(to: .completed)
             }
-            while !gate.isWaiting {
-                await Task.yield()
+            defer {
+                gate.resume()
+                firstUpdate.cancel()
             }
+            let deadline = ContinuousClock.now + .seconds(2)
+            while !gate.isWaiting && ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            try #require(gate.isWaiting, "The first status write did not enter the gate.")
 
             let duplicateDidUpdate = await model.updateStatus(to: .completed)
             gate.resume()

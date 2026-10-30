@@ -15,7 +15,7 @@ struct UnavailableTimeCalendarTests {
         let block = try insertBlock(into: database, label: "Travel")
         let recorder = BlockCalendarRecorder()
         let coordinator = makeCoordinator(database, recorder)
-        await activate(coordinator)
+        try await activate(coordinator)
         let first = try #require(recorder.payloads.first)
         #expect(first.title == "Blocked: Travel")
         #expect(first.start == block.start)
@@ -29,7 +29,7 @@ struct UnavailableTimeCalendarTests {
                 $0.durationMinutes = 30
             }.execute(db)
         }
-        await activate(coordinator)
+        try await activate(coordinator)
         try await waitUntil { recorder.payloads.last?.title == "Blocked" }
         #expect(recorder.payloads.last?.title == "Blocked")
         #expect(recorder.payloads.last?.end == block.start.addingTimeInterval(30 * 60))
@@ -37,7 +37,7 @@ struct UnavailableTimeCalendarTests {
         try await database.write { db in
             try UnavailableTimeRecord.find(block.id).delete().execute(db)
         }
-        await activate(coordinator)
+        try await activate(coordinator)
         try await waitUntil { try syncRow(block.id, database) == nil }
         #expect(recorder.deletions.last == ClinicalURL.unavailableTime(block.id).url)
         #expect(try syncRow(block.id, database) == nil)
@@ -51,7 +51,7 @@ struct UnavailableTimeCalendarTests {
         }
         let recorder = BlockCalendarRecorder()
         let coordinator = makeCoordinator(database, recorder)
-        await activate(coordinator)
+        try await activate(coordinator)
         #expect(recorder.payloads.isEmpty)
         #expect(recorder.deletions == [ClinicalURL.unavailableTime(block.id).url])
         #expect(try syncRow(block.id, database) == nil)
@@ -71,7 +71,7 @@ struct UnavailableTimeCalendarTests {
         let recorder = BlockCalendarRecorder()
         recorder.failureURL = ClinicalURL.unavailableTime(block.id).url
         let coordinator = makeCoordinator(database, recorder)
-        await activate(coordinator)
+        try await activate(coordinator)
         #expect(recorder.payloads.first?.url == ClinicalURL.appointment(block.id).url)
         #expect(try syncRow(block.id, database)?.needsSync == true)
         #expect(
@@ -80,7 +80,7 @@ struct UnavailableTimeCalendarTests {
                     db)?.needsSync
             } == false)
         recorder.failureURL = nil
-        await activate(coordinator)
+        try await activate(coordinator)
         #expect(try syncRow(block.id, database)?.eventIdentifier != "event-1")
         #expect(try syncRow(block.id, database)?.needsSync == false)
     }
@@ -94,11 +94,11 @@ struct UnavailableTimeCalendarTests {
         let denied = BlockCalendarRecorder()
         denied.granted = granted
         denied.target = target
-        await activate(makeCoordinator(database, denied))
+        try await activate(makeCoordinator(database, denied))
         #expect(denied.payloads.isEmpty)
         #expect(try syncRow(block.id, database)?.needsSync == true)
         let retry = BlockCalendarRecorder()
-        await activate(makeCoordinator(database, retry))
+        try await activate(makeCoordinator(database, retry))
         #expect(retry.payloads.count == 1)
         #expect(try syncRow(block.id, database)?.needsSync == false)
     }
@@ -115,14 +115,14 @@ struct UnavailableTimeCalendarTests {
             }
         }
         let coordinator = makeCoordinator(database, recorder)
-        await activate(coordinator)
+        try await activate(coordinator)
         let row = try #require(try syncRow(block.id, database))
         #expect(row.revision == 2)
         #expect(row.needsSync)
         #expect(row.eventIdentifier == "event-1")
         #expect(recorder.links.last?.eventIdentifier == "event-1")
         recorder.onReplace = nil
-        await activate(coordinator)
+        try await activate(coordinator)
         #expect(recorder.payloads.last?.title == "Blocked: Changed")
         #expect(try syncRow(block.id, database)?.needsSync == false)
     }
@@ -138,7 +138,7 @@ struct UnavailableTimeCalendarTests {
             }
         }
         let coordinator = makeCoordinator(database, recorder)
-        await activate(coordinator)
+        try await activate(coordinator)
         #expect(recorder.payloads.count == 1)
         #expect(recorder.deletedLinks.first?.eventIdentifier == "event-1")
         #expect(try syncRow(block.id, database) == nil)
@@ -156,7 +156,7 @@ struct UnavailableTimeCalendarTests {
             }
         }
         let coordinator = makeCoordinator(database, recorder)
-        await activate(coordinator)
+        try await activate(coordinator)
         #expect(recorder.payloads.count == 1)
         #expect(try syncRow(block.id, database)?.needsSync == false)
         #expect(try syncRow(block.id, database)?.revision == 3)
@@ -173,11 +173,11 @@ struct UnavailableTimeCalendarTests {
         }
         let recorder = BlockCalendarRecorder()
         let coordinator = makeCoordinator(database, recorder)
-        await activate(coordinator)
+        try await activate(coordinator)
         #expect(recorder.payloads.count == 1)
         #expect(try syncRow(block.id, database)?.needsSync == true)
         try await database.write { db in try db.execute(sql: "DROP TRIGGER reject_event_link") }
-        await activate(coordinator)
+        try await activate(coordinator)
         #expect(recorder.payloads.last?.url == recorder.payloads.first?.url)
         #expect(try syncRow(block.id, database)?.needsSync == false)
     }
@@ -198,7 +198,7 @@ struct UnavailableTimeCalendarTests {
         }
         let recorder = BlockCalendarRecorder()
         recorder.failureURL = ClinicalURL.unavailableTime(failed.id).url
-        await activate(makeCoordinator(database, recorder))
+        try await activate(makeCoordinator(database, recorder))
         #expect(recorder.payloads.first?.title == "Blocked: Failed")
         #expect(try syncRow(failed.id, database)?.needsSync == true)
         #expect(try syncRow(next.id, database)?.needsSync == false)
@@ -234,11 +234,11 @@ struct UnavailableTimeCalendarTests {
     }
 
     private func waitUntil(_ condition: () throws -> Bool) async throws {
-        for _ in 0..<200 {
-            if try condition() { return }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while try !condition() && ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }
-        Issue.record("Calendar work did not finish.")
+        try #require(try condition(), "Calendar work did not finish within two seconds.")
     }
 
     private func insertBlock(into database: DatabaseQueue, label: String? = nil) throws
@@ -277,15 +277,21 @@ struct UnavailableTimeCalendarTests {
         }
     }
 
-    private func activate(_ coordinator: CalendarSyncCoordinator) async {
-        await withDependencies {
-            var calendar = Calendar(identifier: .gregorian)
-            calendar.timeZone = .gmt
-            $0.calendar = calendar
-        } operation: {
-            await coordinator.activate()
+    private func activate(_ coordinator: CalendarSyncCoordinator) async throws {
+        var finished = false
+        let activation = Task {
+            await withDependencies {
+                var calendar = Calendar(identifier: .gregorian)
+                calendar.timeZone = .gmt
+                $0.calendar = calendar
+            } operation: {
+                await coordinator.activate()
+            }
+            finished = true
         }
-        for _ in 0..<10 { await Task.yield() }
+        defer { activation.cancel() }
+        try await waitUntil { finished }
+        await activation.value
     }
 }
 
