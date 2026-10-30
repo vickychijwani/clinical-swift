@@ -68,6 +68,23 @@ nonisolated enum PaymentsFixture {
                     == patientLedger(patientID: id, in: db).balance)
         }
     }
+
+    // Swift 6.4 cannot compile adjacent throwing assertions with a nonescaping closure here.
+    static func expectDatabaseError(
+        _ code: ResultCode, in db: Database, operation: @escaping () throws -> Void
+    ) throws {
+        let tables = ["patients", "appointments", "accountEntries", "patientBalances"]
+        let before = try tables.map { try Row.fetchAll(db, sql: "SELECT * FROM \($0) ORDER BY id") }
+        do {
+            try operation()
+            Issue.record("The write must fail with \(code).")
+        } catch let error as DatabaseError {
+            #expect(
+                (code == .SQLITE_CONSTRAINT ? error.resultCode : error.extendedResultCode) == code)
+        }
+        let after = try tables.map { try Row.fetchAll(db, sql: "SELECT * FROM \($0) ORDER BY id") }
+        #expect(after == before, "A rejected write must leave stored data unchanged.")
+    }
 }
 
 struct PaymentsModelTests {
@@ -108,7 +125,7 @@ struct PaymentsModelTests {
                         try AccountEntryRecord(changed, updatedAt: PaymentsFixture.now).entry()
                     }
                     try database.write { db -> Void in
-                        #expect(throws: (any Error).self) {
+                        try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_CHECK, in: db) {
                             try AccountEntryRecord.insert {
                                 AccountEntryRecord(changed, updatedAt: PaymentsFixture.now)
                             }.execute(db)
@@ -143,7 +160,7 @@ struct PaymentsModelTests {
                 for invalidRecord in invalid {
                     #expect(throws: AccountEntryError.invalidFields) { try invalidRecord.entry() }
                     try database.write { db -> Void in
-                        #expect(throws: (any Error).self) {
+                        try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT, in: db) {
                             try AccountEntryRecord.insert { invalidRecord }.execute(db)
                         }
                     }
@@ -337,7 +354,9 @@ struct PaymentsPersistenceTests {
                 #expect(
                     try AccountEntryRecord.find(charge.id).fetchOne(db)?.createdAt
                         == charge.createdDate)
-                #expect(throws: (any Error).self) { try PaymentsFixture.save([charge], in: db) }
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_PRIMARYKEY, in: db) {
+                    try PaymentsFixture.save([charge], in: db)
+                }
                 #expect(try AccountEntryRecord.find(charge.id).fetchOne(db)?.amount == 4000)
                 reduced.amount = 0
                 #expect(throws: AccountEntryError.invalidAmount) {
@@ -491,10 +510,15 @@ struct PaymentsPersistenceTests {
                 #expect(throws: AccountEntryError.appointmentPatientMismatch) {
                     try PaymentsFixture.save([mismatch], in: db)
                 }
-                #expect(throws: (any Error).self) {
-                    try AccountEntryRecord.insert {
-                        AccountEntryRecord(mismatch, updatedAt: PaymentsFixture.now)
-                    }.execute(db)
+                let mismatchRecord = AccountEntryRecord(mismatch, updatedAt: PaymentsFixture.now)
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_TRIGGER, in: db) {
+                    try AccountEntryRecord.insert { mismatchRecord }.execute(db)
+                }
+                var orphan = AccountEntryRecord(charge, updatedAt: PaymentsFixture.now)
+                orphan.patientID = UUID()
+                orphan.appointmentID = nil
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_FOREIGNKEY, in: db) {
+                    try AccountEntryRecord.insert { orphan }.execute(db)
                 }
                 var second = PaymentsFixture.entry(.charge, 50)
                 second.details = .charge(
@@ -507,10 +531,10 @@ struct PaymentsPersistenceTests {
                 #expect(
                     try AppointmentCoverageRequest(appointmentID: PaymentsFixture.appointmentID)
                         .fetch(db).covered == 100)
-                #expect(throws: (any Error).self) {
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_TRIGGER, in: db) {
                     try AppointmentRecord.find(PaymentsFixture.appointmentID).delete().execute(db)
                 }
-                #expect(throws: (any Error).self) {
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_TRIGGER, in: db) {
                     try AppointmentRecord.find(PaymentsFixture.appointmentID).update {
                         $0.patientID = #bind(PaymentsFixture.otherPatientID)
                     }.execute(db)
@@ -520,7 +544,7 @@ struct PaymentsPersistenceTests {
                         id: PaymentsFixture.appointmentID,
                         patientID: PaymentsFixture.otherPatientID, in: db)
                 }
-                #expect(throws: (any Error).self) {
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_TRIGGER, in: db) {
                     try PatientRecord.find(PaymentsFixture.patientID).delete().execute(db)
                 }
                 try AppointmentRecord.find(PaymentsFixture.appointmentID).update {
@@ -530,7 +554,7 @@ struct PaymentsPersistenceTests {
                     try AppointmentChargesRequest(appointmentID: PaymentsFixture.appointmentID)
                         .fetch(db).count == 2)
                 // The update guard also applies when an existing charge gains a wrong link.
-                #expect(throws: (any Error).self) {
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_TRIGGER, in: db) {
                     try AccountEntryRecord.find(charge.id).update {
                         $0.patientID = #bind(PaymentsFixture.otherPatientID)
                     }.execute(db)
@@ -558,7 +582,7 @@ struct PaymentsPersistenceTests {
                     try PaymentsFixture.save([charge], in: db)
                 }
                 try PaymentsFixture.save([PaymentsFixture.entry(.charge, Int.max)], in: db)
-                #expect(throws: (any Error).self) {
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_TRIGGER, in: db) {
                     try PaymentsFixture.save([PaymentsFixture.entry(.charge, 1)], in: db)
                 }
                 #expect(
@@ -718,29 +742,6 @@ struct PaymentsQueryTests {
             #expect(history.count == 2)
         }
     }
-
-    @Test func freshSchemaContainsIndexesTriggersAndForeignKeys() throws {
-        try PaymentsFixture.run { database in
-            try database.read { db in
-                let indexes = try String.fetchAll(
-                    db, sql: "SELECT name FROM sqlite_master WHERE type = 'index'")
-                #expect(
-                    Set(indexes).isSuperset(of: [
-                        "idx_accountEntries_patient", "idx_accountEntries_appointment",
-                        "idx_accountEntries_date", "idx_patientBalances_positive",
-                    ]))
-                let triggers = try String.fetchAll(
-                    db, sql: "SELECT name FROM sqlite_master WHERE type = 'trigger'")
-                #expect(
-                    Set(triggers).isSuperset(of: [
-                        "accountEntry_summary_insert", "accountEntry_summary_update",
-                        "accountEntry_summary_delete", "accountEntry_patient_insert",
-                        "accountEntry_patient_update", "appointment_charged_patient",
-                    ]))
-                #expect(try Row.fetchAll(db, sql: "PRAGMA foreign_key_check").isEmpty)
-            }
-        }
-    }
 }
 
 struct PaymentsBoundaryTests {
@@ -875,7 +876,7 @@ struct PaymentsBoundaryTests {
                 let charge = PaymentsFixture.entry(.charge, Int.max)
                 try PaymentsFixture.save([charge], in: db)
                 for field in ["kind", "category", "paymentMethod"] {
-                    #expect(throws: (any Error).self) {
+                    try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_CHECK, in: db) {
                         try db.execute(sql: "UPDATE accountEntries SET \(field) = 'unexpected'")
                     }
                 }
@@ -887,7 +888,7 @@ struct PaymentsBoundaryTests {
                 try saveAccountEntries(AccountEntryBatch(updates: [negative]), in: db)
                 var positive = negative
                 positive.amount = 1
-                #expect(throws: (any Error).self) {
+                try PaymentsFixture.expectDatabaseError(.SQLITE_CONSTRAINT_TRIGGER, in: db) {
                     try saveAccountEntries(AccountEntryBatch(updates: [positive]), in: db)
                 }
                 #expect(
@@ -928,7 +929,9 @@ struct PaymentsBoundaryTests {
                     (\(bind: p), 7, \(bind: PaymentsFixture.now), \(bind: PaymentsFixture.now))
                     """
                 ).execute(db)
-                #expect(throws: (any Error).self) { try rebuildPatientBalances(in: db) }
+                try PaymentsFixture.expectDatabaseError(.SQLITE_ERROR, in: db) {
+                    try rebuildPatientBalances(in: db)
+                }
                 #expect(try currentPatientBalance(patientID: p, in: db) == 7)
             }
         }

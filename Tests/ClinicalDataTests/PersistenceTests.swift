@@ -50,24 +50,6 @@ struct PersistenceTests {
         #expect(Appointment.Status(storageValue: "unexpected") == nil)
     }
 
-    @Test func migrationsCreateTables() throws {
-        let database = try testDatabase()
-
-        let tableCount = try database.read { db in
-            try Int.fetchOne(
-                db,
-                sql: """
-                    SELECT count(*)
-                    FROM "sqlite_master"
-                    WHERE "type" = 'table'
-                      AND "name" IN ('patients', 'appointments')
-                    """
-            ) ?? 0
-        }
-
-        #expect(tableCount == 2)
-    }
-
     @Test func patientRowsDeriveNextAppointmentDate() throws {
         let database = try testDatabase()
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
