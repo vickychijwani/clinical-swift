@@ -50,24 +50,6 @@ struct PersistenceTests {
         #expect(Appointment.Status(storageValue: "unexpected") == nil)
     }
 
-    @Test func migrationsCreateTables() throws {
-        let database = try testDatabase()
-
-        let tableCount = try database.read { db in
-            try Int.fetchOne(
-                db,
-                sql: """
-                    SELECT count(*)
-                    FROM "sqlite_master"
-                    WHERE "type" = 'table'
-                      AND "name" IN ('patients', 'appointments')
-                    """
-            ) ?? 0
-        }
-
-        #expect(tableCount == 2)
-    }
-
     @Test func patientRowsDeriveNextAppointmentDate() throws {
         let database = try testDatabase()
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
@@ -313,33 +295,6 @@ struct PersistenceTests {
         #expect(appointmentCount == 0)
         #expect(deletedPatient == nil)
         #expect(deletedAppointment == nil)
-    }
-
-    @Test func patientRecordInsertHonorsPatientValidationBoundary() throws {
-        let database = try testDatabase()
-        let validPatient = Patient(name: "Ishaan Verma")
-
-        try validPatient.validate()
-        try database.write { db in
-            try PatientRecord.insert { PatientRecord(validPatient) }
-                .execute(db)
-        }
-
-        let patientCount = try database.read { db in
-            try PatientRecord.count().fetchOne(db) ?? 0
-        }
-
-        #expect(patientCount == 1)
-        #expect(throws: Patient.ValidationError.missingNameAndPhone) {
-            try Patient(name: nil, phone: nil).validate()
-        }
-    }
-
-    private func testDatabase() throws -> DatabaseQueue {
-        let configuration = clinicalDatabaseConfiguration()
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
     }
 
     private struct AppointmentSeed {

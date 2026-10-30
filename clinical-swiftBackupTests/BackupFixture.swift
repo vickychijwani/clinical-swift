@@ -17,7 +17,8 @@ enum BackupFixture {
     }
 
     static func database(at url: URL) throws -> DatabasePool {
-        let database = try DatabasePool(path: url.path(percentEncoded: false))
+        let database = try DatabasePool(
+            path: url.path(percentEncoded: false), configuration: clinicalDatabaseConfiguration())
         try databaseMigrator(allowDebugErasure: false).migrate(database)
         try database.write { db in
             try db.execute(

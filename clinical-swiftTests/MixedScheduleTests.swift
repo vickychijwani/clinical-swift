@@ -76,8 +76,7 @@ struct MixedScheduleTests {
 
     @Test func widgetReadsMixedItemsAndRefreshesAtFirstEnd() throws {
         let calendar = utcCalendar
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
+        let database = try testDatabase()
         let now = try instant("2026-10-02T10:30:00Z")
         let patient = Patient(name: "Patient", createdDate: now)
         let appointment = try AppointmentRecord.persisted(
@@ -206,8 +205,7 @@ struct MixedScheduleTests {
     }
 
     @Test func observedBlocksPageWithoutChangingBookingAvailability() async throws {
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
+        let database = try testDatabase()
         let date = try instant("2026-10-02T09:00:00Z")
         try await withDependencies {
             $0.defaultDatabase = database
@@ -253,8 +251,7 @@ struct MixedScheduleTests {
     }
 
     @Test func committedBlockWritesReloadWidgetsAndRollbacksDoNot() async throws {
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
+        let database = try testDatabase()
         let reloads = Mutex(0)
         let invalidator = WidgetTimelineInvalidator(
             database: database,
@@ -264,19 +261,21 @@ struct MixedScheduleTests {
         let start = try instant("2026-10-02T09:00:00Z")
         let block = UnavailableTimeRecord(
             id: UUID(), start: start, durationMinutes: 60, createdAt: start, updatedAt: start)
+        var previousReloads = reloads.withLock { $0 }
         try await database.write { db in try UnavailableTimeRecord.insert { block }.execute(db) }
+        #expect(reloads.withLock { $0 } > previousReloads)
+        previousReloads = reloads.withLock { $0 }
         try await database.write { db in
             try UnavailableTimeRecord.find(block.id).update { $0.label = #bind("Travel") }.execute(
                 db)
         }
+        #expect(reloads.withLock { $0 } > previousReloads)
+        previousReloads = reloads.withLock { $0 }
         try await database.write { db in
             try UnavailableTimeRecord.find(block.id).delete().execute(db)
         }
-        for _ in 0..<100 {
-            if reloads.withLock({ $0 }) == 4 { break }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(reloads.withLock { $0 } == 4)
+        #expect(reloads.withLock { $0 } > previousReloads)
+        let committedReloads = reloads.withLock { $0 }
         do {
             try await database.write { db in
                 try UnavailableTimeRecord.insert { block }.execute(db)
@@ -284,14 +283,14 @@ struct MixedScheduleTests {
             }
             Issue.record("The transaction should fail.")
         } catch UnavailableTimeError.invalidTime {}
-        for _ in 0..<5 { await Task.yield() }
-        #expect(reloads.withLock { $0 } == 4)
+        // Region callbacks run on the writer queue. This barrier follows commit and rollback delivery.
+        try await database.write { _ in }
+        #expect(reloads.withLock { $0 } == committedReloads)
         withExtendedLifetime(invalidator) {}
     }
 
     @Test func calendarBlockURLLoadsItsStoredDate() async throws {
-        let database = try DatabaseQueue()
-        try migrateDatabase(database)
+        let database = try testDatabase()
         let start = try instant("2026-10-04T14:00:00Z")
         let block = UnavailableTimeRecord(
             id: UUID(), start: start, durationMinutes: 60, createdAt: start, updatedAt: start)

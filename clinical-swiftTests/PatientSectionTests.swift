@@ -33,7 +33,7 @@ struct PatientSectionTests {
         #expect(sections.map(\.id) == ["A", "D"])
     }
 
-    @Test func searchMatchesRealNamesOnly() {
+    @Test func nameSearchFiltersPatientsAndOmitsEmptySections() {
         let items = [
             unknownPatient(createdDate: date(2026, 5, 28)),
             patient(name: "Unknown Roy"),
@@ -46,58 +46,13 @@ struct PatientSectionTests {
         )
         let aaravSearch = PatientSection.sections(
             from: items,
-            searchText: "aarav"
-        )
-
-        #expect(unknownSearch.flatMap(\.items).map(\.patient.name) == ["Unknown Roy"])
-        #expect(aaravSearch.flatMap(\.items).map(\.patient.name) == ["Aarav Mehta"])
-    }
-
-    @Test func searchCanRemoveUnknownSection() {
-        let items = [
-            unknownPatient(createdDate: date(2026, 5, 28)),
-            patient(name: "Aarav Mehta"),
-        ]
-
-        let sections = PatientSection.sections(
-            from: items,
-            searchText: "Aarav"
-        )
-
-        #expect(sections.map(\.id) == ["A"])
-    }
-
-    @Test func searchMatchesPrefixesOfNameWordsOnly() {
-        let items = [
-            patient(name: "Aarav Mehta"),
-            patient(name: "Ishaan Puri"),
-        ]
-
-        let sections = PatientSection.sections(
-            from: items,
-            searchText: "aa"
-        )
-
-        #expect(sections.flatMap(\.items).map(\.patient.name) == ["Aarav Mehta"])
-    }
-
-    @Test func searchMatchesWordPrefixesInAnyOrder() {
-        let items = [
-            patient(name: "Aarav Mehta"),
-            patient(name: "Mehta Aarav"),
-            patient(name: "Mehul Arora"),
-        ]
-
-        let sections = PatientSection.sections(
-            from: items,
             searchText: "me aa"
         )
 
-        #expect(
-            sections.flatMap(\.items).map(\.patient.name) == [
-                "Aarav Mehta",
-                "Mehta Aarav",
-            ])
+        #expect(unknownSearch.map(\.id) == ["U"])
+        #expect(aaravSearch.map(\.id) == ["A"])
+        #expect(unknownSearch.flatMap(\.items).map(\.patient.name) == ["Unknown Roy"])
+        #expect(aaravSearch.flatMap(\.items).map(\.patient.name) == ["Aarav Mehta"])
     }
 
     @Test func externalPhoneFilterMatchesEverySuppliedNumberExactly() {

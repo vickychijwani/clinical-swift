@@ -9,6 +9,34 @@ import Testing
 
 @MainActor
 struct PatientEditorModelTests {
+    @Test(arguments: [false, true])
+    func invalidDraftDoesNotWrite(editing: Bool) async throws {
+        let database = try testDatabase()
+        let now = try Date("2026-10-29T09:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Aarav Mehta", createdDate: now)
+        if editing {
+            try await database.write { db in
+                try PatientRecord.insert { PatientRecord(patient, now: now) }.execute(db)
+            }
+        }
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+            $0.date.now = now.addingTimeInterval(60)
+        } operation: {
+            let before = try await database.read { try PatientRecord.fetchAll($0) }
+            let model = PatientEditorModel(patient: editing ? patient : nil)
+            model.draft.name = " \n "
+            model.draft.phone = " "
+
+            #expect(await model.save() == nil)
+            #expect(model.saveErrorMessage == "Enter a name or phone number.")
+            let after = try await database.read { try PatientRecord.fetchAll($0) }
+            #expect(after.map { Patient($0) } == before.map { Patient($0) })
+            #expect(after.map(\.updatedAt) == before.map(\.updatedAt))
+        }
+    }
+
     @Test func editInitializationPreservesValuesAndTracksChanges() {
         let createdAt = Date(timeIntervalSinceReferenceDate: 1_000)
         let patient = Patient(
@@ -143,13 +171,5 @@ struct PatientEditorModelTests {
         #expect(record?.phone == savedPatient.phone)
         #expect(record?.createdAt == savedPatient.createdDate)
         #expect(record?.updatedAt == now)
-    }
-
-    private func testDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
     }
 }

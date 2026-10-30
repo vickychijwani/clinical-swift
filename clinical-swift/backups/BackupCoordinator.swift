@@ -15,6 +15,7 @@ final class BackupCoordinator {
     private let database: any DatabaseWriter
     private let store: BackupStateStore
     private let account: GoogleBackupAccount
+    private let session: URLSession
     private let snapshotWorker = BackupSnapshotWorker()
     private var work: Task<Bool, Never>?
     private var stateIsReadable = true
@@ -22,11 +23,12 @@ final class BackupCoordinator {
 
     init(
         database: any DatabaseWriter, store: BackupStateStore = .live(),
-        account: GoogleBackupAccount = GoogleBackupAccount()
+        account: GoogleBackupAccount = GoogleBackupAccount(), session: URLSession = .shared
     ) {
         self.database = database
         self.store = store
         self.account = account
+        self.session = session
         do { state = try store.load() } catch {
             state = BackupState()
             state.problem =
@@ -107,9 +109,11 @@ final class BackupCoordinator {
         isRunning = true
         defer { isRunning = false }
         let account = account
-        let drive = GoogleDriveClient(token: {
-            try await account.accessToken(expectedAccountID: accountID)
-        })
+        let drive = GoogleDriveClient(
+            session: session,
+            token: {
+                try await account.accessToken(expectedAccountID: accountID)
+            })
         do {
             try Task.checkCancellation()
             if let root = state.rootFolderID {

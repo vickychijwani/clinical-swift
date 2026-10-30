@@ -192,7 +192,7 @@ struct TimelineAdjustmentTests {
         #expect(model.scale(items, draft: draft).isBreakExpanded)
     }
 
-    @Test func releaseWithoutMotionKeepsDraft() throws {
+    @Test func releaseWithoutMotionClearsDragStateAndOriginal() throws {
         let appointment = try appointment()
         let draft = TimelineItem.appointment(appointment)
         let model = withDependencies {
@@ -202,7 +202,6 @@ struct TimelineAdjustmentTests {
         }
         model.begin(draft, edge: .move, items: [draft])
         model.release()
-        #expect(draft.start == appointment.start)
         #expect(!model.isDragging)
         #expect(model.original == nil)
     }

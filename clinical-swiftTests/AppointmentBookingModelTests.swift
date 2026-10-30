@@ -187,7 +187,10 @@ struct AppointmentBookingModelTests {
             let session = try editingSession(
                 AppointmentDetails(appointment: appointment, patient: patient)
             ) { _ in didSave = true }
-            guard case .appointment(let model) = session.editor else { return }
+            guard case .appointment(let model) = session.editor else {
+                Issue.record("Expected an appointment editor")
+                return
+            }
             model.draft.selectedPatient = other
             #expect(await session.save() == false)
             #expect(
@@ -226,13 +229,5 @@ struct AppointmentBookingModelTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         return calendar
-    }
-
-    private func testDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
     }
 }

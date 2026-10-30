@@ -7,7 +7,7 @@ import Testing
 
 struct AppointmentBookingPatientQueryTests {
     @Test func mixesRecentVisitsAndPatientCreationWithoutDuplicateRows() throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let now = try date("2026-10-05T09:00:00Z")
         let patients = try [
             patient(1, name: "Zoya Shah", created: "2026-10-05T08:00:00Z"),
@@ -59,7 +59,7 @@ struct AppointmentBookingPatientQueryTests {
     }
 
     @Test func equalRecencyUsesNameAndIDWithUnnamedPatientsLast() throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let now = try date("2026-10-05T09:00:00Z")
         let patients = try [
             patient(1, name: "Zoya", created: "2026-10-04T09:00:00Z"),
@@ -84,7 +84,7 @@ struct AppointmentBookingPatientQueryTests {
     }
 
     @Test func timeBoundaryAndUpcomingMetadataUseIndependentFilters() throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let now = try date("2026-10-05T09:00:00Z")
         let patients = try [
             patient(1, name: "Zoya", created: "2026-06-01T09:00:00Z"),
@@ -122,7 +122,7 @@ struct AppointmentBookingPatientQueryTests {
 
     @MainActor
     @Test func observationUpdatesAfterPatientAndAppointmentWrites() async throws {
-        let database = try makeDatabase()
+        let database = try testDatabase()
         let now = try date("2026-10-05T09:00:00Z")
         let first = try patient(1, name: "Anjali", created: "2026-10-03T09:00:00Z")
         let second = try patient(2, name: "Zoya", created: "2026-06-01T09:00:00Z")
@@ -189,13 +189,6 @@ struct AppointmentBookingPatientQueryTests {
             }
             try await waitUntil { rows.map(\.id) == [first.id, second.id] }
         }
-    }
-
-    private func makeDatabase() throws -> DatabaseQueue {
-        let configuration = clinicalDatabaseConfiguration()
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
     }
 
     private func date(_ value: String) throws -> Date {

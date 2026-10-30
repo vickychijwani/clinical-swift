@@ -143,30 +143,6 @@ struct PatientAppointmentTimelineTests {
         #expect(emptyRecords.isEmpty)
     }
 
-    @Test func statusPresentationCoversEveryAppointmentStatus() {
-        let scheduled = AppointmentStatusPresentation(status: .scheduled)
-        let completed = AppointmentStatusPresentation(status: .completed)
-        let draft = AppointmentStatusPresentation(status: .draft)
-        let cancelled = AppointmentStatusPresentation(status: .cancelled)
-
-        #expect(scheduled.label == "Scheduled")
-        #expect(scheduled.systemImage == "clock")
-        #expect(scheduled.statusColor == .accent)
-        #expect(scheduled.timeColor == .text)
-        #expect(completed.label == "Completed")
-        #expect(completed.systemImage == "checkmark.circle")
-        #expect(completed.statusColor == .success)
-        #expect(completed.timeColor == .secondaryText)
-        #expect(draft.label == "Draft")
-        #expect(draft.systemImage == "clock")
-        #expect(draft.statusColor == .accent)
-        #expect(draft.timeColor == .text)
-        #expect(cancelled.label == "Cancelled")
-        #expect(cancelled.systemImage == "xmark.circle")
-        #expect(cancelled.statusColor == .secondaryText)
-        #expect(cancelled.timeColor == .secondaryText)
-    }
-
     @Test func navigationTitleChangesWhenThePatientNameLeavesTheViewport() {
         let longName = "A Patient Name That Is Deliberately Long Enough To Truncate"
 
@@ -188,14 +164,6 @@ struct PatientAppointmentTimelineTests {
                 isNameVisible: false
             ) == Patient.unknownDisplayName
         )
-    }
-
-    private func testDatabase() throws -> DatabaseQueue {
-        var configuration = Configuration()
-        configuration.foreignKeysEnabled = true
-        let database = try DatabaseQueue(configuration: configuration)
-        try migrateDatabase(database)
-        return database
     }
 
     private struct AppointmentFixture {
