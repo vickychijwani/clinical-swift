@@ -502,6 +502,7 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
             evaluatedWith: dayButton(app, offset: 0))
         waitForExpectations(timeout: 5)
         XCTAssertEqual(time(original(app)), "12:00 PM")
-        XCTAssertFalse(app.buttons[id].isHittable)
+        // The saved card remains in the adjacent page's accessibility tree.
+        XCTAssertFalse(app.frame.intersects(app.buttons[id].frame))
     }
 }
