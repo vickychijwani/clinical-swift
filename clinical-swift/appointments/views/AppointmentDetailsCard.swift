@@ -35,6 +35,7 @@ struct AppointmentDetailsCard: View {
                     .clipShape(.rect(cornerRadius: 32))
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("patient-appointment-\(appointment.id)")
         }
     }
 

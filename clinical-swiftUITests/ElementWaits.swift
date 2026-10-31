@@ -8,6 +8,11 @@ extension XCUIElement {
     }
 
     @MainActor
+    func absentOrWait(timeout: TimeInterval) -> Bool {
+        !exists || waitForNonExistence(timeout: timeout)
+    }
+
+    @MainActor
     func hittableOrWait(timeout: TimeInterval) -> Bool {
         isHittable || wait(for: \.isHittable, toEqual: true, timeout: timeout)
     }
