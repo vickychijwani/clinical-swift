@@ -38,11 +38,11 @@ struct TimelineItemView: View {
             .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
             // Taps use the button action. A zero-distance drag can also consume Done or Cancel.
             .simultaneousGesture(
-                // Measure from touch-down so the hold does not lose the first movement.
-                // A swipe must cancel selection even when the day is too short to scroll.
                 DragGesture(minimumDistance: 5, coordinateSpace: .global)
                     .onChanged(onMoveChanged)
-                    .onEnded(onMoveEnded)
+                    .onEnded(onMoveEnded),
+                // Saved cards must let the scroll view handle a swipe.
+                isEnabled: showsAdjustmentControls
             )
         }
         .buttonStyle(TimelineCardButtonStyle())

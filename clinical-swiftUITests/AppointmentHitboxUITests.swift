@@ -17,7 +17,7 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         app.launch()
 
         let selectionStatus = app.staticTexts["selection-status"]
-        XCTAssertTrue(selectionStatus.waitForExistence(timeout: 5))
+        XCTAssertTrue(selectionStatus.existsOrWait(timeout: 5))
         XCTAssertEqual(selectionStatus.label, "No appointment selected")
 
         let leftAppointment = app.buttons[
@@ -26,8 +26,8 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         let rightAppointment = app.buttons[
             "appointment-00000000-0000-0000-0000-000000000002"
         ]
-        XCTAssertTrue(leftAppointment.waitForExistence(timeout: 5))
-        XCTAssertTrue(rightAppointment.waitForExistence(timeout: 5))
+        XCTAssertTrue(leftAppointment.existsOrWait(timeout: 5))
+        XCTAssertTrue(rightAppointment.hittableOrWait(timeout: 5))
 
         rightAppointment.tap()
         XCTAssertEqual(selectionStatus.label, "Selected right appointment")
@@ -53,11 +53,11 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         app.launchArguments = ["--ui-testing-appointment-hitboxes", "--ui-testing-mixed-hitboxes"]
         app.launch()
         let status = app.staticTexts["selection-status"]
-        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(status.existsOrWait(timeout: 5))
         let appointment = app.buttons["appointment-00000000-0000-0000-0000-000000000001"]
         let middle = app.buttons["unavailable-time-00000000-0000-0000-0000-000000000001"]
         let right = app.buttons["unavailable-time-00000000-0000-0000-0000-000000000002"]
-        XCTAssertTrue(right.waitForExistence(timeout: 5))
+        XCTAssertTrue(right.hittableOrWait(timeout: 5))
         middle.tap()
         XCTAssertEqual(status.label, "Selected middle block")
         right.tap()
@@ -78,22 +78,22 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         app.launchArguments = ["--ui-testing-timeline-adjustment"]
         app.launch()
         let action = app.buttons["Add"]
-        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        XCTAssertTrue(action.hittableOrWait(timeout: 5))
         action.tap()
         app.segmentedControls.buttons["Unavailable Time"].tap()
         let label = app.textFields["Optional label"]
-        XCTAssertTrue(label.waitForExistence(timeout: 5))
+        XCTAssertTrue(label.hittableOrWait(timeout: 5))
         label.tap()
         label.typeText("Draft travel")
         app.buttons["Back"].tap()
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Cancel"].hittableOrWait(timeout: 5))
         XCTAssertFalse(label.exists)
         let draft = app.buttons.matching(
             NSPredicate(
                 format: "identifier BEGINSWITH %@ AND identifier != %@", "unavailable-time-",
                 "unavailable-time-00000000-0000-0000-0000-000000000014")
         ).firstMatch
-        XCTAssertTrue(draft.waitForExistence(timeout: 5))
+        XCTAssertTrue(draft.existsOrWait(timeout: 5))
         let draftID = draft.identifier
         let calendar = Calendar.current
         let offset = calendar.component(.weekday, from: .now) == 1 ? 1 : -1
@@ -106,10 +106,10 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         XCTAssertTrue(dateButton.exists)
         dateButton.tap()
         XCTAssertTrue((dateButton.value as? String)?.contains("Selected") == true)
-        XCTAssertTrue(app.buttons[draftID].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons[draftID].existsOrWait(timeout: 5))
         app.buttons["Cancel"].tap()
         let discard = app.buttons["Discard Changes"]
-        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        XCTAssertTrue(discard.hittableOrWait(timeout: 5))
         if app.buttons["Keep Editing"].exists {
             app.buttons["Keep Editing"].tap()
         } else {
@@ -118,18 +118,18 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         }
         XCTAssertTrue((dateButton.value as? String)?.contains("Selected") == true)
         app.buttons[draftID].tap()
-        XCTAssertTrue(label.waitForExistence(timeout: 5))
+        XCTAssertTrue(label.hittableOrWait(timeout: 5))
         XCTAssertEqual(label.value as? String, "Draft travel")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Unavailable time editor"
         screenshot.lifetime = .keepAlways
         add(screenshot)
         app.buttons["Back"].tap()
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Cancel"].hittableOrWait(timeout: 5))
         app.buttons["Cancel"].tap()
-        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        XCTAssertTrue(discard.hittableOrWait(timeout: 5))
         discard.tap()
-        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        XCTAssertTrue(action.hittableOrWait(timeout: 5))
         XCTAssertFalse(app.buttons[draftID].exists)
         XCTAssertTrue((dateButton.value as? String)?.contains("Selected") == true)
     }
