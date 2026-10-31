@@ -206,9 +206,9 @@ func stopResult(_ root: URL) throws -> [String: String] {
         \(findings)
         Restore comments that still apply, or update and move them with their code.
         For intentional rewrites or obsolete comments, inspect each finding and record the reasons:
-        /bin/sh .codex/hooks/stop.sh --review 'reasons'
+        /bin/sh .codex/hooks/check_swift.sh --review 'reasons'
         This records a review of this exact source change set only. Do not record a review just to clear the hook.
-        Then run the check again: /bin/sh .codex/hooks/stop.sh --check
+        Then run the check again: /bin/sh .codex/hooks/check_swift.sh --check
         """,
     ]
 }

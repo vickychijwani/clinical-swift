@@ -14,8 +14,6 @@ struct Timeline: View {
     var allowsAdjustment = false
     var onDraggingChanged: (Bool) -> Void = { _ in }
     var onScaleChange: (CGFloat) -> Void = { _ in }
-    var onBeginBooking: (TimeOfDay) -> ScheduleEditorSession? = { _ in nil }
-    var onBookingRelease: (TimelineAdjustment) -> Void = { _ in }
     var onCancel: () -> Void = {}
     var onDiscard: () -> Void = {}
     var onDone: @MainActor () async -> Void = {}
@@ -26,9 +24,6 @@ struct Timeline: View {
     var editorSession: ScheduleEditorSession?
     var isWorking = false
     @State private var lastDragEnd: ContinuousClock.Instant?
-    @State private var touchStart: CGPoint?
-    // Keep the first touch attached while Schedule installs the new booking session.
-    @State private var bookingDrag: ScheduleEditorSession?
 
     static let metrics = TimelineMetrics(
         hourHeight: 60,
@@ -63,10 +58,6 @@ struct Timeline: View {
             }
         }
         .onChange(of: editorSession?.adjustment.isDragging) { _, dragging in
-            if dragging != true {
-                bookingDrag = nil
-                touchStart = nil
-            }
             onDraggingChanged(dragging == true)
         }
         .sensoryFeedback(
@@ -130,47 +121,6 @@ struct Timeline: View {
                         .zIndex(2)
                 }
             }
-            .contentShape(.rect)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onChanged { value in
-                        touchStart = value.startLocation
-                        if let bookingDrag {
-                            onScaleChange(
-                                bookingDrag.updateAdjustment(
-                                    translation: value.translation.height, items: items))
-                        }
-                    }
-                    .onEnded { value in
-                        touchStart = nil
-                        guard let bookingDrag else { return }
-                        self.bookingDrag = nil
-                        // Done or Cancel can end the drag before the finger lifts.
-                        guard bookingDrag.adjustment.isDragging else { return }
-                        lastDragEnd = .now
-                        onScaleChange(
-                            bookingDrag.updateAdjustment(
-                                translation: value.translation.height, items: items))
-                        bookingDrag.adjustment.release()
-                        onBookingRelease(bookingDrag.adjustment)
-                    },
-                including: allowsAdjustment && (editorSession == nil || bookingDrag != nil)
-                    ? .all : .subviews
-            )
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.3)
-                    .onEnded { _ in
-                        guard allowsAdjustment, itemInteractionsEnabled,
-                            editorSession == nil,
-                            let touchStart
-                        else { return }
-                        let y = touchStart.y - geometry.frame(in: .global).minY
-                        // Use the displayed scale, including a compact break, for touch mapping.
-                        bookingDrag = onBeginBooking(scale.time(at: y))
-                    },
-                including: allowsAdjustment && (editorSession == nil || bookingDrag != nil)
-                    ? .all : .subviews
-            )
         }
         .frame(height: scale.totalHeight)
         .padding(.vertical, Timeline.metrics.verticalPadding)
@@ -182,7 +132,7 @@ struct Timeline: View {
     }
 
     private func selectItem(_ item: TimelineItem) {
-        // A hold can finish in the same event as the button release.
+        // A move can finish in the same event as the button release.
         guard lastDragEnd.map({ $0.duration(to: .now) > .milliseconds(150) }) ?? true
         else { return }
         if isDraft(item) {
