@@ -116,7 +116,7 @@ private struct AppStartup {
                     || CommandLine.arguments.contains("--ui-testing-color-lab")
                     || CommandLine.arguments.contains("--ui-testing-appointment-completion")
                 {
-                    return try isolatedUITest()
+                    return try isolatedUITest(router: router)
                 }
             #endif
             return try live(router: router)
@@ -165,7 +165,7 @@ private struct AppStartup {
     }
 
     #if DEBUG
-        private static func isolatedUITest() throws -> Self {
+        private static func isolatedUITest(router: Router) throws -> Self {
             let database = try prepareDependencies {
                 let database =
                     try CommandLine.arguments.contains("--ui-testing-appointment-completion")
@@ -173,6 +173,9 @@ private struct AppStartup {
                     : TimelineAdjustmentUITestView.makeDatabase()
                 $0.defaultDatabase = database
                 return database
+            }
+            if CommandLine.arguments.contains("--completion-open-form") {
+                try AppointmentCompletionUITestData.openForm(router: router, database: database)
             }
             return Self(
                 backups: BackupCoordinator(

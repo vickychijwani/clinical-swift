@@ -4,16 +4,19 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
     private let appointmentID = "appointment-00000000-0000-0000-0000-00000000000A"
 
     @MainActor
-    private func launch(_ arguments: [String] = []) -> XCUIApplication {
+    private func launch(_ arguments: [String] = [], fromSchedule: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing-appointment-completion"] + arguments
+        if !fromSchedule { app.launchArguments.append("--completion-open-form") }
         app.launch()
-        let appointment = app.buttons[appointmentID]
-        XCTAssertTrue(appointment.waitForExistence(timeout: 5))
-        appointment.tap()
-        XCTAssertTrue(app.buttons["Complete"].waitForExistence(timeout: 5))
-        app.buttons["Complete"].tap()
-        XCTAssertTrue(app.navigationBars["Complete Appointment"].waitForExistence(timeout: 5))
+        if fromSchedule {
+            let appointment = app.buttons[appointmentID]
+            XCTAssertTrue(appointment.hittableOrWait(timeout: 5))
+            appointment.tap()
+            XCTAssertTrue(app.buttons["Complete"].hittableOrWait(timeout: 5))
+            app.buttons["Complete"].tap()
+        }
+        XCTAssertTrue(app.navigationBars["Complete Appointment"].existsOrWait(timeout: 5))
         return app
     }
 
@@ -32,7 +35,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         let field = app.textFields["completion-amount"]
         field.tap()
         field.press(forDuration: 1)
-        if app.menuItems["Select All"].waitForExistence(timeout: 1) {
+        if app.menuItems["Select All"].hittableOrWait(timeout: 1) {
             app.menuItems["Select All"].tap()
             field.typeText(text)
         } else {
@@ -62,7 +65,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         let singleLineHeight = title.frame.height
         XCTAssertTrue(action.isHittable)
         XCTAssertGreaterThan(action.frame.width, app.frame.width * 0.8)
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.keyboards.firstMatch.existsOrWait(timeout: 3))
         XCTAssertFalse(app.keyboards.buttons["."].exists)
         XCTAssertLessThan(action.frame.maxY, app.keyboards.firstMatch.frame.minY)
         XCTAssertLessThan(
@@ -90,7 +93,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
 
     @MainActor
     func testBackKeepsDraftAndRootCloseConfirmsDiscard() {
-        let app = launch()
+        let app = launch(fromSchedule: true)
         app.textFields["completion-amount"].typeText("1000")
         app.segmentedControls["completion-method"].buttons["Cash"].tap()
         app.navigationBars.buttons["BackButton"].tap()
@@ -104,7 +107,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
             thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95)))
         XCTAssertTrue(detailsBar.exists)
         app.buttons["Close"].tap()
-        XCTAssertTrue(app.buttons["Discard Changes"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Discard Changes"].hittableOrWait(timeout: 3))
         if app.buttons["Keep Editing"].exists {
             app.buttons["Keep Editing"].tap()
         } else {
@@ -115,7 +118,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         app.navigationBars.buttons["BackButton"].tap()
         app.buttons["Close"].tap()
         app.buttons["Discard Changes"].tap()
-        XCTAssertTrue(app.buttons[appointmentID].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons[appointmentID].hittableOrWait(timeout: 3))
         app.buttons[appointmentID].tap()
         app.buttons["Complete"].tap()
         XCTAssertEqual(app.textFields["completion-amount"].value as? String, "0")
@@ -133,7 +136,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         detailsBar.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.1)).press(
             forDuration: 0.05,
             thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95)))
-        XCTAssertTrue(detailsBar.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(detailsBar.absentOrWait(timeout: 3))
         XCTAssertFalse(app.buttons["Discard Changes"].exists)
         app.buttons[appointmentID].tap()
         app.buttons["Complete"].tap()
@@ -146,7 +149,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         app.navigationBars.buttons["BackButton"].tap()
         app.buttons["View Patient"].tap()
         let historyAppointment = app.buttons["patient-" + appointmentID]
-        XCTAssertTrue(historyAppointment.waitForExistence(timeout: 3))
+        XCTAssertTrue(historyAppointment.hittableOrWait(timeout: 3))
         historyAppointment.tap()
         app.buttons["Complete"].tap()
         app.textFields["completion-amount"].typeText("1000")
@@ -157,7 +160,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         app.buttons["complete-appointment"].coordinate(
             withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)
         ).tap()
-        XCTAssertTrue(app.navigationBars["Complete Appointment"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Complete Appointment"].absentOrWait(timeout: 5))
         XCTAssertTrue(app.buttons[appointmentID].exists)
         app.buttons[appointmentID].tap()
         XCTAssertFalse(app.buttons["Complete"].exists)
@@ -169,7 +172,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         app.textFields["completion-amount"].typeText("1000")
         app.segmentedControls["completion-method"].buttons["Card"].tap()
         app.buttons["complete-appointment"].tap()
-        XCTAssertTrue(app.alerts["Unable to complete appointment"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alerts["Unable to complete appointment"].existsOrWait(timeout: 5))
         XCTAssertTrue(
             app.alerts.staticTexts[
                 "This change would leave the patient with a credit balance. Check the earlier receipts."
@@ -183,15 +186,20 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
 
     @MainActor
     func testUnknownPatientAndSavingControls() {
-        let app = launch(["--completion-unknown-patient", "--completion-delayed-save"])
+        let app = launch(["--completion-unknown-patient", "--completion-gated-save"])
         XCTAssertTrue(app.staticTexts["For Unknown Patient"].exists)
         app.buttons["complete-appointment"].tap()
+        let release = app.buttons["release-test-save"]
+        XCTAssertTrue(release.hittableOrWait(timeout: 5))
+        defer { if release.exists { release.tap() } }
         XCTAssertFalse(app.navigationBars.buttons["BackButton"].exists)
         XCTAssertFalse(app.textFields["completion-amount"].isEnabled)
         XCTAssertFalse(app.segmentedControls["completion-method"].isEnabled)
         XCTAssertFalse(app.buttons["complete-appointment"].isEnabled)
         swipeSheetDown(app)
-        XCTAssertTrue(app.navigationBars["Complete Appointment"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["complete-appointment"].isEnabled)
+        release.tap()
+        XCTAssertTrue(app.navigationBars["Complete Appointment"].absentOrWait(timeout: 5))
         XCTAssertTrue(app.buttons[appointmentID].exists)
     }
 }

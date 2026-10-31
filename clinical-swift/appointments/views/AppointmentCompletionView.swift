@@ -93,6 +93,16 @@ struct AppointmentCompletionView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColor.canvas)
         .disabled(model.isSaving || model.didSave)
+        #if DEBUG
+            .overlay(alignment: .topTrailing) {
+                if AppointmentCompletionUITestData.saveGate.isWaiting {
+                    Button("Finish test save") {
+                        AppointmentCompletionUITestData.saveGate.release()
+                    }
+                    .accessibilityIdentifier("release-test-save")
+                }
+            }
+        #endif
         .navigationTitle("Complete Appointment")
         .navigationSubtitle("For \(model.patientName)")
         .navigationBarTitleDisplayMode(.inline)
