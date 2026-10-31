@@ -173,9 +173,8 @@ struct PaymentListTests {
             #expect(days.first?.items.map(\.id) == [receipt.id])
             let expense = try PaymentListFixture.item(date: "2026-10-25T12:00:00Z").entry
             try await database.createAccountEntry(expense)
-            for _ in 0..<200 {
-                if days.count == 2 { break }
-                try await Task.sleep(for: .milliseconds(5))
+            try await waitUntil {
+                days.count == 2 && days.first?.title == "Today" && days.first?.expenses == 4800
             }
             #expect(days.first?.title == "Today")
             #expect(days.first?.expenses == 4800)
@@ -184,23 +183,20 @@ struct PaymentListTests {
                     $0.name = #bind("Renamed Patient")
                 }.execute(db)
             }
-            for _ in 0..<200 {
-                if days.last?.items.first?.title == "Renamed Patient" { break }
-                try await Task.sleep(for: .milliseconds(5))
+            try await waitUntil {
+                days.last?.items.first?.title == "Renamed Patient"
             }
             #expect(days.last?.items.first?.title == "Renamed Patient")
             var edited = expense
             edited.amount = 6000
             try await database.editAccountEntry(edited)
-            for _ in 0..<200 {
-                if days.first?.expenses == 6000 { break }
-                try await Task.sleep(for: .milliseconds(5))
+            try await waitUntil {
+                days.first?.expenses == 6000
             }
             #expect(days.first?.expenses == 6000)
             try await database.deleteAccountEntry(id: expense.id)
-            for _ in 0..<200 {
-                if days.count == 1 { break }
-                try await Task.sleep(for: .milliseconds(5))
+            try await waitUntil {
+                days.count == 1 && days.first?.receipts == 50 && days.first?.expenses == nil
             }
             #expect(days.count == 1)
             #expect(days.first?.receipts == 50)
@@ -209,5 +205,13 @@ struct PaymentListTests {
             #expect(days.first?.title == "Today")
             #expect(days.first?.items.isEmpty == true)
         }
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(1)
+        while !condition() && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try #require(condition(), "Payment history did not update within one second.")
     }
 }
