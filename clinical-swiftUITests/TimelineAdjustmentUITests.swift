@@ -183,6 +183,18 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertEqual(draft(app).value as? String, "30 min")
     }
 
+    @MainActor func testHoldNearClosingCreatesBooking() {
+        let app = launch()
+        // The compact break puts 8:45 PM 362 points below the noon card's center.
+        let point = original(app).coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+            .withOffset(CGVector(dx: 0, dy: 362))
+        attach(app, "Timeline before bottom-edge hold")
+        point.press(forDuration: 0.4)
+        selectPatient(app)
+        XCTAssertEqual(time(draft(app)), "8:30 PM")
+        XCTAssertEqual(draft(app).value as? String, "30 min")
+    }
+
     @MainActor func testSelectedDraftCanMoveResizeAndCancel() {
         let app = launch()
         hold(original(app))
@@ -226,18 +238,17 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         hold(original(app), move: 17)
         selectPatient(app)
         let id = draft(app).identifier
-        let calendar = Calendar.current
-        guard let next = calendar.date(byAdding: .day, value: 1, to: .now) else {
-            XCTFail("The next date is missing.")
-            return
-        }
-        let nextDate = app.buttons[
-            next.formatted(.dateTime.weekday(.wide).month(.wide).day().year())]
-        if nextDate.exists {
+        let nextDate = dayButton(app, offset: 1)
+        // Adjacent weeks can expose date buttons that are still off screen.
+        // XCTest can fail when it checks their hittability, so compare frames first.
+        if app.frame.contains(nextDate.frame) {
             nextDate.tap()
         } else {
-            app.scrollViews.firstMatch.swipeLeft()
+            swipeTimeline(app, left: true)
         }
+        expectation(
+            for: NSPredicate(format: "value CONTAINS %@", "Selected"), evaluatedWith: nextDate)
+        waitForExpectations(timeout: 5)
         XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 3))
         XCTAssertEqual(time(app.buttons[id]), "12:15 PM")
         XCTAssertTrue(app.buttons["appointment-00000000-0000-0000-0000-00000000000C"].exists)
@@ -395,6 +406,9 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["details-opened"].exists)
         XCTAssertFalse(draft(app).exists)
         XCTAssertFalse(app.textFields["Search patient by name"].exists)
+        // The cancelled touch must not turn the next tap into a booking.
+        original(app).tap()
+        XCTAssertTrue(app.staticTexts["details-opened"].waitForExistence(timeout: 3))
     }
 
     @MainActor func testTimelineSwipeChangesDayAndReturnsToOriginalAppointments() {
@@ -488,6 +502,7 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
             evaluatedWith: dayButton(app, offset: 0))
         waitForExpectations(timeout: 5)
         XCTAssertEqual(time(original(app)), "12:00 PM")
-        XCTAssertFalse(app.buttons[id].isHittable)
+        // The saved card remains in the adjacent page's accessibility tree.
+        XCTAssertFalse(app.frame.intersects(app.buttons[id].frame))
     }
 }
