@@ -24,6 +24,8 @@ struct ScheduleTimelinePage: View {
     @State private var pendingScrollY: CGFloat?
     @State private var timelineTop: CGFloat = 0
     @State private var touchStart: CGPoint?
+    @State private var holdRecognized = false
+    @GestureState private var touchActive = false
     @State private var lastDragEnd: ContinuousClock.Instant?
     // Keep the first touch attached while Schedule installs the new booking session.
     @State private var bookingDrag: ScheduleEditorSession?
@@ -46,6 +48,7 @@ struct ScheduleTimelinePage: View {
                         if !$0 {
                             bookingDrag = nil
                             touchStart = nil
+                            holdRecognized = false
                         }
                     },
                     onScaleChange: correctScrollPosition,
@@ -86,6 +89,14 @@ struct ScheduleTimelinePage: View {
             needsAdjustmentClearance = editorSession != nil
         }
         .scrollDisabled(isDragging)
+        .onChange(of: touchActive) { _, active in
+            if !active {
+                // Draft layout can reset gesture state before the finger lifts.
+                // Only the drag's onEnded may release the draft and open its sheet.
+                touchStart = nil
+                holdRecognized = false
+            }
+        }
         // In iOS 26, gestures inside the content can block the scroll view's native pan.
         // Keep booking touch tracking on the scroll view so both can receive the same swipe.
         .simultaneousGesture(
@@ -97,6 +108,7 @@ struct ScheduleTimelinePage: View {
                     if abs(value.translation.height) > 5 || abs(value.translation.width) > 5 {
                         lastDragEnd = .now
                     }
+                    beginBookingIfReady()
                     if let bookingDrag {
                         correctScrollPosition(
                             bookingDrag.updateAdjustment(
@@ -105,6 +117,7 @@ struct ScheduleTimelinePage: View {
                 }
                 .onEnded { value in
                     touchStart = nil
+                    holdRecognized = false
                     guard let bookingDrag else { return }
                     self.bookingDrag = nil
                     // Done or Cancel can end the drag before the finger lifts.
@@ -115,19 +128,18 @@ struct ScheduleTimelinePage: View {
                             translation: value.translation.height, items: items))
                     bookingDrag.adjustment.release()
                     onBookingRelease(bookingDrag.adjustment)
-                },
+                }
+                // Clear a completed hold when this touch ends or is cancelled.
+                .updating($touchActive) { _, active, _ in active = true },
             including: allowsAdjustment && (editorSession == nil || bookingDrag != nil)
                 ? .all : .subviews
         )
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.3)
                 .onEnded { _ in
-                    guard allowsAdjustment, itemInteractionsEnabled,
-                        editorSession == nil, let touchStart
-                    else { return }
-                    let y = touchStart.y - timelineTop
-                    // Use the displayed scale, including a compact break, for touch mapping.
-                    bookingDrag = onBeginBooking(TimelineScale(items: items).time(at: y))
+                    // A phone can complete the hold before the drag supplies its position.
+                    holdRecognized = true
+                    beginBookingIfReady()
                 },
             including: allowsAdjustment && (editorSession == nil || bookingDrag != nil)
                 ? .all : .subviews
@@ -143,6 +155,15 @@ struct ScheduleTimelinePage: View {
     private var allowsSelection: Bool {
         // A hold can finish in the same event as the button release.
         lastDragEnd.map { $0.duration(to: .now) > .milliseconds(150) } ?? true
+    }
+
+    private func beginBookingIfReady() {
+        guard holdRecognized, let touchStart, allowsAdjustment, itemInteractionsEnabled,
+            editorSession == nil, bookingDrag == nil
+        else { return }
+        let y = touchStart.y - timelineTop
+        // Use the displayed scale, including a compact break, for touch mapping.
+        bookingDrag = onBeginBooking(TimelineScale(items: items).time(at: y))
     }
 
     private func correctScrollPosition(_ delta: CGFloat) {
