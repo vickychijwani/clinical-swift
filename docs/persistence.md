@@ -42,12 +42,12 @@ relationships when practical; keep local data correctness when the two conflict
 and record the trade-off with the schema decision.
 
 The ledger deliberately uses multiple references and restrictive deletion to
-protect financial history. The pinned CloudKit integration does not accept
+protect financial history. The pinned SQLiteData sync engine does not accept
 `ON DELETE RESTRICT` on synced tables, so enabling sync needs further design work.
 Do not remove those protections merely to enable sync. See [payments](payments.md)
 and [Calendar](calendar-sync.md) for their data ownership rules.
 
 Before implementing sync, check schema, migration, trigger, and conflict behavior
-against SQLiteData's [sync](https://github.com/pointfreeco/sqlite-data/blob/1.6.6/Sources/SQLiteData/Documentation.docc/Articles/CloudKitSync.md)
-and [sharing](https://github.com/pointfreeco/sqlite-data/blob/1.6.6/Sources/SQLiteData/Documentation.docc/Articles/CloudKitSharing.md)
+against SQLiteData's [sync](https://github.com/pointfreeco/sqlite-data/blob/1.12.1/Sources/SQLiteData/Documentation.docc/Articles/CloudKitSync.md)
+and [sharing](https://github.com/pointfreeco/sqlite-data/blob/1.12.1/Sources/SQLiteData/Documentation.docc/Articles/CloudKitSharing.md)
 requirements. Library conflict resolution is not yet an app-level guarantee.
