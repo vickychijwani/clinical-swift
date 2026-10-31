@@ -240,7 +240,8 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         let id = draft(app).identifier
         let nextDate = dayButton(app, offset: 1)
         // Adjacent weeks can expose date buttons that are still off screen.
-        if nextDate.isHittable {
+        // XCTest can fail when it checks their hittability, so compare frames first.
+        if app.frame.contains(nextDate.frame) {
             nextDate.tap()
         } else {
             swipeTimeline(app, left: true)
