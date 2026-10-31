@@ -53,20 +53,12 @@
         }
 
         var body: some View {
-            TabView(selection: $router.selectedTab) {
-                Tab("Schedule", systemImage: "calendar", value: AppTab.schedule) {
-                    NavigationStack { ScheduleView() }
+            ContentView(router: router)
+                .overlay(alignment: .bottom) {
+                    if router.detailsPresentation != nil {
+                        Text("Appointment details").accessibilityIdentifier("details-opened")
+                    }
                 }
-                Tab("Patients", systemImage: "person.2", value: AppTab.patients) {
-                    Text("Patients")
-                }
-            }
-            .environment(router)
-            .overlay(alignment: .bottom) {
-                if router.detailsPresentation != nil {
-                    Text("Appointment details").accessibilityIdentifier("details-opened")
-                }
-            }
         }
     }
 #endif

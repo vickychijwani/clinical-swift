@@ -183,6 +183,18 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertEqual(draft(app).value as? String, "30 min")
     }
 
+    @MainActor func testHoldNearClosingCreatesBooking() {
+        let app = launch()
+        // The compact break puts 8:45 PM 362 points below the noon card's center.
+        let point = original(app).coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+            .withOffset(CGVector(dx: 0, dy: 362))
+        attach(app, "Timeline before bottom-edge hold")
+        point.press(forDuration: 0.4)
+        selectPatient(app)
+        XCTAssertEqual(time(draft(app)), "8:30 PM")
+        XCTAssertEqual(draft(app).value as? String, "30 min")
+    }
+
     @MainActor func testSelectedDraftCanMoveResizeAndCancel() {
         let app = launch()
         hold(original(app))
@@ -395,6 +407,9 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["details-opened"].exists)
         XCTAssertFalse(draft(app).exists)
         XCTAssertFalse(app.textFields["Search patient by name"].exists)
+        // The cancelled touch must not turn the next tap into a booking.
+        original(app).tap()
+        XCTAssertTrue(app.staticTexts["details-opened"].waitForExistence(timeout: 3))
     }
 
     @MainActor func testTimelineSwipeChangesDayAndReturnsToOriginalAppointments() {
