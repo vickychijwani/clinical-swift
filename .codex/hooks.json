@@ -5,7 +5,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/sh \"$(git rev-parse --show-toplevel)/.codex/hooks/stop.sh\"",
+            "command": "/bin/sh \"$(git rev-parse --show-toplevel)/.codex/hooks/check_ui_waits.sh\"",
+            "timeout": 1,
+            "statusMessage": "Checking UI test waits"
+          },
+          {
+            "type": "command",
+            "command": "/bin/sh \"$(git rev-parse --show-toplevel)/.codex/hooks/check_swift.sh\"",
             "timeout": 60,
             "statusMessage": "Checking format and comment preservation"
           }

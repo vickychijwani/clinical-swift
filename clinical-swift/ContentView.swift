@@ -3,12 +3,13 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var router: Router
+    var initialEditorSession: ScheduleEditorSession? = nil
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
             Tab("Schedule", systemImage: "calendar", value: AppTab.schedule) {
                 NavigationStack(path: $router.schedulePath) {
-                    ScheduleView()
+                    ScheduleView(editorSession: initialEditorSession)
                 }
             }
 
