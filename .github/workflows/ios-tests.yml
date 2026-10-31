@@ -80,31 +80,103 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  ui-runner:
+    name: Select UI runner
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      labels: ${{ steps.select.outputs.labels }}
+      local: ${{ steps.select.outputs.local }}
+    steps:
+      - id: select
+        uses: actions/github-script@v7
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        with:
+          github-token: ${{ secrets.RUNNER_STATUS_TOKEN || github.token }}
+          script: |
+            core.setOutput('labels', JSON.stringify(['xcode-27']));
+            core.setOutput('local', 'false');
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const trusted = pr.head.repo?.full_name === `${owner}/${context.repo.repo}`
+              && pr.user.login === owner && context.actor === owner;
+            if (!trusted || !process.env.RUNNER_STATUS_TOKEN) {
+              core.info('Using GitHub macOS: local routing is unavailable for this run.');
+              return;
+            }
+            try {
+              const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
+                ...context.repo,
+                per_page: 100,
+                request: { timeout: 10000 },
+              });
+              const labels = ['self-hosted', 'macOS', 'ARM64', 'clinical-ios'];
+              const available = data.runners.some(runner =>
+                runner.name === 'clinical-m5' && runner.status === 'online' && !runner.busy
+                && labels.every(label => runner.labels.some(item => item.name === label))
+              );
+              if (available) {
+                core.setOutput('labels', JSON.stringify(labels));
+                core.setOutput('local', 'true');
+                core.info('Using clinical-m5: the runner is online and idle.');
+              } else {
+                core.info('Using GitHub macOS: clinical-m5 is offline or busy.');
+              }
+            } catch {
+              core.warning('Runner status check failed; using GitHub macOS.');
+            }
+
   ui-tests:
     name: UI tests
-    if: >-
-      github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login == github.repository_owner &&
-      github.actor == github.repository_owner
-    runs-on: [self-hosted, macOS, ARM64, clinical-ios]
-    timeout-minutes: 30
+    needs: ui-runner
+    runs-on: ${{ fromJSON(needs.ui-runner.outputs.labels) }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        if: needs.ui-runner.outputs.local != 'true'
+        with:
+          xcode-version: '27.1'
+      - name: Cache Xcode package downloads
+        if: needs.ui-runner.outputs.local != 'true'
+        uses: actions/cache@v4
+        with:
+          path: build/SourcePackages
+          key: spm-v1-${{ runner.os }}-${{ runner.arch }}-xcode-27.1-${{ hashFiles('Package.swift', 'clinical-swift.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-v1-${{ runner.os }}-${{ runner.arch }}-xcode-27.1-
       - name: Prepare persistent build paths
+        if: needs.ui-runner.outputs.local == 'true'
         # Keep build state outside checkout because checkout removes untracked files.
         run: |
           cache_root="$HOME/ci/clinical-swift/cache/$(xcodebuild -version | shasum -a 256 | cut -c 1-16)"
           mkdir -p "$cache_root/DerivedData" "$cache_root/SourcePackages"
           echo "CI_CACHE_ROOT=$cache_root" >> "$GITHUB_ENV"
           xcodebuild -version
+      - name: Prepare hosted build paths
+        if: needs.ui-runner.outputs.local != 'true'
+        run: echo "CI_CACHE_ROOT=$GITHUB_WORKSPACE/build" >> "$GITHUB_ENV"
       - name: Apply Xcode CI setup
         run: sh ci_scripts/ci_post_clone.sh
       - name: Boot test simulator
         # Let first-boot setup finish before XCTest loads Accessibility.
-        run: xcrun simctl bootstatus 'CI Simulator 1' -b
+        env:
+          USE_LOCAL_RUNNER: ${{ needs.ui-runner.outputs.local }}
+        run: |
+          if [[ "$USE_LOCAL_RUNNER" == true ]]; then
+            echo 'TEST_DESTINATION=platform=iOS Simulator,name=CI Simulator 1,OS=26.5' >> "$GITHUB_ENV"
+            xcrun simctl bootstatus 'CI Simulator 1' -b
+          else
+            simulator_id=$(xcrun simctl create 'Clinical CI' \
+              com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
+              com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+            echo "TEST_DESTINATION=platform=iOS Simulator,id=$simulator_id" >> "$GITHUB_ENV"
+            xcrun simctl bootstatus "$simulator_id" -b
+          fi
       - name: Run UI tests
         # Ad hoc signing preserves Keychain and App Group entitlements without a certificate.
         run: |
@@ -112,7 +184,7 @@ jobs:
             -scheme clinical-swift-UITests \
             -derivedDataPath "$CI_CACHE_ROOT/DerivedData" \
             -clonedSourcePackagesDirPath "$CI_CACHE_ROOT/SourcePackages" \
-            -destination 'platform=iOS Simulator,name=CI Simulator 1,OS=26.5' \
+            -destination "$TEST_DESTINATION" \
             -destination-timeout 120 \
             -disableAutomaticPackageResolution \
             -parallel-testing-enabled NO \
