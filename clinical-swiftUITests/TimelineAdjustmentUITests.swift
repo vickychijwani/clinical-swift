@@ -238,18 +238,16 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         hold(original(app), move: 17)
         selectPatient(app)
         let id = draft(app).identifier
-        let calendar = Calendar.current
-        guard let next = calendar.date(byAdding: .day, value: 1, to: .now) else {
-            XCTFail("The next date is missing.")
-            return
-        }
-        let nextDate = app.buttons[
-            next.formatted(.dateTime.weekday(.wide).month(.wide).day().year())]
-        if nextDate.exists {
+        let nextDate = dayButton(app, offset: 1)
+        // Adjacent weeks can expose date buttons that are still off screen.
+        if nextDate.isHittable {
             nextDate.tap()
         } else {
-            app.scrollViews.firstMatch.swipeLeft()
+            swipeTimeline(app, left: true)
         }
+        expectation(
+            for: NSPredicate(format: "value CONTAINS %@", "Selected"), evaluatedWith: nextDate)
+        waitForExpectations(timeout: 5)
         XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 3))
         XCTAssertEqual(time(app.buttons[id]), "12:15 PM")
         XCTAssertTrue(app.buttons["appointment-00000000-0000-0000-0000-00000000000C"].exists)
