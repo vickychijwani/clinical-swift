@@ -28,7 +28,8 @@ struct ScheduleView: View {
             })
     }
 
-    init() {
+    init(editorSession: ScheduleEditorSession? = nil) {
+        _editorSession = State(initialValue: editorSession)
         scheduleModel = ScheduleModel()
     }
 
