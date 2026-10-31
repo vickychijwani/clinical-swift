@@ -8,6 +8,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   ios-tests:
     name: ${{ matrix.name }}
@@ -24,9 +27,6 @@ jobs:
           - suite: backup
             name: Local backup tests
             scheme: clinical-swift-Backups
-          - suite: ui
-            name: UI tests
-            scheme: clinical-swift-UITests
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
@@ -76,6 +76,54 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.suite }}
+          path: TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ui-tests:
+    name: UI tests
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == github.repository_owner &&
+      github.actor == github.repository_owner
+    runs-on: [self-hosted, macOS, ARM64, clinical-ios]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare persistent build paths
+        # Keep build state outside checkout because checkout removes untracked files.
+        run: |
+          cache_root="$HOME/ci/clinical-swift/cache/$(xcodebuild -version | shasum -a 256 | cut -c 1-16)"
+          mkdir -p "$cache_root/DerivedData" "$cache_root/SourcePackages"
+          echo "CI_CACHE_ROOT=$cache_root" >> "$GITHUB_ENV"
+          xcodebuild -version
+      - name: Apply Xcode CI setup
+        run: sh ci_scripts/ci_post_clone.sh
+      - name: Boot test simulator
+        # Let first-boot setup finish before XCTest loads Accessibility.
+        run: xcrun simctl bootstatus 'CI Simulator 1' -b
+      - name: Run UI tests
+        # Ad hoc signing preserves Keychain and App Group entitlements without a certificate.
+        run: |
+          xcodebuild -project clinical-swift.xcodeproj \
+            -scheme clinical-swift-UITests \
+            -derivedDataPath "$CI_CACHE_ROOT/DerivedData" \
+            -clonedSourcePackagesDirPath "$CI_CACHE_ROOT/SourcePackages" \
+            -destination 'platform=iOS Simulator,name=CI Simulator 1,OS=26.5' \
+            -destination-timeout 120 \
+            -disableAutomaticPackageResolution \
+            -parallel-testing-enabled NO \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_ALLOWED=YES test
+      - name: Upload failed test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-ui
           path: TestResults.xcresult
           if-no-files-found: ignore
           retention-days: 7
