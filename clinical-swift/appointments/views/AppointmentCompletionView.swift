@@ -82,6 +82,8 @@ struct AppointmentCompletionView: View {
                         .contentShape(.rect)
                     }
                     .buttonStyle(.appGlassProminent)
+                    // Include the glass style's padding in the tap area.
+                    .contentShape(.rect)
                     .controlSize(.regular)
                     .labelStyle(.titleAndIcon)
                     .disabled(!model.canSave)
