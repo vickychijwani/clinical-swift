@@ -157,9 +157,7 @@ nonisolated final class AppointmentCompletionUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Appointment"].exists)
         app.buttons["Complete"].tap()
         XCTAssertEqual(app.textFields["completion-amount"].value as? String, "1000")
-        app.buttons["complete-appointment"].coordinate(
-            withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)
-        ).tap()
+        app.buttons["complete-appointment"].tap()
         XCTAssertTrue(app.navigationBars["Complete Appointment"].absentOrWait(timeout: 5))
         XCTAssertTrue(app.buttons[appointmentID].exists)
         app.buttons[appointmentID].tap()
