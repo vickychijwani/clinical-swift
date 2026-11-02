@@ -65,6 +65,7 @@ struct FormSheetDismissAction {
 
 struct FormSheetCancelButton: View {
     let action: FormSheetDismissAction
+    var label: LocalizedStringKey = "Cancel"
 
     @State private var isConfirmingDiscard = false
 
@@ -76,7 +77,7 @@ struct FormSheetCancelButton: View {
                 action.dismissSheet()
             }
         } label: {
-            Label("Cancel", systemImage: "xmark")
+            Label(label, systemImage: "xmark")
                 .labelStyle(.iconOnly)
         }
         .confirmationDialog(

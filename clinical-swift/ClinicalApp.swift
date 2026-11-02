@@ -114,8 +114,9 @@ private struct AppStartup {
                 // Keep gesture tests away from clinic data and its background integrations.
                 if CommandLine.arguments.contains("--ui-testing-timeline-adjustment")
                     || CommandLine.arguments.contains("--ui-testing-color-lab")
+                    || CommandLine.arguments.contains("--ui-testing-appointment-completion")
                 {
-                    return try timelineAdjustmentTest()
+                    return try isolatedUITest(router: router)
                 }
             #endif
             return try live(router: router)
@@ -164,11 +165,17 @@ private struct AppStartup {
     }
 
     #if DEBUG
-        private static func timelineAdjustmentTest() throws -> Self {
+        private static func isolatedUITest(router: Router) throws -> Self {
             let database = try prepareDependencies {
-                let database = try TimelineAdjustmentUITestView.makeDatabase()
+                let database =
+                    try CommandLine.arguments.contains("--ui-testing-appointment-completion")
+                    ? AppointmentCompletionUITestData.makeDatabase()
+                    : TimelineAdjustmentUITestView.makeDatabase()
                 $0.defaultDatabase = database
                 return database
+            }
+            if CommandLine.arguments.contains("--completion-open-form") {
+                try AppointmentCompletionUITestData.openForm(router: router, database: database)
             }
             return Self(
                 backups: BackupCoordinator(

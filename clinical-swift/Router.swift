@@ -13,6 +13,7 @@ enum AppTab: Hashable {
 enum Route: Hashable {
     case patient(_ id: UUID)
     case appointment(_ id: UUID)
+    case appointmentCompletion(_ visitID: UUID)
 }
 
 @MainActor @Observable
@@ -125,7 +126,34 @@ final class Router {
         // NavigationStack can write its path back after a sheet has been replaced. The session ID
         // prevents that stale write from mutating the new details flow.
         guard let detailsPresentation, detailsPresentation.id == presentationID else { return }
+        guard !detailsPresentation.isSavingCompletion else { return }
         detailsPresentation.setPath(path)
+    }
+
+    func beginAppointmentCompletion(
+        _ details: AppointmentDetails, visitID: UUID, presentationID: UUID
+    ) {
+        guard let presentation = detailsPresentation,
+            isCurrentDetailsRoute(
+                .appointment(details.appointment.id), presentationID: presentationID),
+            details.appointment.status == .scheduled, !presentation.isSavingCompletion
+        else { return }
+        if presentation.completionDrafts[visitID] == nil {
+            presentation.completionDrafts[visitID] = AppointmentCompletionModel(
+                id: visitID, details: details, originPath: presentation.path)
+        }
+        presentation.push(.appointmentCompletion(visitID))
+    }
+
+    func finishAppointmentCompletion(_ model: AppointmentCompletionModel, presentationID: UUID) {
+        // A sheet ID can survive root replacement. The draft identity also proves visit ownership.
+        guard let presentation = detailsPresentation, presentation.id == presentationID,
+            presentation.currentRoute == .appointmentCompletion(model.id),
+            presentation.completionDrafts[model.id] === model,
+            Array(presentation.path.dropLast()) == model.originPath
+        else { return }
+        selectedTab = .schedule
+        discardActivePresentation()
     }
 
     func dismissDetails() {
@@ -315,6 +343,8 @@ final class Router {
             presentDetails(route)
         case .appointment(let id):
             openAppointment(id: id)
+        case .appointmentCompletion:
+            break
         }
     }
 
@@ -476,6 +506,15 @@ final class DetailsPresentation: Identifiable {
 
     // Keep mutation router-owned so every NavigationStack write-back can be checked against `id`.
     private(set) var path: [Route]
+    private(set) var visitID = UUID()
+    var completionDrafts: [UUID: AppointmentCompletionModel] = [:]
+
+    var isSavingCompletion: Bool { completionDrafts.values.contains { $0.isSaving } }
+    var hasUnsavedCompletion: Bool { completionDrafts.values.contains { $0.hasUnsavedChanges } }
+    var showsCompletion: Bool {
+        if case .appointmentCompletion = currentRoute { return true }
+        return false
+    }
 
     var currentRoute: Route {
         path.last ?? root
@@ -492,6 +531,8 @@ final class DetailsPresentation: Identifiable {
     }
 
     fileprivate func replaceRoot(with route: Route) {
+        visitID = UUID()
+        completionDrafts.removeAll()
         root = route
         path.removeAll()
     }
@@ -502,6 +543,9 @@ final class DetailsPresentation: Identifiable {
 
     fileprivate func setPath(_ path: [Route]) {
         self.path = path
+        completionDrafts = completionDrafts.filter { _, draft in
+            path.starts(with: draft.originPath)
+        }
     }
 }
 

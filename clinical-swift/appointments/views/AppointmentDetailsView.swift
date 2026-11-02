@@ -6,6 +6,7 @@ struct AppointmentDetailsView: View {
     @Environment(Router.self) private var router
     @State private var model: AppointmentDetailsModel
     @State private var hasResolvedInitialDetails = false
+    @State private var visitID = UUID()
 
     let presentationID: DetailsPresentation.ID
     let onSelectPatient: @MainActor @Sendable (Patient.ID) -> Void
@@ -29,6 +30,10 @@ struct AppointmentDetailsView: View {
                 if canRender(details) {
                     AppointmentDetailsContent(
                         model: model,
+                        onComplete: {
+                            router.beginAppointmentCompletion(
+                                details, visitID: visitID, presentationID: presentationID)
+                        },
                         onSelectPatient: onSelectPatient
                     )
                 } else {
@@ -111,12 +116,15 @@ private struct AppointmentDetailsContent: View {
     @Bindable var model: AppointmentDetailsModel
 
     let onSelectPatient: @MainActor @Sendable (Patient.ID) -> Void
+    var onComplete: @MainActor () -> Void = {}
 
     init(
         model: AppointmentDetailsModel,
+        onComplete: @escaping @MainActor () -> Void = {},
         onSelectPatient: @escaping @MainActor @Sendable (Patient.ID) -> Void
     ) {
         self.model = model
+        self.onComplete = onComplete
         self.onSelectPatient = onSelectPatient
     }
 
@@ -138,9 +146,7 @@ private struct AppointmentDetailsContent: View {
                         if model.showsStatusActions {
                             AppointmentDetailsActionsView(
                                 isUpdating: model.isUpdatingStatus,
-                                onComplete: {
-                                    await performStatusUpdate(.completed)
-                                },
+                                onComplete: onComplete,
                                 onReschedule: {
                                     router.requestAppointmentEdit(details)
                                 },
@@ -172,18 +178,14 @@ private struct AppointmentDetailsContent: View {
 
 private struct AppointmentDetailsActionsView: View {
     let isUpdating: Bool
-    let onComplete: @MainActor () async -> Void
+    let onComplete: @MainActor () -> Void
     let onReschedule: @MainActor () -> Void
     let onCancel: @MainActor () async -> Void
 
     var body: some View {
         GlassEffectContainer {
             HStack {
-                ConfirmingAsyncButton(
-                    "Complete",
-                    message: Text("Mark this appointment as completed?"),
-                    action: onComplete
-                ) {
+                Button(action: onComplete) {
                     Label("Complete", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
                 }

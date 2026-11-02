@@ -100,7 +100,7 @@
     }
 
     @MainActor @Observable
-    private final class UITestSaveGate {
+    final class UITestSaveGate {
         private(set) var isWaiting = false
         private nonisolated let condition = NSConditionLock(condition: 0)
 
