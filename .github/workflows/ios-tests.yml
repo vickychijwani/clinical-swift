@@ -24,9 +24,12 @@ jobs:
           - suite: unit
             name: App unit tests
             scheme: clinical-swift-UnitTests
+            configuration: Debug
           - suite: backup
             name: Local backup tests
             scheme: clinical-swift-Backups
+            # Match the cloud release check, including timing changes from optimization.
+            configuration: Release
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
@@ -52,9 +55,11 @@ jobs:
           xcrun simctl bootstatus "$simulator_id" -b
       - name: Run simulator tests
         # Ad hoc signing preserves Keychain and App Group entitlements without a certificate.
+        # Release needs testability for the backup bundle's @testable import.
         env:
           TEST_SCHEME: ${{ matrix.scheme }}
           TEST_SUITE: ${{ matrix.suite }}
+          TEST_CONFIGURATION: ${{ matrix.configuration }}
         run: |
           test_options=()
           if [[ "$TEST_SUITE" == backup ]]; then
@@ -62,6 +67,7 @@ jobs:
           fi
           xcodebuild -project clinical-swift.xcodeproj \
             -scheme "$TEST_SCHEME" \
+            -configuration "$TEST_CONFIGURATION" \
             -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/build/SourcePackages" \
             -destination "platform=iOS Simulator,id=$TEST_SIMULATOR_ID" \
             -destination-timeout 120 \
@@ -70,6 +76,7 @@ jobs:
             -resultBundlePath TestResults.xcresult \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_ALLOWED=YES \
+            ENABLE_TESTABILITY=YES \
             "${test_options[@]}" test
       - name: Upload failed test results
         if: failure()

@@ -257,23 +257,29 @@ struct BackupNetworkTests {
             GoogleBackupTokens(
                 accountID: "original", email: "test@example.invalid", clientID: "client",
                 accessToken: "expired", refreshToken: "refresh", expiresAt: .distantPast))
-        let (started, continuation) = AsyncStream<Void>.makeStream()
-        defer { continuation.finish() }
-        let cancelled = Mutex(false)
+        let (refreshEvents, continuation) = AsyncStream<Void>.makeStream()
+        let timeout = Task {
+            try await Task.sleep(for: .seconds(10))
+            continuation.finish()
+        }
+        defer {
+            timeout.cancel()
+            continuation.finish()
+        }
         let testSession = session { _ in
             try await withTaskCancellationHandler {
                 continuation.yield(())
                 try await Task.sleep(for: .seconds(30))
                 return (200, Data(#"{"access_token":"unexpected","expires_in":3600}"#.utf8))
             } onCancel: {
-                cancelled.withLock { $0 = true }
+                continuation.yield(())
             }
         }
         defer { testSession.invalidateAndCancel() }
         let account = GoogleBackupAccount(session: testSession, keychain: keychain)
         let backup = Task { try await account.accessToken(expectedAccountID: "original") }
         defer { backup.cancel() }
-        var events = started.makeAsyncIterator()
+        var events = refreshEvents.makeAsyncIterator()
         try #require(await events.next() != nil)
         backup.cancel()
         do {
@@ -282,7 +288,8 @@ struct BackupNetworkTests {
         } catch {
             #expect(error is CancellationError || (error as? URLError)?.code == .cancelled)
         }
-        #expect(cancelled.withLock { $0 })
+        // URLSession can return cancellation before the protocol receives stopLoading().
+        try #require(await events.next() != nil, "The refresh did not receive cancellation.")
         #expect(try keychain.load().accessToken == "expired")
         #expect(try keychain.load().refreshToken == "refresh")
         BackupURLProtocol.handler.withLock { handler in
