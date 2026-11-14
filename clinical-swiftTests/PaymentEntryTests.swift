@@ -51,6 +51,7 @@ struct PaymentEntryTests {
 
     @Test func suggestionsStayWithinKindAndReuseExistingSpelling() async throws {
         let date = try Date("2026-11-04T10:00:00Z", strategy: .iso8601)
+        let earlier = try Date("2026-11-03T10:00:00Z", strategy: .iso8601)
         try await withDependencies {
             $0.date.now = date
             $0.defaultDatabase = try testDatabase()
@@ -58,14 +59,20 @@ struct PaymentEntryTests {
             @Dependency(\.defaultDatabase) var database
             let entries = [
                 AccountEntry(
-                    details: .expense(category: .materials, paymentMethod: nil),
+                    details: .expense(category: nil, paymentMethod: nil),
                     amount: 100, note: "Dental Lab"),
                 AccountEntry(
                     details: .expense(category: .materials, paymentMethod: nil),
-                    amount: 100, note: "dental lab"),
+                    amount: 100, createdDate: earlier, note: "dental lab"),
+                AccountEntry(
+                    details: .expense(category: .materials, paymentMethod: nil),
+                    amount: 100, createdDate: earlier, note: "Gloves"),
                 AccountEntry(
                     details: .receipt(source: .externalConsultations, paymentMethod: nil),
                     amount: 100, note: "Visiting clinic"),
+                AccountEntry(
+                    details: .receipt(source: .externalConsultations, paymentMethod: nil),
+                    amount: 100, createdDate: earlier, note: "VISITING CLINIC"),
                 AccountEntry(
                     details: .receipt(source: .referralCommissions, paymentMethod: nil),
                     amount: 100, note: "Referral clinic"),
@@ -73,24 +80,48 @@ struct PaymentEntryTests {
             try await database.write { db in
                 try saveAccountEntries(AccountEntryBatch(inserts: entries), in: db)
             }
-            let records = entries.map { AccountEntryRecord($0, updatedAt: date) }
-            #expect(PaymentEntryModel.labels(for: .expense, entries: records) == ["Dental Lab"])
-            #expect(
-                PaymentEntryModel.labels(for: .consult, entries: records) == ["Visiting clinic"])
-            #expect(
-                PaymentEntryModel.labels(for: .referral, entries: records) == ["Referral clinic"])
-
             let model = PaymentEntryModel()
             model.selectKind(.expense)
+            #expect(model.labels == ["Dental Lab", "Gloves"])
+            model.setNote("den")
+            #expect(model.matchingLabels == ["Dental Lab"])
             model.setNote("  DENTAL LAB  ")
-            let existing = try #require(model.labels.first)
             model.finishNote()
-            #expect(model.note == existing)
+            #expect(model.note == "Dental Lab")
             model.setNote("New lab")
             model.finishNote()
             #expect(model.note == "New lab")
+            model.selectKind(.consult)
+            #expect(model.labels == ["Visiting clinic"])
+            model.setNote(" VISITING CLINIC ")
+            model.finishNote()
+            #expect(model.note == "Visiting clinic")
+            model.selectKind(.referral)
+            #expect(model.labels == ["Referral clinic"])
             let count = try await database.read { try AccountEntryRecord.count().fetchOne($0) }
             #expect(count == entries.count)
+        }
+    }
+
+    @Test(arguments: [PaymentEntryModel.Kind.expense, .consult])
+    func savedLabelAppearsWhileTheKindStaysSelected(_ kind: PaymentEntryModel.Kind) async throws {
+        let date = try Date("2026-11-04T10:00:00Z", strategy: .iso8601)
+        try await withDependencies {
+            $0.date.now = date
+            $0.defaultDatabase = try testDatabase()
+        } operation: {
+            let model = PaymentEntryModel()
+            model.selectKind(kind)
+            #expect(model.labels.isEmpty)
+            model.setNote("Sterilization")
+            model.amountText = "100"
+            #expect(await model.save())
+            model.setNote("ster")
+            let deadline = ContinuousClock.now + .seconds(2)
+            while model.matchingLabels.isEmpty && ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            #expect(model.matchingLabels == ["Sterilization"])
         }
     }
 

@@ -138,3 +138,34 @@ public nonisolated struct PreviousAccountNotesRequest: FetchKeyRequest {
         }
     }
 }
+
+public nonisolated struct PaymentLabelsRequest: FetchKeyRequest {
+    private let kind: AccountEntry.Kind
+    private let category: AccountEntry.Category?
+
+    public init(kind: AccountEntry.Kind, category: AccountEntry.Category? = nil) {
+        self.kind = kind
+        self.category = category
+    }
+
+    public func fetch(_ db: Database) throws -> [String] {
+        let notes = try AccountEntryRecord.where { $0.kind.eq(kind.rawValue) && $0.note.isNot(nil) }
+            .where { entry in
+                if let category { entry.category.eq(category.rawValue) }
+            }
+            .order { ($0.createdAt.desc(), $0.id.desc()) }
+            .select { $0.note }
+            .fetchAll(db)
+        // Keep the most recently recorded spelling for each label.
+        var labels: [String] = []
+        for note in notes {
+            guard let label = note?.nilIfBlank,
+                !labels.contains(where: {
+                    $0.localizedCaseInsensitiveCompare(label) == .orderedSame
+                })
+            else { continue }
+            labels.append(label)
+        }
+        return labels
+    }
+}

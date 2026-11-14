@@ -20,25 +20,24 @@ final class PaymentEntryModel {
             }
         }
 
-        func includes(_ entry: AccountEntryRecord) -> Bool {
+        var receiptSource: AccountEntry.ReceiptSource? {
             switch self {
-            case .patient: false
-            case .consult:
-                entry.kind == "receipt" && entry.category == "externalConsultations"
-            case .referral:
-                entry.kind == "receipt" && entry.category == "referralCommissions"
-            case .expense: entry.kind == "expense"
+            case .consult: .externalConsultations
+            case .referral: .referralCommissions
+            case .patient, .expense: nil
             }
+        }
+
+        var labelsRequest: PaymentLabelsRequest? {
+            if self == .expense { return PaymentLabelsRequest(kind: .expense) }
+            return receiptSource.map { PaymentLabelsRequest(kind: .receipt, category: $0.category) }
         }
     }
 
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.date.now) private var now
     @ObservationIgnored var patientRows = FetchAll<PatientDetailsSelection>()
-    @ObservationIgnored
-    @FetchAll(AccountEntryRecord.where { $0.note.isNot(nil) }.order { $0.createdAt.desc() })
-    private var previousEntries: [AccountEntryRecord] = []
-
+    private var labelHistory: Fetch<[String]>?
     private(set) var kind = Kind.patient
     private(set) var note = ""
     private(set) var patient: Patient?
@@ -54,7 +53,7 @@ final class PaymentEntryModel {
     }
 
     var labels: [String] {
-        Self.labels(for: kind, entries: previousEntries)
+        labelHistory?.wrappedValue ?? []
     }
 
     var matchingLabels: [String] {
@@ -74,6 +73,7 @@ final class PaymentEntryModel {
 
     func selectKind(_ kind: Kind) {
         guard !isSaving, self.kind != kind else { return }
+        labelHistory = kind.labelsRequest.map { Fetch(wrappedValue: [], $0) }
         self.kind = kind
         note = ""
         patient = nil
@@ -113,10 +113,9 @@ final class PaymentEntryModel {
         case .patient:
             guard let patient else { return false }
             details = .receipt(source: .patient(patient.id), paymentMethod: method)
-        case .consult:
-            details = .receipt(source: .externalConsultations, paymentMethod: method)
-        case .referral:
-            details = .receipt(source: .referralCommissions, paymentMethod: method)
+        case .consult, .referral:
+            guard let source = kind.receiptSource else { return false }
+            details = .receipt(source: source, paymentMethod: method)
         case .expense:
             details = .expense(category: nil, paymentMethod: method)
         }
@@ -148,18 +147,5 @@ final class PaymentEntryModel {
             errorMessage = "The payment could not be saved. Please try again."
         }
         return false
-    }
-
-    static func labels(for kind: Kind, entries: [AccountEntryRecord]) -> [String] {
-        var labels: [String] = []
-        for entry in entries where kind.includes(entry) {
-            guard let label = entry.note?.nilIfBlank,
-                !labels.contains(where: {
-                    $0.localizedCaseInsensitiveCompare(label) == .orderedSame
-                })
-            else { continue }
-            labels.append(label)
-        }
-        return labels
     }
 }
