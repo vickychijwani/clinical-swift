@@ -2,6 +2,22 @@ import XCTest
 
 extension XCUIElement {
     @MainActor
+    func frameSettledOrWait(timeout: TimeInterval) -> Bool {
+        // A native sheet can report a hittable button before its animations end.
+        // Sample across polls so an immediate first check cannot pass during motion.
+        var previousFrame: CGRect?
+        return waitUntil(timeout: timeout) {
+            guard exists, isHittable else {
+                previousFrame = nil
+                return false
+            }
+            let frame = self.frame
+            defer { previousFrame = frame }
+            return previousFrame == frame
+        }
+    }
+
+    @MainActor
     func existsOrWait(timeout: TimeInterval) -> Bool {
         // Poll frequently instead of XCTest's ~1-second retry interval.
         waitUntil(timeout: timeout) { exists }

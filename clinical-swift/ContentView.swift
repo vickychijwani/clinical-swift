@@ -1,9 +1,12 @@
+import ClinicalModels
 import SQLiteData
 import SwiftUI
 
 struct ContentView: View {
     @Bindable var router: Router
     var initialEditorSession: ScheduleEditorSession? = nil
+    @Namespace private var appointmentZoom
+    @State private var retainedAppointmentZoomID: Appointment.ID? = nil
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
@@ -27,9 +30,15 @@ struct ContentView: View {
         }
         .sheet(
             item: detailsPresentationBinding,
-            onDismiss: router.presentationDidDismiss
+            onDismiss: {
+                retainedAppointmentZoomID = nil
+                router.presentationDidDismiss()
+            }
         ) { presentation in
             DetailsFlowSheet(presentation: presentation)
+                .modifier(
+                    AppointmentZoomTransition(route: presentation.root, namespace: appointmentZoom)
+                )
                 .id(presentation.id)
                 .onAppear {
                     router.presentationDidAppear(presentation.id)
@@ -54,6 +63,12 @@ struct ContentView: View {
                 }
         }
         .environment(router)
+        .environment(\.appointmentZoomNamespace, appointmentZoom)
+        .environment(\.appointmentZoomSourceID, appointmentZoomID ?? retainedAppointmentZoomID)
+        .onChange(of: appointmentZoomID, initial: true) { _, id in
+            // Keep the source copy until onDismiss. The router clears its route before the zoom ends.
+            if let id { retainedAppointmentZoomID = id }
+        }
         .sheet(
             item: presentationBinding(get: { router.settingsRequest }),
             onDismiss: router.presentationDidDismiss
@@ -83,6 +98,11 @@ struct ContentView: View {
         .colorLabRoot()
     }
 
+    private var appointmentZoomID: Appointment.ID? {
+        guard case .appointment(let id)? = router.detailsPresentation?.root else { return nil }
+        return id
+    }
+
     private var detailsPresentationBinding: Binding<DetailsPresentation?> {
         presentationBinding(get: { router.detailsPresentation })
     }
@@ -108,6 +128,24 @@ struct ContentView: View {
                 router.dismissPresentation()
             }
         )
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var appointmentZoomNamespace: Namespace.ID? = nil
+    @Entry var appointmentZoomSourceID: Appointment.ID? = nil
+}
+
+private struct AppointmentZoomTransition: ViewModifier {
+    let route: Route
+    let namespace: Namespace.ID
+
+    func body(content: Content) -> some View {
+        if case .appointment(let id) = route {
+            content.navigationTransition(.zoom(sourceID: id, in: namespace))
+        } else {
+            content
+        }
     }
 }
 

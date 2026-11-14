@@ -40,6 +40,25 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
     }
 
     @MainActor
+    func testAppointmentCardCanReopenDetailsAfterClosing() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-appointment-completion"]
+        app.launch()
+        let appointment = app.buttons[AppointmentCompletionUITestSupport.appointmentID]
+        let detailsBar = app.navigationBars["Appointment"]
+
+        for _ in 0..<2 {
+            XCTAssertTrue(appointment.hittableOrWait(timeout: 5))
+            appointment.tap()
+            XCTAssertTrue(detailsBar.existsOrWait(timeout: 5))
+            XCTAssertTrue(detailsBar.frameSettledOrWait(timeout: 5))
+            app.buttons["Close"].tap()
+            XCTAssertTrue(detailsBar.absentOrWait(timeout: 3))
+        }
+        XCTAssertTrue(appointment.isHittable)
+    }
+
+    @MainActor
     func testCleanDetailsCanDismissAfterBack() {
         let app = AppointmentCompletionUITestSupport.launch()
         app.navigationBars.buttons["BackButton"].tap()
@@ -56,7 +75,7 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
 
     @MainActor
     func testPatientHistoryReturnsToItsOriginAndCompletionClosesTheFlow() {
-        let app = AppointmentCompletionUITestSupport.launch()
+        let app = AppointmentCompletionUITestSupport.launch(fromSchedule: true)
         app.navigationBars.buttons["BackButton"].tap()
         app.buttons["View Patient"].tap()
         let historyAppointment =
@@ -69,6 +88,7 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Appointment"].exists)
         app.buttons["Complete"].tap()
         XCTAssertEqual(app.textFields["completion-amount"].value as? String, "1000")
+        XCTAssertTrue(app.buttons["complete-appointment"].frameSettledOrWait(timeout: 5))
         app.buttons["complete-appointment"].tap()
         XCTAssertTrue(app.navigationBars["Complete Appointment"].absentOrWait(timeout: 5))
         let appointment = app.buttons[AppointmentCompletionUITestSupport.appointmentID]

@@ -10,7 +10,8 @@ struct DetailsFlowSheet: View {
             hasUnsavedChanges: presentation.hasUnsavedCompletion,
             title: "Discard unsaved payment?",
             message: "Your payment changes have not been saved.",
-            allowsInteractiveDismiss: !presentation.showsCompletion && !presentation.isSavingCompletion
+            allowsInteractiveDismiss: !presentation.showsCompletion
+                && !presentation.isSavingCompletion
         ) { dismissAction in
             NavigationStack(path: pathBinding) {
                 ZStack {
@@ -43,7 +44,10 @@ struct DetailsFlowSheet: View {
                 presentation.showsCompletion ? [.height(400)] : [.height(280), .medium]
             )
             .presentationDragIndicator(presentation.showsCompletion ? .hidden : .automatic)
-            .presentationBackground(AppColor.canvas)
+            // The style-only background can leave a line during zoom. Keep the fill in a view.
+            .presentationBackground {
+                Rectangle().fill(AppColor.canvas)
+            }
             .presentationContentInteraction(.resizes)
         }
     }
