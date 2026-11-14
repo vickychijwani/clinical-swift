@@ -70,10 +70,15 @@ public nonisolated struct AccountEntryRecord: Identifiable, Sendable {
             }
             details = .receipt(source: source, paymentMethod: method)
         case .expense:
-            guard patientID == nil, appointmentID == nil,
-                let category,
-                let expense = AccountEntry.ExpenseCategory(rawValue: category.rawValue)
-            else { throw AccountEntryError.invalidFields }
+            guard patientID == nil, appointmentID == nil else {
+                throw AccountEntryError.invalidFields
+            }
+            let expense = try category.map { category in
+                guard let expense = AccountEntry.ExpenseCategory(rawValue: category.rawValue) else {
+                    throw AccountEntryError.invalidFields
+                }
+                return expense
+            }
             details = .expense(category: expense, paymentMethod: method)
         }
         guard entryDate.timeIntervalSinceReferenceDate.isFinite,

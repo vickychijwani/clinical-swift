@@ -72,9 +72,9 @@ public nonisolated struct AppointmentCoverage: Equatable, Sendable {
 
 public nonisolated struct CashFlow: Equatable, Sendable {
     public struct Group: Hashable, Sendable {
-        public let category: AccountEntry.Category
+        public let category: AccountEntry.Category?
         public let paymentMethod: AccountEntry.PaymentMethod?
-        public var reportingGroup: AccountEntry.ReportingGroup { category.group }
+        public var reportingGroup: AccountEntry.ReportingGroup? { category?.group }
     }
     public let totals: [Group: Int]
     public let received: Int
@@ -87,13 +87,13 @@ public nonisolated struct CashFlow: Equatable, Sendable {
         var paid = 0
         for entry in entries {
             try entry.validateValues()
-            let category: AccountEntry.Category
+            let category: AccountEntry.Category?
             switch entry.details {
             case .receipt(let source, _):
                 category = source.category
                 received = try addingMoney(received, entry.amount)
             case .expense(let expense, _):
-                category = expense.category
+                category = expense?.category
                 paid = try addingMoney(paid, entry.amount)
             case .charge, .adjustment: continue
             }
@@ -106,7 +106,7 @@ public nonisolated struct CashFlow: Equatable, Sendable {
         self.net = try addingMoney(received, -paid)
     }
 
-    public func total(for category: AccountEntry.Category) throws -> Int {
+    public func total(for category: AccountEntry.Category?) throws -> Int {
         try totals.filter { $0.key.category == category }.values.reduce(0, addingMoney)
     }
 

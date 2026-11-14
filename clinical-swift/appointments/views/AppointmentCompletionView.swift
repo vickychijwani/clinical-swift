@@ -46,21 +46,10 @@ struct AppointmentCompletionView: View {
                         .font(.subheadline)
                         .foregroundStyle(AppColor.secondaryText)
                         .padding(.horizontal)
-                    Picker(
-                        "Payment method",
+                    PaymentMethodPicker(
                         selection: Binding(
                             get: { model.paymentMethod }, set: { model.selectMethod($0) })
-                    ) {
-                        Text("UPI").tag(
-                            AccountEntry.PaymentMethod.upi as AccountEntry.PaymentMethod?)
-                        Text("Cash").tag(
-                            AccountEntry.PaymentMethod.cash as AccountEntry.PaymentMethod?)
-                        Text("Card").tag(
-                            AccountEntry.PaymentMethod.card as AccountEntry.PaymentMethod?)
-                        Text("Other").tag(
-                            AccountEntry.PaymentMethod.other as AccountEntry.PaymentMethod?)
-                    }
-                    .pickerStyle(.segmented)
+                    )
                     .accessibilityIdentifier("completion-method")
                 }
                 GlassEffectContainer {

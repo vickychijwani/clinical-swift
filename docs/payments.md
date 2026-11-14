@@ -12,6 +12,11 @@ Adjustments change debt without recording treatment fees or cash movement. They
 support opening balances and incomplete history. An unknown payment method does
 not mean cash, and net cash flow includes capital expenses, so it is not profit.
 
+Expenses can have no category so payment entry does not require classification.
+Keep these expenses in paid and net cash totals, in a separate missing-category
+group. Do not infer an operating or capital category from the label. Receipt
+categories still identify their source.
+
 ## Balances and dates
 
 A complete local save must leave every affected patient's current balance
@@ -35,6 +40,10 @@ completion, changed patients, and multiple linked charges. This keeps a stale or
 competing request from recording another receipt. The entered payment replaces
 the linked charge amount, or removes the charge for zero. Existing receipts stay
 unchanged, so ledger validation can reject either operation.
+
+Patient mode in Payments saves a charge and a receipt for the same amount in one
+transaction. The charge has no appointment link. The pair leaves the current
+balance unchanged.
 
 ## Derived balances
 

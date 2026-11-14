@@ -104,7 +104,7 @@ public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
     public enum Details: Hashable, Sendable {
         case charge(patientID: UUID, appointmentID: UUID?)
         case receipt(source: ReceiptSource, paymentMethod: PaymentMethod?)
-        case expense(category: ExpenseCategory, paymentMethod: PaymentMethod?)
+        case expense(category: ExpenseCategory?, paymentMethod: PaymentMethod?)
         case adjustment(patientID: UUID)
     }
 
@@ -138,7 +138,7 @@ public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
     public var category: Category? {
         switch details {
         case .receipt(let source, _): source.category
-        case .expense(let category, _): category.category
+        case .expense(let category, _): category?.category
         case .charge, .adjustment: nil
         }
     }

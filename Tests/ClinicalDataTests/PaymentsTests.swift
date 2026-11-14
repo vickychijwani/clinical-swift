@@ -88,6 +88,40 @@ nonisolated enum PaymentsFixture {
 }
 
 struct PaymentsModelTests {
+    @Test func uncategorizedExpensesStayInCashTotalsWithoutAnAssumedReportingGroup() throws {
+        try PaymentsFixture.withClock {
+            let report = try CashFlow(entries: [
+                AccountEntry(
+                    details: .receipt(source: .externalConsultations, paymentMethod: .cash),
+                    amount: 1000),
+                AccountEntry(details: .expense(category: nil, paymentMethod: .cash), amount: 300),
+                AccountEntry(details: .expense(category: nil, paymentMethod: nil), amount: 200),
+                AccountEntry(details: .expense(category: .rent, paymentMethod: .cash), amount: 100),
+                AccountEntry(
+                    details: .expense(category: .equipmentPurchases, paymentMethod: .card),
+                    amount: 50),
+            ])
+            #expect(report.received == 1000)
+            #expect(report.paid == 650)
+            #expect(report.net == 350)
+            #expect(try report.total(for: nil) == 500)
+            #expect(try report.total(for: .operating) == 100)
+            #expect(try report.total(for: .capital) == 50)
+            let cash = try report.amounts(paymentMethod: .cash)
+            #expect(cash.received == 1000)
+            #expect(cash.paid == 400)
+            #expect(cash.net == 600)
+            let unknownMethod = try report.amounts(paymentMethod: nil)
+            #expect(unknownMethod.received == 0)
+            #expect(unknownMethod.paid == 200)
+            #expect(unknownMethod.net == -200)
+            #expect(
+                report.totals.keys.filter { $0.category == nil }.allSatisfy {
+                    $0.reportingGroup == nil
+                })
+        }
+    }
+
     @Test func fieldContractMatchesDomainAndSchema() throws {
         try PaymentsFixture.run { database in
             let p = PaymentsFixture.patientID
@@ -102,6 +136,7 @@ struct PaymentsModelTests {
                     .receipt(source: .externalConsultations, paymentMethod: nil),
                     .receipt(source: .referralCommissions, paymentMethod: nil),
                     .receipt(source: .otherReceipts, paymentMethod: nil),
+                    .expense(category: nil, paymentMethod: nil),
                 ]
                 + AccountEntry.ExpenseCategory.allCases.map {
                     .expense(category: $0, paymentMethod: nil)
@@ -150,9 +185,11 @@ struct PaymentsModelTests {
                     changed.paymentMethod = "cash"
                     invalid.append(changed)
                 } else {
-                    changed = record
-                    changed.category = nil
-                    invalid.append(changed)
+                    if entry.kind == .receipt {
+                        changed = record
+                        changed.category = nil
+                        invalid.append(changed)
+                    }
                     changed = record
                     changed.category = entry.kind == .expense ? "otherReceipts" : "rent"
                     invalid.append(changed)
