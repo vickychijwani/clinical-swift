@@ -14,6 +14,7 @@ struct PaymentEntryTests {
         } operation: {
             let model = PaymentEntryModel()
             #expect(model.kind == .patient)
+            #expect(model.method == nil)
             #expect(!model.canAdd)
             model.amountText = "500"
             model.setNote("Anjali")
@@ -327,7 +328,7 @@ struct PaymentEntryTests {
     }
 
     @Test(arguments: [AccountEntry.PaymentMethod.upi, .cash, .card, .other, nil])
-    func savesExpenseWithExistingLabelSpellingAndSelectedMethod(
+    func savesExpenseWithExistingLabelSpellingAndOptionalMethod(
         _ method: AccountEntry.PaymentMethod?
     ) async throws {
         let date = try Date("2026-11-05T10:00:00Z", strategy: .iso8601)
@@ -344,7 +345,7 @@ struct PaymentEntryTests {
             model.selectKind(.expense)
             model.setNote("  DENTAL LAB  ")
             model.amountText = "500"
-            model.method = method
+            if let method { model.method = method }
             #expect(await model.save())
             let entry = try await database.read { db in
                 try AccountEntryRecord.where { $0.amount.eq(500) }.fetchOne(db)?.entry()

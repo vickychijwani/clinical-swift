@@ -42,7 +42,7 @@ final class PaymentEntryModel {
     private(set) var note = ""
     private(set) var patient: Patient?
     var amountText = ""
-    var method: AccountEntry.PaymentMethod? = .upi
+    var method: AccountEntry.PaymentMethod?
     private(set) var isSaving = false
     private(set) var errorMessage: String?
 
