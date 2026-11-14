@@ -12,8 +12,8 @@ struct ScheduleTimelinePage: View {
     let allowsAdjustment: Bool
     let editorSession: ScheduleEditorSession?
     let isWorking: Bool
-    let onBeginBooking: (TimeOfDay) -> ScheduleEditorSession?
-    let onBookingRelease: (TimelineAdjustment) -> Void
+    let onBeginHold: (TimelineItem?, TimeOfDay) -> ScheduleEditorSession?
+    let onHoldRelease: (TimelineAdjustment) -> Void
     let onCancel: () -> Void
     let onDiscard: () -> Void
     let onDone: @MainActor () async -> Void
@@ -22,13 +22,13 @@ struct ScheduleTimelinePage: View {
     @State private var scrollY: CGFloat = 0
     @State private var needsAdjustmentClearance = false
     @State private var pendingScrollY: CGFloat?
-    @State private var timelineTop: CGFloat = 0
+    @State private var timelineFrame = CGRect.zero
     @State private var touchStart: CGPoint?
     @State private var holdRecognized = false
     @GestureState private var touchActive = false
     @State private var lastDragEnd: ContinuousClock.Instant?
-    // Keep the first touch attached while Schedule installs the new booking session.
-    @State private var bookingDrag: ScheduleEditorSession?
+    // Keep the first touch attached while Schedule installs the editor session.
+    @State private var holdSession: ScheduleEditorSession?
 
     var body: some View {
         let timelinePadding = Timeline.metrics.verticalPadding
@@ -46,7 +46,7 @@ struct ScheduleTimelinePage: View {
                         isDragging = $0
                         if $0 { needsAdjustmentClearance = true }
                         if !$0 {
-                            bookingDrag = nil
+                            holdSession = nil
                             touchStart = nil
                             holdRecognized = false
                         }
@@ -60,10 +60,10 @@ struct ScheduleTimelinePage: View {
                     editorSession: editorSession,
                     isWorking: isWorking
                 )
-                .onGeometryChange(for: CGFloat.self) {
-                    $0.frame(in: .global).minY + timelinePadding
+                .onGeometryChange(for: CGRect.self) {
+                    $0.frame(in: .global).insetBy(dx: 0, dy: timelinePadding)
                 } action: {
-                    timelineTop = $0
+                    timelineFrame = $0
                 }
 
                 if needsAdjustmentClearance {
@@ -98,7 +98,7 @@ struct ScheduleTimelinePage: View {
             }
         }
         // In iOS 26, gestures inside the content can block the scroll view's native pan.
-        // Keep booking touch tracking on the scroll view so both can receive the same swipe.
+        // Keep touch tracking on the scroll view so both can receive the same swipe.
         .simultaneousGesture(
             // Measure from touch-down so the hold does not lose the first movement.
             DragGesture(minimumDistance: 0, coordinateSpace: .global)
@@ -108,30 +108,30 @@ struct ScheduleTimelinePage: View {
                     if abs(value.translation.height) > 5 || abs(value.translation.width) > 5 {
                         lastDragEnd = .now
                     }
-                    beginBookingIfReady()
-                    if let bookingDrag {
+                    beginHoldIfReady()
+                    if let holdSession {
                         correctScrollPosition(
-                            bookingDrag.updateAdjustment(
+                            holdSession.updateAdjustment(
                                 translation: value.translation.height, items: items))
                     }
                 }
                 .onEnded { value in
+                    if holdRecognized || holdSession != nil { lastDragEnd = .now }
                     touchStart = nil
                     holdRecognized = false
-                    guard let bookingDrag else { return }
-                    self.bookingDrag = nil
+                    guard let holdSession else { return }
+                    self.holdSession = nil
                     // Done or Cancel can end the drag before the finger lifts.
-                    guard bookingDrag.adjustment.isDragging else { return }
-                    lastDragEnd = .now
+                    guard holdSession.adjustment.isDragging else { return }
                     correctScrollPosition(
-                        bookingDrag.updateAdjustment(
+                        holdSession.updateAdjustment(
                             translation: value.translation.height, items: items))
-                    bookingDrag.adjustment.release()
-                    onBookingRelease(bookingDrag.adjustment)
+                    holdSession.adjustment.release()
+                    onHoldRelease(holdSession.adjustment)
                 }
                 // Clear a completed hold when this touch ends or is cancelled.
                 .updating($touchActive) { _, active, _ in active = true },
-            including: allowsAdjustment && (editorSession == nil || bookingDrag != nil)
+            including: allowsAdjustment && (editorSession == nil || holdSession != nil)
                 ? .all : .subviews
         )
         .simultaneousGesture(
@@ -139,9 +139,9 @@ struct ScheduleTimelinePage: View {
                 .onEnded { _ in
                     // A phone can complete the hold before the drag supplies its position.
                     holdRecognized = true
-                    beginBookingIfReady()
+                    beginHoldIfReady()
                 },
-            including: allowsAdjustment && (editorSession == nil || bookingDrag != nil)
+            including: allowsAdjustment && (editorSession == nil || holdSession != nil)
                 ? .all : .subviews
         )
         .onScrollGeometryChange(for: CGFloat.self) {
@@ -157,13 +157,21 @@ struct ScheduleTimelinePage: View {
         lastDragEnd.map { $0.duration(to: .now) > .milliseconds(150) } ?? true
     }
 
-    private func beginBookingIfReady() {
+    private func beginHoldIfReady() {
         guard holdRecognized, let touchStart, allowsAdjustment, itemInteractionsEnabled,
-            editorSession == nil, bookingDrag == nil
+            editorSession == nil, holdSession == nil
         else { return }
-        let y = touchStart.y - timelineTop
+        lastDragEnd = .now
+        let point = CGPoint(
+            x: touchStart.x - timelineFrame.minX, y: touchStart.y - timelineFrame.minY)
         // Use the displayed scale, including a compact break, for touch mapping.
-        bookingDrag = onBeginBooking(TimelineScale(items: items).time(at: y))
+        let scale = TimelineScale(items: items)
+        let layout = TimelineLayoutEngine(availableWidth: timelineFrame.width, scale: scale)
+        // Check the front card first when cards share an overlap column.
+        let item = layout.layout(items: items).last {
+            TimelineItemView.cardShape.path(in: $0.rect).contains(point)
+        }?.item
+        holdSession = onBeginHold(item, scale.time(at: point.y))
     }
 
     private func correctScrollPosition(_ delta: CGFloat) {

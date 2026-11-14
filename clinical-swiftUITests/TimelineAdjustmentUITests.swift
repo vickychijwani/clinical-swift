@@ -47,8 +47,12 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertFalse(search.exists)
     }
 
-    @MainActor private func hold(_ card: XCUIElement, move: CGFloat = 0) {
-        let point = card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+    @MainActor private func emptySpaceAbove(_ card: XCUIElement) -> XCUICoordinate {
+        card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0))
+            .withOffset(CGVector(dx: 0, dy: -5))
+    }
+
+    @MainActor private func hold(_ point: XCUICoordinate, move: CGFloat) {
         // Leave time for the 0.3-second recognizer to run on a busy CI simulator before release.
         point.press(
             forDuration: 1, thenDragTo: point.withOffset(CGVector(dx: 0, dy: move)),
@@ -69,10 +73,10 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         add(attachment)
     }
 
-    @MainActor func testHoldOnAppointmentCreatesCenteredBookingAndDragsBeforePatientSelection() {
+    @MainActor func testHoldAboveAppointmentCanDragIntoAnOverlap() {
         let app = launch()
         let originalTime = time(original(app))
-        hold(original(app), move: 17)
+        hold(emptySpaceAbove(original(app)), move: 30)
         selectPatient(app)
         XCTAssertEqual(time(draft(app)), "12:15 PM")
         XCTAssertEqual(draft(app).value as? String, "30 min")
@@ -93,16 +97,37 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
         XCTAssertFalse(app.otherElements["appointment-duration-handle"].exists)
     }
 
-    @MainActor func testHoldOnUnavailableTimeCreatesBooking() {
+    @MainActor func testHoldAndDragOnAppointmentMovesTheSameCard() {
+        let app = launch()
+        let card = original(app)
+        hold(card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5)), move: 17)
+        XCTAssertTrue(app.buttons["Done"].hittableOrWait(timeout: 3))
+        XCTAssertEqual(time(card), "12:15 PM")
+        XCTAssertEqual(card.value as? String, "30 min")
+        XCTAssertTrue(card.label.contains("Test Patient"))
+        XCTAssertFalse(app.staticTexts["details-opened"].exists)
+        XCTAssertFalse(app.textFields["Search patient by name"].exists)
+        XCTAssertFalse(draft(app).exists)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Add"].hittableOrWait(timeout: 3))
+        XCTAssertEqual(time(card), "12:15 PM")
+    }
+
+    @MainActor func testHoldOnUnavailableTimeEntersMoveModeAtTheSameTime() {
         let app = launch()
         let block = app.buttons["unavailable-time-00000000-0000-0000-0000-000000000014"]
         XCTAssertTrue(block.exists)
-        hold(block)
-        selectPatient(app)
-        XCTAssertEqual(time(draft(app)), "11:00 AM")
-        XCTAssertEqual(draft(app).value as? String, "30 min")
-        XCTAssertTrue(block.exists)
+        block.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["Done"].hittableOrWait(timeout: 3))
+        XCTAssertEqual(time(block), "11:00 AM")
         XCTAssertFalse(app.textFields["Optional label"].exists)
+        XCTAssertFalse(app.textFields["Search patient by name"].exists)
+        drag(block, by: 15)
+        XCTAssertEqual(time(block), "11:15 AM")
+        app.buttons["Cancel"].tap()
+        app.buttons["Discard Changes"].tap()
+        XCTAssertTrue(app.buttons["Add"].hittableOrWait(timeout: 3))
+        XCTAssertEqual(time(block), "11:00 AM")
     }
 
     @MainActor func testUnavailableTimeTapMovesResizesAndCancelRestoresStoredBlock() {
@@ -267,7 +292,7 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
 
     @MainActor func testDoneWithoutPatientReopensSelection() {
         let app = launch()
-        hold(original(app))
+        emptySpaceAbove(original(app)).press(forDuration: 1)
         let search = app.textFields["Search patient by name"]
         XCTAssertTrue(search.hittableOrWait(timeout: 3))
         app.buttons["Back"].tap()
@@ -350,7 +375,7 @@ nonisolated final class TimelineAdjustmentUITests: XCTestCase {
 
     @MainActor func testHoldSwitchToUnavailableTimeKeepsFirstDrag() {
         let app = launch()
-        hold(original(app), move: 17)
+        hold(emptySpaceAbove(original(app)), move: 30)
         XCTAssertTrue(
             app.segmentedControls.buttons["Unavailable Time"].existsOrWait(timeout: 3))
         app.segmentedControls.buttons["Unavailable Time"].tap()

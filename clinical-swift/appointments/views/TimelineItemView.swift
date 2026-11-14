@@ -3,6 +3,8 @@ import Dependencies
 import SwiftUI
 
 struct TimelineItemView: View {
+    static let cardShape = RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+
     let item: TimelineItem
     let size: CGSize
     let isDraft: Bool
@@ -34,8 +36,8 @@ struct TimelineItemView: View {
             // Keep clipped text within the card's tap area.
             // Regression tests: testLongNameDoesNotStealTapFromRightAppointment()
             // and testMixedThreeColumnCardsKeepSeparateTapAreas().
-            .contentShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
-            .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
+            .contentShape(Self.cardShape)
+            .clipShape(Self.cardShape)
             // Taps use the button action. A zero-distance drag can also consume Done or Cancel.
             .simultaneousGesture(
                 DragGesture(minimumDistance: 5, coordinateSpace: .global)

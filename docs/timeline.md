@@ -38,9 +38,11 @@ Hide the stored version of the edited item on every date page until the session
 ends. Showing both versions would make one item appear to occupy two slots when
 its draft moves to another day.
 
-A timeline hold starts shared creation even over an existing card. Occupied time
-does not make booking invalid. Open the [creation sheet](appointment-booking.md#shared-creation)
-after the first drag ends so presentation does not interrupt that gesture.
+A hold on a scheduled appointment or unavailable-time block starts a move. A hold
+in empty space starts shared creation. Use the first touch to choose the action
+so a new booking can move into occupied time. Open the
+[creation sheet](appointment-booking.md#shared-creation) after release so the sheet
+does not interrupt the drag.
 
 ## Navigation
 

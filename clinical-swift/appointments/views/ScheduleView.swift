@@ -58,9 +58,11 @@ struct ScheduleView: View {
                         ?? !hasEditor,
                     editorSession: editorSession,
                     isWorking: editorSession?.isWorking == true,
-                    onBeginBooking: { beginBooking(center: $0, on: date) },
-                    onBookingRelease: { released in
-                        editorSession?.releaseBooking(released)
+                    onBeginHold: { beginHold(on: $0, center: $1, date: date) },
+                    onHoldRelease: { released in
+                        if editorSession?.allowsTypeSelection == true {
+                            editorSession?.releaseBooking(released)
+                        }
                     },
                     onCancel: { editorSession?.adjustment.release() },
                     onDiscard: {
@@ -267,10 +269,32 @@ struct ScheduleView: View {
         }
     }
 
-    private func beginBooking(center: TimeOfDay, on date: Date) -> ScheduleEditorSession? {
+    private func beginHold(
+        on item: TimelineItem?, center: TimeOfDay, date: Date
+    ) -> ScheduleEditorSession? {
         guard !hasEditor,
             date.isSameDayAs(router.selectedScheduleDate)
         else { return nil }
+        if let item {
+            guard item.allowsAdjustment else { return nil }
+            switch item {
+            case .appointment(let appointment):
+                guard let details = scheduleModel.details(for: appointment),
+                    details.appointment.status == .scheduled
+                else { return nil }
+                router.requestAppointmentEdit(details)
+            case .unavailableTime(let block):
+                router.requestUnavailableTimeEdit(block)
+            }
+            guard let request = scheduleEditorRequest,
+                let session = ScheduleEditorSession(
+                    request: request, selectedDate: date, appointments: [],
+                    onFinished: { finishEditor(request.id, date: $0) })
+            else { return nil }
+            session.beginAdjustment(item, edge: .move, items: visibleItems(for: date))
+            editorSession = session
+            return session
+        }
         router.requestScheduleCreation()
         guard let request = router.scheduleCreationRequest else { return nil }
         editorSession = ScheduleEditorSession(
