@@ -1,0 +1,11 @@
+{
+  "run": [
+    {
+      "name": "Clinical",
+      "commands": [
+        "make build-and-run"
+      ],
+      "default": true
+    }
+  ]
+}
