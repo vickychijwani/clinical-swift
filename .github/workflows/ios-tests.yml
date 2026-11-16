@@ -3,9 +3,10 @@ name: iOS tests
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -14,7 +15,7 @@ permissions:
 jobs:
   unit-tests:
     name: App unit tests
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     runs-on: xcode-27
     timeout-minutes: 45
     steps:
@@ -79,7 +80,7 @@ jobs:
 
   ui-runner:
     name: Select local runner
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     outputs:
@@ -97,8 +98,10 @@ jobs:
             core.setOutput('local', 'false');
             const pr = context.payload.pull_request;
             const owner = context.repo.owner;
-            const trusted = pr.head.repo?.full_name === `${owner}/${context.repo.repo}`
-              && pr.user.login === owner && context.actor === owner;
+            const trusted = pr
+              ? pr.head.repo?.full_name === `${owner}/${context.repo.repo}`
+                && pr.user.login === owner && context.actor === owner
+              : context.eventName === 'workflow_dispatch' && context.actor === owner;
             if (!trusted || !process.env.RUNNER_STATUS_TOKEN) {
               core.info('Using GitHub macOS: local routing is unavailable for this run.');
               return;
