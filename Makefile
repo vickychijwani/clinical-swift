@@ -4,6 +4,14 @@ SWIFT ?= swift
 SWIFT_TEST_FLAGS ?=
 ONLY_TESTING ?=
 TEST_SELECTION = $(foreach selection,$(ONLY_TESTING),-only-testing:$(selection))
+TEST_CLASSES := $(sort $(foreach selection,$(ONLY_TESTING),$(word 1,$(subst /, ,$(selection)))/$(word 2,$(subst /, ,$(selection)))))
+# One class cannot use multiple runners. Keep bundle and multi-class runs parallel.
+UI_TEST_PARALLEL_ENABLED := YES
+ifeq ($(words $(TEST_CLASSES)),1)
+ifneq ($(word 2,$(subst /, ,$(firstword $(ONLY_TESTING)))),)
+UI_TEST_PARALLEL_ENABLED := NO
+endif
+endif
 
 XCODE_DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR := $(XCODE_DEVELOPER_DIR)
@@ -62,7 +70,7 @@ NATIVE_ARCH := $(shell uname -m)
 TEST_BUILD_SETTINGS := ENABLE_TESTABILITY=YES DEBUG_INFORMATION_FORMAT=dwarf ONLY_ACTIVE_ARCH=YES ARCHS=$(NATIVE_ARCH)
 XCODEBUILD_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
 UNIT_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
-UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)" -parallel-testing-enabled YES $(TEST_BUILD_SETTINGS)
+UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)" -parallel-testing-enabled $(UI_TEST_PARALLEL_ENABLED) $(TEST_BUILD_SETTINGS)
 BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
 
 .DEFAULT_GOAL := build-and-run
@@ -89,6 +97,7 @@ help:
 		"  make backup-export-credentials  Save test credentials outside the repo" \
 		"  make ui-test          Run UI tests" \
 		"                        app-test and ui-test accept ONLY_TESTING='Bundle/Class[/method] ...'" \
+		"                        UI filters for one class run in sequence; other UI runs use parallel runners" \
 		"" \
 		"Xcode Cloud:" \
 		"  make xcode-cloud-build  Start the configured workflow on its default branch" \
