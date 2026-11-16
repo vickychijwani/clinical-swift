@@ -20,13 +20,14 @@ app lockfile before it runs tests with automatic resolution disabled.
 
 ## Local CI runner
 
-UI CI uses the `clinical-ios` ARM64 runner on the local Mac when it is online
-and idle. Otherwise it uses GitHub's macOS runner. Its local work directory
-is `~/ci/clinical-swift/work`; the runner keeps the same checkout path across jobs.
-Build state stays in `~/ci/clinical-swift/cache`, outside checkout cleanup, with a
-separate cache for each Xcode build. UI tests run in parallel simulator clones
-of `CI Simulator 1` (iPhone 17, iOS 26.5). Keep this simulator for CI so tests
-cannot change a development simulator's data.
+UI and local backup CI use the `clinical-ios` ARM64 runner on the local Mac when
+it is online and idle. Otherwise they use GitHub's macOS runner with cached
+`DerivedData`. Its local work directory is `~/ci/clinical-swift/work`; the runner
+keeps the same checkout path across jobs. Build state stays in
+`~/ci/clinical-swift/cache`, outside checkout cleanup, with a separate cache for
+each Xcode build. UI tests run in parallel simulator clones of `CI Simulator 1`
+(iPhone 17, iOS 26.5), and local backup tests run on `CI Simulator 1`. Keep this
+simulator for CI so tests cannot change a development simulator's data.
 
 The runner is a login service. The Mac must be awake, connected, and logged in.
 To check or restart it:
@@ -48,10 +49,10 @@ xcrun simctl create 'CI Simulator 1' \
 xcrun simctl bootstatus 'CI Simulator 1' -b
 ```
 
-Local UI jobs accept only non-draft PRs opened by the repository owner from
+Local runner jobs accept only non-draft PRs opened by the repository owner from
 this repository, with runs triggered by that owner. Review changes before
 allowing other contributors to use this runner: jobs run with the local user's
-access. Other non-draft PRs use GitHub's macOS runner for UI tests.
+access. Other non-draft PRs use GitHub's macOS runner.
 
 The routing check needs the repository Actions secret `RUNNER_STATUS_TOKEN`:
 use a fine-grained token limited to this repository with Administration read
@@ -59,8 +60,8 @@ permission. Missing or expired credentials and failed status checks select
 GitHub's macOS runner. The check is a snapshot: if the Mac disconnects after
 selection, GitHub can still queue the job until the runner returns.
 
-App unit tests, local backup tests, Linux tests, and architecture
-validation use GitHub-hosted runners.
+App unit tests, Linux tests, and architecture validation use GitHub-hosted
+runners. App unit tests also cache `DerivedData` on the hosted runner.
 
 ## Test boundaries
 
