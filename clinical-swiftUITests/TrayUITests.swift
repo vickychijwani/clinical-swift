@@ -11,7 +11,7 @@ nonisolated final class TrayUITests: XCTestCase {
         let appointment = app.buttons[appointmentID]
         XCTAssertTrue(appointment.hittableOrWait(timeout: 5))
         appointment.tap()
-        XCTAssertTrue(app.navigationBars["Appointment"].hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Appointment"].stableFrameOrWait(timeout: 5))
         return app
     }
 
@@ -20,10 +20,10 @@ nonisolated final class TrayUITests: XCTestCase {
         let app = launch()
         let original = app.navigationBars["Appointment"].frame
         app.buttons["View Patient"].tap()
-        XCTAssertTrue(app.navigationBars["Patient Details"].existsOrWait(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Patient Details"].stableFrameOrWait(timeout: 3))
         XCTAssertEqual(app.navigationBars["Patient Details"].frame.minY, original.minY, accuracy: 1)
         app.navigationBars.buttons["BackButton"].tap()
-        XCTAssertTrue(app.navigationBars["Appointment"].existsOrWait(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Appointment"].stableFrameOrWait(timeout: 3))
         XCTAssertEqual(app.navigationBars["Appointment"].frame.minY, original.minY, accuracy: 1)
         app.buttons["Close"].tap()
         XCTAssertTrue(app.navigationBars["Appointment"].absentOrWait(timeout: 3))
