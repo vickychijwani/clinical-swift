@@ -2,6 +2,8 @@ SHELL := /bin/bash
 
 SWIFT ?= swift
 SWIFT_TEST_FLAGS ?=
+ONLY_TESTING ?=
+TEST_SELECTION = $(foreach selection,$(ONLY_TESTING),-only-testing:$(selection))
 
 XCODE_DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR := $(XCODE_DEVELOPER_DIR)
@@ -65,7 +67,7 @@ BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" 
 
 .DEFAULT_GOAL := build-and-run
 
-.PHONY: data-test
+.PHONY: data-test app-test
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
@@ -78,6 +80,7 @@ help:
 		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when none is running" \
 		"  make build            Build the app" \
 		"  make test             Run unit tests" \
+		"  make app-test         Run app unit tests without package tests" \
 		"  make data-test        Run model and persistence tests without Xcode" \
 		"  make backup-test      Run local backup safety tests (no network)" \
 		"  make backup-drive-check  Verify a synthetic backup through real Drive" \
@@ -85,6 +88,7 @@ help:
 		"  make backup-authorize  Open internal Google test-account setup" \
 		"  make backup-export-credentials  Save test credentials outside the repo" \
 		"  make ui-test          Run UI tests" \
+		"                        app-test and ui-test accept ONLY_TESTING='Bundle/Class[/method] ...'" \
 		"" \
 		"Xcode Cloud:" \
 		"  make xcode-cloud-build  Start the configured workflow on its default branch" \
@@ -184,9 +188,12 @@ build: check-tools check-simulator prepare
 
 test: check-tools check-simulator prepare
 	@$(MAKE) --no-print-directory data-test
+	@$(MAKE) --no-print-directory app-test
+
+app-test: check-tools check-simulator prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
-		$(UNIT_TEST_FLAGS) \
+		$(UNIT_TEST_FLAGS) $(TEST_SELECTION) \
 		test \
 		2>&1 | tee "$(LOG_DIR)/test.log" | $(XCBEAUTIFY); \
 	status=$$?; \
@@ -227,7 +234,7 @@ release-verify: check-simulator prepare
 ui-test: check-tools check-simulator prepare
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
-		$(UI_TEST_FLAGS) \
+		$(UI_TEST_FLAGS) $(TEST_SELECTION) \
 		test \
 		2>&1 | tee "$(LOG_DIR)/ui-test.log" | $(XCBEAUTIFY)
 
