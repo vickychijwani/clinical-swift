@@ -23,9 +23,9 @@ nonisolated func createAccountEntrySchema(_ db: Database) throws {
                 OR (kind = 'receipt' AND appointmentID IS NULL AND category IS NOT NULL AND (
                   (category = 'patientFees' AND patientID IS NOT NULL)
                   OR (category IN ('externalConsultations','referralCommissions','otherReceipts') AND patientID IS NULL)))
-                OR (kind = 'expense' AND patientID IS NULL AND appointmentID IS NULL AND category IS NOT NULL
-                  AND category IN ('rent','staff','consultants','utilities','materials','repairsAndMaintenance',
-                    'otherOperatingCosts','equipmentPurchases','clinicImprovements'))
+                OR (kind = 'expense' AND patientID IS NULL AND appointmentID IS NULL AND (
+                  category IS NULL OR category IN ('rent','staff','consultants','utilities','materials',
+                    'repairsAndMaintenance','otherOperatingCosts','equipmentPurchases','clinicImprovements')))
               )
             ) STRICT;
             CREATE INDEX idx_accountEntries_patient ON accountEntries(patientID, entryDate, createdAt, id);

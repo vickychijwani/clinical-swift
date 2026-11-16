@@ -7,6 +7,16 @@ struct PaymentsView: View {
 
     var body: some View {
         List {
+            Section {
+                PaymentEntryForm()
+                    // Keep the controls and glass shadow inside the grouped row's clip.
+                    .padding()
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+            .listSectionMargins(.horizontal, 0)
+            .listSectionSeparator(.hidden)
             if model.error != nil {
                 Text("Payments could not be loaded.")
                     .foregroundStyle(AppColor.secondaryText)

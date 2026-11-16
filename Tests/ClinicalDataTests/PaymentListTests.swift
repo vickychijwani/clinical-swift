@@ -54,6 +54,13 @@ struct PaymentListTests {
             #expect(row.entry.paymentMethod == method)
         }
         #expect(try PaymentListFixture.item().method == nil)
+        #expect(
+            try PaymentListFixture.item(.expense(category: nil, paymentMethod: nil)).title
+                == "Unknown")
+        #expect(
+            try PaymentListFixture.item(
+                .expense(category: nil, paymentMethod: .cash), note: "Dental Lab"
+            ).title == "Dental Lab")
         for category in AccountEntry.ExpenseCategory.allCases {
             let row = try PaymentListFixture.item(.expense(category: category, paymentMethod: nil))
             #expect(!row.title.isEmpty && row.title != "Unknown")
