@@ -194,7 +194,7 @@ jobs:
             -destination "$TEST_DESTINATION" \
             -destination-timeout 120 \
             -disableAutomaticPackageResolution \
-            -parallel-testing-enabled NO \
+            -parallel-testing-enabled YES \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_ALLOWED=YES test

@@ -4,6 +4,10 @@ import OSLog
 import SQLiteData
 import SwiftUI
 
+#if DEBUG
+    import UIKit
+#endif
+
 @main
 struct ClinicalApp: App {
     @Environment(\.scenePhase) private var scenePhase
@@ -14,6 +18,12 @@ struct ClinicalApp: App {
     private let calendarSyncCoordinator: CalendarSyncCoordinator?
 
     init() {
+        #if DEBUG
+            if CommandLine.arguments.contains(where: { $0.hasPrefix("--ui-testing-") }) {
+                // Skip transition animations during UI tests so XCTest idle waits settle immediately.
+                UIView.setAnimationsEnabled(false)
+            }
+        #endif
         let router = Router()
         _router = State(initialValue: router)
         let startup = AppStartup.load(router: router)

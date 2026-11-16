@@ -24,9 +24,9 @@ UI CI uses the `clinical-ios` ARM64 runner on the local Mac when it is online
 and idle. Otherwise it uses GitHub's macOS runner. Its local work directory
 is `~/ci/clinical-swift/work`; the runner keeps the same checkout path across jobs.
 Build state stays in `~/ci/clinical-swift/cache`, outside checkout cleanup, with a
-separate cache for each Xcode build. UI tests run in sequence on `CI Simulator 1`
-(iPhone 17, iOS 26.5). Keep this simulator for CI so tests cannot change a
-development simulator's data.
+separate cache for each Xcode build. UI tests run in parallel simulator clones
+of `CI Simulator 1` (iPhone 17, iOS 26.5). Keep this simulator for CI so tests
+cannot change a development simulator's data.
 
 The runner is a login service. The Mac must be awake, connected, and logged in.
 To check or restart it:

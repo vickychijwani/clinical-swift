@@ -55,7 +55,7 @@ XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
 	-skipPackageUpdates
 XCODEBUILD_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
 UNIT_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO
-UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)"
+UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)" -parallel-testing-enabled YES
 BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO ENABLE_TESTABILITY=YES
 
 .DEFAULT_GOAL := build-and-run
