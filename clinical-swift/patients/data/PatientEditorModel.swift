@@ -12,6 +12,7 @@ final class PatientEditorModel {
     private let editedPatient: Patient?
     private let originalDraft: PatientDraft
 
+    private(set) var isSaving = false
     var draft: PatientDraft
     private(set) var saveErrorMessage: String?
 
@@ -36,6 +37,9 @@ final class PatientEditorModel {
     }
 
     func save() async -> Patient? {
+        guard !isSaving else { return nil }
+        isSaving = true
+        defer { isSaving = false }
         saveErrorMessage = nil
         let normalizedDraft = draft.normalized
 

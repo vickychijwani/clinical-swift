@@ -7,6 +7,35 @@ import Testing
 
 @MainActor
 struct RouterTests {
+    @Test func staleFieldTrayExitCannotClearAReplacement() throws {
+        let router = withDependencies {
+            $0.calendar = Calendar(identifier: .gregorian)
+        } operation: {
+            Router()
+        }
+        router.requestScheduleCreation()
+        let oldID = try #require(router.activePresentation?.id)
+        router.presentationDidAppear(oldID)
+        router.requestPatientCreation()
+        router.presentationDidDismiss(oldID, retainingScheduleEditor: oldID)
+        let newID = try #require(router.patientEditRequest?.id)
+        router.presentationDidAppear(newID)
+        router.presentationDidDismiss(oldID, retainingScheduleEditor: oldID)
+        #expect(router.activePresentation?.id == newID)
+    }
+
+    @Test func staleAppearanceAndDismissalDoNotAffectANewSession() throws {
+        let router = makeRouter()
+        router.presentDetails(.patient(UUID()))
+        let oldID = try #require(router.detailsPresentation?.id)
+        router.requestScheduleCreation()
+        let newID = try #require(router.scheduleCreationRequest?.id)
+        router.presentationDidAppear(newID)
+        router.presentationDidAppear(oldID)
+        router.presentationDidDismiss(oldID)
+        #expect(router.activePresentation?.id == newID)
+    }
+
     @Test func patientSelectionDismissalRetainsEditorAndAllowsImmediateInterruption() throws {
         let router = makeRouter()
         router.requestScheduleCreation()

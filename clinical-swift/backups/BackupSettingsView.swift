@@ -5,7 +5,7 @@ import SwiftUI
 struct BackupSettingsView: View {
     @Environment(BackupCoordinator.self) private var backups
     @Environment(\.webAuthenticationSession) private var authentication
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.trayDismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -58,6 +58,7 @@ struct BackupSettingsView: View {
                 }
             }
         }
+        .trayOptions(size: .full)
     }
 }
 

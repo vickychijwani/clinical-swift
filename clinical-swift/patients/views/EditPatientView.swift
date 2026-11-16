@@ -4,9 +4,11 @@ import SQLiteData
 import SwiftUI
 
 struct EditPatientView: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.trayDismiss) private var dismiss
 
     @State private var model: PatientEditorModel
+    @State private var dobRequest: DOBRequest?
+    @State private var draftDOB = Date()
     private let onSave: @MainActor (Patient) -> Void
 
     init(
@@ -24,21 +26,27 @@ struct EditPatientView: View {
         @Bindable var model = model
 
         NavigationStack {
-            ConfirmingFormSheet(
+            ConfirmingTray(
                 hasUnsavedChanges: model.hasUnsavedChanges,
                 title: "Discard unsaved changes?",
-                message: "Your patient details have not been saved."
+                message: "Your patient details have not been saved.",
+                allowsInteractiveDismiss: !model.isSaving
             ) { guardedDismiss in
                 EditPatientForm(
                     draft: $model.draft,
+                    dobRequest: $dobRequest,
+                    draftDOB: $draftDOB,
                     title: model.title,
                     guardedDismiss: guardedDismiss,
                     savePatient: savePatient
                 )
             }
         }
-        .modifier(FittedSheetModifier(fitsVertically: true))
+        .disabled(model.isSaving)
         .background(AppColor.canvas)
+        .trayStep(item: $dobRequest) { _ in
+            PatientDOBPicker(dob: $model.draft.dob, draftDOB: $draftDOB)
+        }
         .alert(
             "Unable to save patient",
             isPresented: Binding(
@@ -64,22 +72,26 @@ struct EditPatientView: View {
 
 private struct EditPatientForm: View {
     @Binding var draft: PatientDraft
+    @Binding var dobRequest: DOBRequest?
+    @Binding var draftDOB: Date
     let title: String
-    let guardedDismiss: FormSheetDismissAction
+    let guardedDismiss: TrayCancelAction
     let savePatient: @MainActor () async -> Void
 
-    @State private var isPickingDOB = false
-    @State private var draftDOB = Date()
     @State private var areOptionalDetailsExpanded = false
     @State private var hasRequestedContactsAccess = false
 
     init(
         draft: Binding<PatientDraft>,
+        dobRequest: Binding<DOBRequest?>,
+        draftDOB: Binding<Date>,
         title: String,
-        guardedDismiss: FormSheetDismissAction,
+        guardedDismiss: TrayCancelAction,
         savePatient: @escaping @MainActor () async -> Void
     ) {
         self._draft = draft
+        self._dobRequest = dobRequest
+        self._draftDOB = draftDOB
         self.title = title
         self.guardedDismiss = guardedDismiss
         self.savePatient = savePatient
@@ -87,42 +99,47 @@ private struct EditPatientForm: View {
 
     var body: some View {
         Form {
-            Section {
-                PhoneField("Phone number", phone: $draft.phone.replacingNil()) { contactName in
-                    draft.prefillName(fromContactName: contactName)
-                } onContactPickerOpened: {
-                    await requestContactsAccessIfNeeded()
+            Group {
+                Section {
+                    PhoneField("Phone number", phone: $draft.phone.replacingNil()) { contactName in
+                        draft.prefillName(fromContactName: contactName)
+                    } onContactPickerOpened: {
+                        await requestContactsAccessIfNeeded()
+                    }
                 }
-            }
 
-            Section {
-                TextField("Name", text: $draft.name.replacingNil())
-                    .textContentType(.name)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-            }
-
-            Section {
-                DisclosureGroup("Optional details", isExpanded: $areOptionalDetailsExpanded) {
-                    PatientDOBField(
-                        title: "Date of birth",
-                        selection: $draft.dob,
-                        isPickingDOB: $isPickingDOB,
-                        draftDOB: $draftDOB
-                    )
-
-                    PatientGenderField(title: "Gender", selection: $draft.gender)
+                Section {
+                    TextField("Name", text: $draft.name.replacingNil())
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
                 }
+
+                Section {
+                    DisclosureGroup("Optional details", isExpanded: $areOptionalDetailsExpanded) {
+                        PatientDOBField(
+                            title: "Date of birth",
+                            selection: $draft.dob,
+                            dobRequest: $dobRequest,
+                            draftDOB: $draftDOB
+                        )
+
+                        PatientGenderField(title: "Gender", selection: $draft.gender)
+                    }
+                }
+                .fittedTrayContent()
             }
-            .fittedSheetContent()
+            // The custom tray has no native sheet context to supply the subtle row fill.
+            .listRowBackground(Rectangle().fill(.quinary))
         }
         .listSectionSpacing(.compact)
         .scrollContentBackground(.hidden)
+        .containerBackground(AppColor.canvas, for: .navigation)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                FormSheetCancelButton(action: guardedDismiss)
+                TrayCancelButton(action: guardedDismiss)
             }
 
             ToolbarItem(placement: .confirmationAction) {
@@ -131,9 +148,6 @@ private struct EditPatientForm: View {
                 }
                 .labelStyle(.iconOnly)
             }
-        }
-        .sheet(isPresented: $isPickingDOB) {
-            PatientDOBPicker(dob: $draft.dob, draftDOB: $draftDOB, isPresented: $isPickingDOB)
         }
     }
 
@@ -146,16 +160,20 @@ private struct EditPatientForm: View {
     }
 }
 
+private nonisolated struct DOBRequest: Identifiable, Sendable {
+    let id = UUID()
+}
+
 private struct PatientDOBField: View {
     let title: String
     @Binding var selection: Date?
-    @Binding var isPickingDOB: Bool
+    @Binding var dobRequest: DOBRequest?
     @Binding var draftDOB: Date
 
     var body: some View {
         Button {
             draftDOB = selection ?? Date()
-            isPickingDOB = true
+            dobRequest = DOBRequest()
         } label: {
             HStack {
                 Text(title)
@@ -176,7 +194,7 @@ private struct PatientDOBField: View {
 private struct PatientDOBPicker: View {
     @Binding var dob: Date?
     @Binding var draftDOB: Date
-    @Binding var isPresented: Bool
+    @Environment(\.trayDismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -194,19 +212,19 @@ private struct PatientDOBPicker: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        isPresented = false
+                        dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dob = draftDOB
-                        isPresented = false
+                        dismiss()
                     }
                 }
             }
         }
-        .presentationDetents([.height(250)])
+        .trayOptions(size: .height(250))
     }
 }
 

@@ -82,8 +82,7 @@ struct ScheduleEditorSheet: View {
             }
             .disabled(session.isWorking)
         }
-        .presentationBackground(AppColor.canvas)
-        .presentationBackgroundInteraction(.disabled)
+        .trayOptions(size: .full, allowsInteractiveDismiss: !session.isWorking)
         .task(id: session.itemType) {
             focusedField = nil
             await Task.yield()
@@ -98,7 +97,7 @@ struct ScheduleEditorSheet: View {
             // Search text changes must not restart the query or change its time boundary.
             _ = try? await patientRows.load(appointmentBookingPatientRowsQuery(now: now))
         }
-        .sheet(item: $patientCreationRequest, onDismiss: { focusedField = session.itemType }) {
+        .trayStep(item: $patientCreationRequest, onDismiss: { focusedField = session.itemType }) {
             request in
             EditPatientView(initialDraft: request.initialDraft) { patient in
                 session.selectPatient(patient)
@@ -112,7 +111,7 @@ struct ScheduleEditorSheet: View {
         return items.filter { PatientNameSearch.matches($0.patient.name, searchText: query) }
     }
 }
-private struct PatientCreationRequest: Identifiable {
+private nonisolated struct PatientCreationRequest: Identifiable, Sendable {
     let id = UUID()
     let initialDraft: PatientDraft
 }

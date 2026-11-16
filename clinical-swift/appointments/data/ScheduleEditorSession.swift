@@ -325,3 +325,13 @@ nonisolated struct ScheduleEditorScrollRequest: Equatable {
     let date: Date
     let revision: Int
 }
+
+/// The timeline owns this session. The app root reads it to present fields on the shared surface.
+@MainActor @Observable
+final class ScheduleEditorStore {
+    var session: ScheduleEditorSession?
+
+    init(session: ScheduleEditorSession? = nil) {
+        self.session = session
+    }
+}

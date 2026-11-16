@@ -16,6 +16,12 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
             forDuration: 0.05,
             thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95)))
         XCTAssertTrue(detailsBar.exists)
+        XCTAssertTrue(app.buttons["Discard Changes"].hittableOrWait(timeout: 3))
+        if app.buttons["Keep Editing"].exists {
+            app.buttons["Keep Editing"].tap()
+        } else {
+            app.otherElements["PopoverDismissRegion"].firstMatch.tap()
+        }
         app.buttons["Close"].tap()
         XCTAssertTrue(app.buttons["Discard Changes"].hittableOrWait(timeout: 3))
         if app.buttons["Keep Editing"].exists {

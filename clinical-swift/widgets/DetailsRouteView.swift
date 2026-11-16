@@ -1,11 +1,11 @@
 import SwiftUI
 
 struct DetailsRouteView: View {
-    @Environment(Router.self) private var router
     let route: Route
     // Forward the stable sheet-session identity so async appointment resolution cannot align the
     // schedule on behalf of a details flow that has since been replaced.
     let presentationID: DetailsPresentation.ID
+    let completionDrafts: [UUID: AppointmentCompletionModel]
     let onNavigate: @MainActor @Sendable (Route) -> Void
 
     var body: some View {
@@ -23,7 +23,7 @@ struct DetailsRouteView: View {
                     onNavigate(.patient(patientID))
                 }
             case .appointmentCompletion(let visitID):
-                if let model = router.detailsPresentation?.completionDrafts[visitID] {
+                if let model = completionDrafts[visitID] {
                     AppointmentCompletionView(model: model, presentationID: presentationID)
                 }
             }
