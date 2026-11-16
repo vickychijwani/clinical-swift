@@ -107,6 +107,7 @@ private struct EditPatientForm: View {
                         await requestContactsAccessIfNeeded()
                     }
                 }
+                .fittedTrayContent()
 
                 Section {
                     TextField("Name", text: $draft.name.replacingNil())
@@ -133,6 +134,7 @@ private struct EditPatientForm: View {
             .listRowBackground(Rectangle().fill(.quinary))
         }
         .listSectionSpacing(.compact)
+        .fittedTrayScroll()
         .scrollContentBackground(.hidden)
         .containerBackground(AppColor.canvas, for: .navigation)
         .navigationTitle(title)

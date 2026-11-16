@@ -87,6 +87,15 @@ where Item.ID == UUID {
     @State private var options: TrayOptions?
     @State private var fittedHeight: CGFloat?
 
+    private var animates: Bool {
+        #if DEBUG
+            // UIKit's animation switch does not stop SwiftUI tray motion during UI tests.
+            !CommandLine.arguments.contains(where: { $0.hasPrefix("--ui-testing-") })
+        #else
+            true
+        #endif
+    }
+
     var body: some View {
         let layout = TrayLayout.resolve(
             sizing: options?.size ?? .full,
@@ -136,8 +145,8 @@ where Item.ID == UUID {
                 .offset(
                     y: isVisible ? dragOffset : layout.height * layout.scale + layout.bottomMargin
                 )
-                .animation(.spring(duration: 0.28, bounce: 0), value: options?.size)
-                .animation(.spring(duration: 0.28, bounce: 0), value: fittedHeight)
+                .animation(animates ? .spring(duration: 0.28, bounce: 0) : nil, value: options?.size)
+                .animation(animates ? .spring(duration: 0.28, bounce: 0) : nil, value: fittedHeight)
                 .allowsHitTesting(phase != .exiting(surfaceID))
                 .simultaneousGesture(
                     DragGesture()
@@ -158,7 +167,7 @@ where Item.ID == UUID {
         .onChange(of: fittedHeight) { enterIfReady() }
         .onChange(of: phase, initial: true) {
             guard phase == .exiting(surfaceID) else { return }
-            withAnimation(.easeIn(duration: 0.13), completionCriteria: .removed) {
+            withAnimation(animates ? .easeIn(duration: 0.13) : nil, completionCriteria: .removed) {
                 isVisible = false
                 dragOffset = 0
             } completion: {
@@ -172,7 +181,7 @@ where Item.ID == UUID {
         guard !isVisible, phase == .entering(surfaceID),
             let options, options.size != .fitted || fittedHeight != nil
         else { return }
-        withAnimation(.spring(duration: 0.24, bounce: 0), completionCriteria: .removed) {
+        withAnimation(animates ? .spring(duration: 0.24, bounce: 0) : nil, completionCriteria: .removed) {
             isVisible = true
         } completion: {
             didEnter()
@@ -196,7 +205,7 @@ where Item.ID == UUID {
         {
             requestInteractiveDismiss()
         }
-        withAnimation(.spring(duration: 0.24, bounce: 0)) { dragOffset = 0 }
+        withAnimation(animates ? .spring(duration: 0.24, bounce: 0) : nil) { dragOffset = 0 }
     }
 }
 

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Dependencies
 import Foundation
 import Testing
@@ -60,6 +61,28 @@ struct TrayTests {
             sizing: .fitted, size: size, topInset: 62, bottomInset: 34, fittedHeight: 2_000)
         #expect(overflow == full)
         #expect(full.topEdge == 62)
+    }
+
+    @Test func fittedHeightDoesNotFollowFormScrollingOrViewportHeight() {
+        let sections = [
+            CGRect(x: 16, y: 60, width: 370, height: 50),
+            CGRect(x: 16, y: 184, width: 370, height: 50),
+        ]
+        let viewport = CGRect(x: 0, y: 44, width: 402, height: 500)
+        let expected = TrayFitting.height(frames: sections, viewport: viewport)
+        #expect(expected == 250)
+        for offset in [-120.0, -24, 12, 96] {
+            let scrolled = sections.map { $0.offsetBy(dx: 0, dy: offset) }
+            #expect(TrayFitting.height(frames: scrolled, viewport: viewport) == expected)
+            #expect(
+                TrayFitting.height(
+                    frames: scrolled, viewport: CGRect(x: 0, y: 44, width: 402, height: 100))
+                    == expected)
+        }
+        let expanded = [sections[0], CGRect(x: 16, y: 184, width: 370, height: 150)]
+        #expect(TrayFitting.height(frames: expanded, viewport: viewport) == expected + 100)
+        #expect(TrayFitting.height(frames: [], viewport: viewport) == 0)
+        #expect(TrayFitting.height(frames: [sections[0]], viewport: viewport) == 0)
     }
 
     @Test func exitRetainsContentAndOnlyActivatesTheNewestReplacement() throws {
