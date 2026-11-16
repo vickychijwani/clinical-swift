@@ -15,7 +15,10 @@ CLINICAL_BACKUP_CHECK_CREDENTIALS ?= $(HOME)/.config/clinical-backups/check-cred
 CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
 SIMULATOR_OS ?= 27.0
-SIMULATOR_ID ?= $(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun simctl list devices --json 2>/dev/null | python3 -c 'import json, sys; devices=json.load(sys.stdin)["devices"]; ios=[d for runtime, items in devices.items() if runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-") for d in items]; running=[d for d in ios if d["state"] == "Booted"]; runtime="iOS-" + "-".join("$(SIMULATOR_OS)".split(".")); fallback=[d for key, items in devices.items() if key.endswith(runtime) for d in items if d["name"] == "$(SIMULATOR)"]; choices=running or fallback; print(choices[0]["udid"] if choices else "")' 2>/dev/null)
+ifeq ($(origin SIMULATOR_ID), undefined)
+# Skip CI simulators so manual make runs cannot touch CI data; check-simulator also rejects overrides.
+SIMULATOR_ID := $(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun simctl list devices --json 2>/dev/null | python3 -c 'import json, sys; sim, os_ver = sys.argv[1], sys.argv[2]; is_ci = lambda n: any(k in n.strip().lower() for k in ("ci simulator", "clinical ci")); devices = json.load(sys.stdin)["devices"] if not is_ci(sim) else {}; ios = [d for k, items in sorted(devices.items()) if k.startswith("com.apple.CoreSimulator.SimRuntime.iOS-") for d in items if d.get("isAvailable", True) and not is_ci(d["name"])]; running = [d for d in ios if d.get("state") == "Booted"]; rt = "iOS-" + "-".join(os_ver.split(".")); fallback = [d for k, items in sorted(devices.items()) if k.endswith("." + rt) for d in items if d.get("isAvailable", True) and not is_ci(d["name"]) and d["name"] == sim]; choices = running or fallback; print(choices[0]["udid"] if choices else "")' "$(SIMULATOR)" "$(SIMULATOR_OS)" 2>/dev/null)
+endif
 BUNDLE_ID := in.bitehaus.clinical
 APP_NAME := Clinical
 TEAM_ID := WM7GP7FBL7
@@ -71,7 +74,7 @@ data-test:
 help:
 	@printf "%s\n" \
 		"Targets:" \
-		"  make                  Build, install, and run on the running iOS simulator" \
+		"  make                  Build, install, and run on a running non-CI iOS simulator" \
 		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when none is running" \
 		"  make build            Build the app" \
 		"  make test             Run unit tests" \
@@ -132,7 +135,20 @@ check-tools:
 	@test -d "$(DEVELOPER_DIR)" || { echo "Xcode developer directory not found: $(DEVELOPER_DIR)"; exit 1; }
 
 check-simulator:
-	@test -n "$(SIMULATOR_ID)" || { echo "No running iOS simulator was found, and fallback $(SIMULATOR) (iOS $(SIMULATOR_OS)) is unavailable."; exit 1; }
+	@python3 -c 'import json, subprocess, sys; \
+sim, os_ver, sim_id, dest = sys.argv[1:5]; \
+is_ci = lambda n: any(k in n.strip().lower() for k in ("ci simulator", "clinical ci")); \
+fail = lambda m: (print(m, file=sys.stderr), sys.exit(1)); \
+is_ci(sim) and fail("Refusing to use simulator \"%s\": CI simulators are reserved for CI." % sim); \
+fields = {k.strip().lower(): v.strip() for part in dest.split(",") if "=" in part for k, v in [part.split("=", 1)]}; \
+[fail("Refusing to use destination \"%s\": CI simulators are reserved for CI." % dest) for k in ("name", "id") if is_ci(fields.get(k, ""))]; \
+sim_id.strip() or fail("No running non-CI iOS simulator was found, and fallback %s (iOS %s) is unavailable." % (sim, os_ver)); \
+is_ci(sim_id) and fail("Refusing to use simulator \"%s\": CI simulators are reserved for CI." % sim_id); \
+proc = subprocess.run(["xcrun", "simctl", "list", "devices", "--json"], capture_output=True, text=True); \
+proc.returncode == 0 or fail("Unable to inspect iOS simulators with xcrun simctl."); \
+all_devs = [d for items in json.loads(proc.stdout)["devices"].values() for d in items]; \
+match = lambda x: next((d for d in all_devs if (d["udid"].lower() == x.lower() or d["name"] == x) and is_ci(d["name"])), None); \
+[fail("Refusing to use simulator \"%s\" (%s): CI simulators are reserved for CI." % (d["name"], d["udid"])) for target in (sim_id.strip(), fields.get("id", "")) if target for d in [match(target)] if d]' "$(SIMULATOR)" "$(SIMULATOR_OS)" "$(SIMULATOR_ID)" "$(DESTINATION)"
 
 check-app-store-connect-tools:
 	@command -v $(firstword $(SWIFT)) >/dev/null
@@ -201,7 +217,7 @@ backup-export-credentials: check-simulator
 	@CLINICAL_BACKUP_CHECK_CREDENTIALS="$(CLINICAL_BACKUP_CHECK_CREDENTIALS)" scripts/export_backup_check_credentials.sh "$(SIMULATOR_ID)"
 
 # Keep the checks inside one recipe so make -j cannot run them concurrently.
-release-verify: prepare
+release-verify: check-simulator prepare
 	@python3 scripts/backup_candidate.py capture "$(BUILD_DIR)/backup-candidate.json"
 	@$(MAKE) --no-print-directory backup-test CONFIGURATION=Release
 	@$(MAKE) --no-print-directory backup-drive-check CONFIGURATION=Release
