@@ -20,14 +20,16 @@ app lockfile before it runs tests with automatic resolution disabled.
 
 ## Local CI runner
 
-UI and local backup CI use the `clinical-ios` ARM64 runner on the local Mac when
-it is online and idle. Otherwise they use GitHub's macOS runner with cached
-`DerivedData`. Its local work directory is `~/ci/clinical-swift/work`; the runner
-keeps the same checkout path across jobs. Build state stays in
-`~/ci/clinical-swift/cache`, outside checkout cleanup, with a separate cache for
-each Xcode build. UI tests run in parallel simulator clones of `CI Simulator 1`
-(iPhone 17, iOS 26.5), and local backup tests run on `CI Simulator 1`. Keep this
-simulator for CI so tests cannot change a development simulator's data.
+iOS CI (`App unit tests`, `Local backup tests`, and `UI tests`) uses the
+`clinical-ios` ARM64 runner on the local Mac when it is online and idle.
+Otherwise it uses GitHub's macOS runner with cached `DerivedData`. Its local
+work directory is `~/ci/clinical-swift/work`; the runner keeps the same checkout
+path across jobs. Build state stays in `~/ci/clinical-swift/cache`, outside
+checkout cleanup, with separate `DerivedData` directories for `Debug` and
+`Release` in each Xcode build. UI tests run in parallel simulator clones of
+`CI Simulator 1` (iPhone 17, iOS 26.5), and unit and local backup tests run on
+`CI Simulator 1`. Keep this simulator for CI so tests cannot change a
+development simulator's data.
 
 The runner is a login service. The Mac must be awake, connected, and logged in.
 To check or restart it:
@@ -60,8 +62,7 @@ permission. Missing or expired credentials and failed status checks select
 GitHub's macOS runner. The check is a snapshot: if the Mac disconnects after
 selection, GitHub can still queue the job until the runner returns.
 
-App unit tests, Linux tests, and architecture validation use GitHub-hosted
-runners. App unit tests also cache `DerivedData` on the hosted runner.
+Linux tests and architecture validation use GitHub-hosted runners.
 
 ## Test boundaries
 
