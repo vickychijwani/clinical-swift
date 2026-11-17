@@ -5,6 +5,7 @@ import SwiftUI
 struct TimelineItemView: View {
     static let cardShape = RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
 
+    @Environment(\.appointmentZoomNamespace) private var appointmentZoom
     let item: TimelineItem
     let size: CGSize
     let isDraft: Bool
@@ -48,6 +49,11 @@ struct TimelineItemView: View {
             )
         }
         .buttonStyle(TimelineCardButtonStyle())
+        .modifier(
+            AppointmentZoomSource(
+                item: item, namespace: isDraft ? nil : appointmentZoom,
+                isDeemphasized: isDeemphasized)
+        )
         .allowsHitTesting(interactionsEnabled)
         // UI tests use the item type and ID to select each card.
         .accessibilityIdentifier(item.id.sortKey)
@@ -92,6 +98,29 @@ struct TimelineItemView: View {
                 // Leave the duration handle its own touch area below the card.
                 .offset(y: size.height + 4)
             }
+        }
+    }
+}
+
+private struct AppointmentZoomSource: ViewModifier {
+    @Environment(\.appointmentZoomSourceID) private var sourceID
+    let item: TimelineItem
+    let namespace: Namespace.ID?
+    let isDeemphasized: Bool
+
+    func body(content: Content) -> some View {
+        if case .appointment(let appointment) = item, let namespace {
+            content.matchedTransitionSource(id: appointment.id, in: namespace)
+                .background {
+                    // SwiftUI hides the active source. Keep only that card visible below it.
+                    if appointment.id == sourceID {
+                        ScheduleItemCard(item: item, isDeemphasized: isDeemphasized)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+        } else {
+            content
         }
     }
 }

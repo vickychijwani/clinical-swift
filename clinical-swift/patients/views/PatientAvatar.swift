@@ -2,15 +2,17 @@ import ClinicalModels
 import SwiftUI
 
 struct PatientAvatar: View {
+    @Environment(\.appPalette) private var palette
     let patient: Patient
 
     var body: some View {
         Text(initials)
             .font(.headline.pointSize(13))
             .bold()
-            .foregroundStyle(AppColor.success)
+            .foregroundStyle(palette[.success])
             .frame(width: 34, height: 34)
-            .background(AppColor.success.opacity(0.16))
+            // A concrete color keeps this opacity under the sheet's native materials.
+            .background(palette[.success].opacity(0.16))
             .clipShape(.circle)
             .accessibilityHidden(true)
     }
