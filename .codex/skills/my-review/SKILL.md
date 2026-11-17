@@ -18,4 +18,3 @@ Review changes from ALL of the following perspectives:
 
 - If given a PR, post comments on the PR directly at appropriate places.
 - Write in a highly readable, friendly, concise style. Be concrete instead of abstract.
-- Because you're posting with my credentials - briefly identify yourself (harness, model, effort - whatever is available) once at the end of the top-level comment in the review batch, formatted in italics: "— Review by Antigravity · Gemini 4 Hydrogen", "— Committed by Codex · GPT-6.1 Sol", "— Resolved by Antigravity · Opus 5.5".
