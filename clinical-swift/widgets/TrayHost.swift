@@ -30,9 +30,10 @@ where Item.ID == UUID {
                                         },
                                         dismiss: { item = nil }),
                                     size: geometry.size, safeArea: container.safeAreaInsets,
-                                    keyboardHeight: keyboardContainer.safeAreaInsets.bottom
-                                        > container.safeAreaInsets.bottom
-                                        ? keyboardContainer.safeAreaInsets.bottom : 0,
+                                    keyboardHeight: max(
+                                        0,
+                                        keyboardContainer.safeAreaInsets.bottom
+                                            - container.safeAreaInsets.bottom),
                                     didEnter: { state.finishEntry(surfaceID) },
                                     didExit: {
                                         guard state.finishExit(surfaceID) else { return }
@@ -113,6 +114,7 @@ where Item.ID == UUID {
             .accessibilityIdentifier("tray-outside")
 
             content(item)
+                .trayOptions(size: .full)
                 .environment(\.trayDismiss, dismiss)
                 .overlayPreferenceValue(TrayOptionsKey.self) { value in
                     Color.clear
@@ -140,7 +142,9 @@ where Item.ID == UUID {
                     y: isVisible ? dragOffset : layout.height * layout.scale + layout.bottomMargin
                 )
                 .animation(
-                    animates ? .spring(duration: 0.28, bounce: 0) : nil, value: options?.size
+                    animates && phase == .visible(surfaceID)
+                        ? .spring(duration: 0.28, bounce: 0) : nil,
+                    value: options?.size
                 )
                 .allowsHitTesting(phase != .exiting(surfaceID))
                 .simultaneousGesture(

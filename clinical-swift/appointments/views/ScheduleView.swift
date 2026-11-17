@@ -21,17 +21,6 @@ struct ScheduleView: View {
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
 
-    private var editorSheet: Binding<ScheduleEditorSession?> {
-        Binding(
-            get: {
-                guard editorSession?.isShowingSheet == true else { return nil }
-                return editorSession
-            },
-            set: { value in
-                editorSession?.isShowingSheet = value != nil
-            })
-    }
-
     init() {
         scheduleModel = ScheduleModel()
     }
@@ -179,8 +168,7 @@ struct ScheduleView: View {
     }
 
     private var showsDesignLabs: Bool {
-        guard router.selectedTab == .schedule, router.schedulePath.isEmpty,
-            editorSheet.wrappedValue == nil
+        guard router.selectedTab == .schedule, router.schedulePath.isEmpty
         else { return false }
         switch router.activePresentation {
         case nil:

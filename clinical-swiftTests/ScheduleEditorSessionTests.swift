@@ -530,7 +530,7 @@ struct ScheduleEditorSessionTests {
             router.requestScheduleCreation()
             router.requestScheduleCreation()
             #expect(!session.finish(using: router, date: start))
-            router.presentationDidDismiss()
+            router.presentationDidDismiss(session.id)
             let replacementID = try #require(router.activePresentation?.id)
             #expect(!session.finish(using: router, date: start))
             #expect(router.activePresentation?.id == replacementID)

@@ -75,6 +75,12 @@ struct AppointmentCompletionInterruptionTests {
             let model = try #require(presentation.completionDrafts[visit])
             model.setAmountText("1000")
             model.selectMethod(.upi)
+            let policy = DetailsDismissal()
+            router.setDetailsPath([], presentationID: presentation.id)
+            policy.request(router: router, presentation: presentation)
+            #expect(policy.isConfirmingDiscard)
+            router.beginAppointmentCompletion(
+                fixture.details, visitID: visit, presentationID: presentation.id)
             let saving = Task { await model.save() }
             let deadline = ContinuousClock.now + .seconds(3)
             while !gate.isWaiting && ContinuousClock.now < deadline {
@@ -83,7 +89,9 @@ struct AppointmentCompletionInterruptionTests {
             try #require(gate.isWaiting)
             #expect(model.isSaving)
             #expect(presentation.isSavingCompletion)
-            let policy = DetailsDismissal()
+            policy.discard(router: router, presentation: presentation)
+            #expect(router.detailsPresentation === presentation)
+            policy.isConfirmingDiscard = false
             policy.request(router: router, presentation: presentation)
             #expect(!policy.isConfirmingDiscard)
             router.dismissDetails(presentationID: presentation.id)
@@ -112,7 +120,7 @@ struct AppointmentCompletionInterruptionTests {
             switch interruption {
             case .sheet:
                 #expect(router.detailsPresentation == nil)
-                router.presentationDidDismiss()
+                router.presentationDidDismiss(presentation.id)
                 #expect(router.scheduleCreationRequest != nil)
             case .sameRoot:
                 #expect(router.detailsPresentation === presentation)

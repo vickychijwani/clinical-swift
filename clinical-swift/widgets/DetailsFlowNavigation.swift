@@ -3,7 +3,7 @@ import SwiftUI
 struct DetailsFlowNavigation: View {
     @Environment(Router.self) private var router
     @Bindable var presentation: DetailsPresentation
-    let dismissAction: TrayCancelAction
+    let requestDismiss: () -> Void
 
     var body: some View {
         let visitID = presentation.visitID
@@ -33,7 +33,8 @@ struct DetailsFlowNavigation: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if presentation.path.isEmpty {
-                        TrayCancelButton(action: dismissAction, label: "Close")
+                        Button("Close", systemImage: "xmark", action: requestDismiss)
+                            .labelStyle(.iconOnly)
                             .disabled(presentation.isSavingCompletion)
                     }
                 }
@@ -57,7 +58,6 @@ struct DetailsFlowNavigation: View {
 }
 
 struct DetailsFlowView: View {
-    @Environment(\.trayDismiss) private var dismiss
     @Bindable var presentation: DetailsPresentation
     @Environment(Router.self) private var router
     @State private var policy = DetailsDismissal()
@@ -69,11 +69,7 @@ struct DetailsFlowView: View {
     var body: some View {
         DetailsFlowNavigation(
             presentation: presentation,
-            dismissAction: TrayCancelAction(
-                title: "Discard unsaved payment?",
-                message: "Your payment changes have not been saved.",
-                hasUnsavedChanges: { presentation.hasUnsavedCompletion },
-                dismiss: { dismiss() })
+            requestDismiss: { policy.request(router: router, presentation: presentation) }
         )
         .trayOptions(
             size: Self.traySize(for: presentation),

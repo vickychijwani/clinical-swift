@@ -272,23 +272,11 @@ final class Router {
         presentedPresentationID = presentationID
     }
 
-    func presentationDidDismiss() {
-        presentationDidDismiss(retainingScheduleEditor: nil)
-    }
-
-    func presentationDidDismiss(_ presentationID: UUID) {
-        presentationDidDismiss(presentationID, retainingScheduleEditor: nil)
-    }
-
-    func presentationDidDismiss(_ presentationID: UUID, retainingScheduleEditor id: UUID?) {
+    func presentationDidDismiss(_ presentationID: UUID, retainingScheduleEditor id: UUID? = nil) {
         guard
             presentedPresentationID == presentationID
                 || dismissingPresentationID == presentationID
         else { return }
-        presentationDidDismiss(retainingScheduleEditor: id)
-    }
-
-    func presentationDidDismiss(retainingScheduleEditor id: UUID?) {
         presentedPresentationID = nil
         // onDismiss either completes a router-driven handoff or reports that the user dismissed
         // the active sheet. Preserve a queued replacement only in the former case.

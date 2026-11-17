@@ -41,7 +41,7 @@ struct RouterTests {
         router.requestScheduleCreation()
         let id = try #require(router.activePresentation?.id)
         router.presentationDidAppear(id)
-        router.presentationDidDismiss(retainingScheduleEditor: id)
+        router.presentationDidDismiss(id, retainingScheduleEditor: id)
         #expect(router.activePresentation?.id == id)
         router.requestScheduleCreation()
         let replacementID = try #require(router.scheduleCreationRequest?.id)
@@ -56,7 +56,7 @@ struct RouterTests {
         router.presentationDidAppear(id)
         router.requestScheduleCreation()
         #expect(router.activePresentation == nil)
-        router.presentationDidDismiss(retainingScheduleEditor: id)
+        router.presentationDidDismiss(id, retainingScheduleEditor: id)
         let replacementID = try #require(router.scheduleCreationRequest?.id)
         #expect(replacementID != id)
         #expect(router.activePresentation?.id == replacementID)
@@ -126,14 +126,13 @@ struct RouterTests {
         let sameDay = try Date("2026-07-18T15:00:00Z", strategy: .iso8601)
         let nextDay = try Date("2026-07-19T00:00:00Z", strategy: .iso8601)
 
-        withDependencies {
+        try withDependencies {
             $0.calendar = calendar
         } operation: {
             let router = makeRouter(selectedScheduleDate: selectedDate)
             router.presentDetails(.appointment(UUID()))
-            if let presentationID = router.detailsPresentation?.id {
-                router.presentationDidAppear(presentationID)
-            }
+            let presentationID = try #require(router.detailsPresentation?.id)
+            router.presentationDidAppear(presentationID)
 
             router.selectScheduleDate(sameDay)
             #expect(router.detailsPresentation != nil)
@@ -142,7 +141,7 @@ struct RouterTests {
             #expect(router.selectedScheduleDate == nextDay)
             #expect(router.detailsPresentation == nil)
 
-            router.presentationDidDismiss()
+            router.presentationDidDismiss(presentationID)
             #expect(router.activePresentation?.id == nil)
         }
     }
@@ -292,21 +291,22 @@ struct RouterTests {
         let router = makeRouter()
         let patient = Patient(name: "Aarav Mehta")
         router.presentDetails(.patient(patient.id))
-        router.presentationDidAppear(try #require(router.detailsPresentation?.id))
+        let presentationID = try #require(router.detailsPresentation?.id)
+        router.presentationDidAppear(presentationID)
 
         router.requestPatientEdit(patient)
         #expect(router.activePresentation?.id == nil)
 
         router.openAppointment(id: UUID())
         router.requestScheduleCreation()
-        router.presentationDidDismiss()
+        router.presentationDidDismiss(presentationID)
 
-        #expect(router.scheduleCreationRequest != nil)
+        let replacementID = try #require(router.scheduleCreationRequest?.id)
         #expect(router.detailsPresentation == nil)
         #expect(router.patientEditRequest == nil)
 
-        router.presentationDidDismiss()
-        #expect(router.activePresentation?.id == nil)
+        router.presentationDidDismiss(presentationID)
+        #expect(router.activePresentation?.id == replacementID)
         #expect(router.detailsPresentation == nil)
     }
 
@@ -314,11 +314,12 @@ struct RouterTests {
         let router = makeRouter()
         let patient = Patient(name: "Aarav Mehta")
         router.presentDetails(.patient(patient.id))
-        router.presentationDidAppear(try #require(router.detailsPresentation?.id))
+        let presentationID = try #require(router.detailsPresentation?.id)
+        router.presentationDidAppear(presentationID)
 
         router.requestPatientEdit(patient)
         router.dismissPresentation()
-        router.presentationDidDismiss()
+        router.presentationDidDismiss(presentationID)
 
         #expect(router.patientEditRequest?.patientID == patient.id)
     }
@@ -333,11 +334,12 @@ struct RouterTests {
         } operation: {
             let router = Router(selectedScheduleDate: initialDate)
             router.presentDetails(.appointment(UUID()))
-            router.presentationDidAppear(try #require(router.detailsPresentation?.id))
+            let presentationID = try #require(router.detailsPresentation?.id)
+            router.presentationDidAppear(presentationID)
             router.requestPatientCreation()
 
             router.openExternalSchedule(destinationDay)
-            router.presentationDidDismiss()
+            router.presentationDidDismiss(presentationID)
 
             #expect(router.activePresentation?.id == nil)
             #expect(router.selectedScheduleDate == destinationDay.date(using: calendar))
@@ -350,27 +352,27 @@ struct RouterTests {
 
         let bookingRouter = makeRouter()
         bookingRouter.requestScheduleCreation()
-        assertExternalAppointmentInterrupts(bookingRouter)
+        try assertExternalAppointmentInterrupts(bookingRouter)
 
         let patientBookingRouter = makeRouter()
         patientBookingRouter.requestAppointmentBooking(for: patient)
-        assertExternalAppointmentInterrupts(patientBookingRouter)
+        try assertExternalAppointmentInterrupts(patientBookingRouter)
 
         let editRouter = makeRouter()
         editRouter.requestAppointmentEdit(details)
-        assertExternalAppointmentInterrupts(editRouter)
+        try assertExternalAppointmentInterrupts(editRouter)
 
         let messageRouter = makeRouter()
         messageRouter.requestAppointmentMessage(details)
-        assertExternalAppointmentInterrupts(messageRouter)
+        try assertExternalAppointmentInterrupts(messageRouter)
 
         let patientRouter = makeRouter()
         patientRouter.requestPatientEdit(patient)
-        assertExternalAppointmentInterrupts(patientRouter)
+        try assertExternalAppointmentInterrupts(patientRouter)
 
         let creationRouter = makeRouter()
         creationRouter.requestPatientCreation()
-        assertExternalAppointmentInterrupts(creationRouter)
+        try assertExternalAppointmentInterrupts(creationRouter)
 
         let detailsRouter = makeRouter()
         detailsRouter.presentDetails(.patient(patient.id))
@@ -395,9 +397,8 @@ struct RouterTests {
     @Test func externalPatientSearchInterruptsPresentationAndNormalizesPhones() throws {
         let router = makeRouter()
         router.requestScheduleCreation()
-        if let presentationID = router.activePresentation?.id {
-            router.presentationDidAppear(presentationID)
-        }
+        let presentationID = try #require(router.activePresentation?.id)
+        router.presentationDidAppear(presentationID)
 
         router.openExternalPatientSearch(
             phoneNumbers: ["98201 44532", "+91 98201 44533"]
@@ -408,7 +409,7 @@ struct RouterTests {
         let request = try #require(router.patientSearchRequest)
         #expect(request.phoneNumbers == ["+919820144532", "+919820144533"])
 
-        router.presentationDidDismiss()
+        router.presentationDidDismiss(presentationID)
         #expect(router.activePresentation?.id == nil)
     }
 
@@ -436,15 +437,14 @@ struct RouterTests {
         }
     }
 
-    private func assertExternalAppointmentInterrupts(_ router: Router) {
-        if let presentationID = router.activePresentation?.id {
-            router.presentationDidAppear(presentationID)
-        }
+    private func assertExternalAppointmentInterrupts(_ router: Router) throws {
+        let presentationID = try #require(router.activePresentation?.id)
+        router.presentationDidAppear(presentationID)
         let appointmentID = UUID()
         router.openAppointment(id: appointmentID)
 
         #expect(router.activePresentation?.id == nil)
-        router.presentationDidDismiss()
+        router.presentationDidDismiss(presentationID)
         #expect(router.detailsPresentation?.root == .appointment(appointmentID))
     }
 
