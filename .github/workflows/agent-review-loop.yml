@@ -39,15 +39,16 @@ concurrency:
 permissions:
   contents: read
   pull-requests: write
+  checks: write
 
 env:
   CODEX_REVIEWER_MODEL: gpt-6.1-sol
   CODEX_REVIEWER_EFFORT: high
   CODEX_AUTHOR_MODEL: gpt-6.1-sol
   CODEX_AUTHOR_EFFORT: high
-  AGY_REVIEWER_MODEL: gemini-4-argon
+  AGY_REVIEWER_MODEL: gemini-4-hydrogen
   AGY_REVIEWER_EFFORT: high
-  AGY_AUTHOR_MODEL: gemini-4-argon
+  AGY_AUTHOR_MODEL: gemini-4-hydrogen
   AGY_AUTHOR_EFFORT: high
   CANONICAL_REPO_PATH: /Users/vicky/code/clinical-swift
   SUPER_ENGINEERING_DB: /Users/vicky/.super.engineering/db/super.engineering.db
@@ -75,6 +76,8 @@ jobs:
       author_harness: ${{ steps.resolve.outputs.author_harness }}
       worktree_path: ${{ steps.resolve.outputs.worktree_path }}
       dry_run: ${{ steps.resolve.outputs.dry_run }}
+      review_check_run_id: ${{ steps.resolve.outputs.review_check_run_id }}
+      address_check_run_id: ${{ steps.resolve.outputs.address_check_run_id }}
     steps:
       - name: Add Homebrew tools to PATH
         run: |
@@ -171,10 +174,31 @@ jobs:
             echo "Note: $note"
           done
 
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          create_check_run() {
+            local name="$1" status="$2" title="$3" summary="$4" conclusion="${5:-}"
+            local args=(
+              swift scripts/agent_review_loop.swift check-run
+              --repo "$GITHUB_REPOSITORY"
+              --name "$name"
+              --head-sha "$pr_head_sha"
+              --status "$status"
+              --title "$title"
+              --summary "$summary"
+              --details-url "$run_url"
+              --external-id "$GITHUB_RUN_ID-$name"
+            )
+            if [[ -n "$conclusion" ]]; then
+              args+=(--conclusion "$conclusion")
+            fi
+            "${args[@]}" || true
+          }
+
           if [[ $discover_status -ne 0 ]]; then
             reason=$(jq -r '.error // "Worktree discovery failed."' <<< "$discovery_json")
             echo "Discovery failed: $reason" >&2
             if [[ "$dry_run" != "true" ]]; then
+              create_check_run "$action" "completed" "Stopped" "$reason" "failure" >/dev/null
               gh pr comment "$pr_number" --repo "$GITHUB_REPOSITORY" \
                 --body "Agent review loop stopped: $reason"
             fi
@@ -184,6 +208,17 @@ jobs:
           reviewer_harness=$(jq -r '.reviewerHarness // ""' <<< "$discovery_json")
           author_harness=$(jq -r '.authorHarness // ""' <<< "$discovery_json")
           worktree_path=$(jq -r '.worktreePath // ""' <<< "$discovery_json")
+
+          review_check_run_id=""
+          address_check_run_id=""
+          if [[ "$dry_run" != "true" ]]; then
+            if [[ "$action" == "review" ]]; then
+              review_check_run_id=$(create_check_run "review" "queued" "Queued ($reviewer_harness)" "Waiting for clinical-agents runner to review PR #$pr_number.")
+              address_check_run_id=$(create_check_run "address" "queued" "Waiting for review ($author_harness)" "Will address review comments after review completes.")
+            else
+              address_check_run_id=$(create_check_run "address" "queued" "Queued ($author_harness)" "Waiting for clinical-agents runner to address PR #$pr_number.")
+            fi
+          fi
 
           {
             echo "pr_number=$pr_number"
@@ -196,6 +231,8 @@ jobs:
             echo "author_harness=$author_harness"
             echo "worktree_path=$worktree_path"
             echo "dry_run=$dry_run"
+            echo "review_check_run_id=$review_check_run_id"
+            echo "address_check_run_id=$address_check_run_id"
           } >> "$GITHUB_OUTPUT"
 
           echo "Planned PR #$pr_number ($action): reviewer=${reviewer_harness:-none}, author=$author_harness, worktree=$worktree_path, dry_run=$dry_run"
@@ -240,6 +277,22 @@ jobs:
         with:
           app-id: ${{ vars.CLINICAL_ANTIGRAVITY_APP_ID || secrets.CLINICAL_ANTIGRAVITY_APP_ID }}
           private-key: ${{ secrets.CLINICAL_ANTIGRAVITY_PRIVATE_KEY }}
+
+      - name: Mark review check in progress
+        if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.review_check_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_RUN_ID: ${{ needs.plan.outputs.review_check_run_id }}
+          PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          REVIEWER_HARNESS: ${{ needs.plan.outputs.reviewer_harness }}
+        run: |
+          swift "$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift" check-run \
+            --repo "$GITHUB_REPOSITORY" \
+            --check-run-id "$CHECK_RUN_ID" \
+            --status in_progress \
+            --title "Reviewing PR ($REVIEWER_HARNESS)" \
+            --summary "Running $REVIEWER_HARNESS on PR #$PR_NUMBER." \
+            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
 
       - name: Run reviewer agent
         env:
@@ -297,6 +350,45 @@ jobs:
           cd "$pr_dir"
           "${cmd[@]}"
 
+      - name: Complete review check
+        if: always() && needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.review_check_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          REVIEW_CHECK_RUN_ID: ${{ needs.plan.outputs.review_check_run_id }}
+          ADDRESS_CHECK_RUN_ID: ${{ needs.plan.outputs.address_check_run_id }}
+          REVIEWER_HARNESS: ${{ needs.plan.outputs.reviewer_harness }}
+          AUTHOR_HARNESS: ${{ needs.plan.outputs.author_harness }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          script="$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift"
+          case "$JOB_STATUS" in
+            success) conclusion="success"; title="Review complete ($REVIEWER_HARNESS)" ;;
+            cancelled) conclusion="cancelled"; title="Review cancelled ($REVIEWER_HARNESS)" ;;
+            *) conclusion="failure"; title="Review failed ($REVIEWER_HARNESS)" ;;
+          esac
+
+          swift "$script" check-run \
+            --repo "$GITHUB_REPOSITORY" \
+            --check-run-id "$REVIEW_CHECK_RUN_ID" \
+            --status completed \
+            --conclusion "$conclusion" \
+            --title "$title" \
+            --summary "Reviewer $REVIEWER_HARNESS finished with status $JOB_STATUS on PR #$PR_NUMBER." \
+            --details-url "$run_url" >/dev/null || true
+
+          if [[ "$JOB_STATUS" != "success" && -n "$ADDRESS_CHECK_RUN_ID" ]]; then
+            swift "$script" check-run \
+              --repo "$GITHUB_REPOSITORY" \
+              --check-run-id "$ADDRESS_CHECK_RUN_ID" \
+              --status completed \
+              --conclusion skipped \
+              --title "Address skipped ($AUTHOR_HARNESS)" \
+              --summary "Skipped because the review job ended with status $JOB_STATUS." \
+              --details-url "$run_url" >/dev/null || true
+          fi
+
   address:
     name: Address review comments
     needs: [plan, review]
@@ -317,6 +409,22 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+
+      - name: Mark address check in progress
+        if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.address_check_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_RUN_ID: ${{ needs.plan.outputs.address_check_run_id }}
+          PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          AUTHOR_HARNESS: ${{ needs.plan.outputs.author_harness }}
+        run: |
+          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
+            --repo "$GITHUB_REPOSITORY" \
+            --check-run-id "$CHECK_RUN_ID" \
+            --status in_progress \
+            --title "Addressing review comments ($AUTHOR_HARNESS)" \
+            --summary "Verifying worktree and running $AUTHOR_HARNESS on PR #$PR_NUMBER." \
+            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
 
       - name: Verify original worktree is clean and at PR head
         id: verify
@@ -435,3 +543,27 @@ jobs:
 
           cd "$worktree_dir"
           "${cmd[@]}"
+
+      - name: Complete address check
+        if: always() && needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.address_check_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          CHECK_RUN_ID: ${{ needs.plan.outputs.address_check_run_id }}
+          AUTHOR_HARNESS: ${{ needs.plan.outputs.author_harness }}
+        run: |
+          case "$JOB_STATUS" in
+            success) conclusion="success"; title="Address complete ($AUTHOR_HARNESS)" ;;
+            cancelled) conclusion="cancelled"; title="Address cancelled ($AUTHOR_HARNESS)" ;;
+            *) conclusion="failure"; title="Address failed ($AUTHOR_HARNESS)" ;;
+          esac
+
+          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
+            --repo "$GITHUB_REPOSITORY" \
+            --check-run-id "$CHECK_RUN_ID" \
+            --status completed \
+            --conclusion "$conclusion" \
+            --title "$title" \
+            --summary "Author $AUTHOR_HARNESS finished with status $JOB_STATUS on PR #$PR_NUMBER." \
+            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true

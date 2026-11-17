@@ -72,7 +72,8 @@ private func normalizePath(_ path: String, resolveSymlinks: Bool = true) -> Stri
 private func runProcess(
     executable: String = "/usr/bin/env",
     arguments: [String],
-    workingDirectory: String? = nil
+    workingDirectory: String? = nil,
+    stdinData: Data? = nil
 ) throws -> (exitCode: Int32, stdout: String, stderr: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
@@ -80,12 +81,25 @@ private func runProcess(
     if let workingDirectory {
         process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
     }
-    process.standardInput = FileHandle.nullDevice
+    let stdinPipe: Pipe?
+    if let stdinData {
+        let pipe = Pipe()
+        process.standardInput = pipe
+        stdinPipe = pipe
+        _ = stdinData
+    } else {
+        process.standardInput = FileHandle.nullDevice
+        stdinPipe = nil
+    }
     let stdoutPipe = Pipe()
     let stderrPipe = Pipe()
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
     try process.run()
+    if let stdinPipe, let stdinData {
+        stdinPipe.fileHandleForWriting.write(stdinData)
+        try? stdinPipe.fileHandleForWriting.close()
+    }
     let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
     let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
@@ -550,6 +564,136 @@ func buildCodexSkillsConfig(
     return "[\(entries.joined(separator: ","))]"
 }
 
+enum CheckRunStatus: String, Codable, Equatable {
+    case queued
+    case inProgress = "in_progress"
+    case completed
+}
+
+struct CheckRunOutput: Codable, Equatable {
+    let title: String
+    let summary: String
+}
+
+struct CheckRunPayload: Codable, Equatable {
+    let name: String?
+    let headSHA: String?
+    let detailsURL: String?
+    let externalID: String?
+    let status: CheckRunStatus
+    let startedAt: String?
+    let completedAt: String?
+    let conclusion: String?
+    let output: CheckRunOutput?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case headSHA = "head_sha"
+        case detailsURL = "details_url"
+        case externalID = "external_id"
+        case status
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case conclusion
+        case output
+    }
+}
+
+/// Builds a GitHub Checks API payload for creating or updating a PR check run.
+func buildCheckRunPayload(
+    name: String? = nil,
+    headSHA: String? = nil,
+    status: CheckRunStatus,
+    conclusion: String? = nil,
+    title: String? = nil,
+    summary: String? = nil,
+    detailsURL: String? = nil,
+    externalID: String? = nil,
+    timestamp: String = ISO8601DateFormatter().string(from: Date())
+) throws -> CheckRunPayload {
+    if status == .completed {
+        guard let conclusion, !conclusion.isEmpty else {
+            throw ReviewLoopError(description: "Missing --conclusion for completed check run.")
+        }
+    } else if let conclusion, !conclusion.isEmpty {
+        throw ReviewLoopError(description: "Unexpected --conclusion for \(status.rawValue) check run.")
+    }
+
+    let output: CheckRunOutput?
+    if let title, !title.isEmpty {
+        output = CheckRunOutput(title: title, summary: summary ?? "")
+    } else if let summary, !summary.isEmpty {
+        output = CheckRunOutput(title: name ?? status.rawValue, summary: summary)
+    } else {
+        output = nil
+    }
+
+    return CheckRunPayload(
+        name: name?.isEmpty == true ? nil : name,
+        headSHA: headSHA?.isEmpty == true ? nil : headSHA,
+        detailsURL: detailsURL?.isEmpty == true ? nil : detailsURL,
+        externalID: externalID?.isEmpty == true ? nil : externalID,
+        status: status,
+        startedAt: status == .inProgress ? timestamp : nil,
+        completedAt: status == .completed ? timestamp : nil,
+        conclusion: status == .completed ? conclusion : nil,
+        output: output
+    )
+}
+
+private func submitCheckRun(
+    repo: String,
+    checkRunID: String?,
+    name: String?,
+    headSHA: String?,
+    status: CheckRunStatus,
+    conclusion: String?,
+    title: String?,
+    summary: String?,
+    detailsURL: String?,
+    externalID: String?
+) throws -> String {
+    let isUpdate = !(checkRunID ?? "").isEmpty
+    if !isUpdate {
+        guard let name, !name.isEmpty, let headSHA, !headSHA.isEmpty else {
+            throw ReviewLoopError(description: "Creating a check run requires --name and --head-sha.")
+        }
+    }
+
+    let payload = try buildCheckRunPayload(
+        name: name,
+        headSHA: isUpdate ? nil : headSHA,
+        status: status,
+        conclusion: conclusion,
+        title: title,
+        summary: summary,
+        detailsURL: detailsURL,
+        externalID: externalID
+    )
+    let jsonData = try JSONEncoder().encode(payload)
+
+    let method = isUpdate ? "PATCH" : "POST"
+    let endpoint = isUpdate
+        ? "repos/\(repo)/check-runs/\(checkRunID!)"
+        : "repos/\(repo)/check-runs"
+    let result = try runProcess(
+        arguments: [
+            "gh", "api",
+            "--method", method,
+            "-H", "Accept: application/vnd.github+json",
+            endpoint,
+            "--input", "-",
+            "--jq", ".id",
+        ],
+        stdinData: jsonData
+    )
+    guard result.exitCode == 0 else {
+        let details = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw ReviewLoopError(description: "gh api \(method) \(endpoint) failed: \(details)")
+    }
+    return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 private func parseOptions(_ arguments: [String]) throws -> (flags: Set<String>, values: [String: String]) {
     var flags = Set<String>()
     var values: [String: String] = [:]
@@ -585,7 +729,7 @@ private func runCLI() -> Int32 {
     let args = Array(CommandLine.arguments.dropFirst())
     guard let subcommand = args.first else {
         FileHandle.standardError.write(
-            Data("Usage: agent_review_loop.swift <parse-trigger|discover|codex-skills-config> [options]\n".utf8))
+            Data("Usage: agent_review_loop.swift <parse-trigger|discover|codex-skills-config|check-run> [options]\n".utf8))
         return 2
     }
 
@@ -653,6 +797,30 @@ private func runCLI() -> Int32 {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
             print(buildCodexSkillsConfig(repoPath: repo, homeDirectory: home, allowedNames: Set(allowList)))
+            return 0
+
+        case "check-run":
+            guard let repo = parsed.values["repo"],
+                let statusText = parsed.values["status"],
+                let status = CheckRunStatus(rawValue: statusText)
+            else {
+                throw ReviewLoopError(
+                    description: "Missing or invalid flags: --repo, --status (queued|in_progress|completed)"
+                )
+            }
+            let checkRunID = try submitCheckRun(
+                repo: repo,
+                checkRunID: parsed.values["check-run-id"],
+                name: parsed.values["name"],
+                headSHA: parsed.values["head-sha"],
+                status: status,
+                conclusion: parsed.values["conclusion"],
+                title: parsed.values["title"],
+                summary: parsed.values["summary"],
+                detailsURL: parsed.values["details-url"],
+                externalID: parsed.values["external-id"]
+            )
+            print(checkRunID)
             return 0
 
         default:

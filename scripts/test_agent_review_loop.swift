@@ -355,6 +355,58 @@ private func testCodexSkillsConfig(in root: URL) throws {
     try expect(config.contains("rex/SKILL.md"), "Home .agents skill must be disabled")
 }
 
+private func testCheckRunPayload() throws {
+    let queued = try buildCheckRunPayload(
+        name: "review",
+        headSHA: "abc123",
+        status: .queued,
+        title: "Queued (antigravity)",
+        summary: "Waiting for runner",
+        detailsURL: "https://github.com/vickychijwani/clinical-swift/actions/runs/1",
+        externalID: "1-review",
+        timestamp: "2026-11-18T00:00:00Z"
+    )
+    try expect(queued.status == .queued, "Queued status mismatch")
+    try expect(queued.headSHA == "abc123", "Queued head_sha mismatch")
+    try expect(queued.startedAt == nil && queued.completedAt == nil, "Queued must omit timestamps")
+    try expect(queued.conclusion == nil, "Queued must omit conclusion")
+
+    let inProgress = try buildCheckRunPayload(
+        status: .inProgress,
+        title: "Reviewing PR (antigravity)",
+        summary: "Running agent",
+        timestamp: "2026-11-18T00:01:00Z"
+    )
+    try expect(inProgress.startedAt == "2026-11-18T00:01:00Z", "In-progress must set started_at")
+    try expect(inProgress.completedAt == nil, "In-progress must omit completed_at")
+
+    let completed = try buildCheckRunPayload(
+        status: .completed,
+        conclusion: "success",
+        title: "Review complete",
+        summary: "Done",
+        timestamp: "2026-11-18T00:02:00Z"
+    )
+    try expect(completed.completedAt == "2026-11-18T00:02:00Z", "Completed must set completed_at")
+    try expect(completed.conclusion == "success", "Completed must set conclusion")
+
+    var rejectedMissingConclusion = false
+    do {
+        _ = try buildCheckRunPayload(status: .completed)
+    } catch {
+        rejectedMissingConclusion = true
+    }
+    try expect(rejectedMissingConclusion, "Completed check run without conclusion must throw")
+
+    var rejectedUnexpectedConclusion = false
+    do {
+        _ = try buildCheckRunPayload(status: .queued, conclusion: "success")
+    } catch {
+        rejectedUnexpectedConclusion = true
+    }
+    try expect(rejectedUnexpectedConclusion, "Non-completed check run with conclusion must throw")
+}
+
 private func runAllTests() {
     let tempRoot = FileManager.default.temporaryDirectory.appending(
         path: "agent-review-loop-tests-\(UUID().uuidString)")
@@ -365,6 +417,7 @@ private func runAllTests() {
         try testWorktreeClassificationAndParsing()
         try testDiscoveryIntegration(in: tempRoot)
         try testCodexSkillsConfig(in: tempRoot)
+        try testCheckRunPayload()
         print("PASS agent review loop unit and integration tests")
     } catch {
         FileHandle.standardError.write(Data("FAIL: \(error)\n".utf8))
