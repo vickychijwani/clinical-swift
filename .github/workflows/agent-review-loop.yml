@@ -1,0 +1,437 @@
+name: Agent review loop
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number
+        required: true
+        type: string
+      action:
+        description: Action to run
+        required: true
+        default: review
+        type: choice
+        options:
+          - review
+          - address
+      reviewer:
+        description: Reviewer harness override (for review action)
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - codex
+          - antigravity
+      dry_run:
+        description: Print commands and plan without running agents or posting to GitHub
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: agent-review-loop-${{ github.event.issue.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  CODEX_REVIEWER_MODEL: gpt-6.1-sol
+  CODEX_REVIEWER_EFFORT: high
+  CODEX_AUTHOR_MODEL: gpt-6.1-sol
+  CODEX_AUTHOR_EFFORT: high
+  AGY_REVIEWER_MODEL: gemini-4-argon
+  AGY_REVIEWER_EFFORT: high
+  AGY_AUTHOR_MODEL: gemini-4-argon
+  AGY_AUTHOR_EFFORT: high
+  CANONICAL_REPO_PATH: /Users/vicky/code/clinical-swift
+  SUPER_ENGINEERING_DB: /Users/vicky/.super.engineering/db/super.engineering.db
+
+jobs:
+  plan:
+    name: Plan review loop
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == github.repository_owner &&
+       (startsWith(github.event.comment.body, '/review') ||
+        startsWith(github.event.comment.body, '/address')))
+    runs-on: clinical-agents
+    timeout-minutes: 5
+    outputs:
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      pr_branch: ${{ steps.resolve.outputs.pr_branch }}
+      pr_head_sha: ${{ steps.resolve.outputs.pr_head_sha }}
+      run_review: ${{ steps.resolve.outputs.run_review }}
+      run_address: ${{ steps.resolve.outputs.run_address }}
+      reviewer_override: ${{ steps.resolve.outputs.reviewer_override }}
+      reviewer_harness: ${{ steps.resolve.outputs.reviewer_harness }}
+      author_harness: ${{ steps.resolve.outputs.author_harness }}
+      worktree_path: ${{ steps.resolve.outputs.worktree_path }}
+      dry_run: ${{ steps.resolve.outputs.dry_run }}
+    steps:
+      - name: Add Homebrew tools to PATH
+        run: |
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Resolve trigger, PR metadata, and worktree harness
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          DISPATCH_ACTION: ${{ inputs.action }}
+          DISPATCH_REVIEWER: ${{ inputs.reviewer }}
+          DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+          DISPATCH_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+            # Ignore normal prose that happens to start with /reviewing or /addressing.
+            first_token=$(printf '%s' "$COMMENT_BODY" | awk 'NR==1 { print $1 }')
+            if [[ "$first_token" != "/review" && "$first_token" != "/address" ]]; then
+              echo "Ignoring non-command comment."
+              echo "run_review=false" >> "$GITHUB_OUTPUT"
+              echo "run_address=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          if ! trigger_json=$(swift scripts/agent_review_loop.swift parse-trigger \
+            --event "$EVENT_NAME" \
+            --body "$COMMENT_BODY" \
+            --action "$DISPATCH_ACTION" \
+            --reviewer "$DISPATCH_REVIEWER" \
+            --pr-number "$DISPATCH_PR_NUMBER" \
+            --dry-run "$DISPATCH_DRY_RUN" 2>&1); then
+            echo "Trigger parse failed: $trigger_json" >&2
+            if [[ "$EVENT_NAME" == "issue_comment" && "$DISPATCH_DRY_RUN" != "true" ]]; then
+              gh pr comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+                --body "Agent review loop stopped: $trigger_json"
+            fi
+            exit 1
+          fi
+
+          action=$(jq -r '.action' <<< "$trigger_json")
+          reviewer_override=$(jq -r '.reviewerOverride // ""' <<< "$trigger_json")
+          dry_run=$(jq -r '.dryRun' <<< "$trigger_json")
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+            pr_number="$ISSUE_NUMBER"
+          else
+            pr_number=$(jq -r '.prNumber' <<< "$trigger_json")
+          fi
+
+          pr_json=$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" \
+            --json number,state,headRefName,headRefOid,url)
+          pr_state=$(jq -r '.state' <<< "$pr_json")
+          pr_branch=$(jq -r '.headRefName' <<< "$pr_json")
+          pr_head_sha=$(jq -r '.headRefOid' <<< "$pr_json")
+
+          if [[ "$pr_state" != "OPEN" ]]; then
+            reason="PR #$pr_number is $pr_state (expected OPEN)."
+            echo "$reason" >&2
+            if [[ "$dry_run" != "true" ]]; then
+              gh pr comment "$pr_number" --repo "$GITHUB_REPOSITORY" \
+                --body "Agent review loop stopped: $reason"
+            fi
+            exit 1
+          fi
+
+          discover_args=(
+            discover
+            --repo "$CANONICAL_REPO_PATH"
+            --branch "$pr_branch"
+            --head-sha "$pr_head_sha"
+            --action "$action"
+            --super-db "$SUPER_ENGINEERING_DB"
+          )
+          if [[ -n "$reviewer_override" ]]; then
+            discover_args+=(--reviewer "$reviewer_override")
+          fi
+
+          set +e
+          discovery_json=$(swift scripts/agent_review_loop.swift "${discover_args[@]}")
+          discover_status=$?
+          set -e
+
+          jq -r '.notes[]?' <<< "$discovery_json" | while IFS= read -r note; do
+            echo "Note: $note"
+          done
+
+          if [[ $discover_status -ne 0 ]]; then
+            reason=$(jq -r '.error // "Worktree discovery failed."' <<< "$discovery_json")
+            echo "Discovery failed: $reason" >&2
+            if [[ "$dry_run" != "true" ]]; then
+              gh pr comment "$pr_number" --repo "$GITHUB_REPOSITORY" \
+                --body "Agent review loop stopped: $reason"
+            fi
+            exit 1
+          fi
+
+          reviewer_harness=$(jq -r '.reviewerHarness // ""' <<< "$discovery_json")
+          author_harness=$(jq -r '.authorHarness // ""' <<< "$discovery_json")
+          worktree_path=$(jq -r '.worktreePath // ""' <<< "$discovery_json")
+
+          {
+            echo "pr_number=$pr_number"
+            echo "pr_branch=$pr_branch"
+            echo "pr_head_sha=$pr_head_sha"
+            echo "run_review=$([[ "$action" == "review" ]] && echo true || echo false)"
+            echo "run_address=true"
+            echo "reviewer_override=$reviewer_override"
+            echo "reviewer_harness=$reviewer_harness"
+            echo "author_harness=$author_harness"
+            echo "worktree_path=$worktree_path"
+            echo "dry_run=$dry_run"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Planned PR #$pr_number ($action): reviewer=${reviewer_harness:-none}, author=$author_harness, worktree=$worktree_path, dry_run=$dry_run"
+
+  review:
+    name: Review PR
+    needs: plan
+    if: needs.plan.outputs.run_review == 'true'
+    runs-on: clinical-agents
+    timeout-minutes: 30
+    steps:
+      - name: Add Homebrew tools to PATH
+        run: |
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.pr_head_sha }}
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create Codex reviewer App token
+        id: codex-token
+        if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.reviewer_harness == 'codex'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CLINICAL_CODEX_APP_ID || secrets.CLINICAL_CODEX_APP_ID }}
+          private-key: ${{ secrets.CLINICAL_CODEX_PRIVATE_KEY }}
+
+      - name: Create Antigravity reviewer App token
+        id: agy-token
+        if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.reviewer_harness == 'antigravity'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CLINICAL_ANTIGRAVITY_APP_ID || secrets.CLINICAL_ANTIGRAVITY_APP_ID }}
+          private-key: ${{ secrets.CLINICAL_ANTIGRAVITY_PRIVATE_KEY }}
+
+      - name: Run reviewer agent
+        env:
+          GH_TOKEN: ${{ steps.codex-token.outputs.token || steps.agy-token.outputs.token }}
+          PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          REVIEWER_HARNESS: ${{ needs.plan.outputs.reviewer_harness }}
+          DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+        run: |
+          set -euo pipefail
+          main_dir="$GITHUB_WORKSPACE/main"
+          pr_dir=$(cd "$GITHUB_WORKSPACE/pr" && pwd -P)
+          if [[ "$REVIEWER_HARNESS" == "codex" ]]; then
+            bot_login="clinical-codex[bot]"
+          else
+            bot_login="clinical-antigravity[bot]"
+          fi
+
+          prompt="Review PR #$PR_NUMBER in $GITHUB_REPOSITORY using the my-review skill. You are running in a clean checkout of the PR head (do not modify files). Your assigned GitHub App identity is $bot_login."
+
+          if [[ "$REVIEWER_HARNESS" == "codex" ]]; then
+            skills_config=$(swift "$main_dir/scripts/agent_review_loop.swift" codex-skills-config \
+              --repo "$pr_dir" --allow my-review,my-design-review)
+            cmd=(
+              codex exec --ignore-user-config --dangerously-bypass-hook-trust --json
+              -C "$pr_dir"
+              -c "projects={\"$pr_dir\"={trust_level=\"trusted\"}}"
+              -m "$CODEX_REVIEWER_MODEL"
+              -c "model_reasoning_effort=$CODEX_REVIEWER_EFFORT"
+              -c 'sandbox_mode="danger-full-access"'
+              -c 'web_search="live"'
+              --disable apps --disable plugins
+              --disable browser_use --disable browser_use_external --disable browser_use_full_cdp_access
+              --disable computer_use --disable in_app_browser --disable image_generation
+              -c "skills.config=$skills_config"
+              "$prompt"
+            )
+          else
+            cmd=(
+              agy --model "$AGY_REVIEWER_MODEL" --effort "$AGY_REVIEWER_EFFORT"
+              --output-format json -p "$prompt"
+            )
+          fi
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "=== DRY RUN: review ==="
+            echo "Harness:  $REVIEWER_HARNESS ($bot_login)"
+            echo "Checkout: $pr_dir"
+            echo "Prompt:   $prompt"
+            printf 'Command:  '
+            printf '%q ' "${cmd[@]}"
+            echo
+            exit 0
+          fi
+
+          cd "$pr_dir"
+          "${cmd[@]}"
+
+  address:
+    name: Address review comments
+    needs: [plan, review]
+    if: >-
+      always() &&
+      needs.plan.result == 'success' &&
+      needs.plan.outputs.run_address == 'true' &&
+      (needs.plan.outputs.run_review != 'true' || needs.review.result == 'success')
+    runs-on: clinical-agents
+    timeout-minutes: 45
+    steps:
+      - name: Add Homebrew tools to PATH
+        run: |
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Verify original worktree is clean and at PR head
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          PR_BRANCH: ${{ needs.plan.outputs.pr_branch }}
+          PR_HEAD_SHA: ${{ needs.plan.outputs.pr_head_sha }}
+          REVIEWER_OVERRIDE: ${{ needs.plan.outputs.reviewer_override }}
+          DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+        run: |
+          set -euo pipefail
+          discover_args=(
+            discover
+            --repo "$CANONICAL_REPO_PATH"
+            --branch "$PR_BRANCH"
+            --head-sha "$PR_HEAD_SHA"
+            --action address
+            --super-db "$SUPER_ENGINEERING_DB"
+            --require-clean
+          )
+          if [[ -n "$REVIEWER_OVERRIDE" ]]; then
+            discover_args+=(--reviewer "$REVIEWER_OVERRIDE")
+          fi
+
+          set +e
+          discovery_json=$(swift scripts/agent_review_loop.swift "${discover_args[@]}")
+          status=$?
+          set -e
+
+          if [[ $status -ne 0 ]]; then
+            reason=$(jq -r '.error // "Worktree safety check failed."' <<< "$discovery_json")
+            echo "Worktree safety check failed: $reason" >&2
+            if [[ "$DRY_RUN" != "true" ]]; then
+              gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+                --body "Agent address job stopped: $reason"
+            fi
+            exit 1
+          fi
+
+          worktree_path=$(jq -r '.worktreePath' <<< "$discovery_json")
+          author_harness=$(jq -r '.authorHarness' <<< "$discovery_json")
+          echo "worktree_path=$worktree_path" >> "$GITHUB_OUTPUT"
+          echo "author_harness=$author_harness" >> "$GITHUB_OUTPUT"
+
+      - name: Create Codex author App token
+        id: codex-token
+        if: needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.author_harness == 'codex'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CLINICAL_CODEX_APP_ID || secrets.CLINICAL_CODEX_APP_ID }}
+          private-key: ${{ secrets.CLINICAL_CODEX_PRIVATE_KEY }}
+
+      - name: Create Antigravity author App token
+        id: agy-token
+        if: needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.author_harness == 'antigravity'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CLINICAL_ANTIGRAVITY_APP_ID || secrets.CLINICAL_ANTIGRAVITY_APP_ID }}
+          private-key: ${{ secrets.CLINICAL_ANTIGRAVITY_PRIVATE_KEY }}
+
+      - name: Run author agent
+        env:
+          GH_TOKEN: ${{ steps.codex-token.outputs.token || steps.agy-token.outputs.token }}
+          PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          WORKTREE_PATH: ${{ steps.verify.outputs.worktree_path }}
+          AUTHOR_HARNESS: ${{ steps.verify.outputs.author_harness }}
+          DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+        run: |
+          set -euo pipefail
+          main_dir="$GITHUB_WORKSPACE"
+          worktree_dir=$(cd "$WORKTREE_PATH" && pwd -P)
+          if [[ "$AUTHOR_HARNESS" == "codex" ]]; then
+            bot_login="clinical-codex[bot]"
+          else
+            bot_login="clinical-antigravity[bot]"
+          fi
+
+          prompt="Address review comments on PR #$PR_NUMBER in $GITHUB_REPOSITORY using the my-address-review skill. Your assigned GitHub App identity is $bot_login."
+
+          if [[ "$AUTHOR_HARNESS" == "codex" ]]; then
+            skills_config=$(swift "$main_dir/scripts/agent_review_loop.swift" codex-skills-config \
+              --repo "$worktree_dir" --allow my-address-review,my-design-review)
+            cmd=(
+              codex exec --ignore-user-config --dangerously-bypass-hook-trust --json
+              -C "$worktree_dir"
+              -c "projects={\"$worktree_dir\"={trust_level=\"trusted\"}}"
+              -m "$CODEX_AUTHOR_MODEL"
+              -c "model_reasoning_effort=$CODEX_AUTHOR_EFFORT"
+              -c 'sandbox_mode="danger-full-access"'
+              -c 'web_search="live"'
+              --disable apps
+              --disable browser_use --disable browser_use_external --disable browser_use_full_cdp_access
+              --disable computer_use --disable in_app_browser --disable image_generation
+              -c plugins.build-ios-apps@openai-curated-remote.enabled=true
+              -c "skills.config=$skills_config"
+              "$prompt"
+            )
+          else
+            cmd=(
+              agy --model "$AGY_AUTHOR_MODEL" --effort "$AGY_AUTHOR_EFFORT"
+              --output-format json -p "$prompt"
+            )
+          fi
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "=== DRY RUN: address ==="
+            echo "Harness:  $AUTHOR_HARNESS ($bot_login)"
+            echo "Worktree: $worktree_dir"
+            echo "Prompt:   $prompt"
+            printf 'Command:  '
+            printf '%q ' "${cmd[@]}"
+            echo
+            exit 0
+          fi
+
+          cd "$worktree_dir"
+          "${cmd[@]}"

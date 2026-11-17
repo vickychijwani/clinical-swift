@@ -1,0 +1,669 @@
+import Foundation
+import SQLite3
+
+struct ReviewLoopError: Error, CustomStringConvertible {
+    let description: String
+}
+
+enum Harness: String, Codable, Equatable {
+    case codex
+    case antigravity
+
+    var other: Harness {
+        switch self {
+        case .codex: .antigravity
+        case .antigravity: .codex
+        }
+    }
+
+    var botLogin: String {
+        switch self {
+        case .codex: "clinical-codex[bot]"
+        case .antigravity: "clinical-antigravity[bot]"
+        }
+    }
+}
+
+enum LoopAction: String, Codable, Equatable {
+    case review
+    case address
+}
+
+struct TriggerPlan: Codable, Equatable {
+    let action: LoopAction
+    let prNumber: Int?
+    let reviewerOverride: Harness?
+    let dryRun: Bool
+}
+
+struct WorktreeEntry: Equatable {
+    let path: String
+    let head: String
+    let branch: String?
+    let isDetached: Bool
+}
+
+enum WorktreeKind: Equatable {
+    case codex
+    case antigravity
+    case superEngineering
+    case unknown
+}
+
+struct DiscoveryOutput: Codable, Equatable {
+    let status: String
+    let worktreePath: String?
+    let authorHarness: Harness?
+    let reviewerHarness: Harness?
+    let notes: [String]
+    let error: String?
+}
+
+private func normalizePath(_ path: String, resolveSymlinks: Bool = true) -> String {
+    let url = URL(fileURLWithPath: path).standardizedFileURL
+    let resolved = resolveSymlinks ? url.resolvingSymlinksInPath() : url
+    var result = resolved.path
+    while result.count > 1 && result.hasSuffix("/") {
+        result.removeLast()
+    }
+    return result
+}
+
+private func runProcess(
+    executable: String = "/usr/bin/env",
+    arguments: [String],
+    workingDirectory: String? = nil
+) throws -> (exitCode: Int32, stdout: String, stderr: String) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    if let workingDirectory {
+        process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
+    }
+    process.standardInput = FileHandle.nullDevice
+    let stdoutPipe = Pipe()
+    let stderrPipe = Pipe()
+    process.standardOutput = stdoutPipe
+    process.standardError = stderrPipe
+    try process.run()
+    let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+    let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    return (
+        process.terminationStatus,
+        String(decoding: stdoutData, as: UTF8.self),
+        String(decoding: stderrData, as: UTF8.self)
+    )
+}
+
+private func git(_ repoPath: String, _ arguments: [String]) throws -> String {
+    let result = try runProcess(arguments: ["git", "-C", repoPath] + arguments)
+    guard result.exitCode == 0 else {
+        let details = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw ReviewLoopError(description: "git \(arguments.joined(separator: " ")) failed: \(details)")
+    }
+    return result.stdout
+}
+
+/// Parses `/review [codex|antigravity]` or `/address` PR comments and workflow_dispatch inputs.
+func parseTrigger(
+    eventName: String,
+    commentBody: String? = nil,
+    dispatchAction: String? = nil,
+    dispatchReviewer: String? = nil,
+    dispatchPRNumber: String? = nil,
+    dispatchDryRun: String? = nil
+) throws -> TriggerPlan {
+    switch eventName {
+    case "issue_comment":
+        let raw = (commentBody ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let tokens = raw.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard let command = tokens.first else {
+            throw ReviewLoopError(description: "Empty PR comment.")
+        }
+        switch command {
+        case "/review":
+            if tokens.count == 1 {
+                return TriggerPlan(action: .review, prNumber: nil, reviewerOverride: nil, dryRun: false)
+            }
+            guard tokens.count == 2, let harness = Harness(rawValue: tokens[1]) else {
+                throw ReviewLoopError(
+                    description: "Invalid /review command. Use `/review`, `/review codex`, or `/review antigravity`."
+                )
+            }
+            return TriggerPlan(action: .review, prNumber: nil, reviewerOverride: harness, dryRun: false)
+        case "/address":
+            guard tokens.count == 1 else {
+                throw ReviewLoopError(description: "Invalid /address command. Use `/address` with no arguments.")
+            }
+            return TriggerPlan(action: .address, prNumber: nil, reviewerOverride: nil, dryRun: false)
+        default:
+            throw ReviewLoopError(description: "Unsupported trigger command: \(command)")
+        }
+
+    case "workflow_dispatch":
+        guard let prText = dispatchPRNumber?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let prNumber = Int(prText), prNumber > 0
+        else {
+            throw ReviewLoopError(description: "Invalid workflow_dispatch pr_number.")
+        }
+        guard let actionText = dispatchAction?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let action = LoopAction(rawValue: actionText)
+        else {
+            throw ReviewLoopError(description: "Invalid workflow_dispatch action. Use `review` or `address`.")
+        }
+        let reviewerText = (dispatchReviewer ?? "auto").trimmingCharacters(in: .whitespacesAndNewlines)
+        let reviewerOverride: Harness?
+        if reviewerText.isEmpty || reviewerText == "auto" {
+            reviewerOverride = nil
+        } else if let parsed = Harness(rawValue: reviewerText), action == .review {
+            reviewerOverride = parsed
+        } else {
+            throw ReviewLoopError(description: "Invalid reviewer option '\(reviewerText)' for action '\(action.rawValue)'.")
+        }
+        let dryRun = (dispatchDryRun ?? "false").trimmingCharacters(in: .whitespacesAndNewlines) == "true"
+        return TriggerPlan(
+            action: action,
+            prNumber: prNumber,
+            reviewerOverride: reviewerOverride,
+            dryRun: dryRun
+        )
+
+    default:
+        throw ReviewLoopError(description: "Unsupported event: \(eventName)")
+    }
+}
+
+/// Parses `git worktree list --porcelain` output into structured entries.
+func parseWorktreeList(_ output: String) -> [WorktreeEntry] {
+    var entries: [WorktreeEntry] = []
+    var currentPath: String?
+    var currentHead: String?
+    var currentBranch: String?
+    var currentDetached = false
+
+    func flush() {
+        if let path = currentPath, let head = currentHead {
+            entries.append(
+                WorktreeEntry(path: path, head: head, branch: currentBranch, isDetached: currentDetached)
+            )
+        }
+        currentPath = nil
+        currentHead = nil
+        currentBranch = nil
+        currentDetached = false
+    }
+
+    for rawLine in output.components(separatedBy: .newlines) {
+        let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        if line.isEmpty {
+            flush()
+        } else if line.hasPrefix("worktree ") {
+            currentPath = String(line.dropFirst("worktree ".count))
+        } else if line.hasPrefix("HEAD ") {
+            currentHead = String(line.dropFirst("HEAD ".count))
+        } else if line.hasPrefix("branch ") {
+            currentBranch = String(line.dropFirst("branch ".count))
+        } else if line == "detached" {
+            currentDetached = true
+        }
+    }
+    flush()
+    return entries
+}
+
+/// Classifies a worktree path against the three supported agent worktree layouts.
+func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind {
+    let normalizedHome = normalizePath(homeDirectory, resolveSymlinks: false)
+    let normalizedPath = normalizePath(path, resolveSymlinks: false)
+    let prefix = normalizedHome == "/" ? "/" : normalizedHome + "/"
+    guard normalizedPath.hasPrefix(prefix) else { return .unknown }
+
+    let relative = String(normalizedPath.dropFirst(prefix.count))
+    let components = relative.split(separator: "/").map(String.init)
+    // Expected layouts:
+    // - .codex/worktrees/<id>/clinical-swift
+    // - .gemini/antigravity/worktrees/clinical-swift/<name>
+    // - .super.engineering/worktrees/clinical-swift/<name>
+    if components.count == 4 && components[0] == ".codex" && components[1] == "worktrees"
+        && components[3] == "clinical-swift"
+    {
+        return .codex
+    }
+    if components.count == 5 && components[0] == ".gemini" && components[1] == "antigravity"
+        && components[2] == "worktrees" && components[3] == "clinical-swift"
+    {
+        return .antigravity
+    }
+    if components.count == 4 && components[0] == ".super.engineering"
+        && components[1] == "worktrees" && components[2] == "clinical-swift"
+    {
+        return .superEngineering
+    }
+    return .unknown
+}
+
+/// Locates the unique PR worktree by branch first, then detached HEAD in known author roots.
+func locateWorktree(
+    entries: [WorktreeEntry],
+    branch: String,
+    headSHA: String,
+    homeDirectory: String
+) throws -> WorktreeEntry? {
+    let targetRef = "refs/heads/\(branch)"
+    let branchMatches = entries.filter { $0.branch == targetRef }
+    if let match = branchMatches.first {
+        return match
+    }
+
+    let detachedMatches = entries.filter { entry in
+        guard entry.isDetached && entry.head == headSHA else { return false }
+        let kind = classifyWorktreePath(entry.path, homeDirectory: homeDirectory)
+        return kind != .unknown
+    }
+    if detachedMatches.count > 1 {
+        let paths = detachedMatches.map(\.path).joined(separator: ", ")
+        throw ReviewLoopError(
+            description: "Multiple detached author worktrees match PR head \(headSHA): \(paths)."
+        )
+    }
+    return detachedMatches.first
+}
+
+/// Reads the provider_key history for a super.engineering worktree, read-only.
+func querySuperEngineeringProviders(databasePath: String, worktreePaths: [String]) throws -> [String] {
+    guard FileManager.default.fileExists(atPath: databasePath) else {
+        throw ReviewLoopError(description: "super.engineering database not found at \(databasePath).")
+    }
+
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
+        let detail = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "open failed"
+        if let db { sqlite3_close(db) }
+        throw ReviewLoopError(description: "Cannot open super.engineering database: \(detail)")
+    }
+    defer { sqlite3_close(db) }
+
+    let uniquePaths = Array(Set(worktreePaths))
+    let placeholders = uniquePaths.map { _ in "?" }.joined(separator: ", ")
+    let sql = """
+        SELECT provider_key
+        FROM conversations
+        WHERE json_extract(metadata, '$.worktree_path') IN (\(placeholders))
+        ORDER BY updated_at DESC, created_at DESC;
+        """
+
+    var statement: OpaquePointer?
+    guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
+        let detail = String(cString: sqlite3_errmsg(db))
+        throw ReviewLoopError(description: "Cannot query super.engineering conversations: \(detail)")
+    }
+    defer { sqlite3_finalize(statement) }
+
+    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    for (index, path) in uniquePaths.enumerated() {
+        sqlite3_bind_text(statement, Int32(index + 1), path, -1, transient)
+    }
+
+    var providers: [String] = []
+    while true {
+        let step = sqlite3_step(statement)
+        if step == SQLITE_ROW {
+            if let cString = sqlite3_column_text(statement, 0) {
+                providers.append(String(cString: cString))
+            }
+        } else if step == SQLITE_DONE {
+            break
+        } else {
+            let detail = String(cString: sqlite3_errmsg(db))
+            throw ReviewLoopError(description: "Failed reading super.engineering conversations: \(detail)")
+        }
+    }
+    return providers
+}
+
+private func resolveAuthorHarness(
+    worktreePath: String,
+    homeDirectory: String,
+    superDBPath: String
+) -> (harness: Harness?, notes: [String], reason: String?) {
+    switch classifyWorktreePath(worktreePath, homeDirectory: homeDirectory) {
+    case .codex:
+        return (.codex, [], nil)
+    case .antigravity:
+        return (.antigravity, [], nil)
+    case .superEngineering:
+        let candidates = [
+            normalizePath(worktreePath, resolveSymlinks: false),
+            normalizePath(worktreePath, resolveSymlinks: true),
+        ]
+        do {
+            let providers = try querySuperEngineeringProviders(
+                databasePath: superDBPath, worktreePaths: candidates)
+            guard let latest = providers.first else {
+                return (nil, [], "No super.engineering conversation found for worktree \(worktreePath).")
+            }
+            var notes: [String] = []
+            let distinct = Array(Set(providers)).sorted()
+            if distinct.count > 1 {
+                notes.append(
+                    "Multiple super.engineering providers found for \(worktreePath) (\(distinct.joined(separator: ", "))); using most recent: \(latest)."
+                )
+            }
+            guard latest == "codex" else {
+                return (
+                    nil,
+                    notes,
+                    "Unsupported super.engineering provider '\(latest)' for worktree \(worktreePath). Only Codex and Antigravity are supported."
+                )
+            }
+            return (.codex, notes, nil)
+        } catch {
+            return (nil, [], "\(error)")
+        }
+    case .unknown:
+        return (
+            nil,
+            [],
+            "Worktree path \(worktreePath) is outside Codex, Antigravity, and super.engineering roots."
+        )
+    }
+}
+
+/// Discovers the original PR worktree and resolves reviewer and author harnesses.
+func discoverLoopContext(
+    canonicalRepoPath: String,
+    branch: String,
+    headSHA: String,
+    action: LoopAction,
+    reviewerOverride: Harness?,
+    superDBPath: String,
+    homeDirectory: String,
+    requireClean: Bool
+) -> DiscoveryOutput {
+    do {
+        let porcelain = try git(canonicalRepoPath, ["worktree", "list", "--porcelain"])
+        let entries = parseWorktreeList(porcelain)
+        // Resolve symlinks on homeDirectory if it exists so /var vs /private/var never mismatches git.
+        let resolvedHome = normalizePath(homeDirectory, resolveSymlinks: true)
+        let normalizedEntries = entries.map {
+            WorktreeEntry(
+                path: normalizePath($0.path, resolveSymlinks: true),
+                head: $0.head,
+                branch: $0.branch,
+                isDetached: $0.isDetached
+            )
+        }
+
+        let worktree = try locateWorktree(
+            entries: normalizedEntries,
+            branch: branch,
+            headSHA: headSHA,
+            homeDirectory: resolvedHome
+        )
+
+        var notes: [String] = []
+        var detectedAuthor: Harness?
+        var detectionFailure: String?
+
+        if let worktree {
+            let result = resolveAuthorHarness(
+                worktreePath: worktree.path,
+                homeDirectory: resolvedHome,
+                superDBPath: superDBPath
+            )
+            detectedAuthor = result.harness
+            notes.append(contentsOf: result.notes)
+            detectionFailure = result.reason
+        } else {
+            detectionFailure = "No local worktree found for branch '\(branch)' or detached commit \(headSHA)."
+        }
+
+        let reviewerHarness: Harness?
+        let authorHarness: Harness?
+        if let reviewerOverride {
+            reviewerHarness = (action == .review) ? reviewerOverride : nil
+            if let detectedAuthor {
+                authorHarness = detectedAuthor
+            } else {
+                authorHarness = reviewerOverride.other
+                notes.append(
+                    "Author harness fallback '\(reviewerOverride.other.rawValue)' used from /review \(reviewerOverride.rawValue) override."
+                )
+            }
+        } else {
+            guard let detectedAuthor else {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: worktree?.path,
+                    authorHarness: nil,
+                    reviewerHarness: nil,
+                    notes: notes,
+                    error: detectionFailure ?? "Could not determine author harness."
+                )
+            }
+            authorHarness = detectedAuthor
+            reviewerHarness = (action == .review) ? detectedAuthor.other : nil
+        }
+
+        if requireClean {
+            guard let worktree else {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: nil,
+                    authorHarness: authorHarness,
+                    reviewerHarness: reviewerHarness,
+                    notes: notes,
+                    error: "No local worktree found for branch '\(branch)' or detached commit \(headSHA)."
+                )
+            }
+            guard FileManager.default.fileExists(atPath: worktree.path) else {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: worktree.path,
+                    authorHarness: authorHarness,
+                    reviewerHarness: reviewerHarness,
+                    notes: notes,
+                    error: "Worktree directory does not exist: \(worktree.path)."
+                )
+            }
+            guard worktree.head == headSHA else {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: worktree.path,
+                    authorHarness: authorHarness,
+                    reviewerHarness: reviewerHarness,
+                    notes: notes,
+                    error: "Worktree \(worktree.path) HEAD (\(worktree.head)) does not match PR head (\(headSHA))."
+                )
+            }
+            let statusOutput = try git(worktree.path, ["status", "--porcelain"])
+            if !statusOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: worktree.path,
+                    authorHarness: authorHarness,
+                    reviewerHarness: reviewerHarness,
+                    notes: notes,
+                    error: "Worktree \(worktree.path) has uncommitted changes."
+                )
+            }
+        }
+
+        return DiscoveryOutput(
+            status: "ok",
+            worktreePath: worktree?.path,
+            authorHarness: authorHarness,
+            reviewerHarness: reviewerHarness,
+            notes: notes,
+            error: nil
+        )
+    } catch {
+        return DiscoveryOutput(
+            status: "error",
+            worktreePath: nil,
+            authorHarness: nil,
+            reviewerHarness: nil,
+            notes: [],
+            error: "\(error)"
+        )
+    }
+}
+
+/// Builds the Codex `-c skills.config=...` TOML array disabling all non-allowlisted skills.
+func buildCodexSkillsConfig(
+    repoPath: String,
+    homeDirectory: String,
+    allowedNames: Set<String>
+) -> String {
+    let fm = FileManager.default
+    let roots = [
+        normalizePath(repoPath, resolveSymlinks: true) + "/.codex/skills",
+        normalizePath(repoPath, resolveSymlinks: true) + "/.agents/skills",
+        normalizePath(homeDirectory, resolveSymlinks: true) + "/.codex/skills",
+        normalizePath(homeDirectory, resolveSymlinks: true) + "/.codex/skills/.system",
+        normalizePath(homeDirectory, resolveSymlinks: true) + "/.agents/skills",
+    ]
+
+    var seenPaths = Set<String>()
+    var disabledPaths: [String] = []
+
+    for root in roots {
+        guard let children = try? fm.contentsOfDirectory(atPath: root) else { continue }
+        for child in children.sorted() {
+            if child.hasPrefix(".") { continue }
+            let skillFile = normalizePath("\(root)/\(child)/SKILL.md", resolveSymlinks: true)
+            guard fm.fileExists(atPath: skillFile) else { continue }
+            guard !allowedNames.contains(child) else { continue }
+            if seenPaths.insert(skillFile).inserted {
+                disabledPaths.append(skillFile)
+            }
+        }
+    }
+
+    let entries = disabledPaths.sorted().map { path -> String in
+        let escaped = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "{path=\"\(escaped)\",enabled=false}"
+    }
+    return "[\(entries.joined(separator: ","))]"
+}
+
+private func parseOptions(_ arguments: [String]) throws -> (flags: Set<String>, values: [String: String]) {
+    var flags = Set<String>()
+    var values: [String: String] = [:]
+    var index = 0
+    while index < arguments.count {
+        let arg = arguments[index]
+        guard arg.hasPrefix("--") else {
+            throw ReviewLoopError(description: "Unexpected argument: \(arg)")
+        }
+        let key = String(arg.dropFirst(2))
+        if key == "require-clean" {
+            flags.insert(key)
+            index += 1
+        } else {
+            guard index + 1 < arguments.count else {
+                throw ReviewLoopError(description: "Missing value for --\(key)")
+            }
+            values[key] = arguments[index + 1]
+            index += 2
+        }
+    }
+    return (flags, values)
+}
+
+private func encodeJSON<T: Encodable>(_ value: T) throws -> String {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let data = try encoder.encode(value)
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func runCLI() -> Int32 {
+    let args = Array(CommandLine.arguments.dropFirst())
+    guard let subcommand = args.first else {
+        FileHandle.standardError.write(
+            Data("Usage: agent_review_loop.swift <parse-trigger|discover|codex-skills-config> [options]\n".utf8))
+        return 2
+    }
+
+    do {
+        let parsed = try parseOptions(Array(args.dropFirst()))
+        let home = parsed.values["home"] ?? FileManager.default.homeDirectoryForCurrentUser.path
+
+        switch subcommand {
+        case "parse-trigger":
+            guard let event = parsed.values["event"] else {
+                throw ReviewLoopError(description: "Missing --event")
+            }
+            let plan = try parseTrigger(
+                eventName: event,
+                commentBody: parsed.values["body"],
+                dispatchAction: parsed.values["action"],
+                dispatchReviewer: parsed.values["reviewer"],
+                dispatchPRNumber: parsed.values["pr-number"],
+                dispatchDryRun: parsed.values["dry-run"]
+            )
+            print(try encodeJSON(plan))
+            return 0
+
+        case "discover":
+            guard let repo = parsed.values["repo"],
+                let branch = parsed.values["branch"],
+                let headSHA = parsed.values["head-sha"],
+                let actionText = parsed.values["action"],
+                let action = LoopAction(rawValue: actionText)
+            else {
+                throw ReviewLoopError(
+                    description: "Missing required flags: --repo, --branch, --head-sha, --action"
+                )
+            }
+            let reviewerOverride: Harness?
+            if let reviewerText = parsed.values["reviewer"], !reviewerText.isEmpty {
+                guard let parsedReviewer = Harness(rawValue: reviewerText) else {
+                    throw ReviewLoopError(description: "Invalid --reviewer value: \(reviewerText)")
+                }
+                reviewerOverride = parsedReviewer
+            } else {
+                reviewerOverride = nil
+            }
+            let superDB = parsed.values["super-db"]
+                ?? "\(home)/.super.engineering/db/super.engineering.db"
+            let result = discoverLoopContext(
+                canonicalRepoPath: repo,
+                branch: branch,
+                headSHA: headSHA,
+                action: action,
+                reviewerOverride: reviewerOverride,
+                superDBPath: superDB,
+                homeDirectory: home,
+                requireClean: parsed.flags.contains("require-clean")
+            )
+            print(try encodeJSON(result))
+            return result.status == "ok" ? 0 : 1
+
+        case "codex-skills-config":
+            guard let repo = parsed.values["repo"] else {
+                throw ReviewLoopError(description: "Missing --repo")
+            }
+            let allowList = (parsed.values["allow"] ?? "")
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            print(buildCodexSkillsConfig(repoPath: repo, homeDirectory: home, allowedNames: Set(allowList)))
+            return 0
+
+        default:
+            throw ReviewLoopError(description: "Unknown subcommand: \(subcommand)")
+        }
+    } catch {
+        FileHandle.standardError.write(Data("\(error)\n".utf8))
+        return 1
+    }
+}
+
+#if !AGENT_REVIEW_LOOP_TESTS
+    exit(runCLI())
+#endif

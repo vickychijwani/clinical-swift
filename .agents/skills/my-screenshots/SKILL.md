@@ -43,7 +43,7 @@ Use the bundled Python from `load_workspace_dependencies` when Pillow is absent.
 Run the helper without reading its source:
 
 ```sh
-"$PYTHON" .codex/skills/my-screenshots/scripts/check_images.py screenshots \
+"$PYTHON" .agents/skills/my-screenshots/scripts/check_images.py screenshots \
   --sheets build/screenshot-capture/contact-sheets \
   --report build/screenshot-capture/images.json
 ```

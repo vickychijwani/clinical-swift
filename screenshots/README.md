@@ -1,7 +1,7 @@
 # App screenshots
 
 Use `$my-screenshots` to capture or update this set. The workflow is in
-[my-screenshots](../.codex/skills/my-screenshots/SKILL.md). It finds the current
+[my-screenshots](../.agents/skills/my-screenshots/SKILL.md). It finds the current
 screens, controls, routes, and widget families before it selects capture states.
 The list below records this capture only. It is not a fixed checklist for later
 versions of the app.
@@ -39,7 +39,7 @@ and contact sheets. Use the Python path from `load_workspace_dependencies` if th
 default Python does not include Pillow:
 
 ```sh
-"$PYTHON" .codex/skills/my-screenshots/scripts/check_images.py screenshots \
+"$PYTHON" .agents/skills/my-screenshots/scripts/check_images.py screenshots \
   --sheets build/screenshot-capture/contact-sheets \
   --report build/screenshot-capture/images.json
 ```
