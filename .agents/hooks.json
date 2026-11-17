@@ -1,0 +1,20 @@
+{
+  "ui-waits-check": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "/bin/sh ./hooks/stop_hook.sh ../.codex/hooks/check_ui_waits.sh",
+        "timeout": 2
+      }
+    ]
+  },
+  "swift-format-and-comments": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "/bin/sh ./hooks/stop_hook.sh ../.codex/hooks/check_swift.sh",
+        "timeout": 60
+      }
+    ]
+  }
+}
