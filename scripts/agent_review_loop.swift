@@ -27,12 +27,21 @@ enum Harness: String, Codable, Equatable {
 enum LoopAction: String, Codable, Equatable {
     case review
     case address
+    case mention
 }
 
 struct TriggerPlan: Codable, Equatable {
     let action: LoopAction
     let prNumber: Int?
     let reviewerOverride: Harness?
+    let dryRun: Bool
+}
+
+struct MentionPlan: Codable, Equatable {
+    let matched: Bool
+    let harness: Harness?
+    let prNumber: Int?
+    let instructions: String?
     let dryRun: Bool
 }
 
@@ -114,7 +123,8 @@ private func git(_ repoPath: String, _ arguments: [String]) throws -> String {
     let result = try runProcess(arguments: ["git", "-C", repoPath] + arguments)
     guard result.exitCode == 0 else {
         let details = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        throw ReviewLoopError(description: "git \(arguments.joined(separator: " ")) failed: \(details)")
+        throw ReviewLoopError(
+            description: "git \(arguments.joined(separator: " ")) failed: \(details)")
     }
     return result.stdout
 }
@@ -138,19 +148,24 @@ func parseTrigger(
         switch command {
         case "/review":
             if tokens.count == 1 {
-                return TriggerPlan(action: .review, prNumber: nil, reviewerOverride: nil, dryRun: false)
+                return TriggerPlan(
+                    action: .review, prNumber: nil, reviewerOverride: nil, dryRun: false)
             }
             guard tokens.count == 2, let harness = Harness(rawValue: tokens[1]) else {
                 throw ReviewLoopError(
-                    description: "Invalid /review command. Use `/review`, `/review codex`, or `/review antigravity`."
+                    description:
+                        "Invalid /review command. Use `/review`, `/review codex`, or `/review antigravity`."
                 )
             }
-            return TriggerPlan(action: .review, prNumber: nil, reviewerOverride: harness, dryRun: false)
+            return TriggerPlan(
+                action: .review, prNumber: nil, reviewerOverride: harness, dryRun: false)
         case "/address":
             guard tokens.count == 1 else {
-                throw ReviewLoopError(description: "Invalid /address command. Use `/address` with no arguments.")
+                throw ReviewLoopError(
+                    description: "Invalid /address command. Use `/address` with no arguments.")
             }
-            return TriggerPlan(action: .address, prNumber: nil, reviewerOverride: nil, dryRun: false)
+            return TriggerPlan(
+                action: .address, prNumber: nil, reviewerOverride: nil, dryRun: false)
         default:
             throw ReviewLoopError(description: "Unsupported trigger command: \(command)")
         }
@@ -164,22 +179,289 @@ func parseTrigger(
         guard let actionText = dispatchAction?.trimmingCharacters(in: .whitespacesAndNewlines),
             let action = LoopAction(rawValue: actionText)
         else {
-            throw ReviewLoopError(description: "Invalid workflow_dispatch action. Use `review` or `address`.")
+            throw ReviewLoopError(
+                description: "Invalid workflow_dispatch action. Use `review` or `address`.")
         }
-        let reviewerText = (dispatchReviewer ?? "auto").trimmingCharacters(in: .whitespacesAndNewlines)
+        let reviewerText = (dispatchReviewer ?? "auto").trimmingCharacters(
+            in: .whitespacesAndNewlines)
         let reviewerOverride: Harness?
         if reviewerText.isEmpty || reviewerText == "auto" {
             reviewerOverride = nil
         } else if let parsed = Harness(rawValue: reviewerText), action == .review {
             reviewerOverride = parsed
         } else {
-            throw ReviewLoopError(description: "Invalid reviewer option '\(reviewerText)' for action '\(action.rawValue)'.")
+            throw ReviewLoopError(
+                description:
+                    "Invalid reviewer option '\(reviewerText)' for action '\(action.rawValue)'.")
         }
-        let dryRun = (dispatchDryRun ?? "false").trimmingCharacters(in: .whitespacesAndNewlines) == "true"
+        let dryRun =
+            (dispatchDryRun ?? "false").trimmingCharacters(in: .whitespacesAndNewlines) == "true"
         return TriggerPlan(
             action: action,
             prNumber: prNumber,
             reviewerOverride: reviewerOverride,
+            dryRun: dryRun
+        )
+
+    default:
+        throw ReviewLoopError(description: "Unsupported event: \(eventName)")
+    }
+}
+
+private func isASCIIAlnum(_ ch: Character) -> Bool {
+    guard let scalar = ch.unicodeScalars.first, ch.unicodeScalars.count == 1 else { return false }
+    return (scalar.value >= 48 && scalar.value <= 57)
+        || (scalar.value >= 65 && scalar.value <= 90)
+        || (scalar.value >= 97 && scalar.value <= 122)
+}
+
+private func isMentionPrefixInvalid(_ ch: Character?) -> Bool {
+    guard let ch else { return false }
+    return isASCIIAlnum(ch) || ch == "." || ch == "_" || ch == "-" || ch == "+"
+}
+
+private func isMentionSuffixInvalid(_ ch: Character?) -> Bool {
+    guard let ch else { return false }
+    return isASCIIAlnum(ch) || ch == "_" || ch == "-" || ch == "["
+}
+
+private func scanBotMentions(in text: String) -> [(harness: Harness, range: Range<String.Index>)] {
+    let targets: [(handle: String, harness: Harness)] = [
+        ("@clinical-codex", .codex),
+        ("@clinical-antigravity", .antigravity),
+    ]
+    var matches: [(harness: Harness, range: Range<String.Index>)] = []
+    var index = text.startIndex
+
+    while index < text.endIndex {
+        if text[index] == "@" {
+            let beforeChar = index > text.startIndex ? text[text.index(before: index)] : nil
+            if !isMentionPrefixInvalid(beforeChar) {
+                var matched = false
+                for target in targets {
+                    guard
+                        let handleEnd = text.index(
+                            index, offsetBy: target.handle.count, limitedBy: text.endIndex)
+                    else { continue }
+                    if text[index..<handleEnd].lowercased() == target.handle {
+                        var tokenEnd = handleEnd
+                        if let botEnd = text.index(
+                            handleEnd, offsetBy: 5, limitedBy: text.endIndex),
+                            text[handleEnd..<botEnd].lowercased() == "[bot]"
+                        {
+                            tokenEnd = botEnd
+                        }
+                        let afterChar = tokenEnd < text.endIndex ? text[tokenEnd] : nil
+                        if !isMentionSuffixInvalid(afterChar) {
+                            matches.append((target.harness, index..<tokenEnd))
+                            index = tokenEnd
+                            matched = true
+                            break
+                        }
+                    }
+                }
+                if matched { continue }
+            }
+        }
+        index = text.index(after: index)
+    }
+    return matches
+}
+
+private func stripBlockquoteLines(from text: String) -> String {
+    text
+        .components(separatedBy: "\n")
+        .filter { line in
+            let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
+            return !trimmed.hasPrefix(">")
+        }
+        .joined(separator: "\n")
+}
+
+private func fencePrefix(in line: String) -> (char: Character, length: Int)? {
+    var spaces = 0
+    var idx = line.startIndex
+    while idx < line.endIndex && line[idx] == " " && spaces < 3 {
+        spaces += 1
+        idx = line.index(after: idx)
+    }
+    guard idx < line.endIndex else { return nil }
+    let ch = line[idx]
+    guard ch == "`" || ch == "~" else { return nil }
+    var length = 0
+    while idx < line.endIndex && line[idx] == ch {
+        length += 1
+        idx = line.index(after: idx)
+    }
+    guard length >= 3 else { return nil }
+    if ch == "`" && line[idx...].contains("`") {
+        return nil
+    }
+    return (ch, length)
+}
+
+private func isClosingFence(_ line: String, char: Character, minLength: Int) -> Bool {
+    var spaces = 0
+    var idx = line.startIndex
+    while idx < line.endIndex && line[idx] == " " && spaces < 3 {
+        spaces += 1
+        idx = line.index(after: idx)
+    }
+    var length = 0
+    while idx < line.endIndex && line[idx] == char {
+        length += 1
+        idx = line.index(after: idx)
+    }
+    guard length >= minLength else { return false }
+    return line[idx...].allSatisfy { $0 == " " || $0 == "\t" || $0 == "\r" }
+}
+
+private func stripInlineCodeSpans(from line: String) -> String {
+    var result = ""
+    var index = line.startIndex
+    while index < line.endIndex {
+        if line[index] == "`" {
+            var tickEnd = index
+            while tickEnd < line.endIndex && line[tickEnd] == "`" {
+                tickEnd = line.index(after: tickEnd)
+            }
+            let tickCount = line.distance(from: index, to: tickEnd)
+            var search = tickEnd
+            var foundCloseEnd: String.Index?
+            while search < line.endIndex {
+                if line[search] == "`" {
+                    var closeEnd = search
+                    while closeEnd < line.endIndex && line[closeEnd] == "`" {
+                        closeEnd = line.index(after: closeEnd)
+                    }
+                    if line.distance(from: search, to: closeEnd) == tickCount {
+                        foundCloseEnd = closeEnd
+                        break
+                    }
+                    search = closeEnd
+                } else {
+                    search = line.index(after: search)
+                }
+            }
+            if let closeEnd = foundCloseEnd {
+                index = closeEnd
+                continue
+            }
+            result.append(contentsOf: line[index..<tickEnd])
+            index = tickEnd
+            continue
+        }
+        result.append(line[index])
+        index = line.index(after: index)
+    }
+    return result
+}
+
+private func stripCodeAndQuotes(from text: String) -> String {
+    let lines = stripBlockquoteLines(from: text).components(separatedBy: "\n")
+    var output: [String] = []
+    var lineIndex = 0
+    while lineIndex < lines.count {
+        let line = lines[lineIndex]
+        if let fence = fencePrefix(in: line) {
+            var closeIndex = lineIndex + 1
+            var foundClose = false
+            while closeIndex < lines.count {
+                if isClosingFence(lines[closeIndex], char: fence.char, minLength: fence.length) {
+                    foundClose = true
+                    break
+                }
+                closeIndex += 1
+            }
+            if foundClose {
+                lineIndex = closeIndex + 1
+                continue
+            }
+        }
+        output.append(stripInlineCodeSpans(from: line))
+        lineIndex += 1
+    }
+    return output.joined(separator: "\n")
+}
+
+private func removeRanges(_ ranges: [Range<String.Index>], from text: String) -> String {
+    var result = text
+    for range in ranges.reversed() {
+        result.removeSubrange(range)
+    }
+    return result
+}
+
+/// Parses `@clinical-codex` or `@clinical-antigravity` PR comment mentions and workflow_dispatch inputs.
+func parseMention(
+    eventName: String,
+    commentBody: String? = nil,
+    dispatchBot: String? = nil,
+    dispatchInstructions: String? = nil,
+    dispatchPRNumber: String? = nil,
+    dispatchDryRun: String? = nil
+) throws -> MentionPlan {
+    switch eventName {
+    case "issue_comment", "pull_request_review_comment", "pull_request_review":
+        let raw = (commentBody ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else {
+            return MentionPlan(
+                matched: false, harness: nil, prNumber: nil, instructions: nil, dryRun: false)
+        }
+
+        let scanText = stripCodeAndQuotes(from: raw)
+        let matches = scanBotMentions(in: scanText)
+        let distinctHarnesses = Set(matches.map(\.harness))
+
+        guard !distinctHarnesses.isEmpty else {
+            return MentionPlan(
+                matched: false, harness: nil, prNumber: nil, instructions: nil, dryRun: false)
+        }
+        guard distinctHarnesses.count == 1, let harness = distinctHarnesses.first else {
+            throw ReviewLoopError(
+                description:
+                    "Both @clinical-codex and @clinical-antigravity were tagged in the same comment. Tag only one bot per comment."
+            )
+        }
+
+        let unquoted = stripBlockquoteLines(from: raw)
+        let unquotedMatches = scanBotMentions(in: unquoted)
+        let remaining = removeRanges(unquotedMatches.map(\.range), from: unquoted)
+            .trimmingCharacters(
+                in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ":,")))
+        guard !remaining.isEmpty else {
+            let tag = harness == .codex ? "@clinical-codex" : "@clinical-antigravity"
+            throw ReviewLoopError(description: "Please include instructions when tagging \(tag).")
+        }
+
+        return MentionPlan(
+            matched: true, harness: harness, prNumber: nil, instructions: raw, dryRun: false)
+
+    case "workflow_dispatch":
+        guard let prText = dispatchPRNumber?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let prNumber = Int(prText), prNumber > 0
+        else {
+            throw ReviewLoopError(description: "Invalid workflow_dispatch pr_number.")
+        }
+        guard let botText = dispatchBot?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let harness = Harness(rawValue: botText)
+        else {
+            throw ReviewLoopError(
+                description: "Invalid workflow_dispatch bot. Use `codex` or `antigravity`.")
+        }
+        let instructions = (dispatchInstructions ?? "").trimmingCharacters(
+            in: .whitespacesAndNewlines)
+        guard !instructions.isEmpty else {
+            throw ReviewLoopError(
+                description: "Invalid workflow_dispatch instructions: cannot be empty.")
+        }
+        let dryRun =
+            (dispatchDryRun ?? "false").trimmingCharacters(in: .whitespacesAndNewlines) == "true"
+        return MentionPlan(
+            matched: true,
+            harness: harness,
+            prNumber: prNumber,
+            instructions: instructions,
             dryRun: dryRun
         )
 
@@ -199,7 +481,8 @@ func parseWorktreeList(_ output: String) -> [WorktreeEntry] {
     func flush() {
         if let path = currentPath, let head = currentHead {
             entries.append(
-                WorktreeEntry(path: path, head: head, branch: currentBranch, isDetached: currentDetached)
+                WorktreeEntry(
+                    path: path, head: head, branch: currentBranch, isDetached: currentDetached)
             )
         }
         currentPath = nil
@@ -285,9 +568,12 @@ func locateWorktree(
 }
 
 /// Reads the provider_key history for a super.engineering worktree, read-only.
-func querySuperEngineeringProviders(databasePath: String, worktreePaths: [String]) throws -> [String] {
+func querySuperEngineeringProviders(databasePath: String, worktreePaths: [String]) throws
+    -> [String]
+{
     guard FileManager.default.fileExists(atPath: databasePath) else {
-        throw ReviewLoopError(description: "super.engineering database not found at \(databasePath).")
+        throw ReviewLoopError(
+            description: "super.engineering database not found at \(databasePath).")
     }
 
     var db: OpaquePointer?
@@ -310,7 +596,8 @@ func querySuperEngineeringProviders(databasePath: String, worktreePaths: [String
     var statement: OpaquePointer?
     guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
         let detail = String(cString: sqlite3_errmsg(db))
-        throw ReviewLoopError(description: "Cannot query super.engineering conversations: \(detail)")
+        throw ReviewLoopError(
+            description: "Cannot query super.engineering conversations: \(detail)")
     }
     defer { sqlite3_finalize(statement) }
 
@@ -330,7 +617,8 @@ func querySuperEngineeringProviders(databasePath: String, worktreePaths: [String
             break
         } else {
             let detail = String(cString: sqlite3_errmsg(db))
-            throw ReviewLoopError(description: "Failed reading super.engineering conversations: \(detail)")
+            throw ReviewLoopError(
+                description: "Failed reading super.engineering conversations: \(detail)")
         }
     }
     return providers
@@ -355,7 +643,9 @@ private func resolveAuthorHarness(
             let providers = try querySuperEngineeringProviders(
                 databasePath: superDBPath, worktreePaths: candidates)
             guard let latest = providers.first else {
-                return (nil, [], "No super.engineering conversation found for worktree \(worktreePath).")
+                return (
+                    nil, [], "No super.engineering conversation found for worktree \(worktreePath)."
+                )
             }
             var notes: [String] = []
             let distinct = Array(Set(providers)).sorted()
@@ -391,6 +681,7 @@ func discoverLoopContext(
     headSHA: String,
     action: LoopAction,
     reviewerOverride: Harness?,
+    targetHarness: Harness? = nil,
     superDBPath: String,
     homeDirectory: String,
     requireClean: Bool
@@ -421,21 +712,49 @@ func discoverLoopContext(
         var detectionFailure: String?
 
         if let worktree {
-            let result = resolveAuthorHarness(
-                worktreePath: worktree.path,
-                homeDirectory: resolvedHome,
-                superDBPath: superDBPath
-            )
-            detectedAuthor = result.harness
-            notes.append(contentsOf: result.notes)
-            detectionFailure = result.reason
+            if action == .mention {
+                detectedAuthor = targetHarness
+            } else {
+                let result = resolveAuthorHarness(
+                    worktreePath: worktree.path,
+                    homeDirectory: resolvedHome,
+                    superDBPath: superDBPath
+                )
+                detectedAuthor = result.harness
+                notes.append(contentsOf: result.notes)
+                detectionFailure = result.reason
+            }
         } else {
-            detectionFailure = "No local worktree found for branch '\(branch)' or detached commit \(headSHA)."
+            detectionFailure =
+                "No local worktree found for branch '\(branch)' or detached commit \(headSHA)."
         }
 
         let reviewerHarness: Harness?
         let authorHarness: Harness?
-        if let reviewerOverride {
+        if action == .mention {
+            guard let targetHarness else {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: worktree?.path,
+                    authorHarness: nil,
+                    reviewerHarness: nil,
+                    notes: notes,
+                    error: "Missing --harness for mention discovery."
+                )
+            }
+            guard worktree != nil else {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: nil,
+                    authorHarness: targetHarness,
+                    reviewerHarness: nil,
+                    notes: notes,
+                    error: detectionFailure
+                )
+            }
+            authorHarness = targetHarness
+            reviewerHarness = nil
+        } else if let reviewerOverride {
             reviewerHarness = (action == .review) ? reviewerOverride : nil
             if let detectedAuthor {
                 authorHarness = detectedAuthor
@@ -468,7 +787,8 @@ func discoverLoopContext(
                     authorHarness: authorHarness,
                     reviewerHarness: reviewerHarness,
                     notes: notes,
-                    error: "No local worktree found for branch '\(branch)' or detached commit \(headSHA)."
+                    error:
+                        "No local worktree found for branch '\(branch)' or detached commit \(headSHA)."
                 )
             }
             guard FileManager.default.fileExists(atPath: worktree.path) else {
@@ -488,7 +808,8 @@ func discoverLoopContext(
                     authorHarness: authorHarness,
                     reviewerHarness: reviewerHarness,
                     notes: notes,
-                    error: "Worktree \(worktree.path) HEAD (\(worktree.head)) does not match PR head (\(headSHA))."
+                    error:
+                        "Worktree \(worktree.path) HEAD (\(worktree.head)) does not match PR head (\(headSHA))."
                 )
             }
             let statusOutput = try git(worktree.path, ["status", "--porcelain"])
@@ -556,7 +877,8 @@ func buildCodexSkillsConfig(
     }
 
     let entries = disabledPaths.sorted().map { path -> String in
-        let escaped = path
+        let escaped =
+            path
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "{path=\"\(escaped)\",enabled=false}"
@@ -616,7 +938,8 @@ func buildCheckRunPayload(
             throw ReviewLoopError(description: "Missing --conclusion for completed check run.")
         }
     } else if let conclusion, !conclusion.isEmpty {
-        throw ReviewLoopError(description: "Unexpected --conclusion for \(status.rawValue) check run.")
+        throw ReviewLoopError(
+            description: "Unexpected --conclusion for \(status.rawValue) check run.")
     }
 
     let output: CheckRunOutput?
@@ -656,7 +979,8 @@ private func submitCheckRun(
     let isUpdate = !(checkRunID ?? "").isEmpty
     if !isUpdate {
         guard let name, !name.isEmpty, let headSHA, !headSHA.isEmpty else {
-            throw ReviewLoopError(description: "Creating a check run requires --name and --head-sha.")
+            throw ReviewLoopError(
+                description: "Creating a check run requires --name and --head-sha.")
         }
     }
 
@@ -673,7 +997,8 @@ private func submitCheckRun(
     let jsonData = try JSONEncoder().encode(payload)
 
     let method = isUpdate ? "PATCH" : "POST"
-    let endpoint = isUpdate
+    let endpoint =
+        isUpdate
         ? "repos/\(repo)/check-runs/\(checkRunID!)"
         : "repos/\(repo)/check-runs"
     let result = try runProcess(
@@ -694,7 +1019,9 @@ private func submitCheckRun(
     return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-private func parseOptions(_ arguments: [String]) throws -> (flags: Set<String>, values: [String: String]) {
+private func parseOptions(_ arguments: [String]) throws -> (
+    flags: Set<String>, values: [String: String]
+) {
     var flags = Set<String>()
     var values: [String: String] = [:]
     var index = 0
@@ -725,11 +1052,21 @@ private func encodeJSON<T: Encodable>(_ value: T) throws -> String {
     return String(decoding: data, as: UTF8.self)
 }
 
+private func parseOptionalHarness(_ values: [String: String], flag: String) throws -> Harness? {
+    guard let raw = values[flag], !raw.isEmpty else { return nil }
+    guard let harness = Harness(rawValue: raw) else {
+        throw ReviewLoopError(description: "Invalid --\(flag) value: \(raw)")
+    }
+    return harness
+}
+
 private func runCLI() -> Int32 {
     let args = Array(CommandLine.arguments.dropFirst())
     guard let subcommand = args.first else {
         FileHandle.standardError.write(
-            Data("Usage: agent_review_loop.swift <parse-trigger|discover|codex-skills-config|check-run> [options]\n".utf8))
+            Data(
+                "Usage: agent_review_loop.swift <parse-trigger|parse-mention|discover|codex-skills-config|check-run> [options]\n"
+                    .utf8))
         return 2
     }
 
@@ -753,6 +1090,21 @@ private func runCLI() -> Int32 {
             print(try encodeJSON(plan))
             return 0
 
+        case "parse-mention":
+            guard let event = parsed.values["event"] else {
+                throw ReviewLoopError(description: "Missing --event")
+            }
+            let plan = try parseMention(
+                eventName: event,
+                commentBody: parsed.values["body"],
+                dispatchBot: parsed.values["bot"],
+                dispatchInstructions: parsed.values["instructions"],
+                dispatchPRNumber: parsed.values["pr-number"],
+                dispatchDryRun: parsed.values["dry-run"]
+            )
+            print(try encodeJSON(plan))
+            return 0
+
         case "discover":
             guard let repo = parsed.values["repo"],
                 let branch = parsed.values["branch"],
@@ -764,16 +1116,10 @@ private func runCLI() -> Int32 {
                     description: "Missing required flags: --repo, --branch, --head-sha, --action"
                 )
             }
-            let reviewerOverride: Harness?
-            if let reviewerText = parsed.values["reviewer"], !reviewerText.isEmpty {
-                guard let parsedReviewer = Harness(rawValue: reviewerText) else {
-                    throw ReviewLoopError(description: "Invalid --reviewer value: \(reviewerText)")
-                }
-                reviewerOverride = parsedReviewer
-            } else {
-                reviewerOverride = nil
-            }
-            let superDB = parsed.values["super-db"]
+            let reviewerOverride = try parseOptionalHarness(parsed.values, flag: "reviewer")
+            let targetHarness = try parseOptionalHarness(parsed.values, flag: "harness")
+            let superDB =
+                parsed.values["super-db"]
                 ?? "\(home)/.super.engineering/db/super.engineering.db"
             let result = discoverLoopContext(
                 canonicalRepoPath: repo,
@@ -781,6 +1127,7 @@ private func runCLI() -> Int32 {
                 headSHA: headSHA,
                 action: action,
                 reviewerOverride: reviewerOverride,
+                targetHarness: targetHarness,
                 superDBPath: superDB,
                 homeDirectory: home,
                 requireClean: parsed.flags.contains("require-clean")
@@ -796,7 +1143,9 @@ private func runCLI() -> Int32 {
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            print(buildCodexSkillsConfig(repoPath: repo, homeDirectory: home, allowedNames: Set(allowList)))
+            print(
+                buildCodexSkillsConfig(
+                    repoPath: repo, homeDirectory: home, allowedNames: Set(allowList)))
             return 0
 
         case "check-run":
@@ -805,7 +1154,8 @@ private func runCLI() -> Int32 {
                 let status = CheckRunStatus(rawValue: statusText)
             else {
                 throw ReviewLoopError(
-                    description: "Missing or invalid flags: --repo, --status (queued|in_progress|completed)"
+                    description:
+                        "Missing or invalid flags: --repo, --status (queued|in_progress|completed)"
                 )
             }
             let checkRunID = try submitCheckRun(
