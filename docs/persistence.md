@@ -48,6 +48,6 @@ Do not remove those protections merely to enable sync. See [payments](payments.m
 and [Calendar](calendar-sync.md) for their data ownership rules.
 
 Before implementing sync, check schema, migration, trigger, and conflict behavior
-against SQLiteData's [sync](https://github.com/pointfreeco/sqlite-data/blob/1.6.6/Sources/SQLiteData/Documentation.docc/Articles/CloudKitSync.md)
-and [sharing](https://github.com/pointfreeco/sqlite-data/blob/1.6.6/Sources/SQLiteData/Documentation.docc/Articles/CloudKitSharing.md)
+against SQLiteData's [sync](https://github.com/pointfreeco/sqlite-data/blob/1.12.1/Sources/SQLiteData/Documentation.docc/Articles/CloudKitSync.md)
+and [sharing](https://github.com/pointfreeco/sqlite-data/blob/1.12.1/Sources/SQLiteData/Documentation.docc/Articles/CloudKitSharing.md)
 requirements. Library conflict resolution is not yet an app-level guarantee.

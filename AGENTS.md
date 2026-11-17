@@ -46,6 +46,7 @@ App-specific guides:
 - One-way EventKit appointment and unavailable-time sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
 - Financial entries, current balances, dated reports, and derived coverage: `docs/payments.md`
 - Patient data backups, Google account binding, release checks, and assisted restore: `docs/backups.md`
+- App Store Connect tooling, Xcode Cloud release checks, and the public website: `scripts/README.md`, `ci_scripts/README.md`, and `sites/README.md`
 
 Update guides when a documented decision changes. A code change alone does not require a documentation change.
 
@@ -58,7 +59,7 @@ Plans, implemented specs, and validation reports are historical context, not cur
 - Keep only consequential decisions and constraints whose reason is not clear from code or tests. Explain the reason briefly.
 - Keep cross-module and cross-process constraints in guides; keep local implementation traps beside the code.
 - Give each decision one home and link to it. Do not repeat it as an invariant, warning, and edge case.
-- Omit implementation inventories, ordinary UI details, test lists/results, and change summaries. Keep runnable setup and recovery procedures.
+- Omit implementation inventories, ordinary UI details, test lists/results, session status reports (what was or was not verified), and change summaries. Keep runnable setup and recovery procedures.
 - When editing a guide, remove duplicate and obsolete text instead of appending a feature summary.
 - Do not maintain documentation for local design tools, such as Card lab and Color lab. These temporary development controls do not need architecture guides.
 

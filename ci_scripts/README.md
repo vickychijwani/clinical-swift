@@ -18,5 +18,4 @@ not need `xcbeautify`. This setting also applies to the nested Make commands;
 failed builds and tests still stop the archive.
 
 The existing post-clone script configures macro trust. Configure secrets and test
-runner access before enabling distribution. Cloud credentials and an actual cloud
-archive have not been verified in this implementation session.
+runner access before enabling distribution.
