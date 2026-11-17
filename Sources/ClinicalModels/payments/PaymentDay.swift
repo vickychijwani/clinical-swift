@@ -97,9 +97,7 @@ extension AccountEntry.Category {
     fileprivate var paymentTitle: String {
         switch self {
         case .patientFees: "Patient fees"
-        case .externalConsultations: "External consultations"
-        case .referralCommissions: "Referral commissions"
-        case .otherReceipts: "Other receipts"
+        case .otherIncome: "Other income"
         case .rent: "Rent"
         case .staff: "Staff"
         case .consultants: "Consultants"

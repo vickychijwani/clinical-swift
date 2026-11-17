@@ -47,7 +47,7 @@ import SQLiteData
                     entries.append(
                         AccountEntry(
                             details: .receipt(
-                                source: .externalConsultations,
+                                source: .otherIncome,
                                 paymentMethod: offset == 4 ? nil : .upi),
                             amount: offset == 7 ? 100000 : 6100, entryDate: day,
                             createdDate: day.addingTimeInterval(-60)))

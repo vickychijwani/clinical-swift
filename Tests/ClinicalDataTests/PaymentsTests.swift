@@ -92,7 +92,7 @@ struct PaymentsModelTests {
         try PaymentsFixture.withClock {
             let report = try CashFlow(entries: [
                 AccountEntry(
-                    details: .receipt(source: .externalConsultations, paymentMethod: .cash),
+                    details: .receipt(source: .otherIncome, paymentMethod: .cash),
                     amount: 1000),
                 AccountEntry(details: .expense(category: nil, paymentMethod: .cash), amount: 300),
                 AccountEntry(details: .expense(category: nil, paymentMethod: nil), amount: 200),
@@ -133,9 +133,7 @@ struct PaymentsModelTests {
                     .charge(patientID: p, appointmentID: a),
                     .adjustment(patientID: p),
                     .receipt(source: .patient(p), paymentMethod: nil),
-                    .receipt(source: .externalConsultations, paymentMethod: nil),
-                    .receipt(source: .referralCommissions, paymentMethod: nil),
-                    .receipt(source: .otherReceipts, paymentMethod: nil),
+                    .receipt(source: .otherIncome, paymentMethod: nil),
                     .expense(category: nil, paymentMethod: nil),
                 ]
                 + AccountEntry.ExpenseCategory.allCases.map {
@@ -191,7 +189,7 @@ struct PaymentsModelTests {
                         invalid.append(changed)
                     }
                     changed = record
-                    changed.category = entry.kind == .expense ? "otherReceipts" : "rent"
+                    changed.category = entry.kind == .expense ? "otherIncome" : "rent"
                     invalid.append(changed)
                 }
                 for invalidRecord in invalid {
@@ -444,7 +442,7 @@ struct PaymentsPersistenceTests {
                 try PaymentsFixture.assertSummary(db)
                 charge.details = .adjustment(patientID: PaymentsFixture.otherPatientID)
                 charge.amount = 70
-                receipt.details = .receipt(source: .otherReceipts, paymentMethod: nil)
+                receipt.details = .receipt(source: .otherIncome, paymentMethod: nil)
                 try saveAccountEntries(AccountEntryBatch(updates: [charge, receipt]), in: db)
                 try PaymentsFixture.assertSummary(db)
                 #expect(
@@ -491,7 +489,7 @@ struct PaymentsPersistenceTests {
                     AccountEntry.Details.charge(
                         patientID: PaymentsFixture.patientID, appointmentID: nil),
                     .receipt(source: .patient(PaymentsFixture.otherPatientID), paymentMethod: nil),
-                    .receipt(source: .otherReceipts, paymentMethod: nil),
+                    .receipt(source: .otherIncome, paymentMethod: nil),
                 ] {
                     let invalid = AccountEntry(details: details, amount: 1)
                     #expect(throws: AccountEntryError.invalidFields) {
@@ -641,10 +639,10 @@ struct PaymentsQueryTests {
                 let end = FinancialDate.nextDay(start)
                 let entries = [
                     AccountEntry(
-                        details: .receipt(source: .externalConsultations, paymentMethod: nil),
+                        details: .receipt(source: .otherIncome, paymentMethod: nil),
                         amount: 100, entryDate: start, note: "Referral"),
                     AccountEntry(
-                        details: .receipt(source: .externalConsultations, paymentMethod: .upi),
+                        details: .receipt(source: .otherIncome, paymentMethod: .upi),
                         amount: 50, entryDate: start, note: "Referral"),
                     AccountEntry(
                         details: .expense(category: .rent, paymentMethod: .cash), amount: 20,
@@ -653,10 +651,10 @@ struct PaymentsQueryTests {
                         details: .expense(category: .equipmentPurchases, paymentMethod: nil),
                         amount: 200, entryDate: start),
                     AccountEntry(
-                        details: .receipt(source: .otherReceipts, paymentMethod: nil), amount: 999,
+                        details: .receipt(source: .otherIncome, paymentMethod: nil), amount: 999,
                         entryDate: end),
                     AccountEntry(
-                        details: .receipt(source: .otherReceipts, paymentMethod: nil), amount: 888,
+                        details: .receipt(source: .otherIncome, paymentMethod: nil), amount: 888,
                         entryDate: start.addingTimeInterval(-1)),
                     PaymentsFixture.entry(.adjustment, 500, date: start),
                     PaymentsFixture.entry(.charge, 500, date: start),
@@ -670,7 +668,7 @@ struct PaymentsQueryTests {
                 #expect(unknown.received == 100)
                 #expect(unknown.paid == 200)
                 #expect(unknown.net == -100)
-                #expect(try report.total(for: AccountEntry.Category.externalConsultations) == 150)
+                #expect(try report.total(for: AccountEntry.Category.otherIncome) == 150)
                 #expect(try report.total(for: .capital) == 200)
                 #expect(try report.total(for: .operating) == 20)
                 #expect(
@@ -678,7 +676,7 @@ struct PaymentsQueryTests {
                         100, 200,
                     ])
                 #expect(
-                    try PreviousAccountNotesRequest(category: .externalConsultations).fetch(db) == [
+                    try PreviousAccountNotesRequest(category: .otherIncome).fetch(db) == [
                         "Referral"
                     ])
                 #expect(try PreviousAccountNotesRequest(category: .rent).fetch(db) == ["Monthly"])

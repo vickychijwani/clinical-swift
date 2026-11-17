@@ -67,7 +67,7 @@ struct ColorLabRenderingTests {
             let lab = ColorLab(defaults: defaults)
             let date = try Date("2026-10-30T12:00:00Z", strategy: .iso8601)
             for details: AccountEntry.Details in [
-                .receipt(source: .otherReceipts, paymentMethod: .upi),
+                .receipt(source: .otherIncome, paymentMethod: .upi),
                 .expense(category: .materials, paymentMethod: nil),
             ] {
                 let item = PaymentItem(

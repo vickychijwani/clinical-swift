@@ -69,14 +69,14 @@ struct PaymentEntryTests {
                     details: .expense(category: .materials, paymentMethod: nil),
                     amount: 100, createdDate: earlier, note: "Gloves"),
                 AccountEntry(
-                    details: .receipt(source: .externalConsultations, paymentMethod: nil),
+                    details: .receipt(source: .otherIncome, paymentMethod: nil),
                     amount: 100, note: "Visiting clinic"),
                 AccountEntry(
-                    details: .receipt(source: .externalConsultations, paymentMethod: nil),
+                    details: .receipt(source: .otherIncome, paymentMethod: nil),
                     amount: 100, createdDate: earlier, note: "VISITING CLINIC"),
                 AccountEntry(
-                    details: .receipt(source: .referralCommissions, paymentMethod: nil),
-                    amount: 100, note: "Referral clinic"),
+                    details: .receipt(source: .otherIncome, paymentMethod: nil),
+                    amount: 100, createdDate: earlier, note: "Referral clinic"),
             ]
             try await database.write { db in
                 try saveAccountEntries(AccountEntryBatch(inserts: entries), in: db)
@@ -92,19 +92,17 @@ struct PaymentEntryTests {
             model.setNote("New lab")
             model.finishNote()
             #expect(model.note == "New lab")
-            model.selectKind(.consult)
-            #expect(model.labels == ["Visiting clinic"])
+            model.selectKind(.otherIncome)
+            #expect(model.labels == ["Visiting clinic", "Referral clinic"])
             model.setNote(" VISITING CLINIC ")
             model.finishNote()
             #expect(model.note == "Visiting clinic")
-            model.selectKind(.referral)
-            #expect(model.labels == ["Referral clinic"])
             let count = try await database.read { try AccountEntryRecord.count().fetchOne($0) }
             #expect(count == entries.count)
         }
     }
 
-    @Test(arguments: [PaymentEntryModel.Kind.expense, .consult])
+    @Test(arguments: [PaymentEntryModel.Kind.expense, .otherIncome])
     func savedLabelAppearsWhileTheKindStaysSelected(_ kind: PaymentEntryModel.Kind) async throws {
         let date = try Date("2026-11-04T10:00:00Z", strategy: .iso8601)
         try await withDependencies {
@@ -126,8 +124,7 @@ struct PaymentEntryTests {
         }
     }
 
-    @Test(arguments: [PaymentEntryModel.Kind.consult, .referral])
-    func savesExternalReceiptForTodayAndClearsDraft(_ kind: PaymentEntryModel.Kind) async throws {
+    @Test func savesOtherIncomeReceiptForTodayAndClearsDraft() async throws {
         let date = try Date("2026-11-04T20:00:00Z", strategy: .iso8601)
         try await withDependencies {
             $0.date.now = date
@@ -135,7 +132,7 @@ struct PaymentEntryTests {
         } operation: {
             @Dependency(\.defaultDatabase) var database
             let model = PaymentEntryModel()
-            model.selectKind(kind)
+            model.selectKind(.otherIncome)
             model.setNote("  Visiting clinic  ")
             model.amountText = "1,000"
             model.method = .card
@@ -150,15 +147,13 @@ struct PaymentEntryTests {
             #expect(entry.kind == .receipt)
             #expect(entry.patientID == nil)
             #expect(entry.appointmentID == nil)
-            #expect(
-                entry.category == (kind == .consult ? .externalConsultations : .referralCommissions)
-            )
+            #expect(entry.category == .otherIncome)
             #expect(entry.note == "Visiting clinic")
             #expect(entry.amount == 1000)
             #expect(entry.paymentMethod == .card)
             #expect(entry.entryDate == FinancialDate.day(date))
             #expect(entry.createdDate == date)
-            #expect(model.kind == kind)
+            #expect(model.kind == .otherIncome)
             #expect(model.method == .card)
             #expect(model.note.isEmpty)
             #expect(model.amountText.isEmpty)
@@ -175,7 +170,7 @@ struct PaymentEntryTests {
         } operation: {
             @Dependency(\.defaultDatabase) var database
             let model = PaymentEntryModel()
-            model.selectKind(.consult)
+            model.selectKind(.otherIncome)
             model.setNote("Visiting clinic")
             model.amountText = text
             #expect(await model.save() == false)
@@ -194,7 +189,7 @@ struct PaymentEntryTests {
         } operation: {
             @Dependency(\.defaultDatabase) var database
             let model = PaymentEntryModel()
-            model.selectKind(.consult)
+            model.selectKind(.otherIncome)
             model.setNote("Visiting clinic")
             model.amountText = "500"
             let first = Task { await model.save() }

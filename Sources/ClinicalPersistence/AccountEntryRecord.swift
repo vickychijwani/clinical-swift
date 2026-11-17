@@ -63,9 +63,7 @@ public nonisolated struct AccountEntryRecord: Identifiable, Sendable {
             let source: AccountEntry.ReceiptSource
             switch (category, patientID) {
             case (.patientFees, .some(let id)): source = .patient(id)
-            case (.externalConsultations, nil): source = .externalConsultations
-            case (.referralCommissions, nil): source = .referralCommissions
-            case (.otherReceipts, nil): source = .otherReceipts
+            case (.otherIncome, nil): source = .otherIncome
             default: throw AccountEntryError.invalidFields
             }
             details = .receipt(source: source, paymentMethod: method)
