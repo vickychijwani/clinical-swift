@@ -46,7 +46,6 @@ final class TrayState<Item: Identifiable & Sendable> where Item.ID == UUID {
 nonisolated enum TraySize: Equatable, Sendable {
     case height(CGFloat)
     case medium
-    case fitted
     case full
 }
 
@@ -61,7 +60,7 @@ nonisolated struct TrayLayout: Equatable {
     /// Keep safe-area space inside that scale, including for fixed-height content.
     static func resolve(
         sizing: TraySize, size: CGSize, topInset: CGFloat,
-        bottomInset: CGFloat, keyboardHeight: CGFloat = 0, fittedHeight: CGFloat? = nil
+        bottomInset: CGFloat, keyboardHeight: CGFloat = 0
     ) -> Self {
         let floatingScale = max(0, (size.width - 16) / max(1, size.width))
         let available = max(0, size.height - topInset - 10)
@@ -73,7 +72,6 @@ nonisolated struct TrayLayout: Equatable {
                 // Native medium uses the maximum detent space and includes the lower safe area.
                 // The floating surface adds its lower safe area again, as for fixed heights.
                 available / 2 + (bottom > 0 ? bottom : 38)
-            case .fitted: fittedHeight ?? available
             case .full: available
             }
         let height = min(content + bottom + max(0, keyboardHeight), max(0, size.height - topInset))

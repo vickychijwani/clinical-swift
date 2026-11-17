@@ -27,6 +27,8 @@ struct EditPatientView: View {
 
         NavigationStack {
             ConfirmingTray(
+                // Reserve space for all optional fields so expansion does not move the tray.
+                size: .height(370),
                 hasUnsavedChanges: model.hasUnsavedChanges,
                 title: "Discard unsaved changes?",
                 message: "Your patient details have not been saved.",
@@ -107,7 +109,6 @@ private struct EditPatientForm: View {
                         await requestContactsAccessIfNeeded()
                     }
                 }
-                .fittedTrayContent()
 
                 Section {
                     TextField("Name", text: $draft.name.replacingNil())
@@ -128,13 +129,12 @@ private struct EditPatientForm: View {
                         PatientGenderField(title: "Gender", selection: $draft.gender)
                     }
                 }
-                .fittedTrayContent()
             }
             // The custom tray has no native sheet context to supply the subtle row fill.
             .listRowBackground(Rectangle().fill(.quinary))
         }
         .listSectionSpacing(.compact)
-        .fittedTrayScroll()
+        .contentMargins(.vertical, 16, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .containerBackground(AppColor.canvas, for: .navigation)
         .navigationTitle(title)

@@ -85,7 +85,6 @@ where Item.ID == UUID {
     @State private var isVisible = false
     @State private var dragOffset: CGFloat = 0
     @State private var options: TrayOptions?
-    @State private var fittedHeight: CGFloat?
 
     private var animates: Bool {
         #if DEBUG
@@ -100,7 +99,7 @@ where Item.ID == UUID {
         let layout = TrayLayout.resolve(
             sizing: options?.size ?? .full,
             size: size, topInset: safeArea.top, bottomInset: safeArea.bottom,
-            keyboardHeight: keyboardHeight, fittedHeight: fittedHeight)
+            keyboardHeight: keyboardHeight)
         ZStack(alignment: .bottom) {
             Button {
                 requestInteractiveDismiss()
@@ -124,11 +123,6 @@ where Item.ID == UUID {
                         .onChange(of: value?.dismiss.id) { options = value }
                         .allowsHitTesting(false)
                 }
-                .modifier(
-                    TrayFittingModifier(
-                        height: $fittedHeight,
-                        isEnabled: options?.size == .fitted && phase != .exiting(surfaceID))
-                )
                 // The standalone navigation bar supplies ten points of top space. Add six to
                 // match the native sheet's sixteen-point header without changing its controls.
                 .padding(.top, 6)
@@ -145,8 +139,9 @@ where Item.ID == UUID {
                 .offset(
                     y: isVisible ? dragOffset : layout.height * layout.scale + layout.bottomMargin
                 )
-                .animation(animates ? .spring(duration: 0.28, bounce: 0) : nil, value: options?.size)
-                .animation(animates ? .spring(duration: 0.28, bounce: 0) : nil, value: fittedHeight)
+                .animation(
+                    animates ? .spring(duration: 0.28, bounce: 0) : nil, value: options?.size
+                )
                 .allowsHitTesting(phase != .exiting(surfaceID))
                 .simultaneousGesture(
                     DragGesture()
@@ -164,7 +159,6 @@ where Item.ID == UUID {
         .frame(width: size.width, height: size.height)
         .onAppear { enterIfReady() }
         .onChange(of: options?.size) { enterIfReady() }
-        .onChange(of: fittedHeight) { enterIfReady() }
         .onChange(of: phase, initial: true) {
             guard phase == .exiting(surfaceID) else { return }
             withAnimation(animates ? .easeIn(duration: 0.13) : nil, completionCriteria: .removed) {
@@ -177,11 +171,13 @@ where Item.ID == UUID {
     }
 
     private func enterIfReady() {
-        // Keep the surface offscreen until the feature supplies its size and any fitted height.
+        // Keep the surface offscreen until the feature supplies its size.
         guard !isVisible, phase == .entering(surfaceID),
-            let options, options.size != .fitted || fittedHeight != nil
+            options != nil
         else { return }
-        withAnimation(animates ? .spring(duration: 0.24, bounce: 0) : nil, completionCriteria: .removed) {
+        withAnimation(
+            animates ? .spring(duration: 0.24, bounce: 0) : nil, completionCriteria: .removed
+        ) {
             isVisible = true
         } completion: {
             didEnter()

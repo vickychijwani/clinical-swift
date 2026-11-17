@@ -46,6 +46,28 @@ nonisolated final class TrayUITests: XCTestCase {
     }
 
     @MainActor
+    func testPatientOptionalFieldsKeepTheFixedHeightAndFitWithoutScrolling() {
+        let app = launch()
+        app.buttons["View Patient"].tap()
+        app.buttons["Edit Patient"].tap()
+        let bar = app.navigationBars["Edit Patient"]
+        XCTAssertTrue(bar.stableFrameOrWait(timeout: 5))
+        let collapsed = bar.frame
+        app.buttons["Optional details"].tap()
+        let dob = app.buttons["Date of birth, Add"]
+        XCTAssertTrue(dob.hittableOrWait(timeout: 3))
+        XCTAssertTrue(bar.stableFrameOrWait(timeout: 3))
+        XCTAssertEqual(bar.frame.minY, collapsed.minY, accuracy: 1)
+        XCTAssertTrue(app.textFields["Phone number"].isHittable)
+        XCTAssertTrue(app.textFields["Name"].isHittable)
+        XCTAssertTrue(app.buttons["Other"].isHittable)
+        record(app, name: "patient-edit-expanded-fixed-height")
+        app.buttons["Optional details"].tap()
+        XCTAssertTrue(dob.absentOrWait(timeout: 3))
+        XCTAssertEqual(bar.frame.minY, collapsed.minY, accuracy: 1)
+    }
+
+    @MainActor
     func testPatientChildCancellationPreservesTheDraftAndDismissalBoundary() {
         let app = launch()
         app.buttons["View Patient"].tap()

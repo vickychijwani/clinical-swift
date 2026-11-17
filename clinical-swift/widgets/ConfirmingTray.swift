@@ -3,6 +3,7 @@ import SwiftUI
 struct ConfirmingTray<Content: View>: View {
     @Environment(\.trayDismiss) private var dismiss
 
+    private let size: TraySize
     private let hasUnsavedChanges: Bool
     private let title: LocalizedStringKey
     private let message: LocalizedStringKey
@@ -10,12 +11,14 @@ struct ConfirmingTray<Content: View>: View {
     private let content: (TrayCancelAction) -> Content
 
     init(
+        size: TraySize,
         hasUnsavedChanges: Bool,
         title: LocalizedStringKey,
         message: LocalizedStringKey,
         allowsInteractiveDismiss: Bool = true,
         @ViewBuilder content: @escaping (TrayCancelAction) -> Content
     ) {
+        self.size = size
         self.hasUnsavedChanges = hasUnsavedChanges
         self.title = title
         self.message = message
@@ -33,7 +36,7 @@ struct ConfirmingTray<Content: View>: View {
             )
         )
         .trayOptions(
-            size: .fitted, allowsInteractiveDismiss: allowsInteractiveDismiss && !hasUnsavedChanges,
+            size: size, allowsInteractiveDismiss: allowsInteractiveDismiss && !hasUnsavedChanges,
             showsIndicator: false)
     }
 }
