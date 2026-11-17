@@ -3,10 +3,19 @@ name: my-review
 description: Use this when the user asks to review code changes
 ---
 
-Review uncommitted changes. Our goals:
+## What to review
+
+Review changes from ALL of the following perspectives:
 
 - Correctness
-- Minimal incidental complexity - look for opportunities of simplification
-- Clean code
-- Idiomatic Swift/SwiftUI + following app-wide conventions
-- No duplication
+- Minimal incidental complexity
+  - Perform an adversarial review of the changes from a code complexity perspective. If it seems like a lot of new code for what at first glance feels like a low-to-moderate-complexity feature, figure out what we can do (including, if needed, any refactor of pre-existing code) to dramatically reduce the complexity and size of the code needed to support this feature?
+- Clean, well-designed code with no unjustified duplication
+  - Use the /my-design-review skill for this
+- Idiomatic code + following repo-wide conventions
+
+## Output
+
+- If given a PR, post comments on the PR directly at appropriate places.
+- Write in a highly readable, friendly, concise style. Be concrete instead of abstract.
+- Because you're posting with my credentials - briefly identify yourself (harness, model, effort - whatever is available) once at the end of the top-level comment in the review batch, formatted in italics: "— Review by Antigravity · Gemini 4 Hydrogen", "— Committed by Codex · GPT-6.1 Sol", "— Resolved by Antigravity · Opus 5.5".
