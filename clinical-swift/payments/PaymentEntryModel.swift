@@ -7,30 +7,23 @@ import SQLiteData
 final class PaymentEntryModel {
     enum Kind: String, CaseIterable {
         case patient = "Patient"
-        case consult = "Consult"
-        case referral = "Referral"
+        case otherIncome = "Other Income"
         case expense = "Expense"
 
         var placeholder: String {
             switch self {
             case .patient: "Search patient by name"
-            case .consult: "Consultation label"
-            case .referral: "Referral label"
+            case .otherIncome: "Other income label"
             case .expense: "Expense label"
             }
         }
 
-        var receiptSource: AccountEntry.ReceiptSource? {
-            switch self {
-            case .consult: .externalConsultations
-            case .referral: .referralCommissions
-            case .patient, .expense: nil
-            }
-        }
-
         var labelsRequest: PaymentLabelsRequest? {
-            if self == .expense { return PaymentLabelsRequest(kind: .expense) }
-            return receiptSource.map { PaymentLabelsRequest(kind: .receipt, category: $0.category) }
+            switch self {
+            case .patient: nil
+            case .otherIncome: PaymentLabelsRequest(kind: .receipt, category: .otherIncome)
+            case .expense: PaymentLabelsRequest(kind: .expense)
+            }
         }
     }
 
@@ -113,9 +106,8 @@ final class PaymentEntryModel {
         case .patient:
             guard let patient else { return false }
             details = .receipt(source: .patient(patient.id), paymentMethod: method)
-        case .consult, .referral:
-            guard let source = kind.receiptSource else { return false }
-            details = .receipt(source: source, paymentMethod: method)
+        case .otherIncome:
+            details = .receipt(source: .otherIncome, paymentMethod: method)
         case .expense:
             details = .expense(category: nil, paymentMethod: method)
         }

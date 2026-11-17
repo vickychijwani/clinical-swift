@@ -36,9 +36,7 @@ public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
 
     public enum Category: String, CaseIterable, Sendable {
         case patientFees = "patientFees"
-        case externalConsultations = "externalConsultations"
-        case referralCommissions = "referralCommissions"
-        case otherReceipts = "otherReceipts"
+        case otherIncome = "otherIncome"
         case rent = "rent"
         case staff = "staff"
         case consultants = "consultants"
@@ -51,7 +49,7 @@ public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
 
         public var group: ReportingGroup {
             switch self {
-            case .patientFees, .externalConsultations, .referralCommissions, .otherReceipts:
+            case .patientFees, .otherIncome:
                 .incoming
             case .equipmentPurchases, .clinicImprovements: .capital
             case .rent, .staff, .consultants, .utilities, .materials, .repairsAndMaintenance,
@@ -70,14 +68,12 @@ public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
 
     public enum ReceiptSource: Hashable, Sendable {
         case patient(UUID)
-        case externalConsultations, referralCommissions, otherReceipts
+        case otherIncome
 
         public var category: Category {
             switch self {
             case .patient: .patientFees
-            case .externalConsultations: .externalConsultations
-            case .referralCommissions: .referralCommissions
-            case .otherReceipts: .otherReceipts
+            case .otherIncome: .otherIncome
             }
         }
     }

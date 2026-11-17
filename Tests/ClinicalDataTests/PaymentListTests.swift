@@ -42,8 +42,8 @@ struct PaymentListTests {
         #expect(try PaymentListFixture.item(note: " \n").title == "Materials")
         #expect(
             try PaymentListFixture.item(
-                .receipt(source: .externalConsultations, paymentMethod: nil)
-            ).title == "External consultations")
+                .receipt(source: .otherIncome, paymentMethod: nil)
+            ).title == "Other income")
         #expect(
             try PaymentListFixture.item(
                 .charge(patientID: patientID, appointmentID: nil)
@@ -100,7 +100,7 @@ struct PaymentListTests {
         let lowID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         let highID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
         let receipt = try PaymentListFixture.item(
-            .receipt(source: .otherReceipts, paymentMethod: .cash), amount: 100000)
+            .receipt(source: .otherIncome, paymentMethod: .cash), amount: 100000)
         let lower = try PaymentListFixture.item(id: lowID)
         let higher = try PaymentListFixture.item(id: highID)
         let later = try PaymentListFixture.item(recorded: "2026-10-24T13:00:00Z")
@@ -137,7 +137,7 @@ struct PaymentListTests {
         #expect(
             try PaymentDay.sections(from: [saturday], today: sunday).map(\.title) == ["Yesterday"])
         for details: AccountEntry.Details in [
-            .receipt(source: .otherReceipts, paymentMethod: nil),
+            .receipt(source: .otherIncome, paymentMethod: nil),
             .expense(category: .rent, paymentMethod: nil),
         ] {
             let payment = try PaymentListFixture.item(details, date: "2026-10-25T18:29:59Z")
@@ -151,7 +151,7 @@ struct PaymentListTests {
 
     @Test func totalsFailOnOverflowRatherThanDroppingAnEntry() throws {
         for details: AccountEntry.Details in [
-            .receipt(source: .otherReceipts, paymentMethod: nil),
+            .receipt(source: .otherIncome, paymentMethod: nil),
             .expense(category: .equipmentPurchases, paymentMethod: nil),
         ] {
             let items = try [

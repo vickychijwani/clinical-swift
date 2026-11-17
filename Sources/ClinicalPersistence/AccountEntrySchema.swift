@@ -22,7 +22,7 @@ nonisolated func createAccountEntrySchema(_ db: Database) throws {
                   AND category IS NULL AND paymentMethod IS NULL)
                 OR (kind = 'receipt' AND appointmentID IS NULL AND category IS NOT NULL AND (
                   (category = 'patientFees' AND patientID IS NOT NULL)
-                  OR (category IN ('externalConsultations','referralCommissions','otherReceipts') AND patientID IS NULL)))
+                  OR (category = 'otherIncome' AND patientID IS NULL)))
                 OR (kind = 'expense' AND patientID IS NULL AND appointmentID IS NULL AND (
                   category IS NULL OR category IN ('rent','staff','consultants','utilities','materials',
                     'repairsAndMaintenance','otherOperatingCosts','equipmentPurchases','clinicImprovements')))
