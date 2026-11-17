@@ -48,6 +48,9 @@ struct PaymentsView: View {
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbarBackground(AppColor.canvas, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            BackupWarningToolbar()
+        }
         .colorLabOverlay(isVisible: true)
         .task(id: scenePhase) {
             if scenePhase == .active { await model.followClinicDays() }

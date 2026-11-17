@@ -82,6 +82,7 @@ struct ScheduleView: View {
         .toolbar(editorSession != nil ? .hidden : .visible, for: .tabBar)
         .toolbar {
             if !hasEditor {
+                BackupWarningToolbar(showsTrailingSpacer: true)
                 ToolbarItem(placement: .topBarTrailing) {
                     // Display the creation button only when there is no schedule editor.
                     Button("Add", systemImage: "plus") {
