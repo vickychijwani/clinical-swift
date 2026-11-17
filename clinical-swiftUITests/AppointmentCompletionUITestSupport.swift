@@ -13,10 +13,11 @@ enum AppointmentCompletionUITestSupport {
             let appointment = app.buttons[appointmentID]
             XCTAssertTrue(appointment.hittableOrWait(timeout: 5))
             appointment.tap()
-            XCTAssertTrue(app.buttons["Complete"].hittableOrWait(timeout: 5))
+            XCTAssertTrue(app.buttons["Complete"].frameSettledOrWait(timeout: 5))
             app.buttons["Complete"].tap()
         }
         XCTAssertTrue(app.navigationBars["Complete Appointment"].existsOrWait(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Complete Appointment"].frameSettledOrWait(timeout: 5))
         return app
     }
 

@@ -6,7 +6,7 @@ struct ContentView: View {
     @Bindable var router: Router
     var initialEditorSession: ScheduleEditorSession? = nil
     @Namespace private var appointmentZoom
-    @State private var retainedAppointmentZoomID: Appointment.ID? = nil
+    @State private var presentedDetails: DetailsPresentation? = nil
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
@@ -31,7 +31,7 @@ struct ContentView: View {
         .sheet(
             item: detailsPresentationBinding,
             onDismiss: {
-                retainedAppointmentZoomID = nil
+                presentedDetails = nil
                 router.presentationDidDismiss()
             }
         ) { presentation in
@@ -41,6 +41,11 @@ struct ContentView: View {
                 )
                 .id(presentation.id)
                 .onAppear {
+                    if router.detailsPresentation?.id == presentation.id {
+                        // Keep the source copy until onDismiss. The router clears its route before the zoom ends.
+                        // Retain the session so an in-place root change also changes the source.
+                        presentedDetails = presentation
+                    }
                     router.presentationDidAppear(presentation.id)
                 }
         }
@@ -64,11 +69,7 @@ struct ContentView: View {
         }
         .environment(router)
         .environment(\.appointmentZoomNamespace, appointmentZoom)
-        .environment(\.appointmentZoomSourceID, appointmentZoomID ?? retainedAppointmentZoomID)
-        .onChange(of: appointmentZoomID, initial: true) { _, id in
-            // Keep the source copy until onDismiss. The router clears its route before the zoom ends.
-            if let id { retainedAppointmentZoomID = id }
-        }
+        .environment(\.appointmentZoomSourceID, appointmentZoomID)
         .sheet(
             item: presentationBinding(get: { router.settingsRequest }),
             onDismiss: router.presentationDidDismiss
@@ -99,7 +100,10 @@ struct ContentView: View {
     }
 
     private var appointmentZoomID: Appointment.ID? {
-        guard case .appointment(let id)? = router.detailsPresentation?.root else { return nil }
+        guard case .appointment(let id)? = (router.detailsPresentation ?? presentedDetails)?.root
+        else {
+            return nil
+        }
         return id
     }
 
