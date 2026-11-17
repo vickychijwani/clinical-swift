@@ -72,7 +72,7 @@ private struct PatientActionsView: View {
 
 #Preview {
     Text("")
-        .sheet(
+        .tray(
             item: .constant(
                 PatientDetails(
                     patient: Patient(
@@ -95,6 +95,6 @@ private struct PatientActionsView: View {
                 )
             }
             .environment(Router())
-            .presentationDetents([.medium, .large])
+            .trayOptions(size: .medium)
         }
 }

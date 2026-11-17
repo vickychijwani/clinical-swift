@@ -1,21 +1,24 @@
 import SwiftUI
 
-struct ConfirmingFormSheet<Content: View>: View {
-    @Environment(\.dismiss) private var dismiss
+struct ConfirmingTray<Content: View>: View {
+    @Environment(\.trayDismiss) private var dismiss
 
+    private let size: TraySize
     private let hasUnsavedChanges: Bool
     private let title: LocalizedStringKey
     private let message: LocalizedStringKey
     private let allowsInteractiveDismiss: Bool
-    private let content: (FormSheetDismissAction) -> Content
+    private let content: (TrayCancelAction) -> Content
 
     init(
+        size: TraySize,
         hasUnsavedChanges: Bool,
         title: LocalizedStringKey,
         message: LocalizedStringKey,
         allowsInteractiveDismiss: Bool = true,
-        @ViewBuilder content: @escaping (FormSheetDismissAction) -> Content
+        @ViewBuilder content: @escaping (TrayCancelAction) -> Content
     ) {
+        self.size = size
         self.hasUnsavedChanges = hasUnsavedChanges
         self.title = title
         self.message = message
@@ -25,18 +28,20 @@ struct ConfirmingFormSheet<Content: View>: View {
 
     var body: some View {
         content(
-            FormSheetDismissAction(
+            TrayCancelAction(
                 title: title,
                 message: message,
                 hasUnsavedChanges: { hasUnsavedChanges },
                 dismiss: { dismiss() }
             )
         )
-        .interactiveDismissDisabled(!allowsInteractiveDismiss || hasUnsavedChanges)
+        .trayOptions(
+            size: size, allowsInteractiveDismiss: allowsInteractiveDismiss && !hasUnsavedChanges,
+            showsIndicator: false)
     }
 }
 
-struct FormSheetDismissAction {
+struct TrayCancelAction {
     fileprivate let title: LocalizedStringKey
     fileprivate let message: LocalizedStringKey
     private let hasUnsavedChanges: () -> Bool
@@ -58,13 +63,13 @@ struct FormSheetDismissAction {
         hasUnsavedChanges()
     }
 
-    fileprivate func dismissSheet() {
+    fileprivate func dismissTray() {
         dismiss()
     }
 }
 
-struct FormSheetCancelButton: View {
-    let action: FormSheetDismissAction
+struct TrayCancelButton: View {
+    let action: TrayCancelAction
     var label: LocalizedStringKey = "Cancel"
 
     @State private var isConfirmingDiscard = false
@@ -74,7 +79,7 @@ struct FormSheetCancelButton: View {
             if action.needsConfirmation {
                 isConfirmingDiscard = true
             } else {
-                action.dismissSheet()
+                action.dismissTray()
             }
         } label: {
             Label(label, systemImage: "xmark")
@@ -87,7 +92,7 @@ struct FormSheetCancelButton: View {
         ) {
             Button("Keep Editing", role: .cancel) {}
             Button("Discard Changes", role: .destructive) {
-                action.dismissSheet()
+                action.dismissTray()
             }
         } message: {
             Text(action.message)

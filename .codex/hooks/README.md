@@ -1,3 +1,20 @@
+# Build command guard
+
+The `PreToolUse` hook matches `Bash`, which also covers unified `exec_command`
+calls in code mode. It denies direct `xcodebuild` commands before execution and
+points the agent to the Makefile targets. Make can still run Xcode internally.
+The Swift checker is compiled once and cached in the worktree's Git metadata.
+
+Run its command-matching tests with:
+
+```sh
+/bin/sh .codex/hooks/check_xcodebuild.sh --test
+```
+
+This is a text guard for accidental direct runs. It covers command paths, common
+wrappers, shell chains, and command substitution. It does not inspect arbitrary
+scripts or stop deliberate shell obfuscation.
+
 # UI test wait check
 
 The Stop hook runs `check_ui_waits.sh` as a separate command with a one-second

@@ -18,6 +18,27 @@ extension XCUIElement {
     }
 
     @MainActor
+    func stableFrameOrWait(timeout: TimeInterval) -> Bool {
+        var previous: CGRect?
+        var unchangedSince = ContinuousClock.now
+        return waitUntil(timeout: timeout) {
+            guard exists, isHittable else {
+                previous = nil
+                unchangedSince = .now
+                return false
+            }
+            let current = frame
+            if current != previous {
+                previous = current
+                unchangedSince = .now
+                return false
+            }
+            // Custom trays use SwiftUI motion, which the UIKit switch does not disable.
+            return unchangedSince.duration(to: .now) >= .milliseconds(150)
+        }
+    }
+
+    @MainActor
     func valueContainsOrWait(_ text: String, timeout: TimeInterval) -> Bool {
         waitUntil(timeout: timeout) {
             exists && (value as? String)?.contains(text) == true

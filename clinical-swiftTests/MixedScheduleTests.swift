@@ -174,7 +174,7 @@ struct MixedScheduleTests {
             router.presentationDidAppear(editor.id)
             router.requestScheduleCreation()
             #expect(router.activePresentation == nil)
-            router.presentationDidDismiss()
+            router.presentationDidDismiss(editor.id)
             #expect(router.activePresentation != nil)
             router.finishScheduleEditor(editor.id, date: date.addingTimeInterval(24 * 60 * 60))
             #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: date))

@@ -81,6 +81,8 @@ nonisolated final class AppointmentCompletionFormUITests: XCTestCase {
         XCTAssertFalse(app.buttons["complete-appointment"].isEnabled)
         AppointmentCompletionUITestSupport.swipeSheetDown(app)
         XCTAssertFalse(app.buttons["complete-appointment"].isEnabled)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.2)).tap()
+        XCTAssertTrue(app.navigationBars["Complete Appointment"].exists)
         release.tap()
         XCTAssertTrue(app.navigationBars["Complete Appointment"].absentOrWait(timeout: 5))
         XCTAssertTrue(app.buttons[AppointmentCompletionUITestSupport.appointmentID].exists)

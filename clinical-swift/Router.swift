@@ -45,9 +45,8 @@ final class Router {
 
     private(set) var patientSearchRequest: PatientSearchRequest?
 
-    // SwiftUI cannot replace an already-presented sheet in one state change. Keep only the newest
-    // replacement while the visible sheet dismisses, and track whether an onDismiss callback is
-    // actually expected so an action replaced before appearing can activate immediately.
+    // Keep only the newest replacement while the visible tray exits. Track whether a dismissal
+    // callback is expected so an action replaced before appearing can activate immediately.
     private var replacementPresentation: AppPresentation?
     private var presentedPresentationID: UUID?
     private var dismissingPresentationID: UUID?
@@ -122,6 +121,13 @@ final class Router {
         detailsPresentation?.push(route)
     }
 
+    func pushDetails(_ route: Route, presentationID: UUID, visitID: UUID) {
+        guard let presentation = detailsPresentation, presentation.id == presentationID,
+            presentation.visitID == visitID
+        else { return }
+        pushDetails(route)
+    }
+
     func setDetailsPath(_ path: [Route], presentationID: DetailsPresentation.ID) {
         // NavigationStack can write its path back after a sheet has been replaced. The session ID
         // prevents that stale write from mutating the new details flow.
@@ -158,6 +164,13 @@ final class Router {
 
     func dismissDetails() {
         guard detailsPresentation != nil else { return }
+        discardActivePresentation()
+    }
+
+    func dismissDetails(presentationID: UUID) {
+        guard let presentation = detailsPresentation, presentation.id == presentationID,
+            !presentation.isSavingCompletion
+        else { return }
         discardActivePresentation()
     }
 
@@ -259,11 +272,11 @@ final class Router {
         presentedPresentationID = presentationID
     }
 
-    func presentationDidDismiss() {
-        presentationDidDismiss(retainingScheduleEditor: nil)
-    }
-
-    func presentationDidDismiss(retainingScheduleEditor id: UUID?) {
+    func presentationDidDismiss(_ presentationID: UUID, retainingScheduleEditor id: UUID? = nil) {
+        guard
+            presentedPresentationID == presentationID
+                || dismissingPresentationID == presentationID
+        else { return }
         presentedPresentationID = nil
         // onDismiss either completes a router-driven handoff or reports that the user dismissed
         // the active sheet. Preserve a queued replacement only in the former case.
@@ -469,7 +482,7 @@ enum AppPresentation {
     case patientEdit(PatientEditRequest)
     case unavailableTimeEditor(UnavailableTimeEditorRequest)
 
-    var id: UUID {
+    nonisolated var id: UUID {
         switch self {
         case .settings(let request):
             request.id
@@ -501,7 +514,7 @@ final class DetailsPresentation: Identifiable {
     /// Stable identity for one details-sheet session. Its root may be replaced in place, while
     /// asynchronous route work and NavigationStack write-backs use this ID to reject stale events
     /// from a sheet session that has already been discarded.
-    let id: UUID
+    nonisolated let id: UUID
     private(set) var root: Route
 
     // Keep mutation router-owned so every NavigationStack write-back can be checked against `id`.

@@ -2,13 +2,28 @@
 
 ## Entry points
 
+Choose test scope with the [test execution rules](../AGENTS.md#test-execution).
+The commands below run whole suites by default; use test filters for focused checks.
+
 - `make data-test`: package model and persistence tests without an app host or
   simulator. Requires Swift 6.4 or later.
 - `make test`: package and app unit tests. UI and backup tests stay outside its
   build graph so routine checks need neither extra test hosts nor account setup.
+- `make app-test`: app unit tests without package tests.
 - `make ui-test`: UI tests only.
 - `make backup-test`: local backup tests without network access.
 - `make backup-drive-check`: real Drive round trip with an isolated test account.
+
+For focused Xcode tests, use `ONLY_TESTING` with one or more space-separated test
+identifiers. This keeps the standard build options, full local logs, and quiet
+console output:
+
+```sh
+make app-test ONLY_TESTING='clinical-swiftTests/TrayTests'
+make ui-test ONLY_TESTING='clinical-swiftUITests/TrayUITests/testDetailsNavigationKeepsTheSameSurfaceAndHeight'
+```
+
+For package tests, use `make data-test SWIFT_TEST_FLAGS='--filter TestName'`.
 
 See [backup setup and release](backups.md#verification-and-release) for credentials
 and the release gate. The [Makefile](../Makefile) owns command options and schemes.

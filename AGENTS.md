@@ -78,3 +78,10 @@ Plans, implemented specs, and validation reports are historical context, not cur
 - When changing or moving code, preserve existing comments that still apply and move them with the code. Update comments when behavior, names, or test references change. Remove a comment only when its purpose no longer applies or an equivalent comment replaces it. Before finishing, check deleted comments in the diff so that design decisions and regression explanations are not lost.
 - The repository Stop hook checks for missing or rewritten Swift comments. Resolve each finding before recording a review; do not record a review only to pass the hook. See `.codex/hooks/README.md` for the check and review commands.
 - Use Swift for scripts, not Python (except one-liners / tiny scripts in Makefile).
+
+## Test execution
+
+- Use Makefile targets for local builds and test runs. Do not invoke `xcodebuild` directly. Use documented Makefile options; if a needed option is missing, add it first. Direct `xcodebuild` builds or test runs require an explicit user request.
+- Use relevant test filters during development.
+- Broaden validation after focused tests pass only when the change can affect other areas, or when release rules require it. A small review fix does not automatically require a full suite.
+- Keep full test output and result bundles locally. Read concise results and relevant failure diagnostics first. Expand log context only when needed to diagnose a failure.

@@ -12,24 +12,16 @@ struct ScheduleView: View {
 
     /// `nil` means normal schedule mode. A session owns the editor and its draft preview.
     /// This value controls the sheet, draft rendering, card interactions, and creation buttons.
-    @State private var editorSession: ScheduleEditorSession?
+    @Environment(ScheduleEditorStore.self) private var editor
+    private var editorSession: ScheduleEditorSession? {
+        get { editor.session }
+        nonmutating set { editor.session = newValue }
+    }
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
 
-    private var editorSheet: Binding<ScheduleEditorSession?> {
-        Binding(
-            get: {
-                guard editorSession?.isShowingSheet == true else { return nil }
-                return editorSession
-            },
-            set: { value in
-                editorSession?.isShowingSheet = value != nil
-            })
-    }
-
-    init(editorSession: ScheduleEditorSession? = nil) {
-        _editorSession = State(initialValue: editorSession)
+    init() {
         scheduleModel = ScheduleModel()
     }
 
@@ -115,16 +107,6 @@ struct ScheduleView: View {
         } message: {
             Text(editorSession?.errorMessage ?? "")
         }
-        .sheet(
-            item: editorSheet,
-            onDismiss: {
-                router.presentationDidDismiss(
-                    retainingScheduleEditor: editorSession?.id)
-            }
-        ) { session in
-            ScheduleEditorSheet(session: session)
-                .onAppear { router.presentationDidAppear(session.id) }
-        }
         .task(id: scheduleEditorRequest?.id) {
             guard let request = scheduleEditorRequest else {
                 editorSession = nil
@@ -186,8 +168,7 @@ struct ScheduleView: View {
     }
 
     private var showsDesignLabs: Bool {
-        guard router.selectedTab == .schedule, router.schedulePath.isEmpty,
-            editorSheet.wrappedValue == nil
+        guard router.selectedTab == .schedule, router.schedulePath.isEmpty
         else { return false }
         switch router.activePresentation {
         case nil:
@@ -379,4 +360,5 @@ private struct AppointmentDetailsScrollRequest: Equatable {
                 directory: .temporaryDirectory.appending(path: UUID().uuidString)))
     )
     .environment(Router())
+    .environment(ScheduleEditorStore())
 }

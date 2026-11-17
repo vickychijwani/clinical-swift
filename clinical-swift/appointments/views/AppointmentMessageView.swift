@@ -4,7 +4,8 @@ import SQLiteData
 import SwiftUI
 
 struct AppointmentMessageView: View {
-    @Environment(\.dismiss) private var dismiss
+    static let traySize = TraySize.height(560)
+    @Environment(\.trayDismiss) private var dismiss
 
     @State private var detailsModel: AppointmentMessageDetailsModel
 
@@ -51,9 +52,7 @@ struct AppointmentMessageView: View {
                 await detailsModel.load()
             }
         }
-        .interactiveDismissDisabled()
-        .presentationDetents([.height(560)])
-        .presentationBackground(AppColor.canvas)
+        .trayOptions(size: Self.traySize, allowsInteractiveDismiss: false, showsIndicator: false)
     }
 }
 
