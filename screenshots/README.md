@@ -10,7 +10,7 @@ versions of the app.
 
 Captured on 6 October 2026 from the current Debug build. Device: iPhone 17, iOS 26.5. Each PNG is a full-screen capture at 1206 × 2622 pixels. The logical screen size is 402 × 874 points at 3× scale. Images use light appearance and the 9:41 status-bar time.
 
-The records are sample data. The simulator keeps the capture data and the Home Screen widget. No app source changes remain.
+The records are sample data.
 
 The source revision, source diff, locale, and time zone were not recorded in the
 first run. The device and setup above are from that run's report. Do not infer
@@ -120,13 +120,3 @@ These images cover the main screen layouts and controls. Use the other images fo
 ## Capture limits
 
 The simulator cannot display the SMS composer or open WhatsApp. Image 46 shows the simulator SMS error. Brief loading and saving states were not captured. Database write failures were not forced. Other device sizes and dark appearance were not captured.
-
-In the first capture run, the app build and temporary UI capture test completed.
-The temporary test file was removed. That run reported visual checks of all 48
-PNGs, dimension and file integrity checks, and no exact duplicate PNG files.
-These are prior results, not a new app build or capture.
-
-On 6 October 2026, the new skill helper checked the existing 48 PNGs. All files
-passed integrity checks at 1206 × 2622 pixels, with no exact pixel duplicates.
-It generated four contact sheets. No new app build or screen capture was run
-for this skill update.

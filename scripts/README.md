@@ -16,10 +16,6 @@ Keep the App Store Connect P-256 private key at
 to its directory. The tool passes the key path to OpenSSL; it does not copy the
 private key into temporary files. JWTs expire after ten minutes.
 
-OpenSSL returns DER signatures. The tool converts each signature to the two
-32-byte unsigned integers required by ES256 JWTs. Both operations use the same
-token creation and signing code.
-
 Run `swift scripts/test_app_store_connect.swift` to check the tool. The tests
 use a temporary P-256 key and verify signatures without Apple credentials or API
-requests. CI runs them on Linux and macOS.
+requests.

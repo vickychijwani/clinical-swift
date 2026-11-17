@@ -73,9 +73,9 @@ before acceptance.
 
 - Check known patient details, upcoming and historical appointments, blocks, and
   the accepted loss window. Confirm editing and widget reads on the target device.
-- Check Calendar in the original account. Snapshot values replace linked values
-  within the recovery window. Older events remain unchanged; duplicates and events
-  created after the capture can remain.
+- Check Calendar in the original account against the
+  [recovery limits](calendar-sync.md#backup-recovery). Duplicates and events created
+  after the capture can remain.
 - Finalize only after the clinic owner accepts the data. Return to the ordinary
   build. Check relaunch, a new edit, and the next confirmed Drive backup.
 - Remove unnecessary staging exports and unreferenced pending files after acceptance.
