@@ -191,8 +191,69 @@ private struct ShakeDetectorModifier: ViewModifier {
                 else { return }
                 action()
             }
+            .uiTestShakeBridge(windowBox: windowBox)
     }
 }
+
+extension View {
+    @ViewBuilder
+    fileprivate func uiTestShakeBridge(windowBox: WeakWindowBox) -> some View {
+        #if DEBUG
+            if CommandLine.arguments.contains(where: { $0.hasPrefix("--ui-testing-") }) {
+                modifier(UITestShakeBridgeModifier(windowBox: windowBox))
+            } else {
+                self
+            }
+        #else
+            self
+        #endif
+    }
+}
+
+#if DEBUG
+    private struct UITestShakeBridgeModifier: ViewModifier {
+        let windowBox: WeakWindowBox
+
+        func body(content: Content) -> some View {
+            content
+                .onAppear {
+                    UITestShakeHook.installIfNeeded()
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: UITestShakeHook.localNotificationName)
+                ) { _ in
+                    windowBox.window?.motionEnded(.motionShake, with: nil)
+                }
+        }
+    }
+
+    private enum UITestShakeHook {
+        private static let darwinNotificationName =
+            "in.bitehaus.clinical.ui-testing.shake" as CFString
+        nonisolated static let localNotificationName = Notification.Name(
+            "clinical.uiTestingSimulateShake")
+
+        static func installIfNeeded() {
+            _ = registration
+        }
+
+        private static let registration: Void = {
+            // XCUITest has no shake API, so UI tests trigger the real window hook via Darwin notify.
+            CFNotificationCenterAddObserver(
+                CFNotificationCenterGetDarwinNotifyCenter(),
+                nil,
+                { _, _, _, _, _ in
+                    Task { @MainActor in
+                        NotificationCenter.default.post(name: localNotificationName, object: nil)
+                    }
+                },
+                darwinNotificationName,
+                nil,
+                .deliverImmediately
+            )
+        }()
+    }
+#endif
 
 @MainActor
 private final class WeakWindowBox {
