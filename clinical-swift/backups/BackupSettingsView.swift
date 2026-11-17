@@ -61,14 +61,3 @@ struct BackupSettingsView: View {
         .trayOptions(size: .full)
     }
 }
-
-struct BackupSettingsButton: View {
-    @Environment(Router.self) private var router
-    @Environment(BackupCoordinator.self) private var backups
-
-    var body: some View {
-        Button("Settings", systemImage: "gearshape") { router.requestSettings() }
-            .badge(backups.needsAttention ? Text("!") : nil)
-            .disabled(router.activePresentation != nil)
-    }
-}

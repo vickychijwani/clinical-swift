@@ -81,17 +81,11 @@ struct ScheduleView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(editorSession != nil ? .hidden : .visible, for: .tabBar)
         .toolbar {
-            if editorSession == nil {
-                ToolbarItem(placement: .topBarTrailing) {
-                    BackupSettingsButton()
-                }
-                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            if !hasEditor {
                 ToolbarItem(placement: .topBarTrailing) {
                     // Display the creation button only when there is no schedule editor.
-                    if !hasEditor {
-                        Button("Add", systemImage: "plus") {
-                            router.requestScheduleCreation()
-                        }
+                    Button("Add", systemImage: "plus") {
+                        router.requestScheduleCreation()
                     }
                 }
             }
