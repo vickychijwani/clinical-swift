@@ -2,47 +2,38 @@
 
 ## Ledger and coverage
 
-The ledger is authoritative. Receipts belong to patients, not appointments.
-Coverage is calculated from the full patient ledger, oldest obligation first;
-receipts and negative adjustments cover charges and positive adjustments. The app
-does not store receipt-to-charge allocations because the doctor should not have to
-manage them. This is a derived view, not a saved appointment payment status.
+The patient ledger is authoritative. Receipts belong to patients. Apply receipts
+and negative adjustments to charges and positive adjustments, oldest obligation
+first. Derive coverage from the full ledger; the doctor should not have to manage
+receipt allocations or appointment payment states.
 
-Adjustments change debt without recording treatment fees or cash movement. They
-support opening balances and incomplete history. An unknown payment method does
-not mean cash, and net cash flow includes capital expenses, so it is not profit.
+Adjustments support opening balances and incomplete history without recording
+treatment fees or cash movement. An unknown payment method does not mean cash.
+Net cash flow includes capital expenses, so it is not profit.
 
 ## Balances and dates
 
-A complete local save must leave every affected patient's current balance
-nonnegative. Intermediate credit is allowed so related corrections can succeed in
-one transaction. Historical balances remain signed: a receipt can precede its
-charge. Backdated changes alter past reports; creation timestamps are not an edit
-audit trail.
+A completed local save must leave affected patients' current balances nonnegative.
+Allow temporary credit while applying related changes together. Historical
+balances can be negative because a receipt can precede its charge. Backdated
+changes alter past reports; creation timestamps are not an edit audit trail.
 
-Financial days use the Gregorian calendar in Asia/Kolkata regardless of device
-settings. A balance through a date includes that whole clinic day. Known-balance
-corrections must read history inside the transaction because screen totals can be
-stale. Financial arithmetic must fail on overflow rather than change an amount.
+Financial days use the Gregorian calendar in Asia/Kolkata, regardless of device
+settings. A balance through a date includes that whole clinic day. Corrections
+must use current history, not screen totals. Reject arithmetic overflow.
 
-Cancellation keeps linked charges. Financial history prevents patient deletion
-even when settled; linked charges prevent appointment deletion or patient changes.
-Schedule changes must not erase or reassign the clinic's financial history.
+Keep linked charges on cancellation. Financial history prevents patient deletion,
+even when settled. Linked charges prevent appointment deletion or patient changes:
+schedule changes must not erase or reassign financial history.
 
-Appointment completion reads the scheduled status, patient, and linked charges in
-the same transaction as the ledger batch and status update. It rejects repeat
-completion, changed patients, and multiple linked charges. This keeps a stale or
-competing request from recording another receipt. The entered payment replaces
-the linked charge amount, or removes the charge for zero. Existing receipts stay
-unchanged, so ledger validation can reject either operation.
+Completion and its financial changes must succeed together. Stale or repeated
+requests must not record another receipt. Changing a charge must preserve existing
+receipts and satisfy the same balance rules as other ledger edits.
 
 ## Derived balances
 
-Current balance summaries are rebuildable, device-local data maintained by ledger
-triggers. They allow temporary credit and partial imports. Rebuild for repair or
-imports that bypass triggers, not on each read or launch. SQLite backups retain
-these summaries; normal restore does not rebuild them.
+Balance summaries are derived, device-local data. The ledger remains authoritative
+for repair and imports; summaries must not be synced.
 
-Future sync must apply entries with summary triggers active and exclude summaries
-from sync. Valid offline saves can produce credit when combined, so local
-nonnegative-balance checks do not establish a cross-device guarantee.
+Valid offline saves can produce credit when combined. The local balance rule is
+not a cross-device guarantee; future sync must account for this.

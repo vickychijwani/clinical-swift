@@ -2,60 +2,55 @@
 
 ## Account and snapshot boundaries
 
-Bind the dataset and pending uploads to the stable Google account ID, not an email
-address. Reconnect must use that account. Address Drive folders by saved IDs;
-missing, moved, or shared folders must stop backup work rather than redirect it.
-An uncertain orphan is safer to leave than to delete or reuse by name.
+Bind each dataset and pending upload to a stable Google account identity.
+Reconnect must use that account. Missing, moved, or shared folders must stop
+backups; do not redirect uploads or reuse an uncertain folder by name.
 
-Use the SQLite backup API to capture committed WAL data. A copied database file
-alone can omit committed edits. The result must be a validated standalone database
-with its matching manifest. Keep patient fields out of remote filenames and
-properties.
+A backup must contain all committed data and open without the source database.
+Validate it with its matching manifest. Keep patient fields out of remote
+filenames and properties.
 
-Keep recovery state outside SQLite so a database failure does not remove it.
-Resolve saved file IDs under current container roots; app updates can move those
-roots. Corrupt backup state must stop backup work without stopping clinic editing.
+Recovery must survive database failure and app-container moves. Corrupt backup
+state must stop backups without stopping clinic editing.
 
-Persist remote file IDs before upload so retries reconcile the same files after
-interruption. Confirm the remote pair before reporting success or deleting local
-pending bytes. Retention must preserve the newest usable pair and must never
-remove another dataset or unrelated files. Cancellation retains validated pending
-work and saved credentials. iOS background opportunities do not guarantee a daily
-backup, so status must reflect confirmed remote success rather than task execution.
+Interrupted uploads must resume without losing validated pending work or
+credentials. Report success and remove pending local data only after confirming
+the remote pair. Retention must preserve the newest usable pair and leave other
+datasets and unrelated files untouched.
+
+iOS does not guarantee daily background execution. Status must show confirmed
+remote success, not merely that a task ran.
 
 ## Restore boundaries
 
-Restore runs before live app pools open and follows the shared
-[database access rules](persistence.md#shared-database-access). Keep the journal and
-original database/WAL/SHM set outside the replaced database. Save rollback or
-finalization intent before changing files so startup can finish interrupted work.
-An installed journal permits ordinary reads; rollback remains available until
-explicit finalization.
+Follow the [shared database rules](persistence.md#shared-database-access). Preserve
+the original local data and enough recovery state to finish interrupted restore,
+rollback, or finalization. Recovered data can be read before acceptance; rollback
+must remain available until explicit finalization.
 
-Recovered data must not pass through debug erasure or sample seeding. Adopt its
-dataset and clear old pending-upload references. See the
-[restore procedure](patient-data-restore.md) for invocation and acceptance, and
-[Calendar recovery](calendar-sync.md#backup-recovery) for external side effects.
+Recovery must not erase data or add samples. Future backups must use the recovered
+dataset, not old pending uploads. See the [restore procedure](patient-data-restore.md)
+and [Calendar recovery limits](calendar-sync.md#backup-recovery).
 
 ## Verification and release
 
-Use an isolated Google account for live checks. The internal authorization flow
-uses separate credentials and must not change the clinic account binding.
+Use an isolated Google account for live checks. Internal authorization must not
+change the clinic's account binding.
 
-For simulator setup:
+Simulator setup:
 
 1. Run `make backup-authorize` and complete Google sign-in.
 2. Run `make backup-export-credentials`. It writes
    `~/.config/clinical-backups/check-credentials.json` with mode 600. Override the
    destination with `CLINICAL_BACKUP_CHECK_CREDENTIALS` if needed.
-3. Run `make backup-drive-check CONFIGURATION=Release` to check the live round trip.
+3. Run `make backup-drive-check CONFIGURATION=Release`.
 
-Keep credentials outside the repository and revoke the grant when retiring the
-runner. Keep the Google project in External Production status with Drive enabled;
-Testing status can expire refresh tokens after seven days. Public client settings
-are in `Info.plist`; public Branding pages are in [the Sites record](../sites/README.md).
+Keep credentials outside the repository; revoke the grant when retiring the
+runner. Keep Drive enabled and the Google project in External Production status:
+Testing status can expire refresh tokens after seven days. See
+[public Branding pages](../sites/README.md).
 
-Distribution also requires native authorization evidence from a physical iPhone:
+Distribution requires authorization evidence from a physical iPhone:
 
 1. Build the signed app in Release with
    `CLINICAL_INTERNAL_CONDITIONS=INTERNAL_BACKUP_CHECK`.
@@ -63,17 +58,13 @@ Distribution also requires native authorization evidence from a physical iPhone:
 3. Export `Documents/backup-check-credentials.json` from the device container to
    the private runner path with mode 600.
 
-The internal flow records physical-device evidence for the client ID and callback
-scheme. Changing either requires fresh evidence. Simulator credentials can run
-the Drive check but cannot satisfy this release requirement. Ordinary builds cannot
-export credentials or invoke recovery.
+Changing the client ID or callback scheme requires fresh device evidence.
+Simulator checks cannot satisfy this requirement. Ordinary builds must not export
+credentials or invoke recovery.
 
-Run `make release-verify` for the candidate. It runs local and live backup checks in
-Release and checks device evidence. Upload paths enforce the gate against the same
-source and archive; an old result or changed archive cannot stand in for it. Keep
-build settings in the checked project and Makefile, not unrecorded overrides.
+Run `make release-verify` for each candidate. Release backup checks must match the
+source and archive being distributed. Record build settings in the project and
+Makefile.
 
-For Xcode Cloud, configure the protected
-`CLINICAL_BACKUP_CHECK_CREDENTIALS_BASE64` secret with the isolated credential JSON,
-plus a usable simulator and network access. Cloud archives run the same gate on
-their own checkout. See [testing](testing.md) for routine test entry points.
+For Xcode Cloud setup, see [release checks](../ci_scripts/README.md). Local results
+cannot authorize a different checkout.

@@ -1,41 +1,39 @@
 # SwiftUI instructions
 
-Read this file before you write, change, review, or plan SwiftUI code or app UI.
 Also read [Swift instructions](swift.md).
 
-## UI constraints
+## Scope and state
 
-- Avoid UIKit unless requested.
-- Don't design or write code for accessibility reasons; this app is built for a specific user (the owner/primary dentist at Bitehaus Dental Clinic) who does NOT have specific a11y needs.
+- Avoid UIKit unless requested. Accessibility-specific work is out of scope
+  unless requested.
+- Use `@Observable`, never `ObservableObject`. Keep view logic testable outside views.
+- Extract subviews into `View` structs, not computed properties. Avoid `AnyView`
+  unless required.
+- Keep each visual variant's values in one configuration, not separate switches
+  for each metric.
 
-## Views and interaction
+## APIs and layout
 
-- Always use `foregroundStyle()` instead of `foregroundColor()`.
-- Always use `clipShape(.rect(cornerRadius:))` instead of `cornerRadius()`.
-- Always use the `Tab` API instead of `tabItem()`.
-- Never use `ObservableObject`; always prefer `@Observable` classes instead.
-- Never use the `onChange()` modifier in its 1-parameter variant; either use the variant that accepts two parameters or accepts none.
-- Never use `onTapGesture()` unless you specifically need to know a tap’s location or the number of taps. All other usages should use `Button`.
-- For plain buttons with composite labels containing `Spacer` or other transparent areas, give the
-  label its intended frame and apply `contentShape()` after the frame. Backgrounds and clipping
-  define appearance, not a reliable hit-testing boundary.
-- Never use `Task.sleep(nanoseconds:)`; always use `Task.sleep(for:)` instead.
-- Never use `UIScreen.main.bounds` to read the size of the available space.
-- Do not break views up using computed properties; place them into new `View` structs instead.
-- Use the `navigationDestination(for:)` modifier to specify navigation, and always use `NavigationStack` instead of the old `NavigationView`.
-- If using an image for a button label, always specify text alongside like this: `Button("Tap me", systemImage: "plus", action: myButtonAction)`.
-- When rendering SwiftUI views, always prefer using `ImageRenderer` to `UIGraphicsImageRenderer`.
-- Don’t apply the `fontWeight()` modifier unless there is good reason. If you want to make some text bold, always use `bold()` instead of `fontWeight(.bold)`.
-- Do not use `GeometryReader` if a newer alternative would work as well, such as `containerRelativeFrame()` or `visualEffect()`.
-- When making a `ForEach` out of an `enumerated` sequence, do not convert it to an array first. So, prefer `ForEach(x.enumerated(), id: \.element.id)` instead of `ForEach(Array(x.enumerated()), id: \.element.id)`.
-- When hiding scroll view indicators, use the `.scrollIndicators(.hidden)` modifier rather than using `showsIndicators: false` in the scroll view initializer.
-- Use the newest ScrollView APIs for item scrolling and positioning (e.g. `ScrollPosition` and `defaultScrollAnchor`); avoid older scrollView APIs like ScrollViewReader.
-- Use `confirmationDialog` for confirmation prompts everywhere; reserve alerts for errors or informational messages that do not present a choice between actions.
-- Use `AsyncButton` when a button tap immediately starts async work. Use `ConfirmingAsyncButton` when a button must show a confirmation dialog before starting async work. Keep shared in-flight state and errors in the owning model when multiple controls or call paths can trigger the same operation.
-- Tray forms with unsaved draft values must confirm before explicit dismissal (use ConfirmingTray.swift for this). Disable swipe and outside-tap dismissal for dirty forms and while saving. Child steps supply their own dismissal boundary.
-- Place view logic into view models or similar, so it can be tested.
-- Avoid `AnyView` unless it is absolutely required.
-- Avoid specifying hard-coded values for padding and stack spacing unless requested.
-- Avoid using UIKit colors in SwiftUI code.
-- When a view supports visual variants, model each variant as one cohesive configuration with its values colocated. Avoid separate switches or conditionals for every metric.
+- Use `foregroundStyle()`, `clipShape(.rect(cornerRadius:))`, and the `Tab` API.
+- Use zero- or two-parameter `onChange()`, never the one-parameter form.
+- Use `NavigationStack` and `navigationDestination(for:)`.
+- Use `Task.sleep(for:)`. Prefer `ImageRenderer` for view rendering.
+- Use `bold()` for bold text; use `fontWeight()` only with a specific reason.
+- Prefer `containerRelativeFrame()` or `visualEffect()` to `GeometryReader`.
+  Never size content with `UIScreen.main.bounds`.
+- Pass enumerated sequences directly to `ForEach`; do not wrap them in `Array`.
+- Use `.scrollIndicators(.hidden)` and current scrolling APIs such as
+  `ScrollPosition` and `defaultScrollAnchor`, not `ScrollViewReader`.
+- Avoid hard-coded padding and stack spacing unless requested. Avoid UIKit colors.
 
+## Interaction
+
+- Use `Button` unless a gesture needs the tap location or count. Give image buttons
+  text labels.
+- For plain composite button labels, set the frame before `contentShape()` so
+  transparent areas respond to taps. Backgrounds and clipping do not ensure this.
+- Use `confirmationDialog` for choices; reserve alerts for errors and information.
+- Use `AsyncButton` for immediate async work and `ConfirmingAsyncButton` for
+  confirmed async work. Shared operations need model-owned progress and errors.
+- Use `ConfirmingTray.swift` for explicit dismissal of unsaved forms. Disable swipe
+  and outside-tap dismissal while dirty or saving. Child steps own their dismissal.

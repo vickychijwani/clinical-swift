@@ -1,28 +1,27 @@
 # Assisted patient data restore
 
-Use an internal signed build. Public recovery screens are deferred. Storage and
-replacement rules are in [backups](backups.md); this procedure covers operator
-steps.
+Use a signed internal build; public recovery is deferred. See [backups](backups.md)
+for restore boundaries.
 
 ## Before starting
 
 - Stop clinic edits. Record the incident time, device, and app version.
-- Keep Clinical installed. Preserve its App Group database and matching WAL/SHM
-  files. Do not reset the device or launch a build that can erase changed schemas.
+- Keep Clinical installed and preserve its App Group database and WAL/SHM files.
+  Do not reset the device or launch a build that can erase data after schema changes.
 - Use the Google account connected for backups. For Calendar link recovery, use
   the same iCloud account and `Bitehaus Debug` calendar.
 - Keep remote backups and downloaded originals unchanged until acceptance.
 
 ## Select and stage a pair
 
-In Google Drive, open `Clinical Backups`, then the intended dataset UUID folder.
-Choose a capture before the incident and download its matching `.db` and `.json`
-files. Ignore incomplete pairs. Record dataset ID, snapshot ID, capture time,
-checksum, size, and schema history without including patient fields in reports.
+In Google Drive, open `Clinical Backups` and the intended dataset UUID folder.
+Download a matching `.db` and `.json` pair captured before the incident. Record
+dataset ID, snapshot ID, capture time, checksum, size, and schema history. Keep
+patient fields out of reports.
 
-Copy the pair into an owned staging directory in the app container as `snapshot.db`
-and `snapshot.json`. Keep the manifest's original bytes. Confirm its dataset ID;
-`--restore-dataset` must name the intended dataset, not merely repeat an unchecked ID.
+Stage the pair in the app container as `snapshot.db` and `snapshot.json`. Keep the
+manifest bytes unchanged. Independently confirm the dataset ID before using it
+with `--restore-dataset`.
 
 Optional independent Mac checks:
 
@@ -33,21 +32,19 @@ sqlite3 -readonly '/absolute/path/to/snapshot.db' 'PRAGMA integrity_check; PRAGM
 sqlite3 -readonly '/absolute/path/to/snapshot.db' 'SELECT identifier FROM grdb_migrations ORDER BY rowid;'
 ```
 
-Integrity must return `ok`, foreign keys must return no rows, and checksum/size must
-match the manifest. Counts alone do not prove that the right records were saved.
-Do not install an invalid or unsupported backup.
+Integrity must return `ok`, foreign keys no rows, and checksum/size must match the
+manifest. Counts do not prove record identity. Reject invalid or unsupported backups.
 
 ## Build and invoke
 
-Use a signed **Release** app build with
+Use a signed **Release** build with
 `CLINICAL_INTERNAL_CONDITIONS=INTERNAL_RECOVERY`. Keep the ordinary bundle ID and
-App Group entitlements; verify the developer team and installed-data access. Do
-not distribute this build. Ordinary builds have no restore command or public URL.
+App Group entitlements. Verify the developer team and installed-data access. Do
+not distribute this build.
 
-Terminate the app before each invocation. Set the selected launch arguments in
-Xcode's Run scheme. Transfer staging files through Xcode's device container support.
-Paths below refer to the current on-device container, not a Mac path; installation
-can change that container path.
+Terminate the app before each invocation. Transfer files with Xcode's device
+container support and set launch arguments in its Run scheme. Use current
+on-device paths; installation can change the container path.
 
 | Action | Launch arguments |
 | --- | --- |
@@ -60,23 +57,18 @@ For Simulator, use
 `xcrun simctl launch <simulator-id> in.bitehaus.clinical <arguments>`. This does not
 verify recovery on the physical clinic device.
 
-Import validates and migrates a working copy with debug erasure and seeding
-disabled. If coordination fails, keep the journal and retry. Do not manually move
-files around an unresolved journal. Once installed, the app can reopen and
-reconcile Calendar, but backups remain paused until finalization.
+If installation is interrupted or coordination fails, keep recovery files and
+retry. Do not move files around an unresolved journal. The app can reopen and
+reconcile Calendar after installation; backups remain paused until finalization.
 
-Rollback restores the original local file set. It cannot undo Calendar changes
-already delivered. Read the [Calendar recovery limits](calendar-sync.md#backup-recovery)
-before acceptance.
+Rollback restores original local files. Read the
+[Calendar recovery limits](calendar-sync.md#backup-recovery) before acceptance.
 
 ## Verify and accept
 
 - Check known patient details, upcoming and historical appointments, blocks, and
   the accepted loss window. Confirm editing and widget reads on the target device.
-- Check Calendar in the original account against the
-  [recovery limits](calendar-sync.md#backup-recovery). Duplicates and events created
-  after the capture can remain.
+- Check Calendar in the original account against those recovery limits.
 - Finalize only after the clinic owner accepts the data. Return to the ordinary
   build. Check relaunch, a new edit, and the next confirmed Drive backup.
 - Remove unnecessary staging exports and unreferenced pending files after acceptance.
-  Keep reports free of patient fields.

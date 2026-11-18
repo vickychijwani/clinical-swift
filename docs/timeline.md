@@ -2,50 +2,27 @@
 
 ## Breaks and coordinates
 
-Break compression belongs to one time scale shared by layout, drawing, and scrolling.
-Separate coordinate calculations can put the card, its hit area, and its scroll
-position at different times. Overlap groups still use real time, not compressed
-coordinates.
+Drawing, touch handling, and scrolling must agree on time, including compressed
+breaks. Determine overlaps from real time, not display coordinates.
 
-A break expands when an item starts inside it. An item that starts before the break
-and crosses it stays on the compact scale so a long appointment does not expand
-the day unexpectedly. Compact break minutes retain proportional height; collapsing
-them to one point would give crossing items misleading durations. Drafts use the
-same scale so previews match saved items.
+A break expands for items that start inside it, not those that only cross it;
+long appointments should not expand the day unexpectedly. Compressed minutes keep
+proportional height so crossing items do not show misleading durations. Drafts
+and saved items use the same scale.
 
-During a drag, break expansion waits for a hold over the compact break. Scale
-changes must correct the scroll position so the card stays under the finger. Keep
-enough scroll range for that correction, and defer separate draft-reveal scrolling
-until the drag ends; competing scroll requests would move the card away from the
-touch.
+During a drag, scale changes and scrolling must keep the card under the finger.
 
-The break is a display preference, not a schedule item or a booking restriction.
-See [booking rules](appointment-booking.md).
+Breaks are display preferences. See [booking rules](appointment-booking.md) for
+overlaps and unavailable time.
 
-Time text takes priority over names in narrow overlap columns: the doctor must
-still be able to read when an appointment starts.
+In narrow overlap columns, keep start times readable before patient names.
 
 ## Direct editing
 
-Appointment and unavailable-time edits stay in one unsaved draft across gestures
-and date changes. Only Done saves these changes; a failed save keeps the draft for
-retry. This lets the doctor try positions across days without changing stored
-data at each release. The session owns gesture, sheet, save, and error state.
-Only its active domain draft is rendered or saved; a second timeline save path
-could bypass validation.
+Appointment and unavailable-time drafts survive gestures and date changes. Only
+Done saves; failure keeps the draft for retry. Confirm before Cancel discards it.
+The doctor must be able to try positions across days without changing saved data.
 
-Hide the stored version of the edited item on every date page until the session
-ends. Showing both versions would make one item appear to occupy two slots when
-its draft moves to another day.
-
-A hold on a scheduled appointment or unavailable-time block starts a move. A hold
-in empty space starts shared creation. Use the first touch to choose the action
-so a new booking can move into occupied time. Open the
-[creation sheet](appointment-booking.md#shared-creation) after release so the sheet
-does not interrupt the drag.
-
-## Navigation
-
-Keep the horizontal pager's rendered range and the loaded schedule range aligned.
-Fast successive swipes can reach beyond the adjacent day before the first animation
-ends; loading only adjacent days can expose an empty day that actually has bookings.
+The first touch determines whether a hold moves an item or starts
+[creation](appointment-booking.md#shared-creation). A new booking can then move into
+occupied time. Present fields after release so they do not interrupt the drag.
