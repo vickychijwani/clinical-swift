@@ -164,6 +164,55 @@ struct PaymentListTests {
         }
     }
 
+    @Test func filtersKeepMatchingRowsAndTotalsWithoutChangingDayOrder() throws {
+        let patientReceipt = try PaymentListFixture.item(
+            .receipt(source: .patient(UUID()), paymentMethod: .upi), amount: 1200)
+        let otherReceipt = try PaymentListFixture.item(
+            .receipt(source: .otherIncome, paymentMethod: .cash), amount: 300,
+            recorded: "2026-10-24T13:00:00Z")
+        let expense = try PaymentListFixture.item(amount: 500)
+        let days = try PaymentDay.sections(
+            from: [patientReceipt, expense, otherReceipt],
+            today: PaymentListFixture.date("2026-10-26T12:00:00Z"))
+
+        #expect(days.map { $0.filtered(by: .all) } == days)
+        for filter in [PaymentFilter.incoming, .outgoing] {
+            let filtered = days.map { $0.filtered(by: filter) }
+            #expect(filtered.map(\.id) == days.map(\.id))
+            #expect(filtered.map(\.title) == days.map(\.title))
+            #expect(filtered.first?.items.isEmpty == true)
+            #expect(filtered.first?.receipts == nil)
+            #expect(filtered.first?.expenses == nil)
+            let last = try #require(filtered.last)
+            if filter == .incoming {
+                #expect(last.items == [otherReceipt, patientReceipt])
+                #expect(last.receipts == 1500)
+                #expect(last.expenses == nil)
+            } else {
+                #expect(last.items == [expense])
+                #expect(last.receipts == nil)
+                #expect(last.expenses == 500)
+            }
+        }
+    }
+
+    @Test func filtersWithNoMatchingPaymentsKeepAnEmptyDayWithoutTotals() throws {
+        for filter in [PaymentFilter.incoming, .outgoing] {
+            let details: AccountEntry.Details =
+                filter == .incoming
+                ? .expense(category: .rent, paymentMethod: nil)
+                : .receipt(source: .otherIncome, paymentMethod: nil)
+            let item = try PaymentListFixture.item(details)
+            let day = try #require(
+                PaymentDay.sections(from: [item], today: item.entry.entryDate).first)
+            let filtered = day.filtered(by: filter)
+            #expect(filtered.id == day.id)
+            #expect(filtered.items.isEmpty)
+            #expect(filtered.receipts == nil)
+            #expect(filtered.expenses == nil)
+        }
+    }
+
     @Test func observedHistoryTracksWritesRenamesDeletesAndSundayVisibility() async throws {
         let database = try PaymentsFixture.database()
         let sunday = try PaymentListFixture.date("2026-10-25T12:00:00Z")

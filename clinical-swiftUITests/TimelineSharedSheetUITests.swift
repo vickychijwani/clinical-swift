@@ -18,6 +18,7 @@ nonisolated final class TimelineSharedSheetUITests: XCTestCase {
 
     @MainActor func testPatientListSurvivesTypeChangesAndSheetReopening() {
         let app = TimelineUITestSupport.launch()
+        XCTAssertTrue(app.tabBars.buttons["Schedule"].isSelected)
         app.buttons["Add"].tap()
         let search = app.textFields["Search patient by name"]
         let patient = app.buttons.matching(
@@ -25,6 +26,7 @@ nonisolated final class TimelineSharedSheetUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(search.hittableOrWait(timeout: 3))
         XCTAssertTrue(patient.existsOrWait(timeout: 3))
+        XCTAssertFalse(app.tabBars.buttons["Schedule"].exists)
 
         for _ in 0..<2 {
             search.typeText("No matching patient")
@@ -40,6 +42,7 @@ nonisolated final class TimelineSharedSheetUITests: XCTestCase {
         app.buttons["Back"].tap()
         XCTAssertTrue(app.buttons["Done"].hittableOrWait(timeout: 3))
         TimelineUITestSupport.draft(app).tap()
+        XCTAssertFalse(app.tabBars.buttons["Schedule"].exists)
         XCTAssertTrue(search.hittableOrWait(timeout: 3))
         XCTAssertTrue(patient.existsOrWait(timeout: 3))
         search.typeText("Test")
@@ -49,6 +52,7 @@ nonisolated final class TimelineSharedSheetUITests: XCTestCase {
         XCTAssertTrue(TimelineUITestSupport.draft(app).label.contains("Test Patient"))
         app.buttons["Done"].tap()
         XCTAssertTrue(app.buttons["Add"].hittableOrWait(timeout: 3))
+        XCTAssertTrue(app.tabBars.buttons["Schedule"].isSelected)
     }
 
     @MainActor func testSharedSheetSwitchesFocusAndSwipeKeepsDraft() {

@@ -22,6 +22,8 @@ Review changes from ALL of the following perspectives:
   - Use the /my-design-review skill for this
 - Idiomatic code + following repo-wide conventions
 
+Evaluate tests against [testing.md](../../../docs/testing.md).
+
 ## Output
 
 - If given a PR, post comments on the PR directly at appropriate places.

@@ -14,9 +14,9 @@ description: Use this when asked to address review comments
 ## Workflow
 
 1. Evaluate each review comment independently
-2. Decide the outcome: "Agree", "Partly agree", or "Disagree"
+2. Decide the outcome: "Agree", "Partly agree", or "Disagree". For test comments, use [testing.md](../../../docs/testing.md).
 3. Implement clean fixes for every "Agree" or "Partly agree", following the /my-design-review skill.
-4. Run focused checks that cover the files you changed
+4. Run focused checks for changed files.
 5. Commit and push to PR branch, if any changes were made
 6. Reply on threads, resolve fixed threads, and summarize (as your assigned GitHub App identity (clinical-antigravity[bot] or clinical-codex[bot])
    - Write in a highly readable, friendly, concise style. Be concrete instead of abstract.

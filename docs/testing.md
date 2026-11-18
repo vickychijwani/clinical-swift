@@ -81,6 +81,8 @@ Linux tests and architecture validation use GitHub-hosted runners.
 
 ## Test boundaries
 
+Use UI tests only when unit tests cannot cover the behavior.
+
 Package tests use public imports to check the same API boundary as the app. Tests
 for app-owned editors and platform setup stay in the app test bundle.
 

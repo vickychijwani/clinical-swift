@@ -1,5 +1,11 @@
 import Foundation
 
+public nonisolated enum PaymentFilter: String, CaseIterable, Sendable {
+    case all = "All"
+    case incoming = "Incoming"
+    case outgoing = "Outgoing"
+}
+
 public nonisolated struct PaymentItem: Identifiable, Equatable, Sendable {
     public let entry: AccountEntry
     public let title: String
@@ -37,6 +43,21 @@ public nonisolated struct PaymentDay: Identifiable, Equatable, Sendable {
     public let items: [PaymentItem]
     public let receipts: Int?
     public let expenses: Int?
+
+    public func filtered(by filter: PaymentFilter) -> Self {
+        switch filter {
+        case .all:
+            self
+        case .incoming:
+            Self(
+                id: id, title: title, items: items.filter(\.isReceipt),
+                receipts: receipts, expenses: nil)
+        case .outgoing:
+            Self(
+                id: id, title: title, items: items.filter { !$0.isReceipt },
+                receipts: nil, expenses: expenses)
+        }
+    }
 
     public static func sections(from items: [PaymentItem], today: Date) throws -> [Self] {
         let payments = items.filter { [.receipt, .expense].contains($0.entry.kind) }.sorted {

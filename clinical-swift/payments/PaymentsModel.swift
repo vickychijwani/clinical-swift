@@ -9,6 +9,9 @@ final class PaymentsModel {
     @ObservationIgnored @Fetch(PaymentDaysRequest(today: FinancialDate.today))
     var days: [PaymentDay] = []
 
+    var filter: PaymentFilter = .all
+    var filteredDays: [PaymentDay] { days.map { $0.filtered(by: filter) } }
+
     var error: (any Error)? { $days.loadError }
 
     func followClinicDays() async {

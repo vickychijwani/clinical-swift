@@ -14,14 +14,24 @@ struct PaymentsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+
+                FilterBar(options: PaymentFilter.allCases, selection: $model.filter) { filter in
+                    Text(filter.rawValue)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
             .listSectionMargins(.horizontal, 0)
+            .listSectionMargins(.bottom, 0)
             .listSectionSeparator(.hidden)
             if model.error != nil {
                 Text("Payments could not be loaded.")
                     .foregroundStyle(AppColor.secondaryText)
             } else {
-                ForEach(model.days) { day in
+                ForEach(model.filteredDays) { day in
                     Section {
                         if day.items.isEmpty {
                             Text("No payments")
