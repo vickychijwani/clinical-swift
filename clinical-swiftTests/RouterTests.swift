@@ -1,7 +1,9 @@
 import ClinicalModels
 import Dependencies
 import Foundation
+import Synchronization
 import Testing
+import UIKit
 
 @testable import clinical_swift
 
@@ -69,6 +71,46 @@ struct RouterTests {
         router.requestSettings()
         #expect(router.settingsRequest == nil)
         #expect(router.activePresentation?.id == editorID)
+    }
+
+    @Test func settingsOpensWhenIdleAndDoesNotReplaceItselfOrDismissingSheets() throws {
+        let router = makeRouter()
+        router.requestSettings()
+        let settingsID = try #require(router.settingsRequest?.id)
+
+        router.requestSettings()
+        #expect(router.settingsRequest?.id == settingsID)
+
+        router.presentationDidAppear(settingsID)
+        router.dismissPresentation()
+        #expect(router.settingsRequest == nil)
+
+        router.requestSettings()
+        #expect(router.settingsRequest == nil)
+
+        router.presentationDidDismiss(settingsID)
+        router.requestSettings()
+        #expect(router.settingsRequest != nil)
+    }
+
+    @Test func windowPostsShakeNotificationOnlyForMotionShake() throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window = UIWindow(windowScene: scene)
+        let receivedCount = Mutex(0)
+        let token = NotificationCenter.default.addObserver(
+            forName: .deviceDidShake,
+            object: window,
+            queue: nil
+        ) { _ in
+            receivedCount.withLock { $0 += 1 }
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        window.motionEnded(.none, with: nil)
+        #expect(receivedCount.withLock { $0 } == 0)
+
+        window.motionEnded(.motionShake, with: nil)
+        #expect(receivedCount.withLock { $0 } == 1)
     }
 
     @Test func detailsHistoryPreservesRepeatedRoutes() throws {

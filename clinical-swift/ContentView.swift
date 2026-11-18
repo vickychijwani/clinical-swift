@@ -1,5 +1,6 @@
 import SQLiteData
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @Bindable var router: Router
@@ -32,6 +33,9 @@ struct ContentView: View {
             }
             .onOpenURL { url in
                 router.open(url)
+            }
+            .onShake {
+                router.requestSettings()
             }
             .timelineTuningRoot()
             .colorLabRoot()
@@ -151,6 +155,139 @@ private struct AppTrayHost: ViewModifier {
             return .appointmentMessage(request)
         case .settings(let request):
             return .settings(request)
+        }
+    }
+}
+
+extension Notification.Name {
+    nonisolated static let deviceDidShake = Notification.Name("clinical.deviceDidShake")
+}
+
+extension UIWindow {
+    open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        if motion == .motionShake {
+            NotificationCenter.default.post(name: .deviceDidShake, object: self)
+        }
+        super.motionEnded(motion, with: event)
+    }
+}
+
+extension View {
+    fileprivate func onShake(perform action: @escaping @MainActor () -> Void) -> some View {
+        modifier(ShakeDetectorModifier(action: action))
+    }
+}
+
+private struct ShakeDetectorModifier: ViewModifier {
+    let action: @MainActor () -> Void
+    @State private var windowBox = WeakWindowBox()
+
+    func body(content: Content) -> some View {
+        content
+            .background(WindowObserver(windowBox: windowBox))
+            .onReceive(NotificationCenter.default.publisher(for: .deviceDidShake)) { notification in
+                // Ignore shakes from separate alert or system windows.
+                guard let window = notification.object as? UIWindow, window === windowBox.window
+                else { return }
+                action()
+            }
+            .uiTestShakeBridge(windowBox: windowBox)
+    }
+}
+
+extension View {
+    @ViewBuilder
+    fileprivate func uiTestShakeBridge(windowBox: WeakWindowBox) -> some View {
+        #if DEBUG
+            if CommandLine.arguments.contains(where: { $0.hasPrefix("--ui-testing-") }) {
+                modifier(UITestShakeBridgeModifier(windowBox: windowBox))
+            } else {
+                self
+            }
+        #else
+            self
+        #endif
+    }
+}
+
+#if DEBUG
+    private struct UITestShakeBridgeModifier: ViewModifier {
+        let windowBox: WeakWindowBox
+
+        func body(content: Content) -> some View {
+            content
+                .onAppear {
+                    UITestShakeHook.installIfNeeded()
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: UITestShakeHook.localNotificationName)
+                ) { _ in
+                    windowBox.window?.motionEnded(.motionShake, with: nil)
+                }
+        }
+    }
+
+    private enum UITestShakeHook {
+        private static let darwinNotificationName =
+            "in.bitehaus.clinical.ui-testing.shake" as CFString
+        nonisolated static let localNotificationName = Notification.Name(
+            "clinical.uiTestingSimulateShake")
+
+        static func installIfNeeded() {
+            _ = registration
+        }
+
+        private static let registration: Void = {
+            // XCUITest has no shake API, so UI tests trigger the real window hook via Darwin notify.
+            CFNotificationCenterAddObserver(
+                CFNotificationCenterGetDarwinNotifyCenter(),
+                nil,
+                { _, _, _, _, _ in
+                    Task { @MainActor in
+                        NotificationCenter.default.post(name: localNotificationName, object: nil)
+                    }
+                },
+                darwinNotificationName,
+                nil,
+                .deliverImmediately
+            )
+        }()
+    }
+#endif
+
+@MainActor
+private final class WeakWindowBox {
+    weak var window: UIWindow?
+}
+
+private struct WindowObserver: UIViewRepresentable {
+    let windowBox: WeakWindowBox
+
+    func makeUIView(context: Context) -> ObserverView {
+        ObserverView(windowBox: windowBox)
+    }
+
+    func updateUIView(_ uiView: ObserverView, context: Context) {
+        uiView.windowBox = windowBox
+        windowBox.window = uiView.window
+    }
+
+    final class ObserverView: UIView {
+        var windowBox: WeakWindowBox
+
+        init(windowBox: WeakWindowBox) {
+            self.windowBox = windowBox
+            super.init(frame: .zero)
+            isHidden = true
+            isUserInteractionEnabled = false
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { nil }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            windowBox.window = window
         }
     }
 }

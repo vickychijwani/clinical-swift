@@ -28,10 +28,7 @@ struct PatientsView: View {
         .navigationTitle("Patients")
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                BackupSettingsButton()
-            }
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            BackupWarningToolbar(showsTrailingSpacer: true)
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Add", systemImage: "plus") {
                     router.requestPatientCreation()

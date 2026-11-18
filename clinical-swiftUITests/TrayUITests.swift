@@ -131,6 +131,26 @@ nonisolated final class TrayUITests: XCTestCase {
     func testSettingsUsesTheTrayAndCloses() {
         let app = launch()
         app.buttons["Close"].tap()
+        XCTAssertTrue(app.navigationBars["Appointment"].absentOrWait(timeout: 3))
+        triggerShake()
+        XCTAssertTrue(app.navigationBars["Settings"].hittableOrWait(timeout: 3))
+        XCTAssertTrue(app.otherElements["tray-surface"].exists)
+        XCTAssertTrue(app.staticTexts["Patient data backups"].exists)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].absentOrWait(timeout: 3))
+    }
+
+    @MainActor
+    func testBackupWarningButtonShowsAcrossTabsAndOpensSettings() {
+        let app = launch()
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.navigationBars["Appointment"].absentOrWait(timeout: 3))
+        XCTAssertTrue(app.buttons["Settings"].hittableOrWait(timeout: 3))
+        app.tabBars.buttons["Patients"].tap()
+        XCTAssertTrue(app.navigationBars["Patients"].hittableOrWait(timeout: 3))
+        XCTAssertTrue(app.buttons["Settings"].hittableOrWait(timeout: 3))
+        app.tabBars.buttons["Payments"].tap()
+        XCTAssertTrue(app.navigationBars["Payments"].hittableOrWait(timeout: 3))
         XCTAssertTrue(app.buttons["Settings"].hittableOrWait(timeout: 3))
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].hittableOrWait(timeout: 3))
@@ -138,6 +158,17 @@ nonisolated final class TrayUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Patient data backups"].exists)
         app.buttons["Done"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].absentOrWait(timeout: 3))
+    }
+
+    @MainActor
+    private func triggerShake() {
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName("in.bitehaus.clinical.ui-testing.shake" as CFString),
+            nil,
+            nil,
+            true
+        )
     }
 
     @MainActor
