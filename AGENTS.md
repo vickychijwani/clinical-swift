@@ -56,12 +56,14 @@ Plans, implemented specs, and validation reports are historical context, not cur
 
 ## Documentation Guidance
 
-- Keep only consequential decisions and constraints whose reason is not clear from code or tests. Explain the reason briefly.
-- Keep cross-module and cross-process constraints in guides; keep local implementation traps beside the code.
-- Give each decision one home and link to it. Do not repeat it as an invariant, warning, and edge case.
-- Omit implementation inventories, ordinary UI details, test lists/results, session status reports (what was or was not verified), and change summaries. Keep runnable setup and recovery procedures.
-- When editing a guide, remove duplicate and obsolete text instead of appending a feature summary.
-- Do not maintain documentation for local design tools, such as Card lab and Color lab. These temporary development controls do not need architecture guides.
+- Write in super concise and easy to read fashion - don't use more words when fewer will do, without sacrificing clarity.
+- Keep major invariants, consequential decisions, and context whose reasons are unclear from code or tests. Explain surprising product rules and preserve business reasons even when tests enforce them.
+- Keep cross-module and cross-process constraints in guides; local traps belong beside code. Do not move every deleted detail into a comment.
+- Remove implementation descriptions, inventories, ordinary UI details, test lists/results, status reports, and feature summaries.
+- Give each decision one home and link to it. Remove duplicate and obsolete text.
+- Keep essential setup, release, and recovery procedures, including commands, prerequisites, and limits; omit internals.
+- Do not document temporary design tools, such as Card lab and Color lab.
+- Do not set word quotas.
 
 ## Core instructions
 
