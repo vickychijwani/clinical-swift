@@ -47,9 +47,7 @@ struct BackupSettingsView: View {
                     .disabled(
                         backups.isRunning || backups.isConnecting || backups.state.accountID == nil)
                 }
-                #if DEBUG
-                    TimelineTuningSettings()
-                #endif
+                TimelineTuningSettings()
             }
             .navigationTitle("Settings")
             .toolbar {

@@ -2,6 +2,8 @@ import ClinicalModels
 import SwiftUI
 
 struct ScheduleTimelinePage: View {
+    @Environment(\.scheduleCardTuning) private var cardTuning
+
     let date: Date
     let items: [TimelineItem]
     let calendar: Calendar
@@ -166,8 +168,12 @@ struct ScheduleTimelinePage: View {
             x: touchStart.x - timelineFrame.minX, y: touchStart.y - timelineFrame.minY)
         // Use the displayed scale, including a compact break, for touch mapping.
         let scale = TimelineScale(items: items)
-        let layout = TimelineLayoutEngine(availableWidth: timelineFrame.width, scale: scale)
-        // Check the front card first when cards share an overlap column.
+        let layout = TimelineLayoutEngine(
+            availableWidth: timelineFrame.width,
+            scale: scale,
+            overlap: cardTuning.overlap
+        )
+        // Check the front card first when cards overlap.
         let item = layout.layout(items: items).last {
             TimelineItemView.cardShape.path(in: $0.rect).contains(point)
         }?.item

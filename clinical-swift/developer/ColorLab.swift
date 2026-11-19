@@ -2,25 +2,16 @@ import SwiftUI
 
 extension View {
     func colorLabRoot() -> some View {
-        #if DEBUG
-            modifier(ColorLabRoot())
-        #else
-            self
-        #endif
+        modifier(ColorLabRoot())
     }
 
     func colorLabOverlay(isVisible: Bool) -> some View {
-        #if DEBUG
-            modifier(ColorLabOverlay(isVisible: isVisible))
-        #else
-            self
-        #endif
+        modifier(ColorLabOverlay(isVisible: isVisible))
     }
 }
 
-#if DEBUG
-    @MainActor @Observable
-    final class ColorLab {
+@MainActor @Observable
+final class ColorLab {
         private let defaults: UserDefaults
         private static let key = "developer.colorLab.v1"
 
@@ -539,4 +530,3 @@ extension View {
             }
         }
     }
-#endif

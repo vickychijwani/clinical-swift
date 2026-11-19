@@ -4,43 +4,47 @@ import Testing
 
 @testable import clinical_swift
 
-#if DEBUG
-    @MainActor
-    struct TimelineTuningTests {
-        @Test func restoresValuesAndPanelState() throws {
-            let suite = "TimelineTuningTests.\(UUID())"
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defer { defaults.removePersistentDomain(forName: suite) }
-            let tuning = TimelineTuning(defaults: defaults)
-            tuning.state.isEnabled = true
-            tuning.state.isExpanded = false
-            tuning.state.position = .init(x: 0.25, y: 0.6)
-            tuning.state.cards.surfaceOpacity = 0.8
-            tuning.state.cards.otherContentOpacity = 0.2
-            tuning.state.cards.lift.width = 0.012
-            tuning.state.cards.lift.shadowOpacity = 0.2
-            tuning.state.cards.lift.shadowRadius = 12
-            tuning.state.cards.lift.duration = 0.2
+@MainActor
+struct TimelineTuningTests {
+    @Test func restoresValuesAndPanelState() throws {
+        let suite = "TimelineTuningTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tuning = TimelineTuning(defaults: defaults)
+        tuning.state.isEnabled = true
+        tuning.state.isExpanded = false
+        tuning.state.position = .init(x: 0.25, y: 0.6)
+        tuning.state.cards.surfaceOpacity = 0.8
+        tuning.state.cards.otherContentOpacity = 0.2
+        tuning.state.cards.lift.width = 0.012
+        tuning.state.cards.lift.shadowOpacity = 0.2
+        tuning.state.cards.lift.shadowRadius = 12
+        tuning.state.cards.lift.duration = 0.2
+        tuning.state.cards.overlap.mode = .cascade
+        tuning.state.cards.overlap.separation = .shadow
+        tuning.state.cards.overlap.stripWidth = 22
+        tuning.state.cards.overlap.haloWidth = 3
 
-            #expect(TimelineTuning(defaults: defaults).state == tuning.state)
+        #expect(TimelineTuning(defaults: defaults).state == tuning.state)
 
-            tuning.reset()
-            #expect(tuning.state.cards == ScheduleCardTuning())
-            #expect(tuning.state.isEnabled)
-            #expect(!tuning.state.isExpanded)
-            #expect(tuning.state.position == .init(x: 0.25, y: 0.6))
-            #expect(TimelineTuning(defaults: defaults).state == tuning.state)
-        }
+        tuning.reset()
+        #expect(tuning.state.cards == ScheduleCardTuning())
+        #expect(tuning.state.isEnabled)
+        #expect(!tuning.state.isExpanded)
+        #expect(tuning.state.position == .init(x: 0.25, y: 0.6))
+        #expect(TimelineTuning(defaults: defaults).state == tuning.state)
+    }
 
-        @Test func oldCardLabValuesKeepOpacityAndGainLiftDefaults() throws {
-            let data = Data(
-                #"{"surfaceOpacity":0.73,"otherContentOpacity":0.21,"glass":"Regular","material":"Thick","materialOpacity":0.4,"isInteractive":false}"#
-                    .utf8)
-            let cards = try JSONDecoder().decode(ScheduleCardTuning.self, from: data)
-            #expect(cards.surfaceOpacity == 0.73)
-            #expect(cards.otherContentOpacity == 0.21)
-            #expect(cards.lift == ScheduleCardTuning.Lift())
-        }
+    @Test func oldCardLabValuesKeepOpacityAndGainLiftAndOverlapDefaults() throws {
+        let data = Data(
+            #"{"surfaceOpacity":0.73,"otherContentOpacity":0.21,"glass":"Regular","material":"Thick","materialOpacity":0.4,"isInteractive":false}"#
+                .utf8)
+        let cards = try JSONDecoder().decode(ScheduleCardTuning.self, from: data)
+        #expect(cards.surfaceOpacity == 0.73)
+        #expect(cards.otherContentOpacity == 0.21)
+        #expect(cards.lift == ScheduleCardTuning.Lift())
+        #expect(cards.overlap == ScheduleCardTuning.Overlap())
+    }
 
         @Test func approvedValuesReplaceEarlierTuningOnceWithoutMovingPanel() throws {
             let suite = "TimelineTuningTests.\(UUID())"
@@ -120,4 +124,3 @@ import Testing
             #expect(position.origin(in: .zero, panel: .zero) == CGPoint(x: 8, y: 8))
         }
     }
-#endif

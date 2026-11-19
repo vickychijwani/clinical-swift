@@ -5,11 +5,15 @@ struct AppointmentCard: View {
     @Environment(\.appPalette) private var palette
     let appt: Appointment
     var isDeemphasized = false
+    var contentTrailingInset: CGFloat = 0
+    var presentation: ScheduleCardPresentation? = nil
 
     var body: some View {
         ScheduleCard(
             start: appt.start, label: appt.patientName, appearance: appearance,
-            isDeemphasized: isDeemphasized
+            isDeemphasized: isDeemphasized,
+            contentTrailingInset: contentTrailingInset,
+            presentation: presentation
         )
         .animation(.easeInOut(duration: 0.2), value: appt.status)
     }

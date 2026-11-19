@@ -38,6 +38,13 @@ nonisolated enum TimelineItem: Identifiable, Sendable {
         }
     }
 
+    var displayLabel: String {
+        switch self {
+        case .appointment(let value): value.patientName
+        case .unavailableTime(let value): value.displayLabel
+        }
+    }
+
     var allowsAdjustment: Bool {
         switch self {
         case .appointment(let value): value.status == .scheduled || value.status == .draft

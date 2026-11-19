@@ -7,6 +7,10 @@ struct ScheduleCard: View {
     let label: String
     let appearance: Appearance
     var isDeemphasized = false
+    /// Extra trailing inset computed by the timeline layout engine so content cannot extend under a front card.
+    var contentTrailingInset: CGFloat = 0
+    /// Explicit layout and time-format choice shared with TimelineLayoutEngine.
+    var presentation: ScheduleCardPresentation? = nil
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -21,12 +25,18 @@ struct ScheduleCard: View {
                     .opacity(tuning.surfaceOpacity)
             }
 
-            ScheduleCardContent(start: start, label: label, appearance: appearance)
-                .padding(.horizontal, 8)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .clipped()
-                .opacity(
-                    appearance.contentOpacity * (isDeemphasized ? tuning.otherContentOpacity : 1))
+            ScheduleCardContent(
+                start: start,
+                label: label,
+                appearance: appearance,
+                presentation: presentation
+            )
+            .padding(.leading, ScheduleCardStyle.horizontalPadding)
+            .padding(.trailing, ScheduleCardStyle.horizontalPadding + contentTrailingInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
+            .opacity(
+                appearance.contentOpacity * (isDeemphasized ? tuning.otherContentOpacity : 1))
 
             RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
                 .stroke(appearance.border, style: appearance.borderStyle)
@@ -85,31 +95,82 @@ private struct ScheduleCardContent: View {
     let start: Date
     let label: String
     let appearance: ScheduleCard.Appearance
+    let presentation: ScheduleCardPresentation?
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            // Preferred: vertical layout when there's enough height
-            VStack(alignment: .leading, spacing: 2) {
-                Color.clear.frame(height: 4)
-                ScheduleCardTime(start: start, appearance: appearance)
-                ScheduleCardLabel(label: label, color: appearance.labelColor)
-                Spacer(minLength: 0)
-            }
+        if let presentation {
+            content(for: presentation)
+        } else {
+            ViewThatFits(in: .vertical) {
+                // Preferred: vertical layout when there's enough height
+                content(for: ScheduleCardPresentation(layout: .stacked))
 
-            // Fallback vertical layout with slightly less spacing
-            VStack(alignment: .leading) {
-                Spacer(minLength: 0)
-                ScheduleCardTime(start: start, appearance: appearance)
-                ScheduleCardLabel(label: label, color: appearance.labelColor)
-                Spacer(minLength: 0)
-            }
-
-            // Fallback: horizontal layout when vertical doesn't fit
-            VStack(alignment: .leading) {
-                Spacer(minLength: 0)
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                // Fallback vertical layout with slightly less spacing
+                VStack(alignment: .leading) {
+                    Spacer(minLength: 0)
                     ScheduleCardTime(start: start, appearance: appearance)
                     ScheduleCardLabel(label: label, color: appearance.labelColor)
+                    Spacer(minLength: 0)
+                }
+
+                // Fallback: horizontal layout when vertical doesn't fit
+                content(for: ScheduleCardPresentation(layout: .horizontal))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func content(for presentation: ScheduleCardPresentation) -> some View {
+        let style = presentation.layout.style
+        switch presentation.layout {
+        case .stacked:
+            VStack(alignment: .leading, spacing: style.spacing) {
+                Color.clear.frame(height: style.topSpacerHeight)
+                ScheduleCardTime(
+                    start: start,
+                    appearance: appearance,
+                    usesCompactTime: presentation.usesCompactTime,
+                    fontSize: style.timeFontSize
+                )
+                ScheduleCardLabel(
+                    label: label,
+                    color: appearance.labelColor,
+                    fontSize: style.labelFontSize
+                )
+                Spacer(minLength: 0)
+            }
+        case .compactStacked:
+            // Compact 2-line stack for narrow medium cards (e.g. 30 min) so names stay readable.
+            VStack(alignment: .leading, spacing: style.spacing) {
+                Spacer(minLength: 0)
+                ScheduleCardTime(
+                    start: start,
+                    appearance: appearance,
+                    usesCompactTime: presentation.usesCompactTime,
+                    fontSize: style.timeFontSize
+                )
+                ScheduleCardLabel(
+                    label: label,
+                    color: appearance.labelColor,
+                    fontSize: style.labelFontSize
+                )
+                Spacer(minLength: 0)
+            }
+        case .horizontal:
+            VStack(alignment: .leading) {
+                Spacer(minLength: 0)
+                HStack(alignment: .firstTextBaseline, spacing: style.spacing) {
+                    ScheduleCardTime(
+                        start: start,
+                        appearance: appearance,
+                        usesCompactTime: presentation.usesCompactTime,
+                        fontSize: style.timeFontSize
+                    )
+                    ScheduleCardLabel(
+                        label: label,
+                        color: appearance.labelColor,
+                        fontSize: style.labelFontSize
+                    )
                 }
                 Spacer(minLength: 0)
             }
@@ -121,14 +182,18 @@ private struct ScheduleCardTime: View {
     @Environment(\.appPalette) private var palette
     let start: Date
     let appearance: ScheduleCard.Appearance
+    var usesCompactTime = false
+    var fontSize: CGFloat = ScheduleCardStyle.timeFontSize
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: ScheduleCardStyle.timeIconSpacing) {
             Image(systemName: appearance.systemImage)
                 .foregroundStyle(appearance.timeColor ?? palette[.cardIcon])
-            Text(start.formatted(.dateTime.hour().minute()))
+            Text(ScheduleCardStyle.formattedTime(start, compact: usesCompactTime))
         }
-        .styleAppointmentTime(color: appearance.timeColor)
+        .font(.system(size: fontSize, weight: .semibold).monospacedDigit())
+        .foregroundStyle(appearance.timeColor ?? palette[.time])
+        .tracking(ScheduleCardStyle.timeTracking)
         .layoutPriority(1)
         .fixedSize(horizontal: true, vertical: false)
     }
@@ -138,10 +203,11 @@ private struct ScheduleCardLabel: View {
     @Environment(\.appPalette) private var palette
     let label: String
     let color: Color?
+    var fontSize: CGFloat = ScheduleCardStyle.labelFontSize
 
     var body: some View {
         Text(label)
-            .styleBodyBold()
+            .font(.system(size: fontSize, weight: .semibold))
             .foregroundStyle(color ?? palette[.text])
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
