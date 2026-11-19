@@ -4,10 +4,10 @@ extension View {
     func styleAppointmentTime(color: Color? = nil) -> some View {
         modifier(
             AppTextStyleModifier(
-                font: .system(size: 12, weight: .semibold)
+                font: .system(size: ScheduleCardStyle.timeFontSize, weight: .semibold)
                     .monospacedDigit(),
                 style: color.map { AnyShapeStyle($0) } ?? AnyShapeStyle(AppColor.time),
-                tracking: 0.4
+                tracking: ScheduleCardStyle.timeTracking
             )
         )
     }
@@ -27,7 +27,11 @@ extension View {
     }
 
     func styleBodyBold() -> some View {
-        modifier(AppTextStyleModifier(font: .system(size: 14, weight: .semibold)))
+        modifier(
+            AppTextStyleModifier(
+                font: .system(size: ScheduleCardStyle.labelFontSize, weight: .semibold)
+            )
+        )
     }
 
     func styleCaption() -> some View {

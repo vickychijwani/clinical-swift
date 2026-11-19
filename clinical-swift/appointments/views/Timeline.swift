@@ -2,6 +2,8 @@ import ClinicalModels
 import SwiftUI
 
 struct Timeline: View {
+    @Environment(\.scheduleCardTuning) private var cardTuning
+
     let items: [TimelineItem]
     let scale: TimelineScale
 
@@ -72,7 +74,8 @@ struct Timeline: View {
         return GeometryReader { geometry in
             let engine = TimelineLayoutEngine(
                 availableWidth: geometry.size.width,
-                scale: scale
+                scale: scale,
+                overlap: cardTuning.overlap
             )
             let layouts = engine.layout(
                 items: items,
@@ -94,6 +97,10 @@ struct Timeline: View {
                     TimelineItemView(
                         item: layout.item,
                         size: layout.rect.size,
+                        contentTrailingInset: layout.contentTrailingInset,
+                        isOverlappingFront: layout.isOverlappingFront,
+                        usesCompactTime: layout.usesCompactTime,
+                        usesCompactStack: layout.usesCompactStack,
                         isDraft: draft,
                         isDeemphasized: editorSession != nil && !draft,
                         interactionsEnabled: !isWorking
@@ -111,14 +118,14 @@ struct Timeline: View {
                         onDone: onDone,
                         onDelete: onDelete
                     )
-                    .zIndex(draft ? 1 : 0)
+                    .zIndex(draft ? Double(layouts.count + 1) : Double(layout.zIndex))
                     .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
 
                 if let nowY = nowY(for: now) {
                     NowMarkerView(availableWidth: geometry.size.width)
                         .position(x: geometry.size.width / 2, y: nowY)
-                        .zIndex(2)
+                        .zIndex(Double(layouts.count + 2))
                 }
             }
         }

@@ -23,10 +23,14 @@
         ScheduleCardGallery(state: .unavailableTimeDraft)
     }
 
+    #Preview("Overlap scenarios") {
+        ScheduleCardGallery(state: .overlapScenarios)
+    }
+
     /// Use the live canvas to select, drag, and resize cards in the real Schedule page.
     private struct ScheduleCardGallery: View {
         enum Mode {
-            case overview, appointmentDraft, unavailableTimeDraft
+            case overview, appointmentDraft, unavailableTimeDraft, overlapScenarios
         }
 
         @State private var router: Router
@@ -41,32 +45,78 @@
                 return database
             }
             let date = Date.now
-            let patients = [
-                Patient(name: "Anjali Desai", createdDate: date),
-                Patient(name: "Priya Narayanan", createdDate: date),
-                Patient(name: "Kabir Malhotra", createdDate: date),
-                Patient(name: "Meera Subramanian", createdDate: date),
-            ]
-            let appointments = [
-                Appointment(
-                    patientName: patients[0].displayName, start: date.setTime(9, 0),
-                    durationMinutes: 60, status: .completed),
-                Appointment(
-                    patientName: patients[1].displayName, start: date.setTime(10, 0),
-                    durationMinutes: 60, status: .scheduled),
-                Appointment(
-                    patientName: patients[2].displayName, start: date.setTime(10, 30),
-                    durationMinutes: 45, status: .scheduled),
-                Appointment(
-                    patientName: patients[3].displayName, start: date.setTime(11, 15),
-                    durationMinutes: 15, status: .scheduled),
-            ]
-            let blocks = [
-                UnavailableTime(
-                    label: "Travel", start: date.setTime(11, 30),
-                    durationMinutes: 60),
-                UnavailableTime(start: date.setTime(12, 30), durationMinutes: 30),
-            ]
+            let patients: [Patient]
+            let appointments: [Appointment]
+            let blocks: [UnavailableTime]
+            if state == .overlapScenarios {
+                patients = [
+                    Patient(name: "Ana", createdDate: date),
+                    Patient(name: "Priya Narayanan", createdDate: date),
+                    Patient(name: "Anjali Subramanian", createdDate: date),
+                    Patient(name: "Kabir Malhotra", createdDate: date),
+                    Patient(name: "Meera Subramanian", createdDate: date),
+                    Patient(name: "Rohan Deshmukh", createdDate: date),
+                    Patient(name: "Devika Nair", createdDate: date),
+                ]
+                appointments = [
+                    // Short-name simultaneous overlap (Text-aware vs Cascade comparison).
+                    Appointment(
+                        patientName: patients[0].displayName, start: date.setTime(9, 0),
+                        durationMinutes: 90, status: .scheduled),
+                    Appointment(
+                        patientName: patients[1].displayName, start: date.setTime(9, 15),
+                        durationMinutes: 45, status: .scheduled),
+                    // Same end time: 2h card + 15m card ending together at 12:00.
+                    Appointment(
+                        patientName: patients[2].displayName, start: date.setTime(10, 0),
+                        durationMinutes: 120, status: .scheduled),
+                    Appointment(
+                        patientName: patients[3].displayName, start: date.setTime(11, 45),
+                        durationMinutes: 15, status: .scheduled),
+                    // Appointments inside a long afternoon unavailable block.
+                    Appointment(
+                        patientName: patients[4].displayName, start: date.setTime(17, 0),
+                        durationMinutes: 60, status: .scheduled),
+                    Appointment(
+                        patientName: patients[5].displayName, start: date.setTime(17, 0),
+                        durationMinutes: 45, status: .scheduled),
+                    Appointment(
+                        patientName: patients[6].displayName, start: date.setTime(18, 0),
+                        durationMinutes: 45, status: .scheduled),
+                ]
+                blocks = [
+                    UnavailableTime(
+                        label: "Travel", start: date.setTime(16, 0),
+                        durationMinutes: 180)
+                ]
+            } else {
+                patients = [
+                    Patient(name: "Anjali Desai", createdDate: date),
+                    Patient(name: "Priya Narayanan", createdDate: date),
+                    Patient(name: "Kabir Malhotra", createdDate: date),
+                    Patient(name: "Meera Subramanian", createdDate: date),
+                ]
+                appointments = [
+                    Appointment(
+                        patientName: patients[0].displayName, start: date.setTime(9, 0),
+                        durationMinutes: 60, status: .completed),
+                    Appointment(
+                        patientName: patients[1].displayName, start: date.setTime(10, 0),
+                        durationMinutes: 60, status: .scheduled),
+                    Appointment(
+                        patientName: patients[2].displayName, start: date.setTime(10, 30),
+                        durationMinutes: 45, status: .scheduled),
+                    Appointment(
+                        patientName: patients[3].displayName, start: date.setTime(11, 15),
+                        durationMinutes: 15, status: .scheduled),
+                ]
+                blocks = [
+                    UnavailableTime(
+                        label: "Travel", start: date.setTime(11, 30),
+                        durationMinutes: 60),
+                    UnavailableTime(start: date.setTime(12, 30), durationMinutes: 30),
+                ]
+            }
             try! database.write { db in
                 for patient in patients {
                     try PatientRecord.insert { PatientRecord(patient) }.execute(db)
@@ -94,7 +144,7 @@
             let router = Router()
             router.selectScheduleDate(date)
             switch state {
-            case .overview:
+            case .overview, .overlapScenarios:
                 break
             case .appointmentDraft:
                 router.requestAppointmentEdit(

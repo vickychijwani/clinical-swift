@@ -20,7 +20,8 @@ struct MixedScheduleTests {
         let block = UnavailableTime(id: id, label: "Travel", start: start, durationMinutes: 60)
         let items: [TimelineItem] = [.unavailableTime(block), .appointment(appointment)]
         let scale = TimelineScale(items: items)
-        let engine = TimelineLayoutEngine(availableWidth: 360, scale: scale)
+        let engine = TimelineLayoutEngine(
+            availableWidth: 360, scale: scale, overlap: .init(mode: .current))
         let two = engine.layout(items: items)
         #expect(two.map(\.id) == [.appointment(id), .unavailableTime(id)])
         #expect(two[0].rect.width == two[1].rect.width)
@@ -42,7 +43,7 @@ struct MixedScheduleTests {
         let touchLayouts = engine.layout(items: [.appointment(appointment), touching])
         #expect(touchLayouts[0].rect.minX == touchLayouts[1].rect.minX)
         #expect(touchLayouts[0].rect.width == Timeline.metrics.contentWidth(availableWidth: 360))
-        let stagger = engine.layout(items: [
+        let staggerItems: [TimelineItem] = [
             .appointment(
                 Appointment(patientName: "A", start: start, durationMinutes: 30, status: .scheduled)
             ),
@@ -50,9 +51,20 @@ struct MixedScheduleTests {
                 UnavailableTime(start: start.addingTimeInterval(15 * 60), durationMinutes: 30)),
             .unavailableTime(
                 UnavailableTime(start: start.addingTimeInterval(30 * 60), durationMinutes: 30)),
-        ])
+        ]
+        let stagger = engine.layout(items: staggerItems)
         #expect(stagger[0].rect.minX == stagger[2].rect.minX)
         #expect(stagger[0].rect.maxX == stagger[1].rect.minX)
+
+        // Default overlapping layout also keeps typed identity, stable ordering, and column reuse.
+        let overlapEngine = TimelineLayoutEngine(availableWidth: 360, scale: scale)
+        let overlapLayouts = overlapEngine.layout(items: items + [third, fourth])
+        #expect(
+            overlapEngine.layout(items: Array((items + [third, fourth]).reversed())).map(\.id)
+                == overlapLayouts.map(\.id))
+        let overlapStagger = overlapEngine.layout(items: staggerItems)
+        #expect(overlapStagger[0].rect.minX == overlapStagger[2].rect.minX)
+        #expect(overlapStagger[0].rect.maxX == overlapStagger[1].rect.minX)
     }
 
     @Test func blockStartsExpandBreakAtHalfOpenBoundaries() {

@@ -6,6 +6,9 @@ struct UnavailableTimeCard: View {
     let block: UnavailableTime
     var isDraft = false
     var isDeemphasized = false
+    var contentTrailingInset: CGFloat = 0
+    var usesCompactTime = false
+    var usesCompactStack = false
 
     var body: some View {
         ScheduleCard(
@@ -19,7 +22,10 @@ struct UnavailableTimeCard: View {
                 timeColor: palette[.unavailableTime],
                 labelColor: palette[.unavailableLabel]
             ),
-            isDeemphasized: isDeemphasized
+            isDeemphasized: isDeemphasized,
+            contentTrailingInset: contentTrailingInset,
+            usesCompactTime: usesCompactTime,
+            usesCompactStack: usesCompactStack
         )
     }
 }

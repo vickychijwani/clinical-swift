@@ -7,6 +7,10 @@ struct TimelineItemView: View {
 
     let item: TimelineItem
     let size: CGSize
+    var contentTrailingInset: CGFloat = 0
+    var isOverlappingFront = false
+    var usesCompactTime = false
+    var usesCompactStack = false
     let isDraft: Bool
     let isDeemphasized: Bool
     let interactionsEnabled: Bool
@@ -30,7 +34,10 @@ struct TimelineItemView: View {
             ScheduleItemCard(
                 item: item,
                 isDraft: isDraft,
-                isDeemphasized: isDeemphasized
+                isDeemphasized: isDeemphasized,
+                contentTrailingInset: contentTrailingInset,
+                usesCompactTime: usesCompactTime,
+                usesCompactStack: usesCompactStack
             )
             .frame(width: size.width, height: size.height)
             // Keep clipped text within the card's tap area.
@@ -62,6 +69,12 @@ struct TimelineItemView: View {
                 )
             }
         }
+        .modifier(
+            TimelineCardOverlapSeparation(
+                size: size,
+                isActive: isOverlappingFront && !isDraft
+            )
+        )
         .modifier(ScheduleCardLift(isPressed: isDraft && isDragging))
         .overlay(alignment: .topLeading) {
             if showsAdjustmentControls, isDragging, !tooltipBelow {
@@ -100,6 +113,46 @@ private struct TimelineCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         // The lift owns press feedback. System button dimming would also fade the white fill.
         configuration.label
+    }
+}
+
+private struct TimelineCardOverlapSeparation: ViewModifier {
+    @Environment(\.appPalette) private var palette
+    @Environment(\.scheduleCardTuning) private var tuning
+    let size: CGSize
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        content.background {
+            if isActive {
+                switch tuning.overlap.separation {
+                case .halo:
+                    let halo = max(CGFloat(tuning.overlap.haloWidth), 0)
+                    RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius + halo)
+                        .fill(palette[.canvas])
+                        .frame(width: size.width + halo * 2, height: size.height + halo * 2)
+                        .allowsHitTesting(false)
+                case .shadow:
+                    RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                        .fill(.black)
+                        .shadow(
+                            color: palette[.shadow].opacity(tuning.overlap.shadowOpacity),
+                            radius: tuning.overlap.shadowRadius,
+                            y: 2
+                        )
+                        .overlay {
+                            // Remove the shadow interior so translucent fills are not darkened.
+                            RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                                .fill(.black)
+                                .blendMode(.destinationOut)
+                        }
+                        .compositingGroup()
+                        .allowsHitTesting(false)
+                case .flat:
+                    EmptyView()
+                }
+            }
+        }
     }
 }
 
