@@ -25,9 +25,14 @@ CLINICAL_BACKUP_CHECK_CREDENTIALS ?= $(HOME)/.config/clinical-backups/check-cred
 CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
 SIMULATOR_OS ?= 27.0
+SIMULATOR_NAME ?=
+SIMULATOR_SCRIPT := $(CURDIR)/scripts/simulator.swift
+EXPLICIT_SIMULATOR_ID := $(if $(filter-out undefined,$(origin SIMULATOR_ID)),$(strip $(SIMULATOR_ID)),)
+EXPLICIT_DESTINATION := $(if $(filter-out undefined,$(origin DESTINATION)),$(strip $(DESTINATION)),)
 ifeq ($(origin SIMULATOR_ID), undefined)
 # Skip CI simulators so manual make runs cannot touch CI data; check-simulator also rejects overrides.
-SIMULATOR_ID := $(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun simctl list devices --json 2>/dev/null | python3 -c 'import json, sys; sim, os_ver = sys.argv[1], sys.argv[2]; is_ci = lambda n: any(k in n.strip().lower() for k in ("ci simulator", "clinical ci")); devices = json.load(sys.stdin)["devices"] if not is_ci(sim) else {}; ios = [d for k, items in sorted(devices.items()) if k.startswith("com.apple.CoreSimulator.SimRuntime.iOS-") for d in items if d.get("isAvailable", True) and not is_ci(d["name"])]; running = [d for d in ios if d.get("state") == "Booted"]; rt = "iOS-" + "-".join(os_ver.split(".")); fallback = [d for k, items in sorted(devices.items()) if k.endswith("." + rt) for d in items if d.get("isAvailable", True) and not is_ci(d["name"]) and d["name"] == sim]; choices = running or fallback; print(choices[0]["udid"] if choices else "")' "$(SIMULATOR)" "$(SIMULATOR_OS)" 2>/dev/null)
+# Resolve lazily so non-simulator targets skip simctl and check-simulator can create SIMULATOR_NAME first.
+SIMULATOR_ID = $(eval SIMULATOR_ID := $$(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" $(SWIFT) "$(SIMULATOR_SCRIPT)" resolve --simulator "$(SIMULATOR)" --os "$(SIMULATOR_OS)" --name "$(SIMULATOR_NAME)" 2>/dev/null))$(SIMULATOR_ID)
 endif
 BUNDLE_ID := in.bitehaus.clinical
 APP_NAME := Clinical
@@ -52,13 +57,13 @@ EXPORT_PATH := $(EXPORT_DIR)/$(APP_NAME)-$(BUILD_NUMBER)
 TESTFLIGHT_EXPORT_OPTIONS := $(CURDIR)/TestFlightExportOptions.plist
 APP_STORE_CONNECT_SCRIPT := $(CURDIR)/scripts/app_store_connect.swift
 
-DESTINATION := platform=iOS Simulator,id=$(SIMULATOR_ID)
+DESTINATION = platform=iOS Simulator,id=$(SIMULATOR_ID)
 ARCHIVE_DESTINATION := generic/platform=iOS
 XCBEAUTIFY := xcbeautify -q --disable-logging
 XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
 RESOLVE_BUILD_NUMBER := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" $(SWIFT) "$(APP_STORE_CONNECT_SCRIPT)" next-build-number "$(BUNDLE_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
 TRIGGER_XCODE_CLOUD_BUILD := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" $(SWIFT) "$(APP_STORE_CONNECT_SCRIPT)" trigger-build "$(XCODE_CLOUD_WORKFLOW_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
-XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
+XCODEBUILD_COMMON_FLAGS = -project "$(PROJECT)" \
 	-configuration "$(CONFIGURATION)" \
 	-destination "$(DESTINATION)" \
 	-destination-timeout 60 \
@@ -68,10 +73,10 @@ XCODEBUILD_COMMON_FLAGS := -project "$(PROJECT)" \
 	-skipPackageUpdates
 NATIVE_ARCH := $(shell uname -m)
 TEST_BUILD_SETTINGS := ENABLE_TESTABILITY=YES DEBUG_INFORMATION_FORMAT=dwarf ONLY_ACTIVE_ARCH=YES ARCHS=$(NATIVE_ARCH)
-XCODEBUILD_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
-UNIT_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
-UI_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)" -parallel-testing-enabled $(UI_TEST_PARALLEL_ENABLED) $(TEST_BUILD_SETTINGS)
-BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
+XCODEBUILD_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
+UNIT_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
+UI_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)" -parallel-testing-enabled $(UI_TEST_PARALLEL_ENABLED) $(TEST_BUILD_SETTINGS)
+BACKUP_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
 
 .DEFAULT_GOAL := build-and-run
 
@@ -79,13 +84,15 @@ BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" 
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
-.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
+.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
 
 help:
 	@printf "%s\n" \
 		"Targets:" \
-		"  make                  Build, install, and run on a running non-CI iOS simulator" \
-		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when none is running" \
+		"  make                  Build, install, and run on the selected non-CI iOS simulator" \
+		"                        Pass SIMULATOR_NAME='<unique name>' (creates if missing) or SIMULATOR_ID='<udid>'" \
+		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when no simulator is booted" \
+		"  make sim-id           Print the target simulator UDID (creates SIMULATOR_NAME if missing)" \
 		"  make build            Build the app" \
 		"  make test             Run unit tests" \
 		"  make app-test         Run app unit tests without package tests" \
@@ -129,6 +136,7 @@ diagnose:
 	@printf "Configuration: %s\n" "$(CONFIGURATION)"
 	@printf "Xcode tools:   %s\n" "$(DEVELOPER_DIR)"
 	@printf "Fallback:      %s (iOS %s)\n" "$(SIMULATOR)" "$(SIMULATOR_OS)"
+	@printf "Target Name:   %s\n" "$(SIMULATOR_NAME)"
 	@printf "Target ID:     %s\n" "$(SIMULATOR_ID)"
 	@printf "Destination:   %s\n" "$(DESTINATION)"
 	@printf "App path:      %s\n" "$(APP_PATH)"
@@ -149,20 +157,20 @@ check-tools:
 	@test -d "$(DEVELOPER_DIR)" || { echo "Xcode developer directory not found: $(DEVELOPER_DIR)"; exit 1; }
 
 check-simulator:
-	@python3 -c 'import json, subprocess, sys; \
-sim, os_ver, sim_id, dest = sys.argv[1:5]; \
-is_ci = lambda n: any(k in n.strip().lower() for k in ("ci simulator", "clinical ci")); \
-fail = lambda m: (print(m, file=sys.stderr), sys.exit(1)); \
-is_ci(sim) and fail("Refusing to use simulator \"%s\": CI simulators are reserved for CI." % sim); \
-fields = {k.strip().lower(): v.strip() for part in dest.split(",") if "=" in part for k, v in [part.split("=", 1)]}; \
-[fail("Refusing to use destination \"%s\": CI simulators are reserved for CI." % dest) for k in ("name", "id") if is_ci(fields.get(k, ""))]; \
-sim_id.strip() or fail("No running non-CI iOS simulator was found, and fallback %s (iOS %s) is unavailable." % (sim, os_ver)); \
-is_ci(sim_id) and fail("Refusing to use simulator \"%s\": CI simulators are reserved for CI." % sim_id); \
-proc = subprocess.run(["xcrun", "simctl", "list", "devices", "--json"], capture_output=True, text=True); \
-proc.returncode == 0 or fail("Unable to inspect iOS simulators with xcrun simctl."); \
-all_devs = [d for items in json.loads(proc.stdout)["devices"].values() for d in items]; \
-match = lambda x: next((d for d in all_devs if (d["udid"].lower() == x.lower() or d["name"] == x) and is_ci(d["name"])), None); \
-[fail("Refusing to use simulator \"%s\" (%s): CI simulators are reserved for CI." % (d["name"], d["udid"])) for target in (sim_id.strip(), fields.get("id", "")) if target for d in [match(target)] if d]' "$(SIMULATOR)" "$(SIMULATOR_OS)" "$(SIMULATOR_ID)" "$(DESTINATION)"
+	@$(SWIFT) "$(SIMULATOR_SCRIPT)" ensure \
+		--simulator "$(SIMULATOR)" \
+		--os "$(SIMULATOR_OS)" \
+		--name "$(SIMULATOR_NAME)" \
+		--id "$(EXPLICIT_SIMULATOR_ID)" \
+		--destination "$(EXPLICIT_DESTINATION)" >/dev/null
+
+sim-id:
+	@$(SWIFT) "$(SIMULATOR_SCRIPT)" ensure \
+		--simulator "$(SIMULATOR)" \
+		--os "$(SIMULATOR_OS)" \
+		--name "$(SIMULATOR_NAME)" \
+		--id "$(EXPLICIT_SIMULATOR_ID)" \
+		--destination "$(EXPLICIT_DESTINATION)"
 
 check-app-store-connect-tools:
 	@command -v $(firstword $(SWIFT)) >/dev/null
