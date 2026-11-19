@@ -25,6 +25,7 @@
 		8BE2A0462FE0000000000005 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0362FE0000000000005 /* Perception */; };
 		8BE2A0472FE0000000000005 /* Sharing in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0372FE0000000000005 /* Sharing */; };
 		8BE2A0482FE0000000000005 /* StructuredQueriesSQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */; };
+		8BE2A0522FE0000000000005 /* Clocks in Frameworks */ = {isa = PBXBuildFile; productRef = 8BE2A0512FE0000000000005 /* Clocks */; };
 		9852A7C230934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		9852A7C330934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		9852A7C430934A9F006C0066 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
@@ -191,6 +192,7 @@
 				8BE2A0462FE0000000000005 /* Perception in Frameworks */,
 				8BE2A0472FE0000000000005 /* Sharing in Frameworks */,
 				8BE2A0482FE0000000000005 /* StructuredQueriesSQLite in Frameworks */,
+				8BE2A0522FE0000000000005 /* Clocks in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -334,6 +336,7 @@
 				8BE2A0362FE0000000000005 /* Perception */,
 				8BE2A0372FE0000000000005 /* Sharing */,
 				8BE2A0382FE0000000000005 /* StructuredQueriesSQLite */,
+				8BE2A0512FE0000000000005 /* Clocks */,
 			);
 			productName = "clinical-swiftTests";
 			productReference = 8BE2A0172FE0000000000005 /* clinical-swiftTests.xctest */;
@@ -478,6 +481,7 @@
 				8BE2A0262FE0000000000005 /* XCRemoteSwiftPackageReference "swift-perception" */,
 				8BE2A0272FE0000000000005 /* XCRemoteSwiftPackageReference "swift-sharing" */,
 				8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */,
+				8BE2A0502FE0000000000005 /* XCRemoteSwiftPackageReference "swift-clocks" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 79438C442FD2D07100C0E6EF /* Products */;
@@ -1140,6 +1144,14 @@
 				version = 0.39.2;
 			};
 		};
+		8BE2A0502FE0000000000005 /* XCRemoteSwiftPackageReference "swift-clocks" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-clocks";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.4;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1232,6 +1244,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8BE2A0282FE0000000000005 /* XCRemoteSwiftPackageReference "swift-structured-queries" */;
 			productName = StructuredQueriesSQLite;
+		};
+		8BE2A0512FE0000000000005 /* Clocks */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BE2A0502FE0000000000005 /* XCRemoteSwiftPackageReference "swift-clocks" */;
+			productName = Clocks;
 		};
 		E40000000000000000000002 /* ClinicalModels */ = {
 			isa = XCSwiftPackageProductDependency;
