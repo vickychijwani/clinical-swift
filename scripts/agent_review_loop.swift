@@ -964,6 +964,47 @@ func buildCheckRunPayload(
     )
 }
 
+enum CheckRunRequestMode: Equatable {
+    case create
+    case update(String)
+}
+
+/// Chooses create or update mode so completed check runs are recreated on retry instead of patched.
+func resolveCheckRunMode(
+    checkRunID: String?,
+    status: CheckRunStatus,
+    recreateIfCompleted: Bool,
+    existingStatus: () throws -> CheckRunStatus?
+) throws -> CheckRunRequestMode {
+    guard let checkRunID, !checkRunID.isEmpty else {
+        return .create
+    }
+    if recreateIfCompleted && status != .completed {
+        if try existingStatus() == .completed {
+            return .create
+        }
+    }
+    return .update(checkRunID)
+}
+
+private func fetchCheckRunStatus(repo: String, checkRunID: String) throws -> CheckRunStatus? {
+    let result = try runProcess(
+        arguments: [
+            "gh", "api",
+            "-H", "Accept: application/vnd.github+json",
+            "repos/\(repo)/check-runs/\(checkRunID)",
+            "--jq", ".status",
+        ]
+    )
+    guard result.exitCode == 0 else {
+        let details = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw ReviewLoopError(
+            description: "gh api GET repos/\(repo)/check-runs/\(checkRunID) failed: \(details)")
+    }
+    let raw = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    return CheckRunStatus(rawValue: raw)
+}
+
 private func submitCheckRun(
     repo: String,
     checkRunID: String?,
@@ -974,14 +1015,38 @@ private func submitCheckRun(
     title: String?,
     summary: String?,
     detailsURL: String?,
-    externalID: String?
+    externalID: String?,
+    recreateIfCompleted: Bool
 ) throws -> String {
-    let isUpdate = !(checkRunID ?? "").isEmpty
-    if !isUpdate {
+    if recreateIfCompleted && status != .completed {
+        guard let name, !name.isEmpty, let headSHA, !headSHA.isEmpty else {
+            throw ReviewLoopError(
+                description: "--recreate-if-completed requires --name and --head-sha.")
+        }
+    }
+
+    let mode = try resolveCheckRunMode(
+        checkRunID: checkRunID,
+        status: status,
+        recreateIfCompleted: recreateIfCompleted,
+        existingStatus: {
+            try fetchCheckRunStatus(repo: repo, checkRunID: checkRunID!)
+        }
+    )
+
+    let isUpdate: Bool
+    let targetID: String?
+    switch mode {
+    case .create:
         guard let name, !name.isEmpty, let headSHA, !headSHA.isEmpty else {
             throw ReviewLoopError(
                 description: "Creating a check run requires --name and --head-sha.")
         }
+        isUpdate = false
+        targetID = nil
+    case .update(let existingID):
+        isUpdate = true
+        targetID = existingID
     }
 
     let payload = try buildCheckRunPayload(
@@ -999,7 +1064,7 @@ private func submitCheckRun(
     let method = isUpdate ? "PATCH" : "POST"
     let endpoint =
         isUpdate
-        ? "repos/\(repo)/check-runs/\(checkRunID!)"
+        ? "repos/\(repo)/check-runs/\(targetID!)"
         : "repos/\(repo)/check-runs"
     let result = try runProcess(
         arguments: [
@@ -1189,7 +1254,7 @@ private func parseOptions(_ arguments: [String]) throws -> (
             throw ReviewLoopError(description: "Unexpected argument: \(arg)")
         }
         let key = String(arg.dropFirst(2))
-        if key == "require-clean" {
+        if key == "require-clean" || key == "recreate-if-completed" {
             flags.insert(key)
             index += 1
         } else {
@@ -1326,7 +1391,8 @@ private func runCLI() -> Int32 {
                 title: parsed.values["title"],
                 summary: parsed.values["summary"],
                 detailsURL: parsed.values["details-url"],
-                externalID: parsed.values["external-id"]
+                externalID: parsed.values["external-id"],
+                recreateIfCompleted: parsed.flags.contains("recreate-if-completed")
             )
             print(checkRunID)
             return 0

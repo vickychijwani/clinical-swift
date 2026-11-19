@@ -597,6 +597,46 @@ private func createSuperDB(
         }
         try expect(
             rejectedUnexpectedConclusion, "Non-completed check run with conclusion must throw")
+
+        let createWhenNoID = try resolveCheckRunMode(
+            checkRunID: nil,
+            status: .queued,
+            recreateIfCompleted: false,
+            existingStatus: {
+                throw TestFailure(description: "Must not query status without checkRunID")
+            }
+        )
+        try expect(createWhenNoID == .create, "Missing checkRunID must create")
+
+        let updateQueued = try resolveCheckRunMode(
+            checkRunID: "123",
+            status: .inProgress,
+            recreateIfCompleted: true,
+            existingStatus: { .queued }
+        )
+        try expect(updateQueued == .update("123"), "Queued check run must update in place")
+
+        let recreateCompleted = try resolveCheckRunMode(
+            checkRunID: "123",
+            status: .inProgress,
+            recreateIfCompleted: true,
+            existingStatus: { .completed }
+        )
+        try expect(
+            recreateCompleted == .create,
+            "Completed check run must create a fresh check run when reopening")
+
+        let updateCompletedWithoutRecreate = try resolveCheckRunMode(
+            checkRunID: "123",
+            status: .completed,
+            recreateIfCompleted: true,
+            existingStatus: {
+                throw TestFailure(description: "Completing a check run must not query status")
+            }
+        )
+        try expect(
+            updateCompletedWithoutRecreate == .update("123"),
+            "Completed target status must update in place")
     }
 
     private func testMonitorRecord(in root: URL) throws {

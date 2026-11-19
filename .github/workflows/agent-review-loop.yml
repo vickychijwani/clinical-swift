@@ -188,7 +188,7 @@ jobs:
               --title "$title"
               --summary "$summary"
               --details-url "$run_url"
-              --external-id "$GITHUB_RUN_ID-$name"
+              --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$name"
             )
             if [[ -n "$conclusion" ]]; then
               args+=(--conclusion "$conclusion")
@@ -371,7 +371,7 @@ jobs:
                   --title "Queued ($REVIEWER_HARNESS)" \
                   --summary "Waiting for clinical-agents runner to review PR #$PR_NUMBER." \
                   --details-url "$run_url" \
-                  --external-id "$GITHUB_RUN_ID-review" || true)
+                  --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-review" || true)
                 address_check_run_id=$(swift "$script" check-run \
                   --repo "$GITHUB_REPOSITORY" \
                   --name "address" \
@@ -380,7 +380,7 @@ jobs:
                   --title "Waiting for review ($AUTHOR_HARNESS)" \
                   --summary "Will address review comments after review completes." \
                   --details-url "$run_url" \
-                  --external-id "$GITHUB_RUN_ID-address" || true)
+                  --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-address" || true)
               fi
             fi
           fi
@@ -415,20 +415,27 @@ jobs:
           private-key: ${{ secrets.CLINICAL_ANTIGRAVITY_PRIVATE_KEY }}
 
       - name: Mark review check in progress
+        id: mark-in-progress
         if: needs.plan.outputs.dry_run != 'true' && steps.sync-head.outputs.review_check_run_id != ''
         env:
           GH_TOKEN: ${{ github.token }}
           CHECK_RUN_ID: ${{ steps.sync-head.outputs.review_check_run_id }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ steps.sync-head.outputs.pr_head_sha }}
           REVIEWER_HARNESS: ${{ needs.plan.outputs.reviewer_harness }}
         run: |
-          swift "$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift" check-run \
+          effective_id=$(swift "$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift" check-run \
             --repo "$GITHUB_REPOSITORY" \
             --check-run-id "$CHECK_RUN_ID" \
+            --name "review" \
+            --head-sha "$PR_HEAD_SHA" \
             --status in_progress \
+            --recreate-if-completed \
             --title "Reviewing PR ($REVIEWER_HARNESS)" \
             --summary "Running $REVIEWER_HARNESS on PR #$PR_NUMBER." \
-            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
+            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-review" || true)
+          echo "check_run_id=${effective_id:-$CHECK_RUN_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Run reviewer agent
         env:
@@ -508,12 +515,12 @@ jobs:
           "${cmd[@]}" 2>&1 | tee "$stream_file"
 
       - name: Complete review check
-        if: always() && needs.plan.outputs.dry_run != 'true' && steps.sync-head.outputs.review_check_run_id != ''
+        if: always() && needs.plan.outputs.dry_run != 'true' && (steps.mark-in-progress.outputs.check_run_id || steps.sync-head.outputs.review_check_run_id) != ''
         env:
           GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
-          REVIEW_CHECK_RUN_ID: ${{ steps.sync-head.outputs.review_check_run_id }}
+          REVIEW_CHECK_RUN_ID: ${{ steps.mark-in-progress.outputs.check_run_id || steps.sync-head.outputs.review_check_run_id }}
           ADDRESS_CHECK_RUN_ID: ${{ steps.sync-head.outputs.address_check_run_id }}
           REVIEWER_HARNESS: ${{ needs.plan.outputs.reviewer_harness }}
           AUTHOR_HARNESS: ${{ needs.plan.outputs.author_harness }}
@@ -619,7 +626,7 @@ jobs:
                 --title "Address skipped ($AUTHOR_HARNESS)" \
                 --summary "$reason" \
                 --details-url "$run_url" \
-                --external-id "$GITHUB_RUN_ID-address-stale" >/dev/null || true
+                --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-address-stale" >/dev/null || true
               gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
                 --body "Agent address job stopped: $reason"
               swift "$script" monitor-record \
@@ -670,20 +677,27 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Mark address check in progress
+        id: mark-in-progress
         if: steps.verify.outputs.skipped != 'true' && needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.address_check_run_id != ''
         env:
           GH_TOKEN: ${{ github.token }}
           CHECK_RUN_ID: ${{ steps.verify.outputs.address_check_run_id }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ needs.review.outputs.pr_head_sha || needs.plan.outputs.pr_head_sha }}
           AUTHOR_HARNESS: ${{ needs.plan.outputs.author_harness }}
         run: |
-          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
+          effective_id=$(swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
             --repo "$GITHUB_REPOSITORY" \
             --check-run-id "$CHECK_RUN_ID" \
+            --name "address" \
+            --head-sha "$PR_HEAD_SHA" \
             --status in_progress \
+            --recreate-if-completed \
             --title "Addressing review comments ($AUTHOR_HARNESS)" \
             --summary "Verifying worktree and running $AUTHOR_HARNESS on PR #$PR_NUMBER." \
-            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
+            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-address" || true)
+          echo "check_run_id=${effective_id:-$CHECK_RUN_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Create Codex author App token
         id: codex-token
@@ -782,12 +796,12 @@ jobs:
           "${cmd[@]}" 2>&1 | tee "$stream_file"
 
       - name: Complete address check
-        if: always() && steps.verify.outputs.skipped != 'true' && needs.plan.outputs.dry_run != 'true' && (needs.review.outputs.address_check_run_id || needs.plan.outputs.address_check_run_id) != ''
+        if: always() && steps.verify.outputs.skipped != 'true' && needs.plan.outputs.dry_run != 'true' && (steps.mark-in-progress.outputs.check_run_id || steps.verify.outputs.address_check_run_id || needs.review.outputs.address_check_run_id || needs.plan.outputs.address_check_run_id) != ''
         env:
           GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
-          CHECK_RUN_ID: ${{ needs.review.outputs.address_check_run_id || needs.plan.outputs.address_check_run_id }}
+          CHECK_RUN_ID: ${{ steps.mark-in-progress.outputs.check_run_id || steps.verify.outputs.address_check_run_id || needs.review.outputs.address_check_run_id || needs.plan.outputs.address_check_run_id }}
           AUTHOR_HARNESS: ${{ needs.plan.outputs.author_harness }}
         run: |
           case "$JOB_STATUS" in

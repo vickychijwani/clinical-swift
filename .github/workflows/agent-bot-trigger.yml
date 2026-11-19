@@ -208,7 +208,7 @@ jobs:
               --title "$title"
               --summary "$summary"
               --details-url "$run_url"
-              --external-id "$GITHUB_RUN_ID-$name"
+              --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$name"
             )
             if [[ -n "$conclusion" ]]; then
               args+=(--conclusion "$conclusion")
@@ -366,7 +366,7 @@ jobs:
                 --title "Queued ($BOT_HARNESS)" \
                 --summary "Waiting for clinical-agents runner to run $BOT_HARNESS on PR #$PR_NUMBER." \
                 --details-url "$run_url" \
-                --external-id "$GITHUB_RUN_ID-bot-$BOT_HARNESS" || true)
+                --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-bot-$BOT_HARNESS" || true)
             fi
           fi
 
@@ -414,24 +414,32 @@ jobs:
             echo "check_run_completed=false"
             echo "worktree_path=$worktree_path"
             echo "pr_branch=$pr_branch"
+            echo "pr_head_sha=$pr_head_sha"
             echo "check_run_id=$check_run_id"
           } >> "$GITHUB_OUTPUT"
 
       - name: Mark bot check in progress
+        id: mark-in-progress
         if: steps.verify.outputs.skipped != 'true' && needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.check_run_id != ''
         env:
           GH_TOKEN: ${{ github.token }}
           CHECK_RUN_ID: ${{ steps.verify.outputs.check_run_id }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ steps.verify.outputs.pr_head_sha || needs.plan.outputs.pr_head_sha }}
           BOT_HARNESS: ${{ needs.plan.outputs.bot_harness }}
         run: |
-          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
+          effective_id=$(swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
             --repo "$GITHUB_REPOSITORY" \
             --check-run-id "$CHECK_RUN_ID" \
+            --name "bot ($BOT_HARNESS)" \
+            --head-sha "$PR_HEAD_SHA" \
             --status in_progress \
+            --recreate-if-completed \
             --title "Running ($BOT_HARNESS)" \
             --summary "Running $BOT_HARNESS on PR #$PR_NUMBER." \
-            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
+            --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-bot-$BOT_HARNESS" || true)
+          echo "check_run_id=${effective_id:-$CHECK_RUN_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Create Codex bot App token
         id: codex-token
@@ -570,12 +578,12 @@ jobs:
           "${cmd[@]}" 2>&1 | tee "$stream_file"
 
       - name: Complete bot check
-        if: always() && needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.check_run_completed != 'true' && (steps.verify.outputs.check_run_id || needs.plan.outputs.check_run_id) != ''
+        if: always() && needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.check_run_completed != 'true' && (steps.mark-in-progress.outputs.check_run_id || steps.verify.outputs.check_run_id || needs.plan.outputs.check_run_id) != ''
         env:
           GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
-          CHECK_RUN_ID: ${{ steps.verify.outputs.check_run_id || needs.plan.outputs.check_run_id }}
+          CHECK_RUN_ID: ${{ steps.mark-in-progress.outputs.check_run_id || steps.verify.outputs.check_run_id || needs.plan.outputs.check_run_id }}
           BOT_HARNESS: ${{ needs.plan.outputs.bot_harness }}
         run: |
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
