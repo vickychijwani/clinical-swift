@@ -6,11 +6,9 @@ For an archive action, `ci_pre_xcodebuild.sh` runs `make release-verify` against
 cloud checkout. It needs a usable iPhone Simulator, Drive network access, and the
 protected `CLINICAL_BACKUP_CHECK_CREDENTIALS_BASE64` secret from a signed Release
 internal build on a physical device. See
-[backup authorization](../docs/backups.md#verification-and-release). Keep
-credentials out of source and logs.
+[backup authorization](../docs/backups.md#verification-and-release).
 
-A missing credential, missing device evidence, failed check, or changed candidate
-stops the archive. `ci_post_xcodebuild.sh` rechecks the source fingerprint before
+`ci_post_xcodebuild.sh` rechecks the source fingerprint before
 distribution. The runner does not need `xcbeautify` because `ci_pre_xcodebuild.sh`
 sets `XCBEAUTIFY=cat`.
 
