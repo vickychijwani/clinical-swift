@@ -27,9 +27,9 @@ public nonisolated struct AppointmentPatientSelection: Identifiable, Sendable {
 }
 
 public nonisolated func querySchedule(
-    selectedDate: Date
+    selectedDate: Date,
+    calendar: Calendar = .autoupdatingCurrent
 ) -> some Statement<AppointmentPatientSelection> & Sendable {
-    let calendar = Calendar.autoupdatingCurrent
     let start = selectedDate.startOfDay(using: calendar)
     let endExclusive = calendar.date(byAdding: .day, value: 1, to: start) ?? start
 

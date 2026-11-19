@@ -117,6 +117,7 @@ struct AppointmentCompletionInterruptionTests {
             gate.release()
             #expect(await saving.value)
             router.finishAppointmentCompletion(model, presentationID: presentation.id)
+            #expect(router.toast.current == nil)
             switch interruption {
             case .sheet:
                 #expect(router.detailsPresentation == nil)

@@ -188,6 +188,101 @@ struct AppointmentCompletionTests {
         router.finishAppointmentCompletion(current, presentationID: presentation.id)
         #expect(router.detailsPresentation == nil)
         #expect(router.selectedTab == .schedule)
+        #expect(router.toast.current?.message == "Completed")
+    }
+
+    @Test func completionShowsSixSecondToastAndFollowUpBooksNextBusinessDayAfterToday() async throws
+    {
+        let clock = TestClock()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let saturday = try Date("2026-04-25T14:00:00Z", strategy: .iso8601)
+        let pastVisit = try Date("2026-04-10T11:00:00Z", strategy: .iso8601)
+        let expectedMonday = try Date("2026-04-27T00:00:00Z", strategy: .iso8601)
+
+        try await withDependencies {
+            $0.calendar = calendar
+            $0.date.now = saturday
+            $0.continuousClock = clock
+        } operation: {
+            let router = Router(selectedScheduleDate: pastVisit)
+            let patient = Patient(name: "Meera Nair", createdDate: pastVisit)
+            let details = AppointmentDetails(
+                appointment: Appointment(
+                    patientName: patient.displayName, start: pastVisit, durationMinutes: 30,
+                    status: .scheduled),
+                patient: patient)
+            router.presentDetails(.appointment(details.id))
+            let presentation = try #require(router.detailsPresentation)
+            let visit = UUID()
+            router.beginAppointmentCompletion(
+                details, visitID: visit, presentationID: presentation.id)
+            let model = try #require(presentation.completionDrafts[visit])
+
+            router.finishAppointmentCompletion(model, presentationID: presentation.id)
+
+            let toast = try #require(router.toast.current)
+            #expect(toast.message == "Completed")
+            #expect(toast.action?.title == "Book follow-up")
+            #expect(toast.duration == .seconds(6))
+
+            // Tab and date changes keep the toast visible until the 6-second timeout.
+            router.selectedTab = .patients
+            router.selectScheduleDate(pastVisit.date(byAddingDays: 1, using: calendar))
+            await clock.advance(by: .seconds(5))
+            #expect(router.toast.current?.id == toast.id)
+
+            router.toast.triggerAction(for: toast.id)
+            #expect(router.toast.current == nil)
+            #expect(router.selectedTab == .schedule)
+            #expect(router.selectedScheduleDate == expectedMonday)
+            guard case .appointmentBooking(let booking) = router.activePresentation else {
+                Issue.record("Expected follow-up appointment booking presentation.")
+                return
+            }
+            #expect(booking.patient == patient)
+        }
+    }
+
+    @Test func completionToastAutoDismissesAfterSixSecondsAndDismissesOnNewPresentation()
+        async throws
+    {
+        let clock = TestClock()
+        try await withDependencies {
+            $0.calendar = FinancialDate.calendar
+            $0.continuousClock = clock
+        } operation: {
+            let router = Router()
+            let details = makeDetails()
+
+            @MainActor func completeOnce() throws {
+                router.presentDetails(.appointment(details.id))
+                let presentation = try #require(router.detailsPresentation)
+                let visit = UUID()
+                router.beginAppointmentCompletion(
+                    details, visitID: visit, presentationID: presentation.id)
+                let model = try #require(presentation.completionDrafts[visit])
+                router.finishAppointmentCompletion(model, presentationID: presentation.id)
+            }
+
+            try completeOnce()
+            #expect(router.toast.current != nil)
+            await clock.advance(by: .seconds(5))
+            #expect(router.toast.current != nil)
+            await clock.advance(by: .seconds(1))
+            #expect(router.toast.current == nil)
+
+            try completeOnce()
+            #expect(router.toast.current != nil)
+            router.requestScheduleCreation()
+            #expect(router.toast.current == nil)
+
+            router.dismissPresentation()
+            try completeOnce()
+            #expect(router.toast.current != nil)
+            router.presentDetails(.patient(details.patient.id))
+            #expect(router.toast.current == nil)
+        }
     }
 
     @Test func externalReplacementAndDateChangeDiscardDrafts() throws {

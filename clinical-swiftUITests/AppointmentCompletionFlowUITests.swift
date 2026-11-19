@@ -82,4 +82,43 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
         appointment.tap()
         XCTAssertFalse(app.buttons["Complete"].exists)
     }
+
+    @MainActor
+    func testCompletionToastBooksFollowUpOnNextBusinessDay() {
+        let app = AppointmentCompletionUITestSupport.launch(fromSchedule: true)
+        app.buttons["complete-appointment"].tap()
+        XCTAssertTrue(app.navigationBars["Complete Appointment"].absentOrWait(timeout: 5))
+
+        let toastAction = app.buttons["Book follow-up"]
+        XCTAssertTrue(toastAction.hittableOrWait(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Completed"].exists)
+        toastAction.tap()
+
+        XCTAssertTrue(toastAction.absentOrWait(timeout: 3))
+        XCTAssertTrue(app.buttons["Done"].hittableOrWait(timeout: 5))
+        XCTAssertFalse(app.textFields["Search patient by name"].exists)
+
+        let calendar = Calendar.autoupdatingCurrent
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now))!
+        let nextBusinessDay =
+            calendar.component(.weekday, from: tomorrow) == 1
+            ? calendar.date(byAdding: .day, value: 1, to: tomorrow)!
+            : tomorrow
+        let expectedTitle = nextBusinessDay.formatted(.dateTime.weekday().month().day())
+        XCTAssertTrue(app.navigationBars[expectedTitle].existsOrWait(timeout: 3))
+
+        let draft = app.buttons.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND identifier != %@", "appointment-",
+                AppointmentCompletionUITestSupport.appointmentID)
+        ).firstMatch
+        XCTAssertTrue(draft.existsOrWait(timeout: 3))
+        XCTAssertTrue(draft.label.contains("Test Patient"))
+        XCTAssertEqual(TimelineUITestSupport.time(draft), "10:00 AM")
+
+        let followUpID = draft.identifier
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Add"].hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.buttons[followUpID].existsOrWait(timeout: 3))
+    }
 }

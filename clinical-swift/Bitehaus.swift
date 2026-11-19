@@ -1,3 +1,4 @@
+import ClinicalModels
 import Foundation
 
 nonisolated struct Bitehaus {
@@ -18,6 +19,15 @@ nonisolated struct Bitehaus {
     /// Derived properties, based on intrinsic properties above
     static let firstHalf = Bitehaus.opening...Bitehaus.break.start
     static let secondHalf = Bitehaus.break.end...Bitehaus.closing
+
+    /// Returns the next clinic working day after `date` by skipping Sunday (weekday 1).
+    static func nextBusinessDay(after date: Date, using calendar: Calendar) -> Date {
+        let nextDay = date.date(byAddingDays: 1, using: calendar)
+        if calendar.component(.weekday, from: nextDay) == 1 {
+            return nextDay.date(byAddingDays: 1, using: calendar)
+        }
+        return nextDay
+    }
 }
 
 nonisolated struct BreakBlock {

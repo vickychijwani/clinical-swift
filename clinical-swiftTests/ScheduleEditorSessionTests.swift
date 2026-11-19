@@ -907,6 +907,107 @@ struct ScheduleEditorSessionTests {
         }
     }
 
+    @Test func dateChangeDuringBookingInitializationUsesNewDateAndSavesIt() async throws {
+        let database = try testDatabase()
+        let today = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+        let day1 = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
+        let day2 = try Date("2026-10-05T00:00:00Z", strategy: .iso8601)
+        let day3 = try Date("2026-10-06T00:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Follow-up Patient", createdDate: today)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: today) }.execute(db)
+        }
+
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.date.now = today
+            $0.defaultDatabase = database
+        } operation: {
+            let router = Router(selectedScheduleDate: today)
+            let store = ScheduleEditorStore()
+            router.requestAppointmentBooking(for: patient, on: day1)
+            let request = try #require(router.activePresentation)
+
+            var resumeFirstRead: CheckedContinuation<[Appointment], Never>?
+            var firstReadStarted: CheckedContinuation<Void, Never>?
+            let firstTask = Task {
+                await store.prepare(
+                    request: request,
+                    router: router,
+                    appointmentsForBooking: { _ in
+                        firstReadStarted?.resume()
+                        firstReadStarted = nil
+                        return await withCheckedContinuation { continuation in
+                            resumeFirstRead = continuation
+                        }
+                    },
+                    onFinished: { id, date in
+                        router.finishScheduleEditor(id, date: date)
+                    }
+                )
+            }
+            await withCheckedContinuation { continuation in
+                if resumeFirstRead != nil {
+                    continuation.resume()
+                } else {
+                    firstReadStarted = continuation
+                }
+            }
+
+            // Change the selected date while the first day's appointment read is still in flight.
+            router.selectScheduleDate(day2)
+            resumeFirstRead?.resume(returning: [])
+            await firstTask.value
+            #expect(store.session == nil)
+
+            let day2Busy = Appointment(
+                patientName: "Other patient",
+                start: day2.setTime(10, 0, using: utcCalendar),
+                durationMinutes: 30,
+                status: .scheduled
+            )
+            await store.prepare(
+                request: request,
+                router: router,
+                appointmentsForBooking: { date in
+                    #expect(date == day2)
+                    return [day2Busy]
+                },
+                onFinished: { id, date in
+                    router.finishScheduleEditor(id, date: date)
+                }
+            )
+
+            let session = try #require(store.session)
+            let expectedStart = day2.setTime(10, 30, using: utcCalendar)
+            #expect(session.selectedDate == day2)
+            #expect(session.preview.start == expectedStart)
+
+            // Date changes after the session exists must not recreate it or reset its chosen time.
+            router.selectScheduleDate(day3)
+            await store.prepare(
+                request: request,
+                router: router,
+                appointmentsForBooking: { _ in
+                    Issue.record("Should not reload booking appointments for an existing session.")
+                    return []
+                },
+                onFinished: { id, date in
+                    router.finishScheduleEditor(id, date: date)
+                }
+            )
+            #expect(store.session === session)
+            #expect(session.preview.start == expectedStart)
+
+            #expect(await session.save())
+            let savedStarts = try await database.read { db in
+                try AppointmentRecord.fetchAll(db).map(\.start)
+            }
+            #expect(savedStarts == [expectedStart])
+            #expect(router.selectedScheduleDate == day2)
+        }
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .gmt

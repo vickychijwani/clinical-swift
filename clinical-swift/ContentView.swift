@@ -5,7 +5,6 @@ import UIKit
 struct ContentView: View {
     @Bindable var router: Router
     @State private var editor: ScheduleEditorStore
-    @State private var toast: ToastStore
 
     init(
         router: Router,
@@ -19,14 +18,18 @@ struct ContentView: View {
                 initialToast
                 ?? (CommandLine.arguments.contains("--preview-toast")
                     ? ToastItem(
-                        message: "Appointment completed",
-                        actionTitle: "View",
+                        message: "Completed",
+                        actionTitle: "Book follow-up",
                         duration: nil
                     ) {}
                     : nil)
-            _toast = State(initialValue: ToastStore(initialToast: resolvedToast))
+            if let resolvedToast, router.toast.current == nil {
+                router.toast.show(resolvedToast)
+            }
         #else
-            _toast = State(initialValue: ToastStore(initialToast: initialToast))
+            if let initialToast, router.toast.current == nil {
+                router.toast.show(initialToast)
+            }
         #endif
     }
 
@@ -35,7 +38,7 @@ struct ContentView: View {
             .modifier(AppTrayHost())
             .environment(router)
             .environment(editor)
-            .environment(toast)
+            .environment(router.toast)
             .task(id: router.unavailableTimeNavigationRequest?.id) {
                 guard let request = router.unavailableTimeNavigationRequest else { return }
                 await router.resolveUnavailableTime(request)

@@ -19,6 +19,9 @@ enum Route: Hashable {
 @MainActor @Observable
 final class Router {
     @ObservationIgnored @Dependency(\.calendar) private var calendar
+    @ObservationIgnored @Dependency(\.date.now) private var now
+
+    let toast: ToastStore
 
     // Schedule is the home screen.
     var selectedTab: AppTab = .schedule {
@@ -51,9 +54,10 @@ final class Router {
     private var presentedPresentationID: UUID?
     private var dismissingPresentationID: UUID?
 
-    init(selectedScheduleDate: Date = .now) {
+    init(selectedScheduleDate: Date = .now, toast: ToastStore? = nil) {
         @Dependency(\.calendar) var calendar
         self.selectedScheduleDate = selectedScheduleDate.startOfDay(using: calendar)
+        self.toast = toast ?? ToastStore()
     }
 
     var detailsPresentation: DetailsPresentation? {
@@ -106,6 +110,7 @@ final class Router {
     }
 
     func presentDetails(_ root: Route) {
+        toast.dismiss()
         unavailableTimeNavigationRequest = nil
         navigationErrorMessage = nil
         if let detailsPresentation, dismissingPresentationID == nil {
@@ -160,6 +165,14 @@ final class Router {
         else { return }
         selectedTab = .schedule
         discardActivePresentation()
+        let patient = model.patient
+        toast.show(
+            message: "Completed",
+            actionTitle: "Book follow-up",
+            duration: .seconds(6)
+        ) { [weak self] in
+            self?.requestFollowUpBooking(for: patient)
+        }
     }
 
     func dismissDetails() {
@@ -242,9 +255,17 @@ final class Router {
         requestPresentation(.appointmentEdit(AppointmentEditRequest(details: details)))
     }
 
-    func requestAppointmentBooking(for patient: Patient) {
+    func requestAppointmentBooking(for patient: Patient, on date: Date? = nil) {
         selectedTab = .schedule
+        if let date {
+            selectedScheduleDate = date.startOfDay(using: calendar)
+        }
         requestPresentation(.appointmentBooking(AppointmentBookingRequest(patient: patient)))
+    }
+
+    func requestFollowUpBooking(for patient: Patient) {
+        let targetDate = Bitehaus.nextBusinessDay(after: now, using: calendar)
+        requestAppointmentBooking(for: patient, on: targetDate)
     }
 
     func requestAppointmentMessage(_ details: AppointmentDetails) {
@@ -405,6 +426,7 @@ final class Router {
     }
 
     private func requestPresentation(_ presentation: AppPresentation) {
+        toast.dismiss()
         unavailableTimeNavigationRequest = nil
         navigationErrorMessage = nil
         // App-root actions are latest-wins interruptions. Do not queue multiple sheets or restore

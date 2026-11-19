@@ -41,8 +41,9 @@ final class AppointmentCompletionModel: Identifiable {
 
     let id: UUID
     let appointmentID: Appointment.ID
-    let patientID: Patient.ID
-    let patientName: String
+    let patient: Patient
+    var patientID: Patient.ID { patient.id }
+    var patientName: String { patient.displayName }
     let originPath: [Route]
     private(set) var amountText = ""
     private(set) var paymentMethod: AccountEntry.PaymentMethod?
@@ -53,8 +54,7 @@ final class AppointmentCompletionModel: Identifiable {
     init(id: UUID, details: AppointmentDetails, originPath: [Route]) {
         self.id = id
         appointmentID = details.appointment.id
-        patientID = details.patient.id
-        patientName = details.patient.displayName
+        patient = details.patient
         self.originPath = originPath
     }
 

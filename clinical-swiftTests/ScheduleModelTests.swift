@@ -54,6 +54,40 @@ struct ScheduleModelTests {
         }
     }
 
+    @Test func appointmentsForBookingReadsStorageWhenOutsideLoadedWindow() async throws {
+        let calendar = gregorianCalendar
+        let database = try testDatabase()
+        let loadedDate = try Date("2026-04-10T00:00:00Z", strategy: .iso8601)
+        let followUpDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let followUpBookedID = UUID()
+        let followUpCancelledID = UUID()
+
+        try seedPatientAndAppointments(
+            database: database,
+            appointments: [
+                AppointmentSeed(
+                    id: followUpBookedID, start: followUpDate.setTime(10, 0, using: calendar)),
+                AppointmentSeed(
+                    id: followUpCancelledID,
+                    start: followUpDate.setTime(10, 30, using: calendar),
+                    status: .cancelled
+                ),
+            ]
+        )
+
+        try await withDependencies {
+            $0.calendar = calendar
+            $0.defaultDatabase = database
+        } operation: {
+            let model = ScheduleModel()
+            try await model.loadVisibleDays(centeredOn: loadedDate, dayRadius: 1)
+
+            #expect(model.appointments(for: followUpDate).isEmpty)
+            let bookingAppointments = await model.appointmentsForBooking(on: followUpDate)
+            #expect(bookingAppointments.map(\.id) == [followUpBookedID])
+        }
+    }
+
     @Test func addingOneDayCrossesSundaySaturdayBoundary() throws {
         let calendar = gregorianCalendar
         let sunday = try Date("2026-04-19T00:00:00Z", strategy: .iso8601)

@@ -334,4 +334,40 @@ final class ScheduleEditorStore {
     init(session: ScheduleEditorSession? = nil) {
         self.session = session
     }
+
+    /// Creates a session for the active request and discards stale async reads if the request
+    /// or selected schedule date changes before initialization finishes.
+    func prepare(
+        request: AppPresentation?,
+        router: Router,
+        appointmentsForBooking: (Date) async -> [Appointment],
+        onFinished: @escaping (UUID, Date) -> Void
+    ) async {
+        guard let request else {
+            session = nil
+            return
+        }
+        // A timeline hold installs its session before the first drag update.
+        guard session?.id != request.id else { return }
+        let selectedDate = router.selectedScheduleDate
+        let appointments: [Appointment]
+        switch request {
+        case .scheduleCreation, .appointmentBooking:
+            appointments = await appointmentsForBooking(selectedDate)
+            guard !Task.isCancelled,
+                router.activePresentation?.id == request.id,
+                selectedDate.isSameDayAs(router.selectedScheduleDate)
+            else { return }
+        default:
+            appointments = []
+        }
+        guard session?.id != request.id else { return }
+        session = ScheduleEditorSession(
+            request: request,
+            selectedDate: selectedDate,
+            appointments: appointments
+        ) { date in
+            onFinished(request.id, date)
+        }
+    }
 }

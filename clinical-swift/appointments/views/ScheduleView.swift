@@ -102,19 +102,13 @@ struct ScheduleView: View {
         } message: {
             Text(editorSession?.errorMessage ?? "")
         }
-        .task(id: scheduleEditorRequest?.id) {
-            guard let request = scheduleEditorRequest else {
-                editorSession = nil
-                return
-            }
-            // A timeline hold installs its session before the first drag update.
-            guard editorSession?.id != request.id else { return }
-            editorSession = ScheduleEditorSession(
-                request: request, selectedDate: router.selectedScheduleDate,
-                appointments: scheduleModel.appointments(for: router.selectedScheduleDate)
-            ) { date in
-                finishEditor(request.id, date: date)
-            }
+        .task(id: scheduleEditorLoadKey) {
+            await editor.prepare(
+                request: scheduleEditorRequest,
+                router: router,
+                appointmentsForBooking: { await scheduleModel.appointmentsForBooking(on: $0) },
+                onFinished: finishEditor
+            )
         }
         .task(id: editorSession?.id) {
             guard let editorSession, !editorSession.adjustment.isDragging else { return }
@@ -200,6 +194,12 @@ struct ScheduleView: View {
             router.activePresentation
         default:
             nil
+        }
+    }
+
+    private var scheduleEditorLoadKey: ScheduleEditorLoadKey? {
+        scheduleEditorRequest.map {
+            ScheduleEditorLoadKey(requestID: $0.id, date: router.selectedScheduleDate)
         }
     }
 
@@ -337,6 +337,11 @@ struct ScheduleView: View {
 private struct AppointmentDetailsScrollRequest: Equatable {
     let appointmentID: Appointment.ID
     let selectedDate: Date
+}
+
+private struct ScheduleEditorLoadKey: Equatable {
+    let requestID: UUID
+    let date: Date
 }
 
 #Preview {
