@@ -1,21 +1,15 @@
 # Developer scripts
 
-Run the App Store Connect tool with Swift 6.2 or later and `openssl` on `PATH`:
+Run the App Store Connect tool with Swift 6.2 or later and `openssl` on `PATH`
+(on Ubuntu, install it with `apt-get install openssl`):
 
 ```sh
 swift scripts/app_store_connect.swift next-build-number BUNDLE_ID KEY_ID ISSUER_ID
 swift scripts/app_store_connect.swift trigger-build WORKFLOW_ID KEY_ID ISSUER_ID
 ```
 
-The tool uses the macOS system LibreSSL command or OpenSSL on Linux. On Ubuntu,
-install the command with `apt-get install openssl`. On Linux it also imports
-FoundationNetworking for HTTP requests.
+Keep the P-256 private key at `~/.appstoreconnect/private_keys/AuthKey_KEY_ID.p8`,
+or set `API_PRIVATE_KEYS_DIR` to its directory.
 
-Keep the App Store Connect P-256 private key at
-`~/.appstoreconnect/private_keys/AuthKey_KEY_ID.p8`, or set `API_PRIVATE_KEYS_DIR`
-to its directory. The tool passes the key path to OpenSSL; it does not copy the
-private key into temporary files. JWTs expire after ten minutes.
-
-Run `swift scripts/test_app_store_connect.swift` to check the tool. The tests
-use a temporary P-256 key and verify signatures without Apple credentials or API
-requests.
+Run `swift scripts/test_app_store_connect.swift` to verify signatures without
+Apple credentials or API requests.
