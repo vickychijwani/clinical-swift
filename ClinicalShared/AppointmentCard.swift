@@ -6,16 +6,14 @@ struct AppointmentCard: View {
     let appt: Appointment
     var isDeemphasized = false
     var contentTrailingInset: CGFloat = 0
-    var usesCompactTime = false
-    var usesCompactStack = false
+    var presentation: ScheduleCardPresentation? = nil
 
     var body: some View {
         ScheduleCard(
             start: appt.start, label: appt.patientName, appearance: appearance,
             isDeemphasized: isDeemphasized,
             contentTrailingInset: contentTrailingInset,
-            usesCompactTime: usesCompactTime,
-            usesCompactStack: usesCompactStack
+            presentation: presentation
         )
         .animation(.easeInOut(duration: 0.2), value: appt.status)
     }

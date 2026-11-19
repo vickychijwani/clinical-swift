@@ -99,8 +99,8 @@ struct Timeline: View {
                         size: layout.rect.size,
                         contentTrailingInset: layout.contentTrailingInset,
                         isOverlappingFront: layout.isOverlappingFront,
-                        usesCompactTime: layout.usesCompactTime,
-                        usesCompactStack: layout.usesCompactStack,
+                        haloOutsets: layout.haloOutsets,
+                        presentation: layout.presentation,
                         isDraft: draft,
                         isDeemphasized: editorSession != nil && !draft,
                         interactionsEnabled: !isWorking

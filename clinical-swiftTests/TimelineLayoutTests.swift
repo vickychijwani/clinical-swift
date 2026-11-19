@@ -415,6 +415,87 @@ struct TimelineLayoutTests {
         #expect(!right.usesCompactStack)
     }
 
+    @Test func breakCrossingSixtyMinOverlapSelectsCompactStackWithinContentFence() throws {
+        let backID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+        let frontID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
+        let items = [
+            appointment(
+                id: backID, name: "Kabir Malhotra", startHour: 12, startMinute: 20, duration: 60),
+            appointment(
+                id: frontID, name: "Priya Narayanan", startHour: 12, startMinute: 20, duration: 60),
+        ]
+        let scale = TimelineScale(items: items)
+        #expect(!scale.isBreakExpanded)
+
+        let layouts = TimelineLayoutEngine(
+            availableWidth: 402,
+            scale: scale,
+            overlap: .init(mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2)
+        ).layout(items: items)
+
+        let back = try layout(for: backID, in: layouts)
+        let front = try layout(for: frontID, in: layouts)
+        #expect(abs(back.rect.height - (40 + 32 * 20.0 / 180.0)) < 0.01)
+        #expect(back.presentation.layout == .compactStacked)
+        #expect(back.contentTrailingInset > 0)
+        #expect(front.isOverlappingFront)
+    }
+
+    @Test func touchingShortOverlapGroupsClipVerticalHalosAndPassValidation() throws {
+        let firstBackID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+        let firstFrontID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
+        let secondBackID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
+        let secondFrontID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000004"))
+        let items = [
+            appointment(id: firstBackID, name: "Ana", startHour: 9, startMinute: 0, duration: 15),
+            appointment(id: firstFrontID, name: "Raj", startHour: 9, startMinute: 0, duration: 15),
+            appointment(
+                id: secondBackID, name: "Mia", startHour: 9, startMinute: 15, duration: 15),
+            appointment(
+                id: secondFrontID, name: "Kabir Malhotra", startHour: 9, startMinute: 15,
+                duration: 15),
+        ]
+        let overlap = ScheduleCardTuning.Overlap(
+            mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2)
+        let scale = TimelineScale(items: items)
+        let layouts = TimelineLayoutEngine(
+            availableWidth: 402, scale: scale, overlap: overlap
+        ).layout(items: items)
+
+        let firstFront = try layout(for: firstFrontID, in: layouts)
+        let secondFront = try layout(for: secondFrontID, in: layouts)
+        #expect(firstFront.isOverlappingFront)
+        #expect(secondFront.isOverlappingFront)
+        #expect(secondFront.haloOutsets == .init(top: 0, bottom: 0, horizontal: 2))
+
+        let metrics = ScheduleCardContentMetrics()
+        let bounds = HorizontalSpan(
+            min: Timeline.metrics.contentLeadingInset,
+            max: Timeline.metrics.contentLeadingInset
+                + Timeline.metrics.contentWidth(availableWidth: 402)
+        )
+        let entries = layouts.map { info in
+            let measured = metrics.bounds(
+                start: info.item.start,
+                label: info.item.displayLabel,
+                cardHeight: info.rect.height,
+                presentation: info.presentation
+            )
+            return ValidatedLayoutEntry(
+                layoutInfo: info,
+                contentRect: CGRect(
+                    x: info.rect.minX,
+                    y: info.rect.minY,
+                    width: min(info.rect.width, measured.width),
+                    height: min(info.rect.height, measured.height)
+                )
+            )
+        }
+        #expect(
+            TimelineLayoutValidator.validate(entries: entries, bounds: bounds, overlap: overlap)
+                .isEmpty)
+    }
+
     @Test func randomizedSchedulesNeverViolateOverlapInvariants() {
         var rng = SeededGenerator(seed: 0xB17E_AA05)
         let names = [
@@ -476,8 +557,7 @@ struct TimelineLayoutTests {
                     start: info.item.start,
                     label: info.item.displayLabel,
                     cardHeight: info.rect.height,
-                    usesCompactTime: info.usesCompactTime,
-                    usesCompactStack: info.usesCompactStack
+                    presentation: info.presentation
                 )
                 let protectedWidth =
                     mode == .textAware ? min(info.rect.width, measured.width) : info.rect.width

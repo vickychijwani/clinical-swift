@@ -5,8 +5,7 @@ struct ScheduleItemCard: View {
     var isDraft = false
     var isDeemphasized = false
     var contentTrailingInset: CGFloat = 0
-    var usesCompactTime = false
-    var usesCompactStack = false
+    var presentation: ScheduleCardPresentation? = nil
 
     var body: some View {
         switch item {
@@ -14,14 +13,12 @@ struct ScheduleItemCard: View {
             AppointmentCard(
                 appt: appointment, isDeemphasized: isDeemphasized,
                 contentTrailingInset: contentTrailingInset,
-                usesCompactTime: usesCompactTime,
-                usesCompactStack: usesCompactStack)
+                presentation: presentation)
         case .unavailableTime(let block):
             UnavailableTimeCard(
                 block: block, isDraft: isDraft, isDeemphasized: isDeemphasized,
                 contentTrailingInset: contentTrailingInset,
-                usesCompactTime: usesCompactTime,
-                usesCompactStack: usesCompactStack)
+                presentation: presentation)
         }
     }
 }

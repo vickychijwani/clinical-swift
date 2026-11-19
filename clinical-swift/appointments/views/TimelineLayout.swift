@@ -176,27 +176,53 @@ struct TimelineLayoutEngine {
         // The held card uses the full content width and does not displace other cards.
         let regular = items.filter { $0.id != floatingID }
         let floating = items.filter { $0.id == floatingID }
-        var result: [TimelineItemLayoutInfo] = []
+        var regularLayouts: [TimelineItemLayoutInfo] = []
         var nextZIndex = 0
         for group in overlappingGroups(for: regular) {
             let groupLayouts = layout(group: group, startingZIndex: nextZIndex)
             nextZIndex += groupLayouts.count
-            result.append(contentsOf: groupLayouts)
+            regularLayouts.append(contentsOf: groupLayouts)
         }
+        if overlap.mode != .current, assertOnFallback {
+            let bounds = HorizontalSpan(
+                min: Timeline.metrics.contentLeadingInset,
+                max: Timeline.metrics.contentLeadingInset + cardWidth
+            )
+            if bounds.width > 0 {
+                let violations = TimelineLayoutValidator.validate(
+                    entries: regularLayouts.map(validatedEntry(for:)),
+                    bounds: bounds,
+                    overlap: overlap
+                )
+                if !violations.isEmpty {
+                    assertionFailure(
+                        "Timeline overlapping layout violated cross-group invariants: \(violations)")
+                }
+            }
+        }
+        var result = regularLayouts
         for item in floating {
+            let rect = CGRect(
+                x: Timeline.metrics.contentLeadingInset,
+                y: cardY(for: item),
+                width: cardWidth,
+                height: cardHeight(for: item)
+            )
+            let presentation = contentMetrics.resolvePresentation(
+                start: item.start,
+                label: item.displayLabel,
+                cardHeight: rect.height,
+                availableWidth: rect.width
+            )
             result.append(
                 TimelineItemLayoutInfo(
                     id: item.id,
                     item: item,
-                    rect: CGRect(
-                        x: Timeline.metrics.contentLeadingInset,
-                        y: cardY(for: item),
-                        width: cardWidth,
-                        height: cardHeight(for: item)
-                    ),
+                    rect: rect,
                     zIndex: nextZIndex,
                     isOverlappingFront: false,
-                    contentTrailingInset: 0
+                    contentTrailingInset: 0,
+                    presentation: presentation
                 )
             )
             nextZIndex += 1
@@ -209,18 +235,29 @@ struct TimelineLayoutEngine {
     ) -> [TimelineItemLayoutInfo] {
         guard group.count > 1 else {
             return group.enumerated().map { offset, item in
-                TimelineItemLayoutInfo(
+                let rect = CGRect(
+                    x: Timeline.metrics.contentLeadingInset,
+                    y: cardY(for: item),
+                    width: cardWidth,
+                    height: cardHeight(for: item)
+                )
+                let presentation =
+                    overlap.mode == .current
+                    ? contentMetrics.defaultPresentation(cardHeight: rect.height)
+                    : contentMetrics.resolvePresentation(
+                        start: item.start,
+                        label: item.displayLabel,
+                        cardHeight: rect.height,
+                        availableWidth: rect.width
+                    )
+                return TimelineItemLayoutInfo(
                     id: item.id,
                     item: item,
-                    rect: CGRect(
-                        x: Timeline.metrics.contentLeadingInset,
-                        y: cardY(for: item),
-                        width: cardWidth,
-                        height: cardHeight(for: item)
-                    ),
+                    rect: rect,
                     zIndex: startingZIndex + offset,
                     isOverlappingFront: false,
-                    contentTrailingInset: 0
+                    contentTrailingInset: 0,
+                    presentation: presentation
                 )
             }
         }
@@ -261,7 +298,8 @@ struct TimelineLayoutEngine {
                 rect: rect,
                 zIndex: startingZIndex + offset,
                 isOverlappingFront: false,
-                contentTrailingInset: 0
+                contentTrailingInset: 0,
+                presentation: contentMetrics.defaultPresentation(cardHeight: rect.height)
             )
         }
     }
@@ -285,7 +323,8 @@ struct TimelineLayoutEngine {
             let metrics = contentMetrics.bounds(
                 start: item.start,
                 label: item.displayLabel,
-                cardHeight: height
+                cardHeight: height,
+                presentation: contentMetrics.defaultPresentation(cardHeight: height)
             )
             return PreparedItem(
                 item: item,
@@ -337,12 +376,11 @@ struct TimelineLayoutEngine {
                 width: width,
                 height: cardHeight(for: item)
             )
-            let presentation = resolveCardPresentation(
-                item: item,
+            let presentation = contentMetrics.resolvePresentation(
+                start: item.start,
+                label: item.displayLabel,
                 cardHeight: rect.height,
-                availableWidth: rect.width,
-                requiredCompactTime: false,
-                requiredCompactStack: false
+                availableWidth: rect.width
             )
             return TimelineItemLayoutInfo(
                 id: item.id,
@@ -351,8 +389,7 @@ struct TimelineLayoutEngine {
                 zIndex: startingZIndex + offset,
                 isOverlappingFront: false,
                 contentTrailingInset: 0,
-                usesCompactTime: presentation.usesCompactTime,
-                usesCompactStack: presentation.usesCompactStack
+                presentation: presentation
             )
         }
     }
@@ -522,22 +559,20 @@ struct TimelineLayoutEngine {
 
             if overlap.mode == .textAware {
                 // Try calmest presentation first: full time -> compact stack (30m) -> compact time.
-                let canCompactStack = contentMetrics.canCompactStack(cardHeight: item.height)
-                var candidates: [(compactTime: Bool, compactStack: Bool)] = [(false, false)]
-                if canCompactStack {
-                    candidates.append((false, true))
-                }
-                candidates.append((true, canCompactStack))
+                let candidates = contentMetrics.candidatePresentations(cardHeight: item.height)
 
                 // Estimate the narrowest readable width needed by the remaining peers in this clique.
                 let nextPeerDemands = items[(index + 1)...].map { peer in
-                    let peerCompactStack = contentMetrics.canCompactStack(cardHeight: peer.height)
+                    let peerLayout: ScheduleCardPresentation.Layout =
+                        contentMetrics.canCompactStack(cardHeight: peer.height)
+                        ? .compactStacked
+                        : contentMetrics.defaultLayout(cardHeight: peer.height)
                     return contentMetrics.bounds(
                         start: peer.item.start,
                         label: peer.item.displayLabel,
                         cardHeight: peer.height,
-                        usesCompactTime: false,
-                        usesCompactStack: peerCompactStack
+                        presentation: ScheduleCardPresentation(
+                            layout: peerLayout, usesCompactTime: false)
                     ).width
                 }
                 let remainingPeersDemand =
@@ -545,7 +580,7 @@ struct TimelineLayoutEngine {
 
                 var bestCandidate:
                     (
-                        compactTime: Bool, compactStack: Bool,
+                        presentation: ScheduleCardPresentation,
                         bounds: ScheduleCardContentMetrics.Bounds, advance: CGFloat
                     )?
                 for candidate in candidates {
@@ -553,8 +588,7 @@ struct TimelineLayoutEngine {
                         start: item.item.start,
                         label: item.item.displayLabel,
                         cardHeight: item.height,
-                        usesCompactTime: candidate.compactTime,
-                        usesCompactStack: candidate.compactStack
+                        presentation: candidate
                     )
                     // Keep text clear of the next front card and its outer halo.
                     let requiredAdvance = max(measured.width + halo, stripWidth)
@@ -566,10 +600,7 @@ struct TimelineLayoutEngine {
                         nextFairWidth >= minimumWidth
                     {
                         if bestCandidate == nil || requiredAdvance < (bestCandidate?.advance ?? .infinity) - Self.epsilon {
-                            bestCandidate = (
-                                candidate.compactTime, candidate.compactStack, measured,
-                                requiredAdvance
-                            )
+                            bestCandidate = (candidate, measured, requiredAdvance)
                         }
                         // Stop at the calmest option as soon as remaining peers fit untruncated.
                         if remainingAfterOverlap + Self.epsilon >= remainingPeersDemand {
@@ -588,8 +619,7 @@ struct TimelineLayoutEngine {
                             item,
                             span: span,
                             drawsHalo: drawsHalo,
-                            usesCompactTime: chosen.compactTime,
-                            usesCompactStack: chosen.compactStack,
+                            presentation: chosen.presentation,
                             contentBoundsOverride: chosen.bounds
                         )
                     )
@@ -615,27 +645,32 @@ struct TimelineLayoutEngine {
         startingZIndex: Int
     ) -> [ValidatedLayoutEntry] {
         let halo = haloMargin
-        return placed.indices.map { index in
+        let overlapStatusByIndex = placed.indices.map { index -> (Bool, TimelineItemLayoutInfo.HaloOutsets) in
             let current = placed[index]
-            let isOverlappingFront = placed[0..<index].contains { lower in
+            let overlappedLower = placed[0..<index].filter { lower in
                 rectsOverlap(current.rect, lower.rect)
             }
+            let outsets = haloOutsets(
+                for: current.rect, overlappedLower: overlappedLower, halo: halo)
+            return (!overlappedLower.isEmpty, outsets)
+        }
+
+        return placed.indices.map { index in
+            let current = placed[index]
+            let (isOverlappingFront, currentOutsets) = overlapStatusByIndex[index]
 
             // Fence content away from any front card that overlaps this card's vertical content band.
             var nearestFrontLeft = current.rect.maxX
             for upperIndex in (index + 1)..<placed.count {
                 let upper = placed[upperIndex]
-                let upperHasHalo = placed[0..<upperIndex].contains { lower in
-                    rectsOverlap(upper.rect, lower.rect)
-                }
-                let upperHalo = upperHasHalo ? halo : 0
-                let upperMinY = upper.rect.minY - upperHalo
-                let upperMaxY = upper.rect.maxY + upperHalo
+                let upperOutsets = overlapStatusByIndex[upperIndex].1
+                let upperMinY = upper.rect.minY - upperOutsets.top
+                let upperMaxY = upper.rect.maxY + upperOutsets.bottom
                 let verticallyHitsContent =
                     upperMinY < current.contentRect.maxY - Self.epsilon
                     && current.contentRect.minY < upperMaxY - Self.epsilon
                 if verticallyHitsContent, upper.rect.minX > current.rect.minX + Self.epsilon {
-                    nearestFrontLeft = min(nearestFrontLeft, upper.rect.minX - upperHalo)
+                    nearestFrontLeft = min(nearestFrontLeft, upper.rect.minX - upperOutsets.horizontal)
                 }
             }
 
@@ -652,113 +687,78 @@ struct TimelineLayoutEngine {
             }
 
             let availableContentWidth = max(current.rect.width - contentTrailingInset, 0)
-            let presentation = resolveCardPresentation(
-                item: current.item,
-                cardHeight: current.rect.height,
-                availableWidth: availableContentWidth,
-                requiredCompactTime: current.usesCompactTime,
-                requiredCompactStack: current.usesCompactStack
-            )
-            let resolvedBounds = contentMetrics.bounds(
+            let presentation = contentMetrics.resolvePresentation(
                 start: current.item.start,
                 label: current.item.displayLabel,
                 cardHeight: current.rect.height,
-                usesCompactTime: presentation.usesCompactTime,
-                usesCompactStack: presentation.usesCompactStack
+                availableWidth: availableContentWidth,
+                minimum: current.presentation
             )
-            let protectedWidth: CGFloat =
-                switch overlap.mode {
-                case .textAware:
-                    min(current.rect.width, resolvedBounds.width)
-                case .cascade, .current:
-                    current.rect.width
-                }
-            let validatedContentRect = CGRect(
-                x: current.rect.minX,
-                y: current.rect.minY,
-                width: protectedWidth,
-                height: min(current.rect.height, resolvedBounds.height)
-            )
-
             let info = TimelineItemLayoutInfo(
                 id: current.item.id,
                 item: current.item,
                 rect: current.rect,
                 zIndex: startingZIndex + index,
                 isOverlappingFront: isOverlappingFront,
+                haloOutsets: currentOutsets,
                 contentTrailingInset: contentTrailingInset,
-                usesCompactTime: presentation.usesCompactTime,
-                usesCompactStack: presentation.usesCompactStack
+                presentation: presentation
             )
-            return ValidatedLayoutEntry(
-                layoutInfo: info,
-                contentRect: validatedContentRect
-            )
+            return validatedEntry(for: info)
         }
     }
 
-    private func resolveCardPresentation(
-        item: TimelineItem,
-        cardHeight: CGFloat,
-        availableWidth: CGFloat,
-        requiredCompactTime: Bool,
-        requiredCompactStack: Bool
-    ) -> (usesCompactTime: Bool, usesCompactStack: Bool) {
-        let horizontalPaddingTotal = ScheduleCardStyle.horizontalPadding * 2
-
-        if cardHeight >= ScheduleCardContentMetrics.stackedThresholdHeight {
-            // Tall stacked cards keep AM/PM unless needed for text-aware overlap or ultra-narrow columns.
-            let fullTimeWidth =
-                contentMetrics.timeRowWidth(
-                    start: item.start, usesCompactTime: false, usesCompactStack: false)
-                + horizontalPaddingTotal
-            let compactTime = requiredCompactTime || availableWidth < fullTimeWidth + 4
-            return (compactTime, false)
-        }
-
-        if contentMetrics.canCompactStack(cardHeight: cardHeight) {
-            // Medium cards (e.g. 30 min) stay 1-line horizontal when the full label fits,
-            // and switch to a compact 2-line stack when narrow.
-            let fullHorizontalWidth = contentMetrics.bounds(
-                start: item.start,
-                label: item.displayLabel,
-                cardHeight: cardHeight,
-                usesCompactTime: false,
-                usesCompactStack: false
-            ).width
-            let compactStack = requiredCompactStack || fullHorizontalWidth > availableWidth
-            guard compactStack else {
-                return (requiredCompactTime, false)
+    private func validatedEntry(for info: TimelineItemLayoutInfo) -> ValidatedLayoutEntry {
+        let resolvedBounds = contentMetrics.bounds(
+            start: info.item.start,
+            label: info.item.displayLabel,
+            cardHeight: info.rect.height,
+            presentation: info.presentation
+        )
+        let protectedWidth: CGFloat =
+            switch overlap.mode {
+            case .textAware:
+                min(info.rect.width, resolvedBounds.width)
+            case .cascade, .current:
+                info.rect.width
             }
-            let compactStackFullTimeWidth =
-                contentMetrics.timeRowWidth(
-                    start: item.start, usesCompactTime: false, usesCompactStack: true)
-                + horizontalPaddingTotal
-            let compactTime = requiredCompactTime || availableWidth < compactStackFullTimeWidth + 4
-            return (compactTime, true)
-        }
+        let validatedContentRect = CGRect(
+            x: info.rect.minX,
+            y: info.rect.minY,
+            width: protectedWidth,
+            height: min(info.rect.height, resolvedBounds.height)
+        )
+        return ValidatedLayoutEntry(layoutInfo: info, contentRect: validatedContentRect)
+    }
 
-        // Short cards (15-20 min) stay 1-line horizontal; drop AM/PM when the name would clip.
-        let fullHorizontalWidth = contentMetrics.bounds(
-            start: item.start,
-            label: item.displayLabel,
-            cardHeight: cardHeight,
-            usesCompactTime: false,
-            usesCompactStack: false
-        ).width
-        let compactTime = requiredCompactTime || fullHorizontalWidth > availableWidth
-        return (compactTime, false)
+    /// Clip vertical halo extension to overlapped lower cards so a front card cannot paint into a preceding group.
+    private func haloOutsets(
+        for rect: CGRect,
+        overlappedLower: [PlacedItem],
+        halo: CGFloat
+    ) -> TimelineItemLayoutInfo.HaloOutsets {
+        guard !overlappedLower.isEmpty, halo > 0 else {
+            return .zero
+        }
+        let overlappedMinY = overlappedLower.map(\.rect.minY).min() ?? rect.minY
+        let overlappedMaxY = overlappedLower.map(\.rect.maxY).max() ?? rect.maxY
+        return TimelineItemLayoutInfo.HaloOutsets(
+            top: min(halo, max(rect.minY - overlappedMinY, 0)),
+            bottom: min(halo, max(overlappedMaxY - rect.maxY, 0)),
+            horizontal: halo
+        )
     }
 
     private func makePlacedItem(
         _ prepared: PreparedItem,
         span: HorizontalSpan,
         drawsHalo: Bool,
-        usesCompactTime: Bool = false,
-        usesCompactStack: Bool = false,
+        presentation: ScheduleCardPresentation? = nil,
         contentBoundsOverride: ScheduleCardContentMetrics.Bounds? = nil
     ) -> PlacedItem {
         let rect = prepared.rect(in: span)
+        let resolvedPresentation =
+            presentation ?? contentMetrics.defaultPresentation(cardHeight: rect.height)
         let bounds = contentBoundsOverride ?? prepared.contentBounds
         let protectedWidth: CGFloat =
             switch overlap.mode {
@@ -778,8 +778,7 @@ struct TimelineLayoutEngine {
             rect: rect,
             contentRect: contentRect,
             drawsHalo: drawsHalo,
-            usesCompactTime: usesCompactTime,
-            usesCompactStack: usesCompactStack
+            presentation: resolvedPresentation
         )
     }
 
@@ -1169,8 +1168,13 @@ nonisolated enum TimelineLayoutValidator {
                 guard upper.layoutInfo.zIndex > lower.layoutInfo.zIndex else { continue }
 
                 let upperRect = upper.layoutInfo.rect
-                let upperHalo = upper.layoutInfo.isOverlappingFront ? halo : 0
-                let upperOcclusionRect = upperRect.insetBy(dx: -upperHalo, dy: -upperHalo)
+                let upperOutsets = upper.layoutInfo.effectiveHaloOutsets(haloWidth: halo)
+                let upperOcclusionRect = CGRect(
+                    x: upperRect.minX - upperOutsets.horizontal,
+                    y: upperRect.minY - upperOutsets.top,
+                    width: upperRect.width + upperOutsets.horizontal * 2,
+                    height: upperRect.height + upperOutsets.top + upperOutsets.bottom
+                )
 
                 if intersects(lower.contentRect, upperOcclusionRect) {
                     violations.append(
@@ -1214,14 +1218,25 @@ struct ValidatedLayoutEntry {
 }
 
 struct TimelineItemLayoutInfo: Identifiable {
+    nonisolated struct HaloOutsets: Equatable, Sendable {
+        let top: CGFloat
+        let bottom: CGFloat
+        let horizontal: CGFloat
+
+        static let zero = Self(top: 0, bottom: 0, horizontal: 0)
+    }
+
     let id: TimelineItem.ID
     let item: TimelineItem
     let rect: CGRect
     let zIndex: Int
     let isOverlappingFront: Bool
+    let haloOutsets: HaloOutsets?
     let contentTrailingInset: CGFloat
-    let usesCompactTime: Bool
-    let usesCompactStack: Bool
+    let presentation: ScheduleCardPresentation
+
+    var usesCompactTime: Bool { presentation.usesCompactTime }
+    var usesCompactStack: Bool { presentation.layout == .compactStacked }
 
     init(
         id: TimelineItem.ID,
@@ -1229,18 +1244,30 @@ struct TimelineItemLayoutInfo: Identifiable {
         rect: CGRect,
         zIndex: Int = 0,
         isOverlappingFront: Bool = false,
+        haloOutsets: HaloOutsets? = nil,
         contentTrailingInset: CGFloat = 0,
-        usesCompactTime: Bool = false,
-        usesCompactStack: Bool = false
+        presentation: ScheduleCardPresentation = .init()
     ) {
         self.id = id
         self.item = item
         self.rect = rect
         self.zIndex = zIndex
         self.isOverlappingFront = isOverlappingFront
+        self.haloOutsets = haloOutsets
         self.contentTrailingInset = contentTrailingInset
-        self.usesCompactTime = usesCompactTime
-        self.usesCompactStack = usesCompactStack
+        self.presentation = presentation
+    }
+
+    nonisolated func effectiveHaloOutsets(haloWidth: CGFloat) -> HaloOutsets {
+        guard isOverlappingFront, haloWidth > 0 else { return .zero }
+        guard let haloOutsets else {
+            return HaloOutsets(top: haloWidth, bottom: haloWidth, horizontal: haloWidth)
+        }
+        return HaloOutsets(
+            top: min(haloOutsets.top, haloWidth),
+            bottom: min(haloOutsets.bottom, haloWidth),
+            horizontal: min(haloOutsets.horizontal, haloWidth)
+        )
     }
 }
 
@@ -1262,8 +1289,7 @@ private struct PlacedItem {
     let rect: CGRect
     let contentRect: CGRect
     let drawsHalo: Bool
-    let usesCompactTime: Bool
-    let usesCompactStack: Bool
+    let presentation: ScheduleCardPresentation
 }
 
 private struct TimelineItemColumnAssignment {

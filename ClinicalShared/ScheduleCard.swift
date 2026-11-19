@@ -9,10 +9,8 @@ struct ScheduleCard: View {
     var isDeemphasized = false
     /// Extra trailing inset computed by the timeline layout engine so content cannot extend under a front card.
     var contentTrailingInset: CGFloat = 0
-    /// Omit AM/PM when horizontal space is tight so start times stay compact and readable.
-    var usesCompactTime = false
-    /// Use a compact 2-line stack on medium cards (e.g. 30 min) when a single horizontal line would clip.
-    var usesCompactStack = false
+    /// Explicit layout and time-format choice shared with TimelineLayoutEngine.
+    var presentation: ScheduleCardPresentation? = nil
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -31,8 +29,7 @@ struct ScheduleCard: View {
                 start: start,
                 label: label,
                 appearance: appearance,
-                usesCompactTime: usesCompactTime,
-                usesCompactStack: usesCompactStack
+                presentation: presentation
             )
             .padding(.leading, ScheduleCardStyle.horizontalPadding)
             .padding(.trailing, ScheduleCardStyle.horizontalPadding + contentTrailingInset)
@@ -98,58 +95,82 @@ private struct ScheduleCardContent: View {
     let start: Date
     let label: String
     let appearance: ScheduleCard.Appearance
-    let usesCompactTime: Bool
-    let usesCompactStack: Bool
+    let presentation: ScheduleCardPresentation?
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            // Preferred: vertical layout when there's enough height
-            VStack(alignment: .leading, spacing: ScheduleCardStyle.stackedSpacing) {
-                Color.clear.frame(height: ScheduleCardStyle.stackedTopSpacerHeight)
+        if let presentation {
+            content(for: presentation)
+        } else {
+            ViewThatFits(in: .vertical) {
+                // Preferred: vertical layout when there's enough height
+                content(for: ScheduleCardPresentation(layout: .stacked))
+
+                // Fallback vertical layout with slightly less spacing
+                VStack(alignment: .leading) {
+                    Spacer(minLength: 0)
+                    ScheduleCardTime(start: start, appearance: appearance)
+                    ScheduleCardLabel(label: label, color: appearance.labelColor)
+                    Spacer(minLength: 0)
+                }
+
+                // Fallback: horizontal layout when vertical doesn't fit
+                content(for: ScheduleCardPresentation(layout: .horizontal))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func content(for presentation: ScheduleCardPresentation) -> some View {
+        let style = presentation.layout.style
+        switch presentation.layout {
+        case .stacked:
+            VStack(alignment: .leading, spacing: style.spacing) {
+                Color.clear.frame(height: style.topSpacerHeight)
                 ScheduleCardTime(
-                    start: start, appearance: appearance, usesCompactTime: usesCompactTime)
-                ScheduleCardLabel(label: label, color: appearance.labelColor)
+                    start: start,
+                    appearance: appearance,
+                    usesCompactTime: presentation.usesCompactTime,
+                    fontSize: style.timeFontSize
+                )
+                ScheduleCardLabel(
+                    label: label,
+                    color: appearance.labelColor,
+                    fontSize: style.labelFontSize
+                )
                 Spacer(minLength: 0)
             }
-
-            // Fallback vertical layout with slightly less spacing
+        case .compactStacked:
+            // Compact 2-line stack for narrow medium cards (e.g. 30 min) so names stay readable.
+            VStack(alignment: .leading, spacing: style.spacing) {
+                Spacer(minLength: 0)
+                ScheduleCardTime(
+                    start: start,
+                    appearance: appearance,
+                    usesCompactTime: presentation.usesCompactTime,
+                    fontSize: style.timeFontSize
+                )
+                ScheduleCardLabel(
+                    label: label,
+                    color: appearance.labelColor,
+                    fontSize: style.labelFontSize
+                )
+                Spacer(minLength: 0)
+            }
+        case .horizontal:
             VStack(alignment: .leading) {
                 Spacer(minLength: 0)
-                ScheduleCardTime(
-                    start: start, appearance: appearance, usesCompactTime: usesCompactTime)
-                ScheduleCardLabel(label: label, color: appearance.labelColor)
-                Spacer(minLength: 0)
-            }
-
-            if usesCompactStack {
-                // Compact 2-line stack for narrow medium cards (e.g. 30 min) so names stay readable.
-                VStack(alignment: .leading, spacing: ScheduleCardStyle.compactStackedSpacing) {
-                    Spacer(minLength: 0)
+                HStack(alignment: .firstTextBaseline, spacing: style.spacing) {
                     ScheduleCardTime(
                         start: start,
                         appearance: appearance,
-                        usesCompactTime: usesCompactTime,
-                        fontSize: ScheduleCardStyle.compactTimeFontSize
+                        usesCompactTime: presentation.usesCompactTime,
+                        fontSize: style.timeFontSize
                     )
                     ScheduleCardLabel(
                         label: label,
                         color: appearance.labelColor,
-                        fontSize: ScheduleCardStyle.compactLabelFontSize
+                        fontSize: style.labelFontSize
                     )
-                    Spacer(minLength: 0)
-                }
-            }
-
-            // Fallback: horizontal layout when vertical doesn't fit
-            VStack(alignment: .leading) {
-                Spacer(minLength: 0)
-                HStack(
-                    alignment: .firstTextBaseline,
-                    spacing: ScheduleCardStyle.compactHorizontalSpacing
-                ) {
-                    ScheduleCardTime(
-                        start: start, appearance: appearance, usesCompactTime: usesCompactTime)
-                    ScheduleCardLabel(label: label, color: appearance.labelColor)
                 }
                 Spacer(minLength: 0)
             }
