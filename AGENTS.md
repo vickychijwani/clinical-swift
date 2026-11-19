@@ -41,7 +41,7 @@ App-specific guides:
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
 - Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
 - Test structure, dependency overrides, and async database access: `docs/testing.md`
-- WidgetKit, App Group database access, timeline refresh, exact-fit layout, and widget routing: `docs/widgets.md`
+- WidgetKit, App Group reads, timeline refresh, and date capacity: `docs/widgets.md`
 - App-level presentation ownership, details navigation, and interruption policy: `docs/routing.md`
 - One-way EventKit appointment and unavailable-time sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
 - Financial entries, current balances, dated reports, and derived coverage: `docs/payments.md`
