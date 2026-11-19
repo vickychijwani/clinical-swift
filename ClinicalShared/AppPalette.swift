@@ -99,7 +99,7 @@ nonisolated struct AppPalette: Equatable {
         case .unavailableBorder: .red.mixWithCanvas(0.2)
         case .unavailableLabel: .primary
         case .grid: .gray.mixWithCanvas(0.15)
-        case .breakStripe: .gray.mixWithCanvas(0.12)
+        case .breakStripe: .gray.mixWithCanvas(0.11)
         case .hour: .gray
         case .now: self[.accent]
         case .success: .green
