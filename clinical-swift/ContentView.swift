@@ -5,10 +5,29 @@ import UIKit
 struct ContentView: View {
     @Bindable var router: Router
     @State private var editor: ScheduleEditorStore
+    @State private var toast: ToastStore
 
-    init(router: Router, initialEditorSession: ScheduleEditorSession? = nil) {
+    init(
+        router: Router,
+        initialEditorSession: ScheduleEditorSession? = nil,
+        initialToast: ToastItem? = nil
+    ) {
         self.router = router
         _editor = State(initialValue: ScheduleEditorStore(session: initialEditorSession))
+        #if DEBUG
+            let resolvedToast =
+                initialToast
+                ?? (CommandLine.arguments.contains("--preview-toast")
+                    ? ToastItem(
+                        message: "Appointment completed",
+                        actionTitle: "View",
+                        duration: nil
+                    ) {}
+                    : nil)
+            _toast = State(initialValue: ToastStore(initialToast: resolvedToast))
+        #else
+            _toast = State(initialValue: ToastStore(initialToast: initialToast))
+        #endif
     }
 
     var body: some View {
@@ -16,6 +35,7 @@ struct ContentView: View {
             .modifier(AppTrayHost())
             .environment(router)
             .environment(editor)
+            .environment(toast)
             .task(id: router.unavailableTimeNavigationRequest?.id) {
                 guard let request = router.unavailableTimeNavigationRequest else { return }
                 await router.resolveUnavailableTime(request)
@@ -45,6 +65,8 @@ struct ContentView: View {
 
 private struct AppTabs: View {
     @Bindable var router: Router
+    @Environment(ScheduleEditorStore.self) private var editor
+    @Environment(ToastStore.self) private var toast
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
@@ -66,6 +88,7 @@ private struct AppTabs: View {
                 }
             }
         }
+        .toastOverlay(toast, bottomClearance: editor.session == nil ? 64 : 16)
     }
 }
 
@@ -81,6 +104,27 @@ private struct AppTabs: View {
                 database: database,
                 store: BackupStateStore(
                     directory: .temporaryDirectory.appending(path: UUID().uuidString))))
+}
+
+#Preview("Toast active") {
+    let database = try! prepareDependencies {
+        let database = try appDatabase(seedSamples: true)
+        $0.defaultDatabase = database
+        return database
+    }
+    ContentView(
+        router: Router(),
+        initialToast: ToastItem(
+            message: "Appointment completed",
+            actionTitle: "View",
+            duration: nil
+        ) {}
+    )
+    .environment(
+        BackupCoordinator(
+            database: database,
+            store: BackupStateStore(
+                directory: .temporaryDirectory.appending(path: UUID().uuidString))))
 }
 
 private enum AppTrayItem: Identifiable {
