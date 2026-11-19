@@ -17,7 +17,25 @@ final class ScheduleEditorSession: Identifiable {
     var errorMessage: String?
     /// A counter keeps repeated scroll requests distinct; it has no domain meaning.
     private var scrollRevision = 0
-    private let onFinished: (Date) -> Void
+    private let onFinished: (Completion) -> Void
+
+    static let savedAppointmentToastDuration: Duration = .seconds(5)
+
+    enum Completion: Equatable, Sendable {
+        case appointmentSaved(AppointmentBookingModel.SavedAppointment)
+        case unavailableTimeChanged(date: Date)
+        case discarded(date: Date)
+
+        var date: Date {
+            switch self {
+            case .appointmentSaved(let saved):
+                saved.start
+            case .unavailableTimeChanged(let date),
+                .discarded(let date):
+                date
+            }
+        }
+    }
 
     enum Editor {
         case appointment(AppointmentBookingModel)
@@ -31,7 +49,7 @@ final class ScheduleEditorSession: Identifiable {
 
     init(
         bookingID: UUID, selectedDate: Date, center: TimeOfDay, items: [TimelineItem],
-        onFinished: @escaping (Date) -> Void
+        onFinished: @escaping (Completion) -> Void
     ) {
         id = bookingID
         allowsTypeSelection = true
@@ -51,7 +69,7 @@ final class ScheduleEditorSession: Identifiable {
 
     init?(
         request: AppPresentation, selectedDate: Date, appointments: [Appointment],
-        onFinished: @escaping (Date) -> Void
+        onFinished: @escaping (Completion) -> Void
     ) {
         id = request.id
         self.onFinished = onFinished
@@ -244,8 +262,10 @@ final class ScheduleEditorSession: Identifiable {
         }
         return await perform {
             switch editor {
-            case .appointment(let model): try await model.save()
-            case .unavailableTime(let model): try await model.save()
+            case .appointment(let model):
+                return .appointmentSaved(try await model.save())
+            case .unavailableTime(let model):
+                return .unavailableTimeChanged(date: try await model.save())
             }
         }
     }
@@ -255,20 +275,22 @@ final class ScheduleEditorSession: Identifiable {
         guard canDelete, !isWorking, !didFinish,
             case .unavailableTime(let model) = editor
         else { return false }
-        return await perform(deleting: true) { try await model.delete() }
+        return await perform(deleting: true) {
+            .unavailableTimeChanged(date: try await model.delete())
+        }
     }
 
     private func perform(
-        deleting: Bool = false, operation: () async throws -> Date
+        deleting: Bool = false, operation: () async throws -> Completion
     ) async -> Bool {
         isWorking = true
         defer { isWorking = false }
         adjustment.release()
         errorMessage = nil
         do {
-            let date = try await operation()
+            let completion = try await operation()
             didFinish = true
-            onFinished(date)
+            onFinished(completion)
             return true
         } catch {
             switch editor {
@@ -312,11 +334,36 @@ final class ScheduleEditorSession: Identifiable {
         return items
     }
 
-    func finish(using router: Router, date: Date) -> Bool {
+    @discardableResult
+    func finish(
+        using router: Router,
+        completion: Completion
+    ) -> Bool {
         // A late save must not close a newer presentation or change its date.
         guard router.activePresentation?.id == id else { return false }
-        router.finishScheduleEditor(id, date: date)
+        router.finishScheduleEditor(id, date: completion.date)
+        showToastIfNeeded(for: completion, using: router)
         return true
+    }
+
+    private func showToastIfNeeded(
+        for completion: Completion,
+        using router: Router
+    ) {
+        guard case .appointmentSaved(let saved) = completion else { return }
+        let message =
+            switch saved.kind {
+            case .booked: "Appointment booked"
+            case .rescheduled: "Appointment rescheduled"
+            case .updated: "Appointment updated"
+            }
+        router.toast.show(
+            message: message,
+            actionTitle: "Message",
+            duration: Self.savedAppointmentToastDuration
+        ) { [weak router] in
+            router?.requestAppointmentMessage(id: saved.id, date: saved.start)
+        }
     }
 }
 
@@ -341,7 +388,7 @@ final class ScheduleEditorStore {
         request: AppPresentation?,
         router: Router,
         appointmentsForBooking: (Date) async -> [Appointment],
-        onFinished: @escaping (UUID, Date) -> Void
+        onFinished: @escaping (UUID, ScheduleEditorSession.Completion) -> Void
     ) async {
         guard let request else {
             session = nil
@@ -366,8 +413,8 @@ final class ScheduleEditorStore {
             request: request,
             selectedDate: selectedDate,
             appointments: appointments
-        ) { date in
-            onFinished(request.id, date)
+        ) { completion in
+            onFinished(request.id, completion)
         }
     }
 }

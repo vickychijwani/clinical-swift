@@ -223,7 +223,8 @@ struct AppointmentBookingModelTests {
         try #require(
             ScheduleEditorSession(
                 request: .appointmentEdit(AppointmentEditRequest(details: details)),
-                selectedDate: details.appointment.start, appointments: [], onFinished: onFinished))
+                selectedDate: details.appointment.start, appointments: [],
+                onFinished: { onFinished($0.date) }))
     }
     private var gregorianCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)

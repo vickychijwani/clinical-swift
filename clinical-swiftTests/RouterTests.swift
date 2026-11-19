@@ -455,6 +455,26 @@ struct RouterTests {
         #expect(router.activePresentation?.id == nil)
     }
 
+    @Test func requestingAppointmentMessageByIDAlignsScheduleAndOpensMessageTray() throws {
+        let calendar = gregorianCalendar
+        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
+        let appointmentStart = try Date("2026-07-22T14:30:00Z", strategy: .iso8601)
+        let appointmentID = UUID()
+
+        withDependencies {
+            $0.calendar = calendar
+        } operation: {
+            let router = makeRouter(selectedScheduleDate: initialDate)
+            router.selectedTab = .patients
+
+            router.requestAppointmentMessage(id: appointmentID, date: appointmentStart)
+
+            #expect(router.selectedTab == .schedule)
+            #expect(router.selectedScheduleDate == appointmentStart.startOfDay(using: calendar))
+            #expect(router.appointmentMessageRequest?.appointmentID == appointmentID)
+        }
+    }
+
     @Test func appointmentAndScheduleURLsUseAuthoritativeRouterEntryPoints() throws {
         let calendar = gregorianCalendar
         let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)

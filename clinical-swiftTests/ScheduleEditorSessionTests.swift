@@ -27,7 +27,7 @@ struct ScheduleEditorSessionTests {
                 ScheduleEditorSession(
                     request: .scheduleCreation(ScheduleCreationRequest()), selectedDate: date,
                     appointments: []
-                ) { finishedDates.append($0) })
+                ) { finishedDates.append($0.date) })
             session.selectPatient(patient)
             if unavailable { session.selectType(.unavailableTime) }
             let preview = session.preview
@@ -267,7 +267,7 @@ struct ScheduleEditorSessionTests {
             let session = try #require(
                 ScheduleEditorSession(
                     request: request, selectedDate: date, appointments: []
-                ) { finishedDates.append($0) })
+                ) { finishedDates.append($0.date) })
             session.selectPatient(patient)
             if unavailable { session.selectType(.unavailableTime) }
             session.isShowingSheet = false
@@ -379,7 +379,7 @@ struct ScheduleEditorSessionTests {
                     request: .unavailableTimeEditor(
                         UnavailableTimeEditorRequest(block: block)),
                     selectedDate: date, appointments: []
-                ) { finishedDates.append($0) })
+                ) { finishedDates.append($0.date) })
             #expect(session.canDelete)
             session.selectDate(nextDate)
             session.beginAdjustment(session.preview, edge: .move, items: [])
@@ -524,15 +524,21 @@ struct ScheduleEditorSessionTests {
                     appointments: [], onFinished: { _ in }))
             if unavailable && !editing { session.selectType(.unavailableTime) }
             router.presentationDidAppear(session.id)
-            #expect(session.finish(using: router, date: savedDate))
+            let completion: ScheduleEditorSession.Completion =
+                unavailable
+                ? .unavailableTimeChanged(date: savedDate)
+                : .appointmentSaved(
+                    AppointmentBookingModel.SavedAppointment(
+                        id: UUID(), start: savedDate, kind: .booked))
+            #expect(session.finish(using: router, completion: completion))
             #expect(router.selectedScheduleDate == savedDate.startOfDay(using: utcCalendar))
             #expect(router.activePresentation == nil)
             router.requestScheduleCreation()
             router.requestScheduleCreation()
-            #expect(!session.finish(using: router, date: start))
+            #expect(!session.finish(using: router, completion: .discarded(date: start)))
             router.presentationDidDismiss(session.id)
             let replacementID = try #require(router.activePresentation?.id)
-            #expect(!session.finish(using: router, date: start))
+            #expect(!session.finish(using: router, completion: .discarded(date: start)))
             #expect(router.activePresentation?.id == replacementID)
             #expect(router.selectedScheduleDate == savedDate.startOfDay(using: utcCalendar))
         }
@@ -782,7 +788,7 @@ struct ScheduleEditorSessionTests {
             var savedDate: Date?
             let session = ScheduleEditorSession(
                 bookingID: UUID(), selectedDate: date, center: TimeOfDay(12, 22), items: []
-            ) { savedDate = $0 }
+            ) { savedDate = $0.date }
             guard case .appointment(let model) = session.editor else {
                 Issue.record("Expected an appointment editor")
                 return
@@ -862,7 +868,7 @@ struct ScheduleEditorSessionTests {
             }
             let session = try #require(
                 ScheduleEditorSession(request: request, selectedDate: date, appointments: []) {
-                    savedDate = $0
+                    savedDate = $0.date
                 })
             if !editing {
                 session.selectPatient(patient)
@@ -941,8 +947,8 @@ struct ScheduleEditorSessionTests {
                             resumeFirstRead = continuation
                         }
                     },
-                    onFinished: { id, date in
-                        router.finishScheduleEditor(id, date: date)
+                    onFinished: { id, completion in
+                        router.finishScheduleEditor(id, date: completion.date)
                     }
                 )
             }
@@ -973,8 +979,8 @@ struct ScheduleEditorSessionTests {
                     #expect(date == day2)
                     return [day2Busy]
                 },
-                onFinished: { id, date in
-                    router.finishScheduleEditor(id, date: date)
+                onFinished: { id, completion in
+                    router.finishScheduleEditor(id, date: completion.date)
                 }
             )
 
@@ -992,8 +998,8 @@ struct ScheduleEditorSessionTests {
                     Issue.record("Should not reload booking appointments for an existing session.")
                     return []
                 },
-                onFinished: { id, date in
-                    router.finishScheduleEditor(id, date: date)
+                onFinished: { id, completion in
+                    router.finishScheduleEditor(id, date: completion.date)
                 }
             )
             #expect(store.session === session)
@@ -1008,6 +1014,260 @@ struct ScheduleEditorSessionTests {
         }
     }
 
+    @Test func bookingAppointmentShowsToastWithMessageActionAndAutoDismisses() async throws {
+        let database = try testDatabase()
+        let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
+        let savedDay = try Date("2026-10-27T00:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+        }
+        let clock = TestClock()
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.continuousClock = clock
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            let router = Router(selectedScheduleDate: date)
+            router.requestScheduleCreation()
+            let request = try #require(router.activePresentation)
+            let session = try finishingSession(
+                request: request, selectedDate: date, router: router)
+            session.selectPatient(patient)
+            session.selectDate(savedDay)
+            let expectedID =
+                switch session.preview {
+                case .appointment(let appointment): appointment.id
+                case .unavailableTime: UUID()
+                }
+
+            #expect(await session.save())
+            let activeToast = try #require(router.toast.current)
+            #expect(activeToast.message == "Appointment booked")
+            #expect(activeToast.action?.title == "Message")
+            #expect(activeToast.duration == ScheduleEditorSession.savedAppointmentToastDuration)
+
+            router.selectedTab = .patients
+            router.selectScheduleDate(date)
+            router.toast.triggerAction(for: activeToast.id)
+            #expect(router.toast.current == nil)
+            #expect(router.selectedTab == .schedule)
+            #expect(router.selectedScheduleDate == savedDay)
+            #expect(router.appointmentMessageRequest?.appointmentID == expectedID)
+
+            // Verify auto-dismiss after the configured duration on a fresh booking.
+            router.dismissPresentation()
+            router.requestScheduleCreation()
+            let secondRequest = try #require(router.activePresentation)
+            let secondSession = try finishingSession(
+                request: secondRequest, selectedDate: date, router: router)
+            secondSession.selectPatient(patient)
+            #expect(await secondSession.save())
+            #expect(router.toast.current?.message == "Appointment booked")
+
+            await clock.advance(by: .seconds(4))
+            #expect(router.toast.current != nil)
+            await clock.advance(by: .seconds(1))
+            #expect(router.toast.current == nil)
+        }
+    }
+
+    @Test func reschedulingAppointmentShowsToastWithMessageActionOnUpdatedDate() async throws {
+        let database = try testDatabase()
+        let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
+        let movedDay = try Date("2026-10-28T00:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        let appointment = Appointment(
+            patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+            let record = try AppointmentRecord.persisted(
+                id: appointment.id, patientID: patient.id, start: date, durationMinutes: 30,
+                status: .scheduled, createdAt: date, updatedAt: date)
+            try AppointmentRecord.insert { record }.execute(db)
+        }
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.continuousClock = TestClock()
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            let router = Router(selectedScheduleDate: date)
+            router.requestAppointmentEdit(
+                AppointmentDetails(appointment: appointment, patient: patient))
+            let request = try #require(router.activePresentation)
+            let session = try finishingSession(
+                request: request, selectedDate: date, appointments: [appointment],
+                router: router)
+            session.selectDate(movedDay)
+
+            #expect(await session.save())
+            let activeToast = try #require(router.toast.current)
+            #expect(activeToast.message == "Appointment rescheduled")
+            #expect(activeToast.action?.title == "Message")
+
+            router.selectScheduleDate(date)
+            router.toast.triggerAction(for: activeToast.id)
+            #expect(router.toast.current == nil)
+            #expect(router.selectedTab == .schedule)
+            #expect(router.selectedScheduleDate == movedDay)
+            #expect(router.appointmentMessageRequest?.appointmentID == appointment.id)
+        }
+    }
+
+    @Test func patientOnlyEditShowsAppointmentUpdatedToastWithMessageAction() async throws {
+        let database = try testDatabase()
+        let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
+        let originalPatient = Patient(name: "Original Patient", createdDate: date)
+        let replacementPatient = Patient(name: "Replacement Patient", createdDate: date)
+        let appointment = Appointment(
+            patientName: originalPatient.displayName, start: date, durationMinutes: 30,
+            status: .scheduled)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(originalPatient, now: date) }.execute(db)
+            try PatientRecord.insert { PatientRecord(replacementPatient, now: date) }.execute(db)
+            let record = try AppointmentRecord.persisted(
+                id: appointment.id, patientID: originalPatient.id, start: date, durationMinutes: 30,
+                status: .scheduled, createdAt: date, updatedAt: date)
+            try AppointmentRecord.insert { record }.execute(db)
+        }
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.continuousClock = TestClock()
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            let router = Router(selectedScheduleDate: date)
+            router.requestAppointmentEdit(
+                AppointmentDetails(appointment: appointment, patient: originalPatient))
+            let request = try #require(router.activePresentation)
+            let session = try finishingSession(
+                request: request, selectedDate: date, appointments: [appointment],
+                router: router)
+            session.selectPatient(replacementPatient)
+
+            #expect(await session.save())
+            let activeToast = try #require(router.toast.current)
+            #expect(activeToast.message == "Appointment updated")
+            #expect(activeToast.action?.title == "Message")
+
+            router.toast.triggerAction(for: activeToast.id)
+            #expect(router.toast.current == nil)
+            #expect(router.selectedTab == .schedule)
+            #expect(router.selectedScheduleDate == date.startOfDay(using: utcCalendar))
+            #expect(router.appointmentMessageRequest?.appointmentID == appointment.id)
+        }
+    }
+
+    @Test func unavailableTimeSaveAndDeleteDoNotShowToast() async throws {
+        let database = try testDatabase()
+        let date = try Date("2026-10-25T11:00:00Z", strategy: .iso8601)
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.continuousClock = TestClock()
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            let router = Router(selectedScheduleDate: date)
+
+            // Create unavailable time.
+            router.requestScheduleCreation()
+            let createRequest = try #require(router.activePresentation)
+            let createSession = try finishingSession(
+                request: createRequest, selectedDate: date, router: router)
+            createSession.selectType(.unavailableTime)
+            #expect(await createSession.save())
+            #expect(router.toast.current == nil)
+
+            let savedBlock = try #require(
+                try await database.read { try UnavailableTimeRecord.fetchAll($0).first }?
+                    .unavailableTime)
+
+            // Edit unavailable time.
+            router.requestUnavailableTimeEdit(savedBlock)
+            let editRequest = try #require(router.activePresentation)
+            let editSession = try finishingSession(
+                request: editRequest, selectedDate: date, router: router)
+            #expect(await editSession.save())
+            #expect(router.toast.current == nil)
+
+            // Delete unavailable time.
+            router.requestUnavailableTimeEdit(savedBlock)
+            let deleteRequest = try #require(router.activePresentation)
+            let deleteSession = try finishingSession(
+                request: deleteRequest, selectedDate: date, router: router)
+            #expect(await deleteSession.delete())
+            #expect(router.toast.current == nil)
+        }
+    }
+
+    @Test func failedSaveDiscardAndSupersededSessionDoNotShowToast() async throws {
+        let database = try testDatabase()
+        let date = try Date("2026-10-25T11:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        let appointment = Appointment(
+            patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+        }
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.continuousClock = TestClock()
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            let router = Router(selectedScheduleDate: date)
+
+            // Failed save (editing a missing appointment).
+            router.requestAppointmentEdit(
+                AppointmentDetails(appointment: appointment, patient: patient))
+            let failedRequest = try #require(router.activePresentation)
+            let failedSession = try finishingSession(
+                request: failedRequest, selectedDate: date, router: router)
+            #expect(!(await failedSession.save()))
+            #expect(failedSession.errorMessage != nil)
+            #expect(router.toast.current == nil)
+
+            // Discard edits.
+            #expect(
+                failedSession.finish(
+                    using: router, completion: .discarded(date: date)))
+            #expect(router.toast.current == nil)
+
+            // Stale/superseded session finish.
+            router.requestScheduleCreation()
+            let oldRequest = try #require(router.activePresentation)
+            let oldSession = try finishingSession(
+                request: oldRequest, selectedDate: date, router: router)
+            oldSession.selectPatient(patient)
+            router.requestScheduleCreation()
+            let replacementID = try #require(router.activePresentation?.id)
+            #expect(replacementID != oldSession.id)
+            #expect(await oldSession.save())
+            #expect(router.activePresentation?.id == replacementID)
+            #expect(router.toast.current == nil)
+        }
+    }
+
+    private func finishingSession(
+        request: AppPresentation,
+        selectedDate: Date,
+        appointments: [Appointment] = [],
+        router: Router
+    ) throws -> ScheduleEditorSession {
+        weak var created: ScheduleEditorSession?
+        let session = try #require(
+            ScheduleEditorSession(
+                request: request,
+                selectedDate: selectedDate,
+                appointments: appointments
+            ) { completion in
+                created?.finish(using: router, completion: completion)
+            })
+        created = session
+        return session
+    }
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .gmt

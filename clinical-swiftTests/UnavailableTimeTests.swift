@@ -326,7 +326,7 @@ struct UnavailableTimeTests {
         let session = try #require(
             ScheduleEditorSession(
                 request: .scheduleCreation(ScheduleCreationRequest()), selectedDate: start,
-                appointments: [], onFinished: onFinished))
+                appointments: [], onFinished: { onFinished($0.date) }))
         session.selectType(.unavailableTime)
         let model = try unavailableModel(session)
         model.draft.start = start
@@ -340,7 +340,7 @@ struct UnavailableTimeTests {
         let session = try #require(
             ScheduleEditorSession(
                 request: .unavailableTimeEditor(UnavailableTimeEditorRequest(block: block)),
-                selectedDate: block.start, appointments: [], onFinished: onFinished))
+                selectedDate: block.start, appointments: [], onFinished: { onFinished($0.date) }))
         return (session, try unavailableModel(session))
     }
 

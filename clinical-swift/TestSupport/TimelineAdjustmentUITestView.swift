@@ -23,7 +23,7 @@
                     let session = ScheduleEditorSession(
                         request: request, selectedDate: router.selectedScheduleDate,
                         appointments: [],
-                        onFinished: { router.finishScheduleEditor(request.id, date: $0) })
+                        onFinished: { router.finishScheduleEditor(request.id, date: $0.date) })
                 else { preconditionFailure("The fixture must create a schedule editor.") }
                 session.selectPatient(Self.patient)
                 guard case .appointment(let model) = session.editor else {

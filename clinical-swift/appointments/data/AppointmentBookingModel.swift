@@ -9,8 +9,21 @@ import SQLiteData
 
     let purpose: AppointmentBookingPurpose
     private let draftAppointmentID: Appointment.ID
+    private let originalInterval: (start: Date, durationMinutes: Int)?
     var draft: AppointmentBookingDraft
     var searchText = ""
+
+    struct SavedAppointment: Equatable, Sendable {
+        let id: Appointment.ID
+        let start: Date
+        let kind: Kind
+
+        enum Kind: Equatable, Sendable {
+            case booked
+            case rescheduled
+            case updated
+        }
+    }
 
     init(
         selectedDate: Date,
@@ -18,6 +31,7 @@ import SQLiteData
     ) {
         self.purpose = .create
         self.draftAppointmentID = UUID()
+        self.originalInterval = nil
         self.draft = AppointmentBookingDraft(
             selectedPatient: selectedPatient,
             selectedDate: selectedDate
@@ -30,6 +44,7 @@ import SQLiteData
         let appointment = details.appointment
         self.purpose = .edit(appointment.id)
         self.draftAppointmentID = appointment.id
+        self.originalInterval = (appointment.start, appointment.durationMinutes)
         self.draft = AppointmentBookingDraft(
             selectedPatient: details.patient,
             selectedDate: appointment.start,
@@ -48,11 +63,12 @@ import SQLiteData
         )
     }
 
-    func save() async throws -> Date {
+    func save() async throws -> SavedAppointment {
         try draft.normalized.validate()
         // Keep the result tied to the value being saved, even if the draft changes while the
         // database write suspends this method.
         let savedDate = draft.start
+        let savedDuration = draft.durationMinutes
         switch purpose {
         case .create:
             let record = try draft.normalized.makeRecord(id: draftAppointmentID, now: now)
@@ -60,6 +76,7 @@ import SQLiteData
                 try AppointmentRecord.insert { record }
                     .execute(db)
             }
+            return SavedAppointment(id: draftAppointmentID, start: savedDate, kind: .booked)
 
         case .edit(let appointmentID):
             guard let patientID = draft.selectedPatient?.id else {
@@ -67,8 +84,8 @@ import SQLiteData
             }
             // Pass one immutable snapshot into the database closure instead of accessing the
             // model's actor-isolated draft and clock from inside the write.
-            let start = draft.start
-            let durationMinutes = draft.durationMinutes
+            let start = savedDate
+            let durationMinutes = savedDuration
             let updatedAt = now
 
             try await database.write { db in
@@ -91,9 +108,16 @@ import SQLiteData
                     }
                     .execute(db)
             }
+            let didReschedule =
+                originalInterval.map {
+                    $0.start != start || $0.durationMinutes != durationMinutes
+                } ?? false
+            return SavedAppointment(
+                id: appointmentID,
+                start: savedDate,
+                kind: didReschedule ? .rescheduled : .updated
+            )
         }
-
-        return savedDate
     }
 
 }

@@ -268,14 +268,18 @@ final class Router {
         requestAppointmentBooking(for: patient, on: targetDate)
     }
 
-    func requestAppointmentMessage(_ details: AppointmentDetails) {
+    func requestAppointmentMessage(id: Appointment.ID, date: Date) {
         selectedTab = .schedule
-        selectedScheduleDate = details.appointment.start.startOfDay(using: calendar)
+        selectedScheduleDate = date.startOfDay(using: calendar)
         requestPresentation(
             .appointmentMessage(
-                AppointmentMessageRequest(appointmentID: details.appointment.id)
+                AppointmentMessageRequest(appointmentID: id)
             )
         )
+    }
+
+    func requestAppointmentMessage(_ details: AppointmentDetails) {
+        requestAppointmentMessage(id: details.appointment.id, date: details.appointment.start)
     }
 
     func requestPatientEdit(_ patient: Patient) {

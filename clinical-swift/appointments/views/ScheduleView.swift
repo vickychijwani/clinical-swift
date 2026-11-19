@@ -59,7 +59,10 @@ struct ScheduleView: View {
                     onCancel: { editorSession?.adjustment.release() },
                     onDiscard: {
                         if let editorSession {
-                            finishEditor(editorSession.id, date: router.selectedScheduleDate)
+                            finishEditor(
+                                editorSession.id,
+                                completion: .discarded(date: router.selectedScheduleDate)
+                            )
                         }
                     },
                     onDone: { await editorSession?.save() },
@@ -265,7 +268,7 @@ struct ScheduleView: View {
             guard let request = scheduleEditorRequest,
                 let session = ScheduleEditorSession(
                     request: request, selectedDate: date, appointments: [],
-                    onFinished: { finishEditor(request.id, date: $0) })
+                    onFinished: { finishEditor(request.id, completion: $0) })
             else { return nil }
             session.beginAdjustment(item, edge: .move, items: visibleItems(for: date))
             editorSession = session
@@ -276,8 +279,8 @@ struct ScheduleView: View {
         editorSession = ScheduleEditorSession(
             bookingID: request.id, selectedDate: date, center: center,
             items: visibleItems(for: date)
-        ) { savedDate in
-            finishEditor(request.id, date: savedDate)
+        ) { completion in
+            finishEditor(request.id, completion: completion)
         }
         return editorSession
     }
@@ -286,14 +289,14 @@ struct ScheduleView: View {
         await editorSession?.delete()
     }
 
-    private func finishEditor(_ requestID: UUID, date: Date) {
+    private func finishEditor(_ requestID: UUID, completion: ScheduleEditorSession.Completion) {
         guard let editorSession, editorSession.id == requestID,
-            editorSession.finish(using: router, date: date)
+            editorSession.finish(using: router, completion: completion)
         else { return }
         self.editorSession = nil
         Task {
             _ = try? await scheduleModel.loadVisibleDays(
-                centeredOn: date,
+                centeredOn: completion.date,
                 dayRadius: scheduleDayRadius
             )
         }
