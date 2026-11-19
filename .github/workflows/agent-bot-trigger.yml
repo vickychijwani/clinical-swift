@@ -43,6 +43,7 @@ env:
   AGY_AUTHOR_EFFORT: high
   CANONICAL_REPO_PATH: /Users/vicky/code/clinical-swift
   SUPER_ENGINEERING_DB: /Users/vicky/.super.engineering/db/super.engineering.db
+  AGENT_MONITOR_DIR: /Users/vicky/.clinical-agent-monitor
 
 jobs:
   plan:
@@ -234,6 +235,17 @@ jobs:
               "queued" \
               "Queued ($bot_harness)" \
               "Waiting for clinical-agents runner to run $bot_harness on PR #$pr_number.")
+            swift scripts/agent_review_loop.swift monitor-record \
+              --run-id "$GITHUB_RUN_ID" \
+              --kind "bot-trigger" \
+              --phase bot \
+              --pr-number "$pr_number" \
+              --pr-branch "$pr_branch" \
+              --head-sha "$pr_head_sha" \
+              --repo "$GITHUB_REPOSITORY" \
+              --run-url "$run_url" \
+              --harness "$bot_harness" \
+              --status queued >/dev/null || true
           fi
 
           {
@@ -314,6 +326,13 @@ jobs:
                 --summary "$reason" \
                 --details-url "$run_url" >/dev/null || true
             fi
+            if [[ "$DRY_RUN" != "true" ]]; then
+              swift "$script" monitor-record \
+                --run-id "$GITHUB_RUN_ID" \
+                --phase bot \
+                --status completed \
+                --conclusion skipped >/dev/null || true
+            fi
             {
               echo "skipped=true"
               echo "check_run_completed=true"
@@ -326,6 +345,9 @@ jobs:
             echo "Advancing target PR head from $pr_head_sha to $live_head_sha."
             pr_head_sha="$live_head_sha"
             if [[ "$DRY_RUN" != "true" ]]; then
+              swift "$script" monitor-record \
+                --run-id "$GITHUB_RUN_ID" \
+                --head-sha "$live_head_sha" >/dev/null || true
               if [[ -n "$check_run_id" ]]; then
                 swift "$script" check-run \
                   --repo "$GITHUB_REPOSITORY" \
@@ -376,6 +398,11 @@ jobs:
               fi
               gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
                 --body "Agent bot trigger stopped: $reason" || true
+              swift "$script" monitor-record \
+                --run-id "$GITHUB_RUN_ID" \
+                --phase bot \
+                --status completed \
+                --conclusion failure >/dev/null || true
             fi
             echo "check_run_completed=true" >> "$GITHUB_OUTPUT"
             exit 1
@@ -502,7 +529,7 @@ jobs:
           else
             cmd=(
               agy --model "$AGY_AUTHOR_MODEL" --effort "$AGY_AUTHOR_EFFORT"
-              --output-format json -p "$prompt"
+              --output-format stream-json -p "$prompt"
             )
           fi
 
@@ -518,8 +545,29 @@ jobs:
             exit 0
           fi
 
+          if [[ "$BOT_HARNESS" == "codex" ]]; then
+            bot_model="$CODEX_AUTHOR_MODEL"
+            bot_effort="$CODEX_AUTHOR_EFFORT"
+          else
+            bot_model="$AGY_AUTHOR_MODEL"
+            bot_effort="$AGY_AUTHOR_EFFORT"
+          fi
+          stream_file="$AGENT_MONITOR_DIR/runs/$GITHUB_RUN_ID/bot.jsonl"
+          mkdir -p "$(dirname "$stream_file")"
+          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" monitor-record \
+            --run-id "$GITHUB_RUN_ID" \
+            --phase bot \
+            --harness "$BOT_HARNESS" \
+            --bot-login "$bot_login" \
+            --model "$bot_model" \
+            --effort "$bot_effort" \
+            --worktree "$worktree_dir" \
+            --prompt "$prompt" \
+            --stream-file "$stream_file" \
+            --status running >/dev/null || true
+
           cd "$worktree_dir"
-          "${cmd[@]}"
+          "${cmd[@]}" 2>&1 | tee "$stream_file"
 
       - name: Complete bot check
         if: always() && needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.check_run_completed != 'true' && (steps.verify.outputs.check_run_id || needs.plan.outputs.check_run_id) != ''
@@ -545,6 +593,12 @@ jobs:
             --title "$title" \
             --summary "Bot $BOT_HARNESS finished with status $JOB_STATUS on PR #$PR_NUMBER." \
             --details-url "$run_url" >/dev/null || true
+
+          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" monitor-record \
+            --run-id "$GITHUB_RUN_ID" \
+            --phase bot \
+            --status completed \
+            --conclusion "$conclusion" >/dev/null || true
 
           if [[ "$JOB_STATUS" == "failure" ]]; then
             gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \

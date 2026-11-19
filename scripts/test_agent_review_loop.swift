@@ -599,6 +599,62 @@ private func createSuperDB(
             rejectedUnexpectedConclusion, "Non-completed check run with conclusion must throw")
     }
 
+    private func testMonitorRecord(in root: URL) throws {
+        let monitorDir = root.appending(path: "monitor", directoryHint: .isDirectory)
+
+        try recordMonitorState(
+            monitorDirectory: monitorDir.path,
+            runID: "999",
+            kind: "review-loop",
+            phase: .review,
+            prNumber: 33,
+            prBranch: "overlay_toast_widget",
+            prHeadSHA: "abc123",
+            repository: "vickychijwani/clinical-swift",
+            runURL: "https://github.com/vickychijwani/clinical-swift/actions/runs/999",
+            harness: .codex,
+            status: .queued,
+            timestamp: "2026-11-19T08:00:00Z"
+        )
+
+        try recordMonitorState(
+            monitorDirectory: monitorDir.path,
+            runID: "999",
+            phase: .review,
+            botLogin: "clinical-codex[bot]",
+            model: "gpt-6.1-sol",
+            effort: "high",
+            worktreePath: "/tmp/pr",
+            prompt: "Review PR #33",
+            streamFile: monitorDir.appending(path: "runs/999/review.jsonl").path,
+            status: .running,
+            timestamp: "2026-11-19T08:01:00Z"
+        )
+
+        try recordMonitorState(
+            monitorDirectory: monitorDir.path,
+            runID: "999",
+            phase: .review,
+            status: .completed,
+            conclusion: "success",
+            timestamp: "2026-11-19T08:03:00Z"
+        )
+
+        let runData = try Data(contentsOf: monitorDir.appending(path: "runs/999/run.json"))
+        let runRecord = try JSONDecoder().decode(MonitorRunRecord.self, from: runData)
+        try expect(runRecord.prNumber == 33, "Expected prNumber preserved")
+        try expect(runRecord.createdAt == "2026-11-19T08:00:00Z", "Expected createdAt preserved")
+        try expect(runRecord.updatedAt == "2026-11-19T08:03:00Z", "Expected updatedAt updated")
+
+        let phaseData = try Data(contentsOf: monitorDir.appending(path: "runs/999/review.json"))
+        let phaseRecord = try JSONDecoder().decode(MonitorPhaseRecord.self, from: phaseData)
+        try expect(phaseRecord.harness == .codex, "Expected harness preserved across updates")
+        try expect(phaseRecord.prompt == "Review PR #33", "Expected prompt preserved across updates")
+        try expect(phaseRecord.startedAt == "2026-11-19T08:01:00Z", "Expected startedAt preserved")
+        try expect(phaseRecord.completedAt == "2026-11-19T08:03:00Z", "Expected completedAt set")
+        try expect(phaseRecord.conclusion == "success", "Expected conclusion recorded")
+    }
+
     private func runAllTests() {
         let tempRoot = FileManager.default.temporaryDirectory.appending(
             path: "agent-review-loop-tests-\(UUID().uuidString)")
@@ -611,6 +667,7 @@ private func createSuperDB(
             try testDiscoveryIntegration(in: tempRoot)
             try testCodexSkillsConfig(in: tempRoot)
             try testCheckRunPayload()
+            try testMonitorRecord(in: tempRoot)
             print("PASS agent review loop unit and integration tests")
         } catch {
             FileHandle.standardError.write(Data("FAIL: \(error)\n".utf8))
@@ -680,6 +737,19 @@ private func createSuperDB(
             mentionOut.contains("\"matched\":true")
                 && mentionOut.contains("\"harness\":\"antigravity\""),
             "CLI parse-mention failed"
+        )
+        let monitorDir = tempDir.appending(path: "cli-monitor")
+        _ = try runShell([
+            cliBinary.path, "monitor-record",
+            "--monitor-dir", monitorDir.path,
+            "--run-id", "42",
+            "--phase", "bot",
+            "--harness", "antigravity",
+            "--status", "queued",
+        ])
+        try expect(
+            FileManager.default.fileExists(atPath: monitorDir.appending(path: "runs/42/bot.json").path),
+            "CLI monitor-record failed"
         )
         print("PASS agent review loop CLI compilation and smoke check")
     } catch {

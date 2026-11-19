@@ -1019,6 +1019,164 @@ private func submitCheckRun(
     return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
+enum MonitorPhaseKind: String, Codable, Equatable {
+    case review
+    case address
+    case bot
+}
+
+enum MonitorPhaseStatus: String, Codable, Equatable {
+    case queued
+    case running
+    case completed
+}
+
+struct MonitorRunRecord: Codable, Equatable {
+    let runID: String
+    let kind: String?
+    let prNumber: Int?
+    let prBranch: String?
+    let prHeadSHA: String?
+    let repository: String?
+    let runURL: String?
+    let createdAt: String
+    let updatedAt: String
+}
+
+struct MonitorPhaseRecord: Codable, Equatable {
+    let phase: MonitorPhaseKind
+    let harness: Harness?
+    let botLogin: String?
+    let model: String?
+    let effort: String?
+    let worktreePath: String?
+    let prompt: String?
+    let streamFile: String?
+    let status: MonitorPhaseStatus
+    let conclusion: String?
+    let startedAt: String?
+    let completedAt: String?
+    let updatedAt: String
+}
+
+private func nonEmpty(_ value: String?) -> String? {
+    guard let value, !value.isEmpty else { return nil }
+    return value
+}
+
+private func writeJSONAtomically<T: Encodable>(_ value: T, to url: URL) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    let data = try encoder.encode(value)
+    let tmpURL = url.deletingLastPathComponent()
+        .appending(path: ".\(url.lastPathComponent).tmp.\(UUID().uuidString)")
+    try data.write(to: tmpURL, options: .atomic)
+    if FileManager.default.fileExists(atPath: url.path) {
+        _ = try FileManager.default.replaceItemAt(url, withItemAt: tmpURL)
+    } else {
+        try FileManager.default.moveItem(at: tmpURL, to: url)
+    }
+}
+
+/// Writes or updates run and phase metadata for the local agent monitor UI.
+func recordMonitorState(
+    monitorDirectory: String,
+    runID: String,
+    kind: String? = nil,
+    phase: MonitorPhaseKind? = nil,
+    prNumber: Int? = nil,
+    prBranch: String? = nil,
+    prHeadSHA: String? = nil,
+    repository: String? = nil,
+    runURL: String? = nil,
+    harness: Harness? = nil,
+    botLogin: String? = nil,
+    model: String? = nil,
+    effort: String? = nil,
+    worktreePath: String? = nil,
+    prompt: String? = nil,
+    streamFile: String? = nil,
+    status: MonitorPhaseStatus? = nil,
+    conclusion: String? = nil,
+    timestamp: String = ISO8601DateFormatter().string(from: Date())
+) throws {
+    guard !runID.isEmpty, !runID.contains("/"), runID != ".", runID != ".." else {
+        throw ReviewLoopError(description: "Invalid --run-id: \(runID)")
+    }
+
+    let runDir = URL(fileURLWithPath: monitorDirectory)
+        .appending(path: "runs", directoryHint: .isDirectory)
+        .appending(path: runID, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: runDir, withIntermediateDirectories: true)
+
+    let runURLFile = runDir.appending(path: "run.json")
+    let existingRun: MonitorRunRecord?
+    if let data = try? Data(contentsOf: runURLFile) {
+        existingRun = try? JSONDecoder().decode(MonitorRunRecord.self, from: data)
+    } else {
+        existingRun = nil
+    }
+
+    let mergedRun = MonitorRunRecord(
+        runID: runID,
+        kind: nonEmpty(kind) ?? existingRun?.kind,
+        prNumber: prNumber ?? existingRun?.prNumber,
+        prBranch: nonEmpty(prBranch) ?? existingRun?.prBranch,
+        prHeadSHA: nonEmpty(prHeadSHA) ?? existingRun?.prHeadSHA,
+        repository: nonEmpty(repository) ?? existingRun?.repository,
+        runURL: nonEmpty(runURL) ?? existingRun?.runURL,
+        createdAt: existingRun?.createdAt ?? timestamp,
+        updatedAt: timestamp
+    )
+    try writeJSONAtomically(mergedRun, to: runURLFile)
+
+    guard let phase else { return }
+    let phaseURLFile = runDir.appending(path: "\(phase.rawValue).json")
+    let existingPhase: MonitorPhaseRecord?
+    if let data = try? Data(contentsOf: phaseURLFile) {
+        existingPhase = try? JSONDecoder().decode(MonitorPhaseRecord.self, from: data)
+    } else {
+        existingPhase = nil
+    }
+
+    let resolvedStatus = status ?? existingPhase?.status ?? .queued
+    let resolvedStartedAt: String? =
+        if resolvedStatus == .running {
+            existingPhase?.startedAt ?? timestamp
+        } else {
+            existingPhase?.startedAt
+        }
+    let resolvedCompletedAt: String? =
+        if resolvedStatus == .completed {
+            existingPhase?.completedAt ?? timestamp
+        } else {
+            nil
+        }
+    let resolvedConclusion: String? =
+        if resolvedStatus == .completed {
+            nonEmpty(conclusion) ?? existingPhase?.conclusion
+        } else {
+            nil
+        }
+
+    let mergedPhase = MonitorPhaseRecord(
+        phase: phase,
+        harness: harness ?? existingPhase?.harness,
+        botLogin: nonEmpty(botLogin) ?? existingPhase?.botLogin,
+        model: nonEmpty(model) ?? existingPhase?.model,
+        effort: nonEmpty(effort) ?? existingPhase?.effort,
+        worktreePath: nonEmpty(worktreePath) ?? existingPhase?.worktreePath,
+        prompt: nonEmpty(prompt) ?? existingPhase?.prompt,
+        streamFile: nonEmpty(streamFile) ?? existingPhase?.streamFile,
+        status: resolvedStatus,
+        conclusion: resolvedConclusion,
+        startedAt: resolvedStartedAt,
+        completedAt: resolvedCompletedAt,
+        updatedAt: timestamp
+    )
+    try writeJSONAtomically(mergedPhase, to: phaseURLFile)
+}
+
 private func parseOptions(_ arguments: [String]) throws -> (
     flags: Set<String>, values: [String: String]
 ) {
@@ -1065,7 +1223,7 @@ private func runCLI() -> Int32 {
     guard let subcommand = args.first else {
         FileHandle.standardError.write(
             Data(
-                "Usage: agent_review_loop.swift <parse-trigger|parse-mention|discover|codex-skills-config|check-run> [options]\n"
+                "Usage: agent_review_loop.swift <parse-trigger|parse-mention|discover|codex-skills-config|check-run|monitor-record> [options]\n"
                     .utf8))
         return 2
     }
@@ -1171,6 +1329,61 @@ private func runCLI() -> Int32 {
                 externalID: parsed.values["external-id"]
             )
             print(checkRunID)
+            return 0
+
+        case "monitor-record":
+            guard let runID = parsed.values["run-id"], !runID.isEmpty else {
+                throw ReviewLoopError(description: "Missing --run-id")
+            }
+            let monitorDirectory =
+                parsed.values["monitor-dir"]
+                ?? ProcessInfo.processInfo.environment["AGENT_MONITOR_DIR"]
+                ?? "\(home)/.clinical-agent-monitor"
+            let phase: MonitorPhaseKind?
+            if let raw = parsed.values["phase"], !raw.isEmpty {
+                guard let parsedPhase = MonitorPhaseKind(rawValue: raw) else {
+                    throw ReviewLoopError(description: "Invalid --phase value: \(raw)")
+                }
+                phase = parsedPhase
+            } else {
+                phase = nil
+            }
+            let status: MonitorPhaseStatus?
+            if let raw = parsed.values["status"], !raw.isEmpty {
+                guard let parsedStatus = MonitorPhaseStatus(rawValue: raw) else {
+                    throw ReviewLoopError(description: "Invalid --status value: \(raw)")
+                }
+                status = parsedStatus
+            } else {
+                status = nil
+            }
+            let prNumber: Int?
+            if let raw = parsed.values["pr-number"], !raw.isEmpty {
+                prNumber = Int(raw)
+            } else {
+                prNumber = nil
+            }
+            let harness = try parseOptionalHarness(parsed.values, flag: "harness")
+            try recordMonitorState(
+                monitorDirectory: monitorDirectory,
+                runID: runID,
+                kind: parsed.values["kind"],
+                phase: phase,
+                prNumber: prNumber,
+                prBranch: parsed.values["pr-branch"],
+                prHeadSHA: parsed.values["head-sha"],
+                repository: parsed.values["repo"],
+                runURL: parsed.values["run-url"],
+                harness: harness,
+                botLogin: parsed.values["bot-login"],
+                model: parsed.values["model"],
+                effort: parsed.values["effort"],
+                worktreePath: parsed.values["worktree"],
+                prompt: parsed.values["prompt"],
+                streamFile: parsed.values["stream-file"],
+                status: status,
+                conclusion: parsed.values["conclusion"]
+            )
             return 0
 
         default:

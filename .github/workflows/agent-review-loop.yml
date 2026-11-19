@@ -52,6 +52,7 @@ env:
   AGY_AUTHOR_EFFORT: high
   CANONICAL_REPO_PATH: /Users/vicky/code/clinical-swift
   SUPER_ENGINEERING_DB: /Users/vicky/.super.engineering/db/super.engineering.db
+  AGENT_MONITOR_DIR: /Users/vicky/.clinical-agent-monitor
 
 jobs:
   plan:
@@ -216,8 +217,41 @@ jobs:
             if [[ "$action" == "review" ]]; then
               review_check_run_id=$(create_check_run "review" "queued" "Queued ($reviewer_harness)" "Waiting for clinical-agents runner to review PR #$pr_number.")
               address_check_run_id=$(create_check_run "address" "queued" "Waiting for review ($author_harness)" "Will address review comments after review completes.")
+              swift scripts/agent_review_loop.swift monitor-record \
+                --run-id "$GITHUB_RUN_ID" \
+                --kind "review-loop" \
+                --phase review \
+                --pr-number "$pr_number" \
+                --pr-branch "$pr_branch" \
+                --head-sha "$pr_head_sha" \
+                --repo "$GITHUB_REPOSITORY" \
+                --run-url "$run_url" \
+                --harness "$reviewer_harness" \
+                --status queued >/dev/null || true
+              swift scripts/agent_review_loop.swift monitor-record \
+                --run-id "$GITHUB_RUN_ID" \
+                --kind "review-loop" \
+                --phase address \
+                --pr-number "$pr_number" \
+                --pr-branch "$pr_branch" \
+                --head-sha "$pr_head_sha" \
+                --repo "$GITHUB_REPOSITORY" \
+                --run-url "$run_url" \
+                --harness "$author_harness" \
+                --status queued >/dev/null || true
             else
               address_check_run_id=$(create_check_run "address" "queued" "Queued ($author_harness)" "Waiting for clinical-agents runner to address PR #$pr_number.")
+              swift scripts/agent_review_loop.swift monitor-record \
+                --run-id "$GITHUB_RUN_ID" \
+                --kind "review-loop" \
+                --phase address \
+                --pr-number "$pr_number" \
+                --pr-branch "$pr_branch" \
+                --head-sha "$pr_head_sha" \
+                --repo "$GITHUB_REPOSITORY" \
+                --run-url "$run_url" \
+                --harness "$author_harness" \
+                --status queued >/dev/null || true
             fi
           fi
 
@@ -305,6 +339,9 @@ jobs:
               echo "Advancing target PR head from $pr_head_sha to $live_head_sha."
               pr_head_sha="$live_head_sha"
               if [[ "$DRY_RUN" != "true" ]]; then
+                swift "$script" monitor-record \
+                  --run-id "$GITHUB_RUN_ID" \
+                  --head-sha "$live_head_sha" >/dev/null || true
                 run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
                 if [[ -n "$review_check_run_id" ]]; then
                   swift "$script" check-run \
@@ -431,7 +468,7 @@ jobs:
           else
             cmd=(
               agy --model "$AGY_REVIEWER_MODEL" --effort "$AGY_REVIEWER_EFFORT"
-              --output-format json -p "$prompt"
+              --output-format stream-json -p "$prompt"
             )
           fi
 
@@ -446,8 +483,29 @@ jobs:
             exit 0
           fi
 
+          if [[ "$REVIEWER_HARNESS" == "codex" ]]; then
+            reviewer_model="$CODEX_REVIEWER_MODEL"
+            reviewer_effort="$CODEX_REVIEWER_EFFORT"
+          else
+            reviewer_model="$AGY_REVIEWER_MODEL"
+            reviewer_effort="$AGY_REVIEWER_EFFORT"
+          fi
+          stream_file="$AGENT_MONITOR_DIR/runs/$GITHUB_RUN_ID/review.jsonl"
+          mkdir -p "$(dirname "$stream_file")"
+          swift "$main_dir/scripts/agent_review_loop.swift" monitor-record \
+            --run-id "$GITHUB_RUN_ID" \
+            --phase review \
+            --harness "$REVIEWER_HARNESS" \
+            --bot-login "$bot_login" \
+            --model "$reviewer_model" \
+            --effort "$reviewer_effort" \
+            --worktree "$pr_dir" \
+            --prompt "$prompt" \
+            --stream-file "$stream_file" \
+            --status running >/dev/null || true
+
           cd "$pr_dir"
-          "${cmd[@]}"
+          "${cmd[@]}" 2>&1 | tee "$stream_file"
 
       - name: Complete review check
         if: always() && needs.plan.outputs.dry_run != 'true' && steps.sync-head.outputs.review_check_run_id != ''
@@ -477,6 +535,12 @@ jobs:
             --summary "Reviewer $REVIEWER_HARNESS finished with status $JOB_STATUS on PR #$PR_NUMBER." \
             --details-url "$run_url" >/dev/null || true
 
+          swift "$script" monitor-record \
+            --run-id "$GITHUB_RUN_ID" \
+            --phase review \
+            --status completed \
+            --conclusion "$conclusion" >/dev/null || true
+
           if [[ "$JOB_STATUS" != "success" && -n "$ADDRESS_CHECK_RUN_ID" ]]; then
             swift "$script" check-run \
               --repo "$GITHUB_REPOSITORY" \
@@ -486,6 +550,11 @@ jobs:
               --title "Address skipped ($AUTHOR_HARNESS)" \
               --summary "Skipped because the review job ended with status $JOB_STATUS." \
               --details-url "$run_url" >/dev/null || true
+            swift "$script" monitor-record \
+              --run-id "$GITHUB_RUN_ID" \
+              --phase address \
+              --status completed \
+              --conclusion skipped >/dev/null || true
           fi
 
   address:
@@ -553,6 +622,11 @@ jobs:
                 --external-id "$GITHUB_RUN_ID-address-stale" >/dev/null || true
               gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
                 --body "Agent address job stopped: $reason"
+              swift "$script" monitor-record \
+                --run-id "$GITHUB_RUN_ID" \
+                --phase address \
+                --status completed \
+                --conclusion skipped >/dev/null || true
             fi
             echo "skipped=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -668,7 +742,7 @@ jobs:
           else
             cmd=(
               agy --model "$AGY_AUTHOR_MODEL" --effort "$AGY_AUTHOR_EFFORT"
-              --output-format json -p "$prompt"
+              --output-format stream-json -p "$prompt"
             )
           fi
 
@@ -683,8 +757,29 @@ jobs:
             exit 0
           fi
 
+          if [[ "$AUTHOR_HARNESS" == "codex" ]]; then
+            author_model="$CODEX_AUTHOR_MODEL"
+            author_effort="$CODEX_AUTHOR_EFFORT"
+          else
+            author_model="$AGY_AUTHOR_MODEL"
+            author_effort="$AGY_AUTHOR_EFFORT"
+          fi
+          stream_file="$AGENT_MONITOR_DIR/runs/$GITHUB_RUN_ID/address.jsonl"
+          mkdir -p "$(dirname "$stream_file")"
+          swift "$main_dir/scripts/agent_review_loop.swift" monitor-record \
+            --run-id "$GITHUB_RUN_ID" \
+            --phase address \
+            --harness "$AUTHOR_HARNESS" \
+            --bot-login "$bot_login" \
+            --model "$author_model" \
+            --effort "$author_effort" \
+            --worktree "$worktree_dir" \
+            --prompt "$prompt" \
+            --stream-file "$stream_file" \
+            --status running >/dev/null || true
+
           cd "$worktree_dir"
-          "${cmd[@]}"
+          "${cmd[@]}" 2>&1 | tee "$stream_file"
 
       - name: Complete address check
         if: always() && steps.verify.outputs.skipped != 'true' && needs.plan.outputs.dry_run != 'true' && (needs.review.outputs.address_check_run_id || needs.plan.outputs.address_check_run_id) != ''
@@ -709,3 +804,9 @@ jobs:
             --title "$title" \
             --summary "Author $AUTHOR_HARNESS finished with status $JOB_STATUS on PR #$PR_NUMBER." \
             --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
+
+          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" monitor-record \
+            --run-id "$GITHUB_RUN_ID" \
+            --phase address \
+            --status completed \
+            --conclusion "$conclusion" >/dev/null || true

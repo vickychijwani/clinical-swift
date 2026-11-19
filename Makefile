@@ -79,7 +79,7 @@ BACKUP_TEST_FLAGS := $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" 
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
-.PHONY: backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
+.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
 
 help:
 	@printf "%s\n" \
@@ -117,6 +117,7 @@ help:
 		"  make run              Launch the installed app" \
 		"  make resolve-packages Resolve Swift package dependencies" \
 		"  make diagnose         Print tool and project settings" \
+		"  make agent-monitor    Open the live PR review and address loop monitor UI" \
 		"  make uninstall        Remove the app from the selected iOS simulator" \
 		"  make clean            Remove local build outputs"
 
@@ -343,3 +344,7 @@ uninstall: check-tools check-simulator boot
 
 clean:
 	@rm -rf "$(BUILD_DIR)"
+
+MONITOR_PORT ?= 4873
+agent-monitor:
+	@$(SWIFT) scripts/agent_monitor.swift --port "$(MONITOR_PORT)" --open
