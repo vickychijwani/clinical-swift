@@ -1,4 +1,5 @@
 import BackgroundTasks
+import ClinicalModels
 import ClinicalPersistence
 import Dependencies
 import Foundation
@@ -8,6 +9,7 @@ import Observation
 @MainActor @Observable
 final class BackupCoordinator {
     @ObservationIgnored @Dependency(\.date.now) private var now
+    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
     private(set) var state: BackupState
     private(set) var isRunning = false
     private(set) var isConnecting = false
@@ -34,6 +36,13 @@ final class BackupCoordinator {
             state.problem =
                 "Backup state could not be read. Keep the saved files and contact support."
             stateIsReadable = false
+            telemetry.log(
+                .error,
+                category: .backup,
+                name: "backup_state_unreadable",
+                message: "Backup state could not be read",
+                error: error
+            )
         }
     }
 
@@ -60,6 +69,7 @@ final class BackupCoordinator {
         isConnecting = true
         defer { isConnecting = false }
         do {
+            telemetry.event(category: .backup, name: "backup_connect_started")
             let request = try GoogleAuthorizationRequest(configuration: .live())
             let callback = try await authenticate(request)
             // Account binding also protects a confirmed dataset, even with no pending upload.
@@ -69,10 +79,18 @@ final class BackupCoordinator {
             state.accountEmail = tokens.email
             state.retryAfter = nil
             try store.save(state)
+            telemetry.event(category: .backup, name: "backup_connected", status: "connected")
             await opportunity()
         } catch {
             state.problem = error.localizedDescription
             try? store.save(state)
+            telemetry.log(
+                .error,
+                category: .backup,
+                name: "backup_connect_failed",
+                message: "Google Drive backup connection failed",
+                error: error
+            )
         }
     }
 
@@ -134,6 +152,7 @@ final class BackupCoordinator {
             guard let folder = state.datasetFolderID else { throw BackupError.missingFolder }
             if state.isDue(at: now) {
                 if state.pending == nil {
+                    let captureStart = ContinuousClock.now
                     let snapshot = try await snapshotWorker.capture(
                         database: database, directory: store.directory.appending(path: "pending"),
                         datasetID: state.datasetID, capturedAt: now,
@@ -144,6 +163,12 @@ final class BackupCoordinator {
                     state.pending = BackupPendingUpload(
                         manifest: snapshot.manifest, accountID: accountID)
                     try store.save(state)
+                    telemetry.event(
+                        category: .backup,
+                        name: "backup_snapshot_captured",
+                        durationMS: elapsedMS(since: captureStart),
+                        recordID: snapshot.manifest.snapshotID.uuidString.lowercased()
+                    )
                 }
                 guard var pending = state.pending else { throw BackupError.invalidSnapshot }
                 guard pending.accountID == accountID else { throw BackupError.accountChanged }
@@ -163,6 +188,7 @@ final class BackupCoordinator {
                     throw BackupError.invalidSnapshot
                 }
                 let manifest = pending.manifest
+                let uploadStart = ContinuousClock.now
                 let name =
                     manifest.capturedAt.formatted(.iso8601).replacing(":", with: "-") + "-"
                     + manifest.snapshotID.uuidString
@@ -181,6 +207,13 @@ final class BackupCoordinator {
                 state.failureCount = 0
                 try store.save(state)
                 try? FileManager.default.removeItem(at: snapshot.directory)
+                telemetry.event(
+                    category: .backup,
+                    name: "backup_uploaded",
+                    durationMS: elapsedMS(since: uploadStart),
+                    recordID: manifest.snapshotID.uuidString.lowercased(),
+                    status: "confirmed"
+                )
             }
             try await prune(drive: drive, folder: folder)
             state.problem = nil
@@ -197,6 +230,14 @@ final class BackupCoordinator {
             state.retryAfter = now.addingTimeInterval(
                 min(3600, 30 * pow(2, Double(state.failureCount))))
             try? store.save(state)
+            telemetry.log(
+                .error,
+                category: .backup,
+                name: "backup_failed",
+                message: "Patient data backup failed",
+                error: error,
+                count: state.failureCount
+            )
             return false
         }
     }
@@ -211,6 +252,7 @@ final class BackupCoordinator {
             state.pendingDeletions.append(id)
         }
         try store.save(state)
+        var deletedCount = 0
         while let id = state.pendingDeletions.first {
             try Task.checkCancellation()
             if let file = try await drive.file(id) {
@@ -223,9 +265,17 @@ final class BackupCoordinator {
                     })
                 else { throw BackupError.invalidSnapshot }
                 try await drive.delete(id)
+                deletedCount += 1
             }
             state.pendingDeletions.removeFirst()
             try store.save(state)
+        }
+        if deletedCount > 0 {
+            telemetry.event(
+                category: .backup,
+                name: "backup_pruned",
+                count: deletedCount
+            )
         }
     }
 
@@ -261,6 +311,20 @@ final class BackupCoordinator {
             state.retryAfter ?? state.lastSuccess?.capturedAt.addingTimeInterval(86_400)
         do { try BGTaskScheduler.shared.submit(request) } catch {
             // Foreground opportunities still run when iOS cannot schedule background work.
+            telemetry.log(
+                .warning,
+                category: .backup,
+                name: "backup_background_schedule_failed",
+                message: "Could not schedule background backup task",
+                error: error
+            )
         }
+    }
+
+    private func elapsedMS(since start: ContinuousClock.Instant) -> Int {
+        let elapsed = start.duration(to: ContinuousClock.now)
+        return Int(
+            (Double(elapsed.components.seconds) * 1000.0
+                + Double(elapsed.components.attoseconds) / 1e15).rounded())
     }
 }

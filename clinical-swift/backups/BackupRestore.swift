@@ -1,5 +1,6 @@
 import ClinicalModels
 import ClinicalPersistence
+import Dependencies
 import Foundation
 import GRDB
 import WidgetKit
@@ -51,6 +52,7 @@ nonisolated extension BackupRestoreJournal {
 /// Invoke only before opening live pools. File coordination also excludes reads in widget processes.
 @MainActor
 struct BackupRestore {
+    @Dependency(\.telemetry) private var telemetry
     let store: BackupStateStore
     let databaseURL: URL
 
@@ -123,6 +125,11 @@ struct BackupRestore {
             previousBackupState: try store.load()
         )
         try BackupFiles.save(journal, to: journalURL)
+        telemetry.event(
+            category: .backup,
+            name: "backup_restore_prepared",
+            recordID: recoveryID.uuidString.lowercased()
+        )
     }
 
     func installOrResume() throws {
@@ -191,6 +198,11 @@ struct BackupRestore {
             journal.phase = .installed
             try BackupFiles.save(journal, to: journalURL)
             WidgetCenter.shared.reloadAllTimelines()
+            telemetry.event(
+                category: .backup,
+                name: "backup_restore_installed",
+                recordID: journal.recoveryID.uuidString.lowercased()
+            )
         }
     }
 
@@ -224,6 +236,11 @@ struct BackupRestore {
             journal.phase = .rolledBack
             try BackupFiles.save(journal, to: journalURL)
             WidgetCenter.shared.reloadAllTimelines()
+            telemetry.event(
+                category: .backup,
+                name: "backup_restore_rolled_back",
+                recordID: journal.recoveryID.uuidString.lowercased()
+            )
         }
     }
 
@@ -244,6 +261,11 @@ struct BackupRestore {
             try FileManager.default.removeItem(at: recovery)
         }
         try FileManager.default.removeItem(at: journalURL)
+        telemetry.event(
+            category: .backup,
+            name: "backup_restore_finalized",
+            recordID: journal.recoveryID.uuidString.lowercased()
+        )
     }
 
     static func prepareCalendar(_ database: any DatabaseWriter, cutoff: Date) throws {

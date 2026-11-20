@@ -1,5 +1,6 @@
 import ClinicalModels
 import ClinicalPersistence
+import Dependencies
 import Foundation
 import SQLiteData
 
@@ -25,10 +26,18 @@ final class PaymentEntryModel {
             case .expense: PaymentLabelsRequest(kind: .expense)
             }
         }
+        var telemetryName: String {
+            switch self {
+            case .patient: "patient"
+            case .otherIncome: "other_income"
+            case .expense: "expense"
+            }
+        }
     }
 
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.date.now) private var now
+    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
     @ObservationIgnored var patientRows = FetchAll<PatientDetailsSelection>()
     private var labelHistory: Fetch<[String]>?
     private(set) var kind = Kind.patient
@@ -129,14 +138,38 @@ final class PaymentEntryModel {
         defer { isSaving = false }
         do {
             try await database.saveAccountEntries(.init(inserts: entries))
+            telemetry.event(
+                category: .payment,
+                name: "payment_entry_saved",
+                count: entries.count,
+                recordID: entries.first?.id.uuidString.lowercased(),
+                status: method?.rawValue,
+                action: kind.telemetryName
+            )
             note = ""
             patient = nil
             amountText = ""
             return true
-        } catch AccountEntryError.missingPatient {
+        } catch AccountEntryError.missingPatient(let patientID) {
             errorMessage = "This patient is no longer available. Select another patient."
+            telemetry.log(
+                .error,
+                category: .payment,
+                name: "payment_entry_save_failed",
+                message: errorMessage,
+                error: AccountEntryError.missingPatient(patientID),
+                action: kind.telemetryName
+            )
         } catch {
             errorMessage = "The payment could not be saved. Please try again."
+            telemetry.log(
+                .error,
+                category: .payment,
+                name: "payment_entry_save_failed",
+                message: errorMessage,
+                error: error,
+                action: kind.telemetryName
+            )
         }
         return false
     }

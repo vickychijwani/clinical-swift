@@ -1,7 +1,7 @@
 import AppIntents
 import ClinicalModels
+import Dependencies
 import GRDB
-import OSLog
 import SQLiteData
 import SwiftUI
 
@@ -14,9 +14,11 @@ struct ClinicalApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var router: Router
     @State private var backups: BackupCoordinator?
+    @State private var telemetry: TelemetryCoordinator
     private let startupError: String?
     private let widgetTimelineInvalidator: WidgetTimelineInvalidator?
     private let calendarSyncCoordinator: CalendarSyncCoordinator?
+    private let metricKitCollector: MetricKitCollector?
 
     init() {
         #if DEBUG
@@ -29,8 +31,10 @@ struct ClinicalApp: App {
         _router = State(initialValue: router)
         let startup = AppStartup.load(router: router)
         _backups = State(initialValue: startup.backups)
+        _telemetry = State(initialValue: startup.telemetry)
         widgetTimelineInvalidator = startup.widgetTimelineInvalidator
         calendarSyncCoordinator = startup.calendarSyncCoordinator
+        metricKitCollector = startup.metricKitCollector
         startupError = startup.error
     }
 
@@ -58,6 +62,7 @@ struct ClinicalApp: App {
                         #endif
                     }
                     .environment(backups)
+                    .environment(telemetry)
                 } else {
                     #if INTERNAL_BACKUP_CHECK
                         if BackupCheckAuthorization.isRequested {
@@ -71,6 +76,9 @@ struct ClinicalApp: App {
             .environment(\.locale, ClinicDate.locale)
             .modifier(ClinicDayModifier())
             .task {
+                telemetry.handleForeground()
+            }
+            .task {
                 await backups?.opportunity()
             }
             .task {
@@ -78,6 +86,7 @@ struct ClinicalApp: App {
             }
             .onChange(of: scenePhase) { _, scenePhase in
                 guard backups != nil else { return }
+                @Dependency(\.telemetry) var telemetryClient
                 // The live writer opts into these notifications in
                 // ClinicalSharedDatabase.openWriter.
                 // TODO: Revisit this when building iPad/Mac support
@@ -90,12 +99,16 @@ struct ClinicalApp: App {
                         object: nil
                     )
                     backups?.isForeground = true
+                    telemetryClient.event(category: .startup, name: "app_foregrounded")
+                    telemetry.handleForeground()
                     Task { await calendarSyncCoordinator?.activate() }
                     Task { await backups?.opportunity() }
                 case .background:
                     backups?.isForeground = false
                     backups?.cancel()
                     backups?.scheduleBackground()
+                    telemetryClient.event(category: .startup, name: "app_backgrounded")
+                    telemetry.handleBackground()
                     NotificationCenter.default.post(
                         name: Database.suspendNotification,
                         object: nil
@@ -113,8 +126,10 @@ struct ClinicalApp: App {
 @MainActor
 private struct AppStartup {
     var backups: BackupCoordinator?
+    var telemetry: TelemetryCoordinator = .disabled()
     var widgetTimelineInvalidator: WidgetTimelineInvalidator?
     var calendarSyncCoordinator: CalendarSyncCoordinator?
+    var metricKitCollector: MetricKitCollector?
     var error: String?
 
     static func load(router: Router) -> Self {
@@ -136,9 +151,16 @@ private struct AppStartup {
             #endif
             return try live(router: router)
         } catch {
-            Logger(subsystem: "in.bitehaus.clinical", category: "Startup")
-                .error("App startup failed: \(String(describing: error), privacy: .private)")
+            @Dependency(\.telemetry) var telemetryClient
+            telemetryClient.log(
+                .fault,
+                category: .startup,
+                name: "startup_failed",
+                message: "App startup failed",
+                error: error
+            )
             return Self(
+                telemetry: .live(),
                 error:
                     "Clinical could not open its data. Keep the app installed and contact support for assisted recovery."
             )
@@ -146,6 +168,11 @@ private struct AppStartup {
     }
 
     private static func live(router: Router) throws -> Self {
+        @Dependency(\.telemetry) var telemetryClient
+        let telemetry = TelemetryCoordinator.live()
+        let metricKitCollector = MetricKitCollector(record: telemetryClient.record)
+        metricKitCollector.start()
+
         let store = BackupStateStore.live()
         let restore = try BackupRestore(
             store: store, databaseURL: ClinicalSharedDatabase.databaseURL())
@@ -163,9 +190,14 @@ private struct AppStartup {
         AppDependencyManager.shared.add(
             dependency: ClinicalAppActions(router: router, database: database)
         )
+        telemetryClient.event(category: .startup, name: "app_launched")
         return Self(
-            backups: backups, widgetTimelineInvalidator: widgetTimelineInvalidator,
-            calendarSyncCoordinator: calendarSyncCoordinator)
+            backups: backups,
+            telemetry: telemetry,
+            widgetTimelineInvalidator: widgetTimelineInvalidator,
+            calendarSyncCoordinator: calendarSyncCoordinator,
+            metricKitCollector: metricKitCollector
+        )
     }
 
     private static func openDatabase(policy: BackupRestore.StartupPolicy) throws

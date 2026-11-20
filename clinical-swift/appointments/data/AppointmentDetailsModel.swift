@@ -1,5 +1,6 @@
 import ClinicalModels
 import ClinicalPersistence
+import Dependencies
 import Foundation
 import SQLiteData
 
@@ -7,6 +8,7 @@ import SQLiteData
 final class AppointmentDetailsModel {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.date.now) private var now
+    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
     @ObservationIgnored @FetchOne private var row: AppointmentPatientSelection?
 
     let appointmentID: Appointment.ID
@@ -61,11 +63,35 @@ final class AppointmentDetailsModel {
                     at: now
                 )
             }
+            telemetry.event(
+                category: .appointment,
+                name: "appointment_status_updated",
+                recordID: appointmentID.uuidString.lowercased(),
+                status: requestedStatus.rawValue
+            )
             return true
         } catch let error as AppointmentStatusUpdateError {
+            telemetry.log(
+                .error,
+                category: .appointment,
+                name: "appointment_status_update_failed",
+                message: "Appointment status update rejected",
+                error: error,
+                recordID: appointmentID.uuidString.lowercased(),
+                status: requestedStatus.rawValue
+            )
             await handleStatusUpdateError(error)
             return false
         } catch {
+            telemetry.log(
+                .error,
+                category: .appointment,
+                name: "appointment_status_update_failed",
+                message: "Appointment status update failed",
+                error: error,
+                recordID: appointmentID.uuidString.lowercased(),
+                status: requestedStatus.rawValue
+            )
             errorMessage = "The appointment could not be updated."
             return false
         }

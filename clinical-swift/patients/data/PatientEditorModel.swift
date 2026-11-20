@@ -8,6 +8,7 @@ import SQLiteData
 final class PatientEditorModel {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.date.now) private var now
+    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
 
     private let editedPatient: Patient?
     private let originalDraft: PatientDraft
@@ -94,12 +95,36 @@ final class PatientEditorModel {
                 }
             }
 
+            telemetry.event(
+                category: .patient,
+                name: editedPatient == nil ? "patient_created" : "patient_updated",
+                recordID: patient.id.uuidString.lowercased(),
+                action: editedPatient == nil ? "create" : "edit"
+            )
             return patient
         } catch is PatientEditingError {
             saveErrorMessage = "This patient can no longer be edited."
+            telemetry.log(
+                .error,
+                category: .patient,
+                name: "patient_save_failed",
+                message: saveErrorMessage,
+                error: PatientEditingError.unavailable,
+                recordID: patient.id.uuidString.lowercased(),
+                action: editedPatient == nil ? "create" : "edit"
+            )
             return nil
         } catch {
             saveErrorMessage = "The patient could not be saved."
+            telemetry.log(
+                .error,
+                category: .patient,
+                name: "patient_save_failed",
+                message: saveErrorMessage,
+                error: error,
+                recordID: patient.id.uuidString.lowercased(),
+                action: editedPatient == nil ? "create" : "edit"
+            )
             return nil
         }
     }

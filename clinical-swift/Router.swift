@@ -19,6 +19,7 @@ enum Route: Hashable {
 @MainActor @Observable
 final class Router {
     @ObservationIgnored @Dependency(\.date.now) private var now
+    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
 
     let toast: ToastStore
 
@@ -28,6 +29,11 @@ final class Router {
             if oldValue != selectedTab {
                 unavailableTimeNavigationRequest = nil
                 navigationErrorMessage = nil
+                telemetry.event(
+                    category: .navigation,
+                    name: "tab_selected",
+                    route: selectedTab.telemetryName
+                )
             }
         }
     }
@@ -115,6 +121,12 @@ final class Router {
             // A new selection behind the visible details sheet replaces its content in place. Keep
             // the session ID stable so SwiftUI does not perform an unnecessary sheet handoff.
             detailsPresentation.replaceRoot(with: root)
+            telemetry.event(
+                category: .navigation,
+                name: "presentation_replaced",
+                recordID: root.telemetryRecordID,
+                route: root.telemetryName
+            )
         } else {
             requestPresentation(.details(DetailsPresentation(root: root)))
         }
@@ -309,12 +321,34 @@ final class Router {
             activePresentation = nil
         }
 
+        telemetry.event(
+            category: .navigation,
+            name: "presentation_dismissed",
+            recordID: presentationID.uuidString.lowercased()
+        )
         activateReplacementIfPossible()
     }
 
     @discardableResult
     func open(_ url: URL) -> Bool {
-        guard let clinicalURL = ClinicalURL(url) else { return false }
+        guard let clinicalURL = ClinicalURL(url) else {
+            telemetry.log(
+                .warning,
+                category: .navigation,
+                name: "url_rejected",
+                message: "Unsupported clinical URL",
+                source: "url"
+            )
+            return false
+        }
+
+        telemetry.event(
+            category: .navigation,
+            name: "url_opened",
+            recordID: clinicalURL.telemetryRecordID,
+            source: "url",
+            route: clinicalURL.telemetryName
+        )
 
         switch clinicalURL {
         case .bookAppointment:
@@ -346,6 +380,14 @@ final class Router {
             }
             completeUnavailableTimeNavigation(request, block: block)
         } catch {
+            telemetry.log(
+                .error,
+                category: .navigation,
+                name: "unavailable_time_navigation_failed",
+                message: "Unavailable time could not be loaded",
+                error: error,
+                recordID: request.blockID.uuidString.lowercased()
+            )
             guard unavailableTimeNavigationRequest?.id == request.id else { return }
             unavailableTimeNavigationRequest = nil
             navigationErrorMessage = "The unavailable time could not be loaded."
@@ -433,6 +475,13 @@ final class Router {
         navigationErrorMessage = nil
         // App-root actions are latest-wins interruptions. Do not queue multiple sheets or restore
         // the interrupted presentation after the replacement ends; its transient state is stale.
+        let isReplacement = activePresentation != nil || dismissingPresentationID != nil
+        telemetry.event(
+            category: .navigation,
+            name: isReplacement ? "presentation_replaced" : "presentation_opened",
+            recordID: presentation.telemetryRecordID,
+            route: presentation.telemetryName
+        )
         patientSearchRequest = nil
         replacementPresentation = presentation
 
@@ -655,4 +704,76 @@ nonisolated struct ScheduleCreationRequest: Identifiable, Sendable {
 nonisolated struct UnavailableTimeNavigationRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
     let blockID: UUID
+}
+
+extension AppTab {
+    fileprivate var telemetryName: String {
+        switch self {
+        case .schedule: "schedule"
+        case .patients: "patients"
+        case .payments: "payments"
+        }
+    }
+}
+
+extension Route {
+    fileprivate var telemetryName: String {
+        switch self {
+        case .patient: "patient_details"
+        case .appointment: "appointment_details"
+        case .appointmentCompletion: "appointment_completion"
+        }
+    }
+
+    fileprivate var telemetryRecordID: String {
+        switch self {
+        case .patient(let id), .appointment(let id), .appointmentCompletion(let id):
+            id.uuidString.lowercased()
+        }
+    }
+}
+
+extension AppPresentation {
+    fileprivate var telemetryName: String {
+        switch self {
+        case .settings: "settings"
+        case .details(let presentation): presentation.root.telemetryName
+        case .scheduleCreation: "schedule_creation"
+        case .appointmentBooking: "appointment_booking"
+        case .appointmentEdit: "appointment_edit"
+        case .appointmentMessage: "appointment_message"
+        case .patientEdit(let request): request.patient == nil ? "patient_create" : "patient_edit"
+        case .unavailableTimeEditor: "unavailable_time_editor"
+        }
+    }
+
+    fileprivate var telemetryRecordID: String? {
+        switch self {
+        case .settings, .scheduleCreation: nil
+        case .details(let presentation): presentation.root.telemetryRecordID
+        case .appointmentBooking(let request): request.patientID.uuidString.lowercased()
+        case .appointmentEdit(let request): request.appointmentID.uuidString.lowercased()
+        case .appointmentMessage(let request): request.appointmentID.uuidString.lowercased()
+        case .patientEdit(let request): request.patientID?.uuidString.lowercased()
+        case .unavailableTimeEditor(let request): request.block.id.uuidString.lowercased()
+        }
+    }
+}
+
+extension ClinicalURL {
+    fileprivate var telemetryName: String {
+        switch self {
+        case .bookAppointment: "book_appointment"
+        case .appointment: "appointment"
+        case .schedule: "schedule"
+        case .unavailableTime: "unavailable_time"
+        }
+    }
+
+    fileprivate var telemetryRecordID: String? {
+        switch self {
+        case .bookAppointment, .schedule: nil
+        case .appointment(let id), .unavailableTime(let id): id.uuidString.lowercased()
+        }
+    }
 }

@@ -718,6 +718,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AXIOM_INGEST_DATASET = "clinical-dev";
+				AXIOM_INGEST_TOKEN = "xaat-3e1c721d-5efe-4216-acc0-2ce8abfa6197";
+				AXIOM_INGEST_URL = "https://eu-central-1.aws.edge.axiom.co/v1/ingest/$(AXIOM_INGEST_DATASET)";
 				CODE_SIGN_ENTITLEMENTS = "clinical-swift/clinical-swift.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -749,6 +752,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AXIOM_INGEST_DATASET = "clinical-prod";
+				"AXIOM_INGEST_DATASET[sdk=iphonesimulator*]" = "clinical-dev";
+				AXIOM_INGEST_TOKEN = "xaat-ffc6b581-5ba8-473c-833b-c11b5d19dae2";
+				"AXIOM_INGEST_TOKEN[sdk=iphonesimulator*]" = "xaat-3e1c721d-5efe-4216-acc0-2ce8abfa6197";
+				AXIOM_INGEST_URL = "https://eu-central-1.aws.edge.axiom.co/v1/ingest/$(AXIOM_INGEST_DATASET)";
+				"AXIOM_INGEST_URL[sdk=iphonesimulator*]" = "https://eu-central-1.aws.edge.axiom.co/v1/ingest/$(AXIOM_INGEST_DATASET)";
 				CODE_SIGN_ENTITLEMENTS = "clinical-swift/clinical-swift.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

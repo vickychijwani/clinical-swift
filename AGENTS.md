@@ -46,6 +46,7 @@ App-specific guides:
 - One-way EventKit appointment and unavailable-time sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
 - Financial entries, current balances, dated reports, and derived coverage: `docs/payments.md`
 - Patient data backups, Google account binding, release checks, and assisted restore: `docs/backups.md`
+- Release logging, structured events, MetricKit diagnostics, and Axiom telemetry upload: `docs/telemetry.md`
 - App Store Connect tooling, Xcode Cloud release checks, and the public website: `scripts/README.md`, `ci_scripts/README.md`, and `sites/README.md`
 
 Update guides when a documented decision changes. A code change alone does not require a documentation change.
