@@ -107,6 +107,7 @@ private struct AppTabs: View {
                 database: database,
                 store: BackupStateStore(
                     directory: .temporaryDirectory.appending(path: UUID().uuidString))))
+        .environment(TelemetryCoordinator.disabled())
 }
 
 #Preview("Toast active") {
@@ -128,6 +129,7 @@ private struct AppTabs: View {
             database: database,
             store: BackupStateStore(
                 directory: .temporaryDirectory.appending(path: UUID().uuidString))))
+    .environment(TelemetryCoordinator.disabled())
 }
 
 private enum AppTrayItem: Identifiable {

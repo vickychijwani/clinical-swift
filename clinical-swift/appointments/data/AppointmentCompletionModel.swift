@@ -38,6 +38,7 @@ nonisolated enum CompletionAmount {
 @MainActor @Observable
 final class AppointmentCompletionModel: Identifiable {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
+    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
 
     let id: UUID
     let appointmentID: Appointment.ID
@@ -93,6 +94,13 @@ final class AppointmentCompletionModel: Identifiable {
                 id: appointmentID, patientID: patientID, amount: amount,
                 paymentMethod: paymentMethod)
             didSave = true
+            telemetry.event(
+                category: .appointment,
+                name: "appointment_completed",
+                recordID: appointmentID.uuidString.lowercased(),
+                status: amount == 0 ? "no_dues" : "paid",
+                action: paymentMethod?.rawValue
+            )
             return true
         } catch let error as AppointmentCompletionError {
             switch error {
@@ -104,11 +112,35 @@ final class AppointmentCompletionModel: Identifiable {
                     "This appointment has several charges. Complete it after correcting the charges."
             case .invalidAmount: errorMessage = "Enter a valid whole-rupee amount."
             }
-        } catch AccountEntryError.negativeBalance {
+            telemetry.log(
+                .error,
+                category: .appointment,
+                name: "appointment_completion_failed",
+                message: errorMessage,
+                error: error,
+                recordID: appointmentID.uuidString.lowercased()
+            )
+        } catch AccountEntryError.negativeBalance(let patientID) {
             errorMessage =
                 "This change would leave the patient with a credit balance. Check the earlier receipts."
+            telemetry.log(
+                .error,
+                category: .appointment,
+                name: "appointment_completion_failed",
+                message: errorMessage,
+                error: AccountEntryError.negativeBalance(patientID),
+                recordID: appointmentID.uuidString.lowercased()
+            )
         } catch {
             errorMessage = "The appointment could not be completed. Please try again."
+            telemetry.log(
+                .error,
+                category: .appointment,
+                name: "appointment_completion_failed",
+                message: errorMessage,
+                error: error,
+                recordID: appointmentID.uuidString.lowercased()
+            )
         }
         return false
     }

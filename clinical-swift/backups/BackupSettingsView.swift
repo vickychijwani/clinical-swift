@@ -4,6 +4,7 @@ import SwiftUI
 
 struct BackupSettingsView: View {
     @Environment(BackupCoordinator.self) private var backups
+    @Environment(TelemetryCoordinator.self) private var telemetry
     @Environment(\.webAuthenticationSession) private var authentication
     @Environment(\.trayDismiss) private var dismiss
 
@@ -47,7 +48,49 @@ struct BackupSettingsView: View {
                     .disabled(
                         backups.isRunning || backups.isConnecting || backups.state.accountID == nil)
                 }
+                Section {
+                    LabeledContent("Status", value: telemetry.statusText)
+                    if let lastUploadedAt = telemetry.lastUploadedAt {
+                        LabeledContent("Last upload") {
+                            Text(
+                                lastUploadedAt,
+                                format: .dateTime.day().month().year().hour().minute())
+                        }
+                    } else {
+                        LabeledContent("Last upload", value: "Never")
+                    }
+                    if let error = telemetry.lastUploadError {
+                        Text(error).foregroundStyle(AppColor.warning)
+                    }
+                    AsyncButton("Send logs now", systemImage: "arrow.up.doc") {
+                        await telemetry.sendNow()
+                    }
+                    .disabled(telemetry.isUploading || !telemetry.isUploadConfigured)
+                    ShareLink(
+                        "Export logs",
+                        item: telemetry.exportDocument,
+                        preview: SharePreview("Clinical diagnostic logs")
+                    )
+                    Toggle(
+                        "Verbose logging",
+                        isOn: Binding(
+                            get: { telemetry.isVerboseEnabled },
+                            set: { telemetry.setVerboseEnabled($0) }
+                        )
+                    )
+                } header: {
+                    Text("Diagnostics")
+                } footer: {
+                    if let expiresAt = telemetry.verboseExpiresAt, telemetry.isVerboseEnabled {
+                        Text(
+                            "Verbose logging captures debug logs and SQL statements. It turns off automatically at \(expiresAt, format: .dateTime.day().month().hour().minute())."
+                        )
+                    }
+                }
                 TimelineTuningSettings()
+            }
+            .onAppear {
+                telemetry.refreshState()
             }
             .navigationTitle("Settings")
             .toolbar {

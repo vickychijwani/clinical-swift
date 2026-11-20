@@ -1,5 +1,6 @@
 import ClinicalModels
 import ClinicalPersistence
+import Dependencies
 import Foundation
 import GRDB
 import OSLog
@@ -8,22 +9,48 @@ import SQLiteData
 func appDatabase(seedSamples: Bool = false, recoverySafe: Bool = false) throws -> any DatabaseWriter
 {
     @Dependency(\.context) var context
+    @Dependency(\.telemetry) var telemetry
+    let openStart = ContinuousClock.now
     var configuration = clinicalDatabaseConfiguration()
 
-    #if DEBUG
-        configuration.prepareDatabase { db in
-            db.trace(options: .profile) {
+    // SQLite supports one trace callback per connection; merge debug console output,
+    // slow-query warnings, and verbose SQL capture into this single callback.
+    configuration.prepareDatabase { db in
+        db.trace(options: .profile) { event in
+            if context == .live, case .profile(_, let duration) = event {
+                let verbose = telemetry.isVerboseEnabled()
+                let durationMS = Int((duration * 1000).rounded())
+                if duration > 0.25 {
+                    telemetry.log(
+                        .warning,
+                        category: .database,
+                        name: "slow_query",
+                        message: "Slow SQLite query",
+                        durationMS: durationMS,
+                        sql: verbose ? event.expandedDescription : nil
+                    )
+                } else if verbose {
+                    telemetry.log(
+                        .debug,
+                        category: .database,
+                        name: "sql_query",
+                        durationMS: durationMS,
+                        sql: event.expandedDescription
+                    )
+                }
+            }
+            #if DEBUG
                 switch context {
                 case .live:
-                    databaseLogger.debug("\($0.expandedDescription)")
+                    databaseLogger.debug("\(event.expandedDescription)")
                 case .preview:
-                    print("\($0.expandedDescription)")
+                    print("\(event.expandedDescription)")
                 case .test:
                     break
                 }
-            }
+            #endif
         }
-    #endif
+    }
 
     let database: any DatabaseWriter
     if context == .live {
@@ -36,6 +63,16 @@ func appDatabase(seedSamples: Bool = false, recoverySafe: Bool = false) throws -
         database = try defaultDatabase(configuration: configuration)
         try migrateDatabase(database)
     }
+    let elapsed = openStart.duration(to: ContinuousClock.now)
+    let durationMS = Int(
+        (Double(elapsed.components.seconds) * 1000.0
+            + Double(elapsed.components.attoseconds) / 1e15).rounded())
+    telemetry.event(
+        category: .database,
+        name: "database_opened",
+        durationMS: durationMS,
+        status: recoverySafe ? "recovery_safe" : "normal"
+    )
     databaseLogger.debug("open '\(database.path)'")
 
     #if DEBUG
@@ -48,8 +85,8 @@ func appDatabase(seedSamples: Bool = false, recoverySafe: Bool = false) throws -
 }
 
 nonisolated private let databaseLogger = Logger(
-    subsystem: "in.bitehaus.clinical-swift",
-    category: "Database"
+    subsystem: "in.bitehaus.clinical",
+    category: "database"
 )
 
 #if DEBUG

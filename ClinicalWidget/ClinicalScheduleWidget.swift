@@ -24,7 +24,11 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
         if context.isPreview {
             completion(sampleEntry(at: .now, appointmentCount: 5))
         } else {
-            completion(liveEntry(at: .now))
+            let now = Date.now
+            var entries: [TelemetryEntry] = []
+            let entry = liveEntry(at: now, source: "snapshot", entries: &entries)
+            flushWidgetTelemetry(entries, at: now)
+            completion(entry)
         }
     }
 
@@ -32,7 +36,10 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
         in context: Context,
         completion: @escaping @Sendable (Timeline<ClinicalScheduleEntry>) -> Void
     ) {
-        let entry = liveEntry(at: .now)
+        let now = Date.now
+        var entries: [TelemetryEntry] = []
+        let entry = liveEntry(at: now, source: "timeline", entries: &entries)
+        flushWidgetTelemetry(entries, at: now)
         let nextRefresh =
             switch entry.content {
             case .schedule(let snapshot):
@@ -47,17 +54,69 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
         completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
     }
 
-    private func liveEntry(at date: Date) -> ClinicalScheduleEntry {
+    private func liveEntry(
+        at date: Date,
+        source: String,
+        entries: inout [TelemetryEntry]
+    ) -> ClinicalScheduleEntry {
+        let start = ContinuousClock.now
         do {
             let databaseURL = try ClinicalSharedDatabase.databaseURL()
             let repository = WidgetScheduleRepository(databaseURL: databaseURL)
             guard let snapshot = try repository.snapshot(at: date) else {
+                entries.append(
+                    TelemetryEntry(
+                        kind: .event,
+                        level: .info,
+                        category: .widget,
+                        name: "widget_snapshot_unavailable",
+                        status: "missing_database",
+                        source: source
+                    ))
                 return ClinicalScheduleEntry(date: date, content: .unavailable)
             }
+            let elapsed = start.duration(to: ContinuousClock.now)
+            let durationMS = Int(
+                (Double(elapsed.components.seconds) * 1000.0
+                    + Double(elapsed.components.attoseconds) / 1e15).rounded())
+            let itemCount = snapshot.sections.reduce(0) { $0 + $1.items.count }
+            entries.append(
+                TelemetryEntry(
+                    kind: .event,
+                    level: .info,
+                    category: .widget,
+                    name: "widget_snapshot_loaded",
+                    durationMS: durationMS,
+                    count: itemCount,
+                    status: "loaded",
+                    source: source
+                ))
             return ClinicalScheduleEntry(date: date, content: .schedule(snapshot))
         } catch {
+            entries.append(
+                TelemetryEntry(
+                    kind: .log,
+                    level: .error,
+                    category: .widget,
+                    name: "widget_snapshot_failed",
+                    message: "Widget schedule read failed",
+                    error: error,
+                    source: source
+                ))
             return ClinicalScheduleEntry(date: date, content: .unavailable)
         }
+    }
+
+    private func flushWidgetTelemetry(_ entries: [TelemetryEntry], at date: Date) {
+        guard !entries.isEmpty,
+            let directory = TelemetrySpool.defaultDirectory()
+        else { return }
+        // Widget runs collect records in memory and write one immutable segment atomically.
+        let settings = TelemetrySettingsStore()
+        let builder = TelemetryRecordBuilder(process: .widget, settings: settings)
+        let records = entries.map { builder.makeRecord(from: $0, now: date) }
+        let spool = TelemetrySpool(directory: directory)
+        spool.writeWidgetSegment(records, now: date)
     }
 
     fileprivate func sampleEntry(

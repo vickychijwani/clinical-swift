@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AxiomIngestDataset</key>
+	<string>$(AXIOM_INGEST_DATASET)</string>
+	<key>AxiomIngestToken</key>
+	<string>$(AXIOM_INGEST_TOKEN)</string>
+	<key>AxiomIngestURL</key>
+	<string>$(AXIOM_INGEST_URL)</string>
 	<key>GoogleBackupClientID</key>
 	<string>544293571126-htgh9g6j8vh8v2io1qjojh4vnkenmt93.apps.googleusercontent.com</string>
 	<key>GoogleBackupCallbackScheme</key>

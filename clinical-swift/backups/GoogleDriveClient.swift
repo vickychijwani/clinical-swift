@@ -1,3 +1,5 @@
+import ClinicalModels
+import Dependencies
 import Foundation
 
 nonisolated struct DriveBackupFile: Codable, Equatable, Sendable {
@@ -190,8 +192,36 @@ nonisolated struct GoogleDriveClient: Sendable {
         request.timeoutInterval = 60
         request.setValue("Bearer " + (try await token()), forHTTPHeaderField: "Authorization")
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await session.data(for: request)
-        try Self.check(response)
-        return data
+        let start = ContinuousClock.now
+        do {
+            let (data, response) = try await session.data(for: request)
+            try Self.check(response)
+            return data
+        } catch {
+            @Dependency(\.telemetry) var telemetry
+            let elapsed = start.duration(to: ContinuousClock.now)
+            let durationMS = Int(
+                (Double(elapsed.components.seconds) * 1000.0
+                    + Double(elapsed.components.attoseconds) / 1e15).rounded())
+            let level: TelemetryLevel =
+                if case BackupError.drive(404) = error {
+                    .debug
+                } else if case BackupError.drive(409) = error {
+                    .warning
+                } else {
+                    .error
+                }
+            telemetry.log(
+                level,
+                category: .backup,
+                name: "backup_drive_request_failed",
+                message: "Google Drive request failed",
+                error: error,
+                durationMS: durationMS,
+                route: path,
+                action: method
+            )
+            throw error
+        }
     }
 }

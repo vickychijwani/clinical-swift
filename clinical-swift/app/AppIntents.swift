@@ -1,6 +1,7 @@
 import AppIntents
 import ClinicalModels
 import ClinicalPersistence
+import Dependencies
 import Foundation
 import SQLiteData
 
@@ -72,6 +73,13 @@ struct BookAppointmentIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        let telemetry = Dependencies.Dependency(\.telemetry).wrappedValue
+        telemetry.event(
+            category: .intent,
+            name: "intent_invoked",
+            source: "app_intent",
+            action: "book_appointment"
+        )
         appActions.bookAppointment()
         return .result()
     }
@@ -95,8 +103,38 @@ struct FindPatientFromContactIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let match = try await appActions.findPatient(
-            phoneNumbers: Self.phoneNumbers(from: contact)
+        let telemetry = Dependencies.Dependency(\.telemetry).wrappedValue
+        let match: PatientContactMatch
+        do {
+            match = try await appActions.findPatient(
+                phoneNumbers: Self.phoneNumbers(from: contact)
+            )
+        } catch {
+            telemetry.log(
+                .error,
+                category: .intent,
+                name: "intent_failed",
+                message: "Find patient intent failed",
+                error: error,
+                source: "app_intent",
+                action: "find_patient_from_contact"
+            )
+            throw error
+        }
+
+        let (status, matchCount): (String, Int) =
+            switch match {
+            case .none: ("none", 0)
+            case .one: ("one", 1)
+            case .multiple(let count): ("multiple", count)
+            }
+        telemetry.event(
+            category: .intent,
+            name: "intent_invoked",
+            count: matchCount,
+            status: status,
+            source: "app_intent",
+            action: "find_patient_from_contact"
         )
 
         let dialog: IntentDialog =

@@ -1,4 +1,6 @@
+import ClinicalModels
 import CryptoKit
+import Dependencies
 import Foundation
 import Security
 
@@ -127,15 +129,36 @@ actor GoogleBackupAccount {
         guard tokens.accountID == expectedAccountID else { throw BackupError.accountChanged }
         if tokens.expiresAt.timeIntervalSinceNow > 60 { return tokens.accessToken }
         // Refresh stays in the caller's task so background expiration cancels its request.
-        let response = try await exchange([
-            "client_id": tokens.clientID, "refresh_token": tokens.refreshToken,
-            "grant_type": "refresh_token",
-        ])
+        let response: TokenResponse
+        do {
+            response = try await exchange([
+                "client_id": tokens.clientID, "refresh_token": tokens.refreshToken,
+                "grant_type": "refresh_token",
+            ])
+        } catch {
+            @Dependency(\.telemetry) var telemetry
+            telemetry.log(
+                .error,
+                category: .backup,
+                name: "backup_token_refresh_failed",
+                message: "Google OAuth token refresh failed",
+                error: error,
+                action: "refresh"
+            )
+            throw error
+        }
         try Task.checkCancellation()
         var refreshed = tokens
         refreshed.accessToken = response.access_token
         refreshed.expiresAt = .now.addingTimeInterval(response.expires_in)
         try keychain.save(refreshed)
+        @Dependency(\.telemetry) var telemetry
+        telemetry.event(
+            category: .backup,
+            name: "backup_token_refreshed",
+            level: .debug,
+            action: "refresh"
+        )
         return refreshed.accessToken
     }
 

@@ -1,14 +1,15 @@
 import ClinicalModels
 import ClinicalPersistence
+import Dependencies
 import EventKit
 import Foundation
 import GRDB
-import OSLog
 import SQLiteData
 
 @MainActor
 final class CalendarSyncCoordinator {
     @Dependency(\.calendar) private var calendar
+    @Dependency(\.telemetry) private var telemetry
     private let database: any DatabaseWriter
     private let calendarClient: CalendarClient
     private let contactClient: AppointmentContactClient
@@ -29,14 +30,19 @@ final class CalendarSyncCoordinator {
         self.calendarClient = calendarClient
         self.contactClient = contactClient
 
+        let telemetry = self.telemetry
         observation = DatabaseRegionObservation(
             tracking: Table("appointmentCalendarSync"), Table("unavailableTimeCalendarSync")
         )
         .start(
             in: database,
             onError: { error in
-                calendarSyncLogger.error(
-                    "Calendar sync database observation failed: \(String(describing: error), privacy: .public)"
+                telemetry.log(
+                    .error,
+                    category: .calendar,
+                    name: "calendar_observation_failed",
+                    message: "Calendar sync database observation failed",
+                    error: error
                 )
             },
             onChange: { [weak self] _ in
@@ -63,21 +69,33 @@ final class CalendarSyncCoordinator {
         do {
             guard try await calendarClient.requestFullAccess() else {
                 isReady = false
-                calendarSyncLogger.notice("Full Calendar access was not granted")
+                telemetry.log(
+                    .warning,
+                    category: .calendar,
+                    name: "calendar_access_denied",
+                    message: "Full Calendar access was not granted"
+                )
                 return
             }
         } catch {
             isReady = false
-            calendarSyncLogger.error(
-                "Requesting full Calendar access failed: \(String(describing: error), privacy: .public)"
+            telemetry.log(
+                .error,
+                category: .calendar,
+                name: "calendar_access_request_failed",
+                message: "Requesting full Calendar access failed",
+                error: error
             )
             return
         }
 
         guard await calendarClient.resolveTargetCalendar() else {
             isReady = false
-            calendarSyncLogger.error(
-                "No writable Calendar titled Bitehaus Debug is available"
+            telemetry.log(
+                .error,
+                category: .calendar,
+                name: "calendar_target_missing",
+                message: "No writable Calendar titled Bitehaus Debug is available"
             )
             return
         }
@@ -159,26 +177,52 @@ final class CalendarSyncCoordinator {
                 return appointments + blocks
             }
         } catch {
-            calendarSyncLogger.error(
-                "Loading Calendar work failed: \(String(describing: error), privacy: .public)")
+            telemetry.log(
+                .error,
+                category: .calendar,
+                name: "calendar_load_failed",
+                message: "Loading Calendar work failed",
+                error: error
+            )
             return
         }
+
+        guard !records.isEmpty else { return }
+        let drainStart = ContinuousClock.now
+        var syncedCount = 0
+        var failureCount = 0
 
         for (index, record) in records.enumerated() {
             if index.isMultiple(of: 64) { await Task.yield() }
             guard !Task.isCancelled else { return }
             do {
                 try await process(record)
+                syncedCount += 1
             } catch {
-                calendarSyncLogger.error(
-                    """
-                    Calendar sync failed for source \
-                    \(record.source.sortKey, privacy: .public): \
-                    \(String(describing: error), privacy: .public)
-                    """
+                failureCount += 1
+                telemetry.log(
+                    .error,
+                    category: .calendar,
+                    name: "calendar_item_sync_failed",
+                    message: "Calendar sync failed for source \(record.source.sortKey)",
+                    error: error,
+                    recordID: record.source.uuid.uuidString.lowercased(),
+                    source: record.source.table
                 )
             }
         }
+
+        let elapsed = drainStart.duration(to: ContinuousClock.now)
+        let durationMS = Int(
+            (Double(elapsed.components.seconds) * 1000.0
+                + Double(elapsed.components.attoseconds) / 1e15).rounded())
+        telemetry.event(
+            category: .calendar,
+            name: "calendar_sync_drained",
+            durationMS: durationMS,
+            count: syncedCount,
+            status: failureCount > 0 ? "partial" : "ok"
+        )
     }
 
     private func process(_ record: CalendarSyncWork) async throws {
@@ -389,8 +433,3 @@ nonisolated private enum CalendarSyncError: Error, Sendable {
     case missingPatient(Patient.ID)
     case invalidMarkerURL
 }
-
-nonisolated private let calendarSyncLogger = Logger(
-    subsystem: "in.bitehaus.clinical",
-    category: "CalendarSync"
-)

@@ -163,6 +163,7 @@
             // Keep the real navigation, toolbar, date strip, tabs, and editing behavior.
             ContentView(router: router)
                 .environment(backup)
+                .environment(TelemetryCoordinator.disabled())
         }
     }
 #endif

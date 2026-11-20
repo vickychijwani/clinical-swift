@@ -9,6 +9,7 @@ final class AppointmentMessageModel {
     @ObservationIgnored @Dependency(\.appointmentContactClient) private var contactClient
     @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.date.now) private var now
+    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
 
     let details: AppointmentDetails
     let includesLocation: Bool
@@ -96,14 +97,38 @@ final class AppointmentMessageModel {
         else {
             errorMessage =
                 "The message was copied, but this patient does not have a usable phone number."
+            telemetry.log(
+                .warning,
+                category: .appointment,
+                name: "appointment_message_blocked",
+                message: errorMessage,
+                recordID: details.appointment.id.uuidString.lowercased(),
+                status: "missing_phone",
+                action: kind.rawValue
+            )
             return
         }
 
         guard messagingClient.canSendText() else {
             errorMessage = "The message was copied, but SMS is not available on this device."
+            telemetry.log(
+                .warning,
+                category: .appointment,
+                name: "appointment_message_blocked",
+                message: errorMessage,
+                recordID: details.appointment.id.uuidString.lowercased(),
+                status: "sms_unavailable",
+                action: kind.rawValue
+            )
             return
         }
 
+        telemetry.event(
+            category: .appointment,
+            name: "appointment_message_started",
+            recordID: details.appointment.id.uuidString.lowercased(),
+            action: kind.rawValue
+        )
         smsDraft = AppointmentSMSDraft(
             recipient: phone,
             phoneDigits: phoneDigits,
@@ -142,25 +167,74 @@ final class AppointmentMessageModel {
 
         switch result {
         case .sent:
+            telemetry.event(
+                category: .appointment,
+                name: "appointment_sms_sent",
+                recordID: details.appointment.id.uuidString.lowercased(),
+                status: "sent",
+                action: kind.rawValue
+            )
             return AppointmentWhatsAppRequest(
                 phoneDigits: smsDraft.phoneDigits,
                 message: smsDraft.body
             )
         case .cancelled:
+            telemetry.event(
+                category: .appointment,
+                name: "appointment_sms_cancelled",
+                recordID: details.appointment.id.uuidString.lowercased(),
+                status: "cancelled",
+                action: kind.rawValue
+            )
             return nil
         case .failed:
             errorMessage = "The message was copied, but SMS could not be sent."
+            telemetry.log(
+                .error,
+                category: .appointment,
+                name: "appointment_sms_failed",
+                message: errorMessage,
+                recordID: details.appointment.id.uuidString.lowercased(),
+                status: "failed",
+                action: kind.rawValue
+            )
             return nil
         @unknown default:
             errorMessage = "The message was copied, but SMS ended unexpectedly."
+            telemetry.log(
+                .error,
+                category: .appointment,
+                name: "appointment_sms_failed",
+                message: errorMessage,
+                recordID: details.appointment.id.uuidString.lowercased(),
+                status: "unknown",
+                action: kind.rawValue
+            )
             return nil
         }
     }
 
     func openWhatsApp(_ request: AppointmentWhatsAppRequest) async -> Bool {
         let didOpen = await messagingClient.openWhatsApp(request.phoneDigits, request.message)
-        if !didOpen {
+        if didOpen {
+            telemetry.event(
+                category: .appointment,
+                name: "appointment_whatsapp_opened",
+                recordID: details.appointment.id.uuidString.lowercased(),
+                status: "opened",
+                action: kind.rawValue
+            )
+        } else {
             errorMessage = "SMS was sent, but WhatsApp could not be opened."
+            telemetry.log(
+                .warning,
+                category: .appointment,
+                name: "appointment_whatsapp_failed",
+                message: errorMessage,
+                recordID: details.appointment.id.uuidString.lowercased(),
+                status: "failed",
+                action: kind.rawValue
+            )
         }
         return didOpen
     }
