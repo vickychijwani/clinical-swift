@@ -21,7 +21,7 @@ struct TimelineOverlapRenderingTests {
         let layouts = TimelineLayoutEngine(
             availableWidth: 402,
             scale: scale,
-            overlap: .init(mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2)
+            overlap: .init(mode: .textAware, stripWidth: 18)
         ).layout(items: items)
         let back = try #require(layouts.first { $0.id == .appointment(backID) })
         #expect(back.presentation.layout == .compactStacked)
@@ -52,59 +52,40 @@ struct TimelineOverlapRenderingTests {
         #expect(fencedCompact != regularStacked)
     }
 
-    @Test func touchingShortOverlapGroupsDoNotClipPrecedingGroupText() throws {
-        let firstBackID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
-        let firstFrontID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
-        let secondBackID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
-        let secondFrontID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000004"))
-        let firstGroup = [
-            appointment(id: firstBackID, name: "Ana", startHour: 9, startMinute: 0, duration: 15),
-            appointment(id: firstFrontID, name: "Raj", startHour: 9, startMinute: 0, duration: 15),
-        ]
-        let secondGroup = [
-            appointment(id: secondBackID, name: "Mia", startHour: 9, startMinute: 15, duration: 15),
-            appointment(
-                id: secondFrontID, name: "Kabir Malhotra", startHour: 9, startMinute: 15,
-                duration: 15),
-        ]
-        let allItems = firstGroup + secondGroup
-        let scale = TimelineScale(items: allItems)
-        let width: CGFloat = 402
-        var haloTuning = ScheduleCardTuning()
-        haloTuning.overlap.separation = .halo
-        var flatTuning = ScheduleCardTuning()
+    @Test func overlapShadowKeepsTranslucentFillUnchangedAndDrawsShadowOutside() throws {
+        var shadowTuning = ScheduleCardTuning()
+        // A stronger shadow makes an interior leak clear even with a translucent surface.
+        shadowTuning.surfaceOpacity = 0.55
+        shadowTuning.overlap.separation = .shadow
+        shadowTuning.overlap.shadowOpacity = 0.8
+        shadowTuning.overlap.shadowRadius = 4
+
+        var flatTuning = shadowTuning
         flatTuning.overlap.separation = .flat
-        let layouts = TimelineLayoutEngine(
-            availableWidth: width, scale: scale, overlap: haloTuning.overlap
-        ).layout(items: allItems)
-        #expect(layouts.first { $0.id == .appointment(firstFrontID) }?.isOverlappingFront == true)
-        #expect(layouts.first { $0.id == .appointment(secondFrontID) }?.isOverlappingFront == true)
-        // Render only the top 60 pt of the timeline covering 9:00–10:00 at 2x scale.
-        let renderHeight: CGFloat = 60
-        let pixelScale = 2
 
-        let firstGroupOnly = try renderTimeline(
-            items: firstGroup, scale: scale, width: width, height: renderHeight,
-            pixelScale: pixelScale, tuning: haloTuning)
-        let withSecondGroup = try renderTimeline(
-            items: allItems, scale: scale, width: width, height: renderHeight,
-            pixelScale: pixelScale, tuning: haloTuning)
-        let withSecondGroupFlat = try renderTimeline(
-            items: allItems, scale: scale, width: width, height: renderHeight,
-            pixelScale: pixelScale, tuning: flatTuning)
+        let shadowed = try renderOverlapSeparation(isActive: true, tuning: shadowTuning)
+        let flat = try renderOverlapSeparation(isActive: true, tuning: flatTuning)
+        let inactive = try renderOverlapSeparation(isActive: false, tuning: shadowTuning)
 
-        let bytesPerRow = Int(width) * pixelScale * 4
-        let firstGroupEndRow = Int(Timeline.metrics.verticalPadding + 15) * pixelScale
-        let firstGroupSlice = 0..<(firstGroupEndRow * bytesPerRow)
-        #expect(
-            Array(firstGroupOnly[firstGroupSlice]) == Array(withSecondGroup[firstGroupSlice]))
+        let centerPixel = (50 * 200 + 100) * 4
+        #expect(Array(shadowed[centerPixel..<centerPixel + 4]) == Array(flat[centerPixel..<centerPixel + 4]))
+        let outsideBelowPixel = (78 * 200 + 100) * 4
+        #expect(shadowed[outsideBelowPixel] < flat[outsideBelowPixel])
+        #expect(inactive == flat)
+    }
 
-        // Confirm the second group still renders its horizontal halo separation.
-        let secondGroupEndRow = Int(Timeline.metrics.verticalPadding + 30) * pixelScale
-        let secondGroupSlice = (firstGroupEndRow * bytesPerRow)..<(secondGroupEndRow * bytesPerRow)
-        #expect(
-            Array(withSecondGroup[secondGroupSlice])
-                != Array(withSecondGroupFlat[secondGroupSlice]))
+    private func renderOverlapSeparation(
+        isActive: Bool,
+        tuning: ScheduleCardTuning
+    ) throws -> [UInt8] {
+        let view = Color.white.opacity(tuning.surfaceOpacity)
+            .frame(width: 120, height: 48)
+            .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
+            .modifier(TimelineCardOverlapSeparation(isActive: isActive))
+            .environment(\.scheduleCardTuning, tuning)
+            .frame(width: 200, height: 100)
+            .background(.gray)
+        return try renderPixels(view, pixelWidth: 200, pixelHeight: 100, scale: 1)
     }
 
     private func renderCard(
@@ -123,27 +104,6 @@ struct TimelineOverlapRenderingTests {
         .frame(width: size.width, height: size.height)
         .background(AppColor.canvas)
         return try renderPixels(view, pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: 2)
-    }
-
-    private func renderTimeline(
-        items: [TimelineItem],
-        scale: TimelineScale,
-        width: CGFloat,
-        height: CGFloat,
-        pixelScale: Int,
-        tuning: ScheduleCardTuning
-    ) throws -> [UInt8] {
-        let view = Timeline(items: items, scale: scale, showsNowMarker: false)
-            .frame(width: width, height: height, alignment: .top)
-            .clipped()
-            .background(AppColor.canvas)
-            .environment(\.scheduleCardTuning, tuning)
-        return try renderPixels(
-            view,
-            pixelWidth: Int(width) * pixelScale,
-            pixelHeight: Int(height) * pixelScale,
-            scale: CGFloat(pixelScale)
-        )
     }
 
     private func renderPixels<Content: View>(

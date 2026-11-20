@@ -109,7 +109,7 @@ struct TimelineLayoutTests {
         ]
 
         for mode in [ScheduleCardTuning.Overlap.Mode.cascade, .textAware] {
-            let overlap = ScheduleCardTuning.Overlap(mode: mode, separation: .halo, stripWidth: 18)
+            let overlap = ScheduleCardTuning.Overlap(mode: mode, stripWidth: 18)
             let layouts = TimelineLayoutEngine(
                 availableWidth: 380, scale: TimelineScale(items: items), overlap: overlap
             ).layout(items: items)
@@ -141,7 +141,7 @@ struct TimelineLayoutTests {
                 id: thirdID, name: "Priya Narayanan", startHour: 10, startMinute: 45, duration: 45),
         ]
 
-        let overlap = ScheduleCardTuning.Overlap(mode: .cascade, separation: .halo, stripWidth: 18)
+        let overlap = ScheduleCardTuning.Overlap(mode: .cascade, stripWidth: 18)
         let layouts = TimelineLayoutEngine(
             availableWidth: 380, scale: TimelineScale(items: items), overlap: overlap
         ).layout(items: items)
@@ -187,7 +187,7 @@ struct TimelineLayoutTests {
         let textAwareLayouts = TimelineLayoutEngine(
             availableWidth: width,
             scale: TimelineScale(items: items),
-            overlap: .init(mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2)
+            overlap: .init(mode: .textAware, stripWidth: 18)
         ).layout(items: items)
         let textBack = try layout(for: backID, in: textAwareLayouts)
         let textFront = try layout(for: frontID, in: textAwareLayouts)
@@ -196,10 +196,10 @@ struct TimelineLayoutTests {
         #expect(textFront.rect.width > fullWidth * 0.6)
         #expect(textFront.isOverlappingFront)
         #expect(textBack.contentTrailingInset > 0)
-        // Content fence must stop strictly before the front card's halo.
+        // Content fence must stop strictly before the front card.
         let fencedContentMaxX =
             textBack.rect.maxX - ScheduleCardStyle.horizontalPadding - textBack.contentTrailingInset
-        #expect(fencedContentMaxX < textFront.rect.minX - 2)
+        #expect(fencedContentMaxX < textFront.rect.minX)
     }
 
     @Test func textAwareFallsBackToFairSplitWhenBackNameIsLong() throws {
@@ -241,8 +241,7 @@ struct TimelineLayoutTests {
         ]
         let width: CGFloat = 380
         let fullWidth = Timeline.metrics.contentWidth(availableWidth: width)
-        let overlap = ScheduleCardTuning.Overlap(
-            mode: .cascade, separation: .halo, stripWidth: 18, haloWidth: 2)
+        let overlap = ScheduleCardTuning.Overlap(mode: .cascade, stripWidth: 18)
 
         let layouts = TimelineLayoutEngine(
             availableWidth: width, scale: TimelineScale(items: items), overlap: overlap
@@ -254,8 +253,7 @@ struct TimelineLayoutTests {
 
         #expect(block.rect.width == fullWidth)
         #expect(first.rect.minX == block.rect.minX + 18)
-        // Halo gap separates side-by-side front cards over a shared background card.
-        #expect(abs((second.rect.minX - first.rect.maxX) - 2) < 0.01)
+        #expect(abs(second.rect.minX - first.rect.maxX) < 0.01)
         #expect(abs(second.rect.maxX - block.rect.maxX) < 0.01)
         #expect(first.isOverlappingFront)
         #expect(second.isOverlappingFront)
@@ -273,8 +271,7 @@ struct TimelineLayoutTests {
             appointment(
                 id: laterID, name: "Priya Narayanan", startHour: 10, startMinute: 0, duration: 30),
         ]
-        let overlap = ScheduleCardTuning.Overlap(
-            mode: .cascade, separation: .halo, stripWidth: 18, haloWidth: 2)
+        let overlap = ScheduleCardTuning.Overlap(mode: .cascade, stripWidth: 18)
 
         let layouts = TimelineLayoutEngine(
             availableWidth: 402, scale: TimelineScale(items: items), overlap: overlap
@@ -302,8 +299,6 @@ struct TimelineLayoutTests {
         let frontItem = appointment(
             id: UUID(), name: "Front", startHour: 11, startMinute: 45, duration: 15)
         let bounds = HorizontalSpan(min: 56, max: 356)
-        let overlap = ScheduleCardTuning.Overlap(
-            mode: .cascade, separation: .halo, stripWidth: 18, haloWidth: 2)
 
         // Full-width 15m card at 11:45–12:00 covers the 2h card's 12:00 end edge.
         let badEdgeEntries = [
@@ -323,7 +318,7 @@ struct TimelineLayoutTests {
             ),
         ]
         let edgeViolations = TimelineLayoutValidator.validate(
-            entries: badEdgeEntries, bounds: bounds, overlap: overlap)
+            entries: badEdgeEntries, bounds: bounds, stripWidth: 18)
         #expect(edgeViolations.contains(.timeEdgeObscured(covered: backID, by: frontID)))
 
         // Indented card placed over the back card's text band obscures its content.
@@ -344,7 +339,7 @@ struct TimelineLayoutTests {
             ),
         ]
         let contentViolations = TimelineLayoutValidator.validate(
-            entries: badContentEntries, bounds: bounds, overlap: overlap)
+            entries: badContentEntries, bounds: bounds, stripWidth: 18)
         #expect(contentViolations.contains(.contentObscured(covered: backID, by: frontID)))
     }
 
@@ -364,7 +359,7 @@ struct TimelineLayoutTests {
         let layouts = TimelineLayoutEngine(
             availableWidth: 340,
             scale: TimelineScale(items: items),
-            overlap: .init(mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2)
+            overlap: .init(mode: .textAware, stripWidth: 18)
         ).layout(items: items)
 
         let ana = try layout(for: anaID, in: layouts)
@@ -430,7 +425,7 @@ struct TimelineLayoutTests {
         let layouts = TimelineLayoutEngine(
             availableWidth: 402,
             scale: scale,
-            overlap: .init(mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2)
+            overlap: .init(mode: .textAware, stripWidth: 18)
         ).layout(items: items)
 
         let back = try layout(for: backID, in: layouts)
@@ -439,61 +434,6 @@ struct TimelineLayoutTests {
         #expect(back.presentation.layout == .compactStacked)
         #expect(back.contentTrailingInset > 0)
         #expect(front.isOverlappingFront)
-    }
-
-    @Test func touchingShortOverlapGroupsClipVerticalHalosAndPassValidation() throws {
-        let firstBackID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
-        let firstFrontID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
-        let secondBackID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
-        let secondFrontID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000004"))
-        let items = [
-            appointment(id: firstBackID, name: "Ana", startHour: 9, startMinute: 0, duration: 15),
-            appointment(id: firstFrontID, name: "Raj", startHour: 9, startMinute: 0, duration: 15),
-            appointment(
-                id: secondBackID, name: "Mia", startHour: 9, startMinute: 15, duration: 15),
-            appointment(
-                id: secondFrontID, name: "Kabir Malhotra", startHour: 9, startMinute: 15,
-                duration: 15),
-        ]
-        let overlap = ScheduleCardTuning.Overlap(
-            mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2)
-        let scale = TimelineScale(items: items)
-        let layouts = TimelineLayoutEngine(
-            availableWidth: 402, scale: scale, overlap: overlap
-        ).layout(items: items)
-
-        let firstFront = try layout(for: firstFrontID, in: layouts)
-        let secondFront = try layout(for: secondFrontID, in: layouts)
-        #expect(firstFront.isOverlappingFront)
-        #expect(secondFront.isOverlappingFront)
-        #expect(secondFront.haloOutsets == .init(top: 0, bottom: 0, horizontal: 2))
-
-        let metrics = ScheduleCardContentMetrics()
-        let bounds = HorizontalSpan(
-            min: Timeline.metrics.contentLeadingInset,
-            max: Timeline.metrics.contentLeadingInset
-                + Timeline.metrics.contentWidth(availableWidth: 402)
-        )
-        let entries = layouts.map { info in
-            let measured = metrics.bounds(
-                start: info.item.start,
-                label: info.item.displayLabel,
-                cardHeight: info.rect.height,
-                presentation: info.presentation
-            )
-            return ValidatedLayoutEntry(
-                layoutInfo: info,
-                contentRect: CGRect(
-                    x: info.rect.minX,
-                    y: info.rect.minY,
-                    width: min(info.rect.width, measured.width),
-                    height: min(info.rect.height, measured.height)
-                )
-            )
-        }
-        #expect(
-            TimelineLayoutValidator.validate(entries: entries, bounds: bounds, overlap: overlap)
-                .isEmpty)
     }
 
     @Test func randomizedSchedulesNeverViolateOverlapInvariants() {
@@ -509,7 +449,6 @@ struct TimelineLayoutTests {
         let durations = [15, 20, 30, 45, 60, 90, 120, 180]
         let widths: [CGFloat] = [280, 340, 402]
         let modes: [ScheduleCardTuning.Overlap.Mode] = [.cascade, .textAware]
-        let separations: [ScheduleCardTuning.Overlap.Separation] = [.halo, .shadow, .flat]
         let metrics = ScheduleCardContentMetrics()
 
         for trial in 0..<300 {
@@ -538,9 +477,7 @@ struct TimelineLayoutTests {
 
             let width = widths[trial % widths.count]
             let mode = modes[trial % modes.count]
-            let separation = separations[trial % separations.count]
-            let overlap = ScheduleCardTuning.Overlap(
-                mode: mode, separation: separation, stripWidth: 18, haloWidth: 2)
+            let overlap = ScheduleCardTuning.Overlap(mode: mode, stripWidth: 18)
             let scale = TimelineScale(items: items)
             let engine = TimelineLayoutEngine(
                 availableWidth: width, scale: scale, overlap: overlap, contentMetrics: metrics)
@@ -570,10 +507,10 @@ struct TimelineLayoutTests {
                 return ValidatedLayoutEntry(layoutInfo: info, contentRect: contentRect)
             }
             let violations = TimelineLayoutValidator.validate(
-                entries: entries, bounds: bounds, overlap: overlap)
+                entries: entries, bounds: bounds, stripWidth: CGFloat(overlap.stripWidth))
             #expect(
                 violations.isEmpty,
-                "Trial \(trial) (\(mode.rawValue)/\(separation.rawValue)) violated: \(violations)")
+                "Trial \(trial) (\(mode.rawValue)) violated: \(violations)")
         }
     }
 

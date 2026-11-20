@@ -21,9 +21,8 @@ struct TimelineTuningTests {
         tuning.state.cards.lift.shadowRadius = 12
         tuning.state.cards.lift.duration = 0.2
         tuning.state.cards.overlap.mode = .cascade
-        tuning.state.cards.overlap.separation = .halo
+        tuning.state.cards.overlap.separation = .flat
         tuning.state.cards.overlap.stripWidth = 22
-        tuning.state.cards.overlap.haloWidth = 3
         tuning.state.cards.overlap.shadowOpacity = 0.2
         tuning.state.cards.overlap.shadowRadius = 8
 
@@ -46,6 +45,19 @@ struct TimelineTuningTests {
         #expect(cards.otherContentOpacity == 0.21)
         #expect(cards.lift == ScheduleCardTuning.Lift())
         #expect(cards.overlap == ScheduleCardTuning.Overlap())
+    }
+
+    @Test func removedHaloSeparationFallsBackToShadowWhenDecodingSavedTuning() throws {
+        let data = Data(
+            #"{"surfaceOpacity":0.73,"otherContentOpacity":0.21,"overlap":{"mode":"Cascade","separation":"Halo","stripWidth":20,"haloWidth":3,"shadowOpacity":0.15,"shadowRadius":4}}"#
+                .utf8)
+        let cards = try JSONDecoder().decode(ScheduleCardTuning.self, from: data)
+        #expect(cards.surfaceOpacity == 0.73)
+        #expect(cards.overlap.mode == .cascade)
+        #expect(cards.overlap.separation == .shadow)
+        #expect(cards.overlap.stripWidth == 20)
+        #expect(cards.overlap.shadowOpacity == 0.15)
+        #expect(cards.overlap.shadowRadius == 4)
     }
 
         @Test func approvedValuesReplaceEarlierTuningOnceWithoutMovingPanel() throws {
@@ -80,7 +92,7 @@ struct TimelineTuningTests {
             saved.position = .init(x: 0.4, y: 0.5)
             saved.cards.surfaceOpacity = 0.65
             saved.cards.overlap = .init(
-                mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2,
+                mode: .textAware, separation: .flat, stripWidth: 18,
                 shadowOpacity: 0.12, shadowRadius: 6)
             defaults.set(
                 try JSONEncoder().encode(saved), forKey: "developer.timelineTuning.v1")

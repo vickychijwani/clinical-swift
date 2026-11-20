@@ -270,11 +270,6 @@ private struct TimelineOverlapControls: View {
                     range: 12...36, step: 1, unit: .points)
 
                 switch overlap.separation {
-                case .halo:
-                    TimelineTuningSlider(
-                        title: "Halo width",
-                        value: $overlap.haloWidth,
-                        range: 1...4, step: 0.5, unit: .points)
                 case .shadow:
                     TimelineTuningSlider(
                         title: "Overlap shadow",
@@ -313,7 +308,7 @@ private struct TimelineTuningSlider: View {
                     case .percent:
                         Text(value, format: .percent.precision(.fractionLength(0...1)))
                     case .points:
-                        Text("\(value, format: .number.precision(.fractionLength(0...1))) pt")
+                        Text("\(value, format: .number.precision(.fractionLength(0))) pt")
                     case .seconds:
                         Text(
                             "\(value * 1000, format: .number.precision(.fractionLength(0))) ms")

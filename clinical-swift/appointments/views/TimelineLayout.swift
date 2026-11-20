@@ -176,31 +176,13 @@ struct TimelineLayoutEngine {
         // The held card uses the full content width and does not displace other cards.
         let regular = items.filter { $0.id != floatingID }
         let floating = items.filter { $0.id == floatingID }
-        var regularLayouts: [TimelineItemLayoutInfo] = []
+        var result: [TimelineItemLayoutInfo] = []
         var nextZIndex = 0
         for group in overlappingGroups(for: regular) {
             let groupLayouts = layout(group: group, startingZIndex: nextZIndex)
             nextZIndex += groupLayouts.count
-            regularLayouts.append(contentsOf: groupLayouts)
+            result.append(contentsOf: groupLayouts)
         }
-        if overlap.mode != .current, assertOnFallback {
-            let bounds = HorizontalSpan(
-                min: Timeline.metrics.contentLeadingInset,
-                max: Timeline.metrics.contentLeadingInset + cardWidth
-            )
-            if bounds.width > 0 {
-                let violations = TimelineLayoutValidator.validate(
-                    entries: regularLayouts.map(validatedEntry(for:)),
-                    bounds: bounds,
-                    overlap: overlap
-                )
-                if !violations.isEmpty {
-                    assertionFailure(
-                        "Timeline overlapping layout violated cross-group invariants: \(violations)")
-                }
-            }
-        }
-        var result = regularLayouts
         for item in floating {
             let rect = CGRect(
                 x: Timeline.metrics.contentLeadingInset,
@@ -340,7 +322,7 @@ struct TimelineLayoutEngine {
             let violations = TimelineLayoutValidator.validate(
                 entries: entries,
                 bounds: bounds,
-                overlap: overlap
+                stripWidth: CGFloat(overlap.stripWidth)
             )
             if violations.isEmpty {
                 return entries.map(\.layoutInfo)
@@ -398,10 +380,9 @@ struct TimelineLayoutEngine {
         items: [PreparedItem],
         bounds: HorizontalSpan
     ) -> [PlacedItem]? {
-        let halo = haloMargin
         let strip = effectiveStripWidth(in: bounds)
         let minimumWidth = min(Self.minimumCardWidth, bounds.width)
-        let waves = contentWaves(for: items, halo: halo)
+        let waves = contentWaves(for: items)
 
         var placed: [PlacedItem] = []
         placed.reserveCapacity(items.count)
@@ -414,15 +395,12 @@ struct TimelineLayoutEngine {
             // Earlier waves start before wave[0], so any earlier item active during this wave
             // is active at waveMinY.
             let activeEarlier = placed.filter { $0.rect.maxY > waveMinY + Self.epsilon }
-            let hasEarlierOverlap = !activeEarlier.isEmpty
             let hostSlots = freeHorizontalSpans(
                 in: bounds,
                 yMin: waveMinY,
                 yMax: waveMaxY,
                 against: activeEarlier,
-                stripWidth: strip,
-                halo: halo,
-                candidateDrawsHalo: hasEarlierOverlap
+                stripWidth: strip
             )
 
             guard !hostSlots.isEmpty else { return nil }
@@ -433,26 +411,16 @@ struct TimelineLayoutEngine {
                     bestSlot.width >= minimumWidth
                 else { return nil }
 
-                placed.append(
-                    makePlacedItem(
-                        item,
-                        span: bestSlot,
-                        drawsHalo: overlapsAny(
-                            rect: item.rect(in: bestSlot), placed: placed)
-                    )
-                )
+                placed.append(makePlacedItem(item, span: bestSlot))
                 continue
             }
 
-            let waveHalo = hasEarlierOverlap ? halo : 0
-            let waveColumns = contentColumnAssignments(for: wave, halo: waveHalo)
+            let waveColumns = contentColumnAssignments(for: wave)
             let columnCount = (waveColumns.max() ?? 0) + 1
             let isClique = columnCount == wave.count
 
             if isClique {
-                let slotCounts = allocateSlots(
-                    count: wave.count, across: hostSlots,
-                    columnGap: hasEarlierOverlap ? halo : 0)
+                let slotCounts = allocateSlots(count: wave.count, across: hostSlots)
                 guard let slotCounts else { return nil }
 
                 var itemCursor = 0
@@ -464,58 +432,41 @@ struct TimelineLayoutEngine {
                         let slicePlaced = placeClique(
                             slice,
                             in: slot,
-                            hasEarlierOverlap: hasEarlierOverlap,
                             stripWidth: strip,
-                            halo: halo,
-                            minimumWidth: minimumWidth,
-                            existingPlaced: placed
+                            minimumWidth: minimumWidth
                         )
                     else { return nil }
                     placed.append(contentsOf: slicePlaced)
                 }
             } else {
-                let slotCounts = allocateSlots(
-                    count: columnCount, across: hostSlots,
-                    columnGap: hasEarlierOverlap ? halo : 0)
+                let slotCounts = allocateSlots(count: columnCount, across: hostSlots)
                 guard let slotCounts else { return nil }
 
                 var columnSpans: [HorizontalSpan] = []
-                let columnGap = hasEarlierOverlap ? halo : 0
                 for (slotIndex, count) in slotCounts.enumerated() where count > 0 {
                     let slot = hostSlots[slotIndex]
-                    let totalGap = columnGap * CGFloat(count - 1)
-                    let colWidth = (slot.width - totalGap) / CGFloat(count)
+                    let colWidth = slot.width / CGFloat(count)
                     guard colWidth >= minimumWidth else { return nil }
                     for col in 0..<count {
-                        let start = slot.min + CGFloat(col) * (colWidth + columnGap)
+                        let start = slot.min + CGFloat(col) * colWidth
                         columnSpans.append(HorizontalSpan(min: start, max: start + colWidth))
                     }
                 }
 
                 for (index, item) in wave.enumerated() {
                     let colSpan = columnSpans[waveColumns[index]]
-                    let candidateRect = item.rect(in: colSpan)
-                    let candidateDrawsHalo = overlapsAny(rect: candidateRect, placed: placed)
                     let freeInCol = freeHorizontalSpans(
                         in: colSpan,
                         yMin: item.minY,
                         yMax: item.maxY,
                         against: placed,
-                        stripWidth: strip,
-                        halo: halo,
-                        candidateDrawsHalo: candidateDrawsHalo
+                        stripWidth: strip
                     )
                     guard let best = freeInCol.max(by: { $0.width < $1.width }),
                         best.width >= minimumWidth
                     else { return nil }
 
-                    placed.append(
-                        makePlacedItem(
-                            item,
-                            span: best,
-                            drawsHalo: overlapsAny(rect: item.rect(in: best), placed: placed)
-                        )
-                    )
+                    placed.append(makePlacedItem(item, span: best))
                 }
             }
         }
@@ -526,35 +477,26 @@ struct TimelineLayoutEngine {
     private func placeClique(
         _ items: [PreparedItem],
         in slot: HorizontalSpan,
-        hasEarlierOverlap: Bool,
         stripWidth: CGFloat,
-        halo: CGFloat,
-        minimumWidth: CGFloat,
-        existingPlaced: [PlacedItem]
+        minimumWidth: CGFloat
     ) -> [PlacedItem]? {
         var result: [PlacedItem] = []
         var cursor = slot.min
-        var hasBackgroundOverlap = hasEarlierOverlap
 
         for index in items.indices {
             let item = items[index]
             let remaining = items.count - index
             let availableSpan = slot.max - cursor
             guard availableSpan > Self.epsilon else { return nil }
-            let peerGap = hasBackgroundOverlap ? halo : 0
 
             if remaining == 1 {
                 guard availableSpan >= minimumWidth else { return nil }
                 let span = HorizontalSpan(min: cursor, max: slot.max)
-                let drawsHalo =
-                    hasBackgroundOverlap
-                    || overlapsAny(rect: item.rect(in: span), placed: existingPlaced + result)
-                result.append(makePlacedItem(item, span: span, drawsHalo: drawsHalo))
+                result.append(makePlacedItem(item, span: span))
                 break
             }
 
-            let fairWidth =
-                (availableSpan - peerGap * CGFloat(remaining - 1)) / CGFloat(remaining)
+            let fairWidth = availableSpan / CGFloat(remaining)
             guard fairWidth >= minimumWidth else { return nil }
 
             if overlap.mode == .textAware {
@@ -575,8 +517,7 @@ struct TimelineLayoutEngine {
                             layout: peerLayout, usesCompactTime: false)
                     ).width
                 }
-                let remainingPeersDemand =
-                    nextPeerDemands.reduce(0, +) + halo * CGFloat(max(remaining - 2, 0))
+                let remainingPeersDemand = nextPeerDemands.reduce(0, +)
 
                 var bestCandidate:
                     (
@@ -590,16 +531,16 @@ struct TimelineLayoutEngine {
                         cardHeight: item.height,
                         presentation: candidate
                     )
-                    // Keep text clear of the next front card and its outer halo.
-                    let requiredAdvance = max(measured.width + halo, stripWidth)
+                    // Keep text clear of the next front card.
+                    let requiredAdvance = max(measured.width, stripWidth)
                     let remainingAfterOverlap = slot.max - (cursor + requiredAdvance)
-                    let nextFairWidth =
-                        (remainingAfterOverlap - halo * CGFloat(remaining - 2))
-                        / CGFloat(remaining - 1)
+                    let nextFairWidth = remainingAfterOverlap / CGFloat(remaining - 1)
                     if requiredAdvance <= fairWidth + Self.epsilon,
                         nextFairWidth >= minimumWidth
                     {
-                        if bestCandidate == nil || requiredAdvance < (bestCandidate?.advance ?? .infinity) - Self.epsilon {
+                        if bestCandidate == nil
+                            || requiredAdvance < (bestCandidate?.advance ?? .infinity) - Self.epsilon
+                        {
                             bestCandidate = (candidate, measured, requiredAdvance)
                         }
                         // Stop at the calmest option as soon as remaining peers fit untruncated.
@@ -610,31 +551,22 @@ struct TimelineLayoutEngine {
                 }
                 if let chosen = bestCandidate {
                     let span = HorizontalSpan(min: cursor, max: slot.max)
-                    let drawsHalo =
-                        hasBackgroundOverlap
-                        || overlapsAny(
-                            rect: item.rect(in: span), placed: existingPlaced + result)
                     result.append(
                         makePlacedItem(
                             item,
                             span: span,
-                            drawsHalo: drawsHalo,
                             presentation: chosen.presentation,
                             contentBoundsOverride: chosen.bounds
                         )
                     )
                     cursor += chosen.advance
-                    hasBackgroundOverlap = true
                     continue
                 }
             }
 
             let span = HorizontalSpan(min: cursor, max: cursor + fairWidth)
-            let drawsHalo =
-                hasBackgroundOverlap
-                || overlapsAny(rect: item.rect(in: span), placed: existingPlaced + result)
-            result.append(makePlacedItem(item, span: span, drawsHalo: drawsHalo))
-            cursor += fairWidth + peerGap
+            result.append(makePlacedItem(item, span: span))
+            cursor += fairWidth
         }
 
         return result
@@ -644,39 +576,27 @@ struct TimelineLayoutEngine {
         from placed: [PlacedItem],
         startingZIndex: Int
     ) -> [ValidatedLayoutEntry] {
-        let halo = haloMargin
-        let overlapStatusByIndex = placed.indices.map { index -> (Bool, TimelineItemLayoutInfo.HaloOutsets) in
+        placed.indices.map { index in
             let current = placed[index]
-            let overlappedLower = placed[0..<index].filter { lower in
+            let isOverlappingFront = placed[0..<index].contains { lower in
                 rectsOverlap(current.rect, lower.rect)
             }
-            let outsets = haloOutsets(
-                for: current.rect, overlappedLower: overlappedLower, halo: halo)
-            return (!overlappedLower.isEmpty, outsets)
-        }
-
-        return placed.indices.map { index in
-            let current = placed[index]
-            let (isOverlappingFront, currentOutsets) = overlapStatusByIndex[index]
 
             // Fence content away from any front card that overlaps this card's vertical content band.
             var nearestFrontLeft = current.rect.maxX
             for upperIndex in (index + 1)..<placed.count {
                 let upper = placed[upperIndex]
-                let upperOutsets = overlapStatusByIndex[upperIndex].1
-                let upperMinY = upper.rect.minY - upperOutsets.top
-                let upperMaxY = upper.rect.maxY + upperOutsets.bottom
                 let verticallyHitsContent =
-                    upperMinY < current.contentRect.maxY - Self.epsilon
-                    && current.contentRect.minY < upperMaxY - Self.epsilon
+                    upper.rect.minY < current.contentRect.maxY - Self.epsilon
+                    && current.contentRect.minY < upper.rect.maxY - Self.epsilon
                 if verticallyHitsContent, upper.rect.minX > current.rect.minX + Self.epsilon {
-                    nearestFrontLeft = min(nearestFrontLeft, upper.rect.minX - upperOutsets.horizontal)
+                    nearestFrontLeft = min(nearestFrontLeft, upper.rect.minX)
                 }
             }
 
             let contentTrailingInset: CGFloat
             if nearestFrontLeft < current.rect.maxX - Self.epsilon {
-                // Leave 4 pt breathing room inside the front card's halo while accounting for
+                // Leave 4 pt breathing room before the front card while accounting for
                 // ScheduleCard's built-in trailing horizontalPadding.
                 let desiredTrailingFromCardEdge =
                     current.rect.maxX - (nearestFrontLeft - Self.contentFenceGap)
@@ -700,59 +620,35 @@ struct TimelineLayoutEngine {
                 rect: current.rect,
                 zIndex: startingZIndex + index,
                 isOverlappingFront: isOverlappingFront,
-                haloOutsets: currentOutsets,
                 contentTrailingInset: contentTrailingInset,
                 presentation: presentation
             )
-            return validatedEntry(for: info)
+            let resolvedBounds = contentMetrics.bounds(
+                start: current.item.start,
+                label: current.item.displayLabel,
+                cardHeight: current.rect.height,
+                presentation: presentation
+            )
+            let protectedWidth: CGFloat =
+                switch overlap.mode {
+                case .textAware:
+                    min(current.rect.width, resolvedBounds.width)
+                case .cascade, .current:
+                    current.rect.width
+                }
+            let validatedContentRect = CGRect(
+                x: current.rect.minX,
+                y: current.rect.minY,
+                width: protectedWidth,
+                height: min(current.rect.height, resolvedBounds.height)
+            )
+            return ValidatedLayoutEntry(layoutInfo: info, contentRect: validatedContentRect)
         }
-    }
-
-    private func validatedEntry(for info: TimelineItemLayoutInfo) -> ValidatedLayoutEntry {
-        let resolvedBounds = contentMetrics.bounds(
-            start: info.item.start,
-            label: info.item.displayLabel,
-            cardHeight: info.rect.height,
-            presentation: info.presentation
-        )
-        let protectedWidth: CGFloat =
-            switch overlap.mode {
-            case .textAware:
-                min(info.rect.width, resolvedBounds.width)
-            case .cascade, .current:
-                info.rect.width
-            }
-        let validatedContentRect = CGRect(
-            x: info.rect.minX,
-            y: info.rect.minY,
-            width: protectedWidth,
-            height: min(info.rect.height, resolvedBounds.height)
-        )
-        return ValidatedLayoutEntry(layoutInfo: info, contentRect: validatedContentRect)
-    }
-
-    /// Clip vertical halo extension to overlapped lower cards so a front card cannot paint into a preceding group.
-    private func haloOutsets(
-        for rect: CGRect,
-        overlappedLower: [PlacedItem],
-        halo: CGFloat
-    ) -> TimelineItemLayoutInfo.HaloOutsets {
-        guard !overlappedLower.isEmpty, halo > 0 else {
-            return .zero
-        }
-        let overlappedMinY = overlappedLower.map(\.rect.minY).min() ?? rect.minY
-        let overlappedMaxY = overlappedLower.map(\.rect.maxY).max() ?? rect.maxY
-        return TimelineItemLayoutInfo.HaloOutsets(
-            top: min(halo, max(rect.minY - overlappedMinY, 0)),
-            bottom: min(halo, max(overlappedMaxY - rect.maxY, 0)),
-            horizontal: halo
-        )
     }
 
     private func makePlacedItem(
         _ prepared: PreparedItem,
         span: HorizontalSpan,
-        drawsHalo: Bool,
         presentation: ScheduleCardPresentation? = nil,
         contentBoundsOverride: ScheduleCardContentMetrics.Bounds? = nil
     ) -> PlacedItem {
@@ -777,21 +673,18 @@ struct TimelineLayoutEngine {
             item: prepared.item,
             rect: rect,
             contentRect: contentRect,
-            drawsHalo: drawsHalo,
             presentation: resolvedPresentation
         )
     }
 
     /// Split a time-overlapping group into sequential waves whose content bands do not collide.
-    private func contentWaves(
-        for items: [PreparedItem], halo: CGFloat
-    ) -> [[PreparedItem]] {
+    private func contentWaves(for items: [PreparedItem]) -> [[PreparedItem]] {
         var waves: [[PreparedItem]] = []
         var currentWave: [PreparedItem] = []
         var currentMaxContentEnd: CGFloat?
 
         for item in items {
-            let contentEnd = item.minY + item.contentBounds.height + halo
+            let contentEnd = item.minY + item.contentBounds.height
             if let maxEnd = currentMaxContentEnd,
                 item.minY >= maxEnd - Self.epsilon
             {
@@ -810,12 +703,10 @@ struct TimelineLayoutEngine {
     }
 
     /// Assign minimal side-by-side columns based only on vertical content-band collisions.
-    private func contentColumnAssignments(
-        for items: [PreparedItem], halo: CGFloat
-    ) -> [Int] {
+    private func contentColumnAssignments(for items: [PreparedItem]) -> [Int] {
         var columnContentEnds: [CGFloat] = []
         return items.map { item in
-            let contentEnd = item.minY + item.contentBounds.height + halo
+            let contentEnd = item.minY + item.contentBounds.height
             if let reusable = columnContentEnds.firstIndex(where: {
                 $0 <= item.minY + Self.epsilon
             }) {
@@ -831,8 +722,7 @@ struct TimelineLayoutEngine {
     /// Distribute `count` columns across available host slots to maximize minimum column width.
     private func allocateSlots(
         count: Int,
-        across slots: [HorizontalSpan],
-        columnGap: CGFloat
+        across slots: [HorizontalSpan]
     ) -> [Int]? {
         guard count > 0, !slots.isEmpty else { return nil }
         var counts = Array(repeating: 0, count: slots.count)
@@ -841,8 +731,7 @@ struct TimelineLayoutEngine {
             var bestWidth: CGFloat = -1
             for index in slots.indices {
                 let nextCount = counts[index] + 1
-                let totalGap = columnGap * CGFloat(nextCount - 1)
-                let width = (slots[index].width - totalGap) / CGFloat(nextCount)
+                let width = slots[index].width / CGFloat(nextCount)
                 if width > bestWidth {
                     bestWidth = width
                     bestIndex = index
@@ -859,11 +748,8 @@ struct TimelineLayoutEngine {
         yMin: CGFloat,
         yMax: CGFloat,
         against placed: [PlacedItem],
-        stripWidth: CGFloat,
-        halo: CGFloat,
-        candidateDrawsHalo: Bool
+        stripWidth: CGFloat
     ) -> [HorizontalSpan] {
-        let candidateHalo = candidateDrawsHalo ? halo : 0
         var forbidden: [HorizontalSpan] = []
 
         for lower in placed {
@@ -873,24 +759,15 @@ struct TimelineLayoutEngine {
             if overlapsVertically {
                 // Keep every overlapped lower card's continuous left strip uncovered.
                 let stripEnd = min(lower.rect.minX + stripWidth, lower.rect.maxX)
-                forbidden.append(
-                    HorizontalSpan(
-                        min: lower.rect.minX - candidateHalo,
-                        max: stripEnd
-                    )
-                )
+                forbidden.append(HorizontalSpan(min: lower.rect.minX, max: stripEnd))
             }
 
             let overlapsContentVertically =
-                lower.contentRect.minY < yMax + candidateHalo - Self.epsilon
-                && yMin - candidateHalo < lower.contentRect.maxY - Self.epsilon
+                lower.contentRect.minY < yMax - Self.epsilon
+                && yMin < lower.contentRect.maxY - Self.epsilon
             if overlapsContentVertically {
                 forbidden.append(
-                    HorizontalSpan(
-                        min: lower.contentRect.minX - candidateHalo,
-                        max: lower.contentRect.maxX + candidateHalo
-                    )
-                )
+                    HorizontalSpan(min: lower.contentRect.minX, max: lower.contentRect.maxX))
             }
         }
 
@@ -934,19 +811,11 @@ struct TimelineLayoutEngine {
         return free
     }
 
-    private func overlapsAny(rect: CGRect, placed: [PlacedItem]) -> Bool {
-        placed.contains { rectsOverlap(rect, $0.rect) }
-    }
-
     private func rectsOverlap(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
         let intersection = lhs.intersection(rhs)
         return !intersection.isNull
             && intersection.width > Self.epsilon
             && intersection.height > Self.epsilon
-    }
-
-    private var haloMargin: CGFloat {
-        overlap.separation == .halo ? max(CGFloat(overlap.haloWidth), 0) : 0
     }
 
     private func effectiveStripWidth(in bounds: HorizontalSpan) -> CGFloat {
@@ -1133,10 +1002,9 @@ nonisolated enum TimelineLayoutValidator {
     static func validate(
         entries: [ValidatedLayoutEntry],
         bounds: HorizontalSpan,
-        overlap: ScheduleCardTuning.Overlap
+        stripWidth: CGFloat
     ) -> [Violation] {
-        let halo = overlap.separation == .halo ? max(CGFloat(overlap.haloWidth), 0) : 0
-        let stripWidth = max(CGFloat(overlap.stripWidth), 0)
+        let stripWidth = max(stripWidth, 0)
         let sorted = entries.sorted { $0.layoutInfo.zIndex < $1.layoutInfo.zIndex }
         var violations: [Violation] = []
 
@@ -1168,15 +1036,7 @@ nonisolated enum TimelineLayoutValidator {
                 guard upper.layoutInfo.zIndex > lower.layoutInfo.zIndex else { continue }
 
                 let upperRect = upper.layoutInfo.rect
-                let upperOutsets = upper.layoutInfo.effectiveHaloOutsets(haloWidth: halo)
-                let upperOcclusionRect = CGRect(
-                    x: upperRect.minX - upperOutsets.horizontal,
-                    y: upperRect.minY - upperOutsets.top,
-                    width: upperRect.width + upperOutsets.horizontal * 2,
-                    height: upperRect.height + upperOutsets.top + upperOutsets.bottom
-                )
-
-                if intersects(lower.contentRect, upperOcclusionRect) {
+                if intersects(lower.contentRect, upperRect) {
                     violations.append(
                         .contentObscured(
                             covered: lower.layoutInfo.id,
@@ -1218,20 +1078,11 @@ struct ValidatedLayoutEntry {
 }
 
 struct TimelineItemLayoutInfo: Identifiable {
-    nonisolated struct HaloOutsets: Equatable, Sendable {
-        let top: CGFloat
-        let bottom: CGFloat
-        let horizontal: CGFloat
-
-        static let zero = Self(top: 0, bottom: 0, horizontal: 0)
-    }
-
     let id: TimelineItem.ID
     let item: TimelineItem
     let rect: CGRect
     let zIndex: Int
     let isOverlappingFront: Bool
-    let haloOutsets: HaloOutsets?
     let contentTrailingInset: CGFloat
     let presentation: ScheduleCardPresentation
 
@@ -1244,7 +1095,6 @@ struct TimelineItemLayoutInfo: Identifiable {
         rect: CGRect,
         zIndex: Int = 0,
         isOverlappingFront: Bool = false,
-        haloOutsets: HaloOutsets? = nil,
         contentTrailingInset: CGFloat = 0,
         presentation: ScheduleCardPresentation = .init()
     ) {
@@ -1253,21 +1103,8 @@ struct TimelineItemLayoutInfo: Identifiable {
         self.rect = rect
         self.zIndex = zIndex
         self.isOverlappingFront = isOverlappingFront
-        self.haloOutsets = haloOutsets
         self.contentTrailingInset = contentTrailingInset
         self.presentation = presentation
-    }
-
-    nonisolated func effectiveHaloOutsets(haloWidth: CGFloat) -> HaloOutsets {
-        guard isOverlappingFront, haloWidth > 0 else { return .zero }
-        guard let haloOutsets else {
-            return HaloOutsets(top: haloWidth, bottom: haloWidth, horizontal: haloWidth)
-        }
-        return HaloOutsets(
-            top: min(haloOutsets.top, haloWidth),
-            bottom: min(haloOutsets.bottom, haloWidth),
-            horizontal: min(haloOutsets.horizontal, haloWidth)
-        )
     }
 }
 
@@ -1288,7 +1125,6 @@ private struct PlacedItem {
     let item: TimelineItem
     let rect: CGRect
     let contentRect: CGRect
-    let drawsHalo: Bool
     let presentation: ScheduleCardPresentation
 }
 
