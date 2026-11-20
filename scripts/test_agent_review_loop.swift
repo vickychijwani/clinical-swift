@@ -695,6 +695,36 @@ private func createSuperDB(
         try expect(phaseRecord.conclusion == "success", "Expected conclusion recorded")
     }
 
+    private func testCommentReactionEndpoint() throws {
+        try expect(
+            commentReactionEndpoint(
+                repo: "owner/repo", eventName: "issue_comment", commentID: "12345")
+                == "repos/owner/repo/issues/comments/12345/reactions",
+            "issue_comment should use issues comments reactions endpoint"
+        )
+        try expect(
+            commentReactionEndpoint(
+                repo: "owner/repo", eventName: "pull_request_review_comment", commentID: "67890")
+                == "repos/owner/repo/pulls/comments/67890/reactions",
+            "pull_request_review_comment should use pulls comments reactions endpoint"
+        )
+        try expect(
+            commentReactionEndpoint(
+                repo: "owner/repo", eventName: "pull_request_review", commentID: "111") == nil,
+            "pull_request_review has no reactions endpoint"
+        )
+        try expect(
+            commentReactionEndpoint(
+                repo: "owner/repo", eventName: "workflow_dispatch", commentID: "111") == nil,
+            "workflow_dispatch has no reactions endpoint"
+        )
+        try expect(
+            commentReactionEndpoint(
+                repo: "owner/repo", eventName: "issue_comment", commentID: "  ") == nil,
+            "Empty comment ID should return nil"
+        )
+    }
+
     private func runAllTests() {
         let tempRoot = FileManager.default.temporaryDirectory.appending(
             path: "agent-review-loop-tests-\(UUID().uuidString)")
@@ -707,6 +737,7 @@ private func createSuperDB(
             try testDiscoveryIntegration(in: tempRoot)
             try testCodexSkillsConfig(in: tempRoot)
             try testCheckRunPayload()
+            try testCommentReactionEndpoint()
             try testMonitorRecord(in: tempRoot)
             print("PASS agent review loop unit and integration tests")
         } catch {
@@ -791,6 +822,13 @@ private func createSuperDB(
             FileManager.default.fileExists(atPath: monitorDir.appending(path: "runs/42/bot.json").path),
             "CLI monitor-record failed"
         )
+        _ = try runShell([
+            cliBinary.path, "react",
+            "--repo", "owner/repo",
+            "--event", "workflow_dispatch",
+            "--comment-id", "",
+            "--content", "eyes",
+        ])
         print("PASS agent review loop CLI compilation and smoke check")
     } catch {
         FileHandle.standardError.write(Data("FAIL: \(error)\n".utf8))
