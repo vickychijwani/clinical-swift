@@ -31,16 +31,20 @@ final class TimelineTuning {
             .flatMap { try? JSONDecoder().decode(SavedState.self, from: $0) } ?? SavedState()
         // Apply the approved values once. Later Card lab edits still persist.
         let appearanceRevision = defaults.integer(forKey: Self.appearanceRevisionKey)
-        if appearanceRevision < 2 {
+        if appearanceRevision < 3 {
+            let defaultsTuning = ScheduleCardTuning()
             if appearanceRevision < 1 {
-                state.cards = ScheduleCardTuning()
+                state.cards = defaultsTuning
             } else {
-                state.cards.surfaceOpacity = ScheduleCardTuning().surfaceOpacity
+                if appearanceRevision < 2 {
+                    state.cards.surfaceOpacity = defaultsTuning.surfaceOpacity
+                }
+                state.cards.overlap = defaultsTuning.overlap
             }
             if let data = try? JSONEncoder().encode(state) {
                 defaults.set(data, forKey: Self.storageKey)
             }
-            defaults.set(2, forKey: Self.appearanceRevisionKey)
+            defaults.set(3, forKey: Self.appearanceRevisionKey)
         }
     }
 

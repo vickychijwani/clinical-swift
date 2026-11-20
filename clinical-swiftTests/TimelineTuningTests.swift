@@ -21,9 +21,11 @@ struct TimelineTuningTests {
         tuning.state.cards.lift.shadowRadius = 12
         tuning.state.cards.lift.duration = 0.2
         tuning.state.cards.overlap.mode = .cascade
-        tuning.state.cards.overlap.separation = .shadow
+        tuning.state.cards.overlap.separation = .halo
         tuning.state.cards.overlap.stripWidth = 22
         tuning.state.cards.overlap.haloWidth = 3
+        tuning.state.cards.overlap.shadowOpacity = 0.2
+        tuning.state.cards.overlap.shadowRadius = 8
 
         #expect(TimelineTuning(defaults: defaults).state == tuning.state)
 
@@ -66,6 +68,36 @@ struct TimelineTuningTests {
             #expect(tuning.state.position == saved.position)
 
             tuning.state.cards.surfaceOpacity = 0.77
+            #expect(TimelineTuning(defaults: defaults).state == tuning.state)
+        }
+
+        @Test func approvedOverlapValuesReplaceRevisionTwoOnceAndKeepOtherTuning() throws {
+            let suite = "TimelineTuningTests.\(UUID())"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            var saved = TimelineTuning.SavedState()
+            saved.isEnabled = true
+            saved.position = .init(x: 0.4, y: 0.5)
+            saved.cards.surfaceOpacity = 0.65
+            saved.cards.overlap = .init(
+                mode: .textAware, separation: .halo, stripWidth: 18, haloWidth: 2,
+                shadowOpacity: 0.12, shadowRadius: 6)
+            defaults.set(
+                try JSONEncoder().encode(saved), forKey: "developer.timelineTuning.v1")
+            defaults.set(2, forKey: "developer.timelineTuning.appearanceRevision")
+
+            let tuning = TimelineTuning(defaults: defaults)
+            #expect(tuning.state.cards.overlap == ScheduleCardTuning.Overlap())
+            #expect(tuning.state.cards.overlap.mode == .textAware)
+            #expect(tuning.state.cards.overlap.separation == .shadow)
+            #expect(tuning.state.cards.overlap.stripWidth == 16)
+            #expect(tuning.state.cards.overlap.shadowOpacity == 0.09)
+            #expect(tuning.state.cards.overlap.shadowRadius == 2)
+            #expect(tuning.state.cards.surfaceOpacity == 0.65)
+            #expect(tuning.state.isEnabled)
+            #expect(tuning.state.position == saved.position)
+
+            tuning.state.cards.overlap.stripWidth = 20
             #expect(TimelineTuning(defaults: defaults).state == tuning.state)
         }
 

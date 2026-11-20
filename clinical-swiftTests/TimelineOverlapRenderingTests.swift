@@ -70,16 +70,18 @@ struct TimelineOverlapRenderingTests {
         let allItems = firstGroup + secondGroup
         let scale = TimelineScale(items: allItems)
         let width: CGFloat = 402
-        let layouts = TimelineLayoutEngine(availableWidth: width, scale: scale).layout(
-            items: allItems)
+        var haloTuning = ScheduleCardTuning()
+        haloTuning.overlap.separation = .halo
+        var flatTuning = ScheduleCardTuning()
+        flatTuning.overlap.separation = .flat
+        let layouts = TimelineLayoutEngine(
+            availableWidth: width, scale: scale, overlap: haloTuning.overlap
+        ).layout(items: allItems)
         #expect(layouts.first { $0.id == .appointment(firstFrontID) }?.isOverlappingFront == true)
         #expect(layouts.first { $0.id == .appointment(secondFrontID) }?.isOverlappingFront == true)
         // Render only the top 60 pt of the timeline covering 9:00–10:00 at 2x scale.
         let renderHeight: CGFloat = 60
         let pixelScale = 2
-        let haloTuning = ScheduleCardTuning()
-        var flatTuning = ScheduleCardTuning()
-        flatTuning.overlap.separation = .flat
 
         let firstGroupOnly = try renderTimeline(
             items: firstGroup, scale: scale, width: width, height: renderHeight,

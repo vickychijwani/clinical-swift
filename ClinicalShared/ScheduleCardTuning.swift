@@ -33,21 +33,21 @@ nonisolated struct ScheduleCardTuning: Codable, Equatable, Sendable {
         }
 
         var mode: Mode = .textAware
-        var separation: Separation = .halo
+        var separation: Separation = .shadow
         /// Minimum continuous left strip left uncovered on every overlapped back card.
-        var stripWidth = 18.0
+        var stripWidth = 16.0
         /// Outer canvas-colored outline around overlapping front cards in `.halo` mode.
         var haloWidth = 2.0
-        var shadowOpacity = 0.12
-        var shadowRadius = 6.0
+        var shadowOpacity = 0.09
+        var shadowRadius = 2.0
 
         init(
             mode: Mode = .textAware,
-            separation: Separation = .halo,
-            stripWidth: Double = 18.0,
+            separation: Separation = .shadow,
+            stripWidth: Double = 16.0,
             haloWidth: Double = 2.0,
-            shadowOpacity: Double = 0.12,
-            shadowRadius: Double = 6.0
+            shadowOpacity: Double = 0.09,
+            shadowRadius: Double = 2.0
         ) {
             self.mode = mode
             self.separation = separation
@@ -60,11 +60,11 @@ nonisolated struct ScheduleCardTuning: Codable, Equatable, Sendable {
         init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
             mode = try values.decodeIfPresent(Mode.self, forKey: .mode) ?? .textAware
-            separation = try values.decodeIfPresent(Separation.self, forKey: .separation) ?? .halo
-            stripWidth = try values.decodeIfPresent(Double.self, forKey: .stripWidth) ?? 18.0
+            separation = try values.decodeIfPresent(Separation.self, forKey: .separation) ?? .shadow
+            stripWidth = try values.decodeIfPresent(Double.self, forKey: .stripWidth) ?? 16.0
             haloWidth = try values.decodeIfPresent(Double.self, forKey: .haloWidth) ?? 2.0
-            shadowOpacity = try values.decodeIfPresent(Double.self, forKey: .shadowOpacity) ?? 0.12
-            shadowRadius = try values.decodeIfPresent(Double.self, forKey: .shadowRadius) ?? 6.0
+            shadowOpacity = try values.decodeIfPresent(Double.self, forKey: .shadowOpacity) ?? 0.09
+            shadowRadius = try values.decodeIfPresent(Double.self, forKey: .shadowRadius) ?? 2.0
         }
 
         private enum CodingKeys: String, CodingKey {
