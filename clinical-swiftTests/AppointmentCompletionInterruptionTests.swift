@@ -14,31 +14,27 @@ struct AppointmentCompletionInterruptionTests {
 
     @Test func trayDismissalUsesTheDraftAndVisitThatRequestedDiscard() throws {
         let fixture = try makeFixture()
-        try withDependencies {
-            $0.calendar = FinancialDate.calendar
-        } operation: {
-            let router = Router(selectedScheduleDate: fixture.timestamp)
-            router.presentDetails(.appointment(fixture.details.id))
-            let presentation = try #require(router.detailsPresentation)
-            let visit = presentation.visitID
-            let policy = DetailsDismissal()
-            router.beginAppointmentCompletion(
-                fixture.details, visitID: visit, presentationID: presentation.id)
-            let model = try #require(presentation.completionDrafts[visit])
-            model.setAmountText("1000")
-            policy.request(router: router, presentation: presentation)
-            #expect(router.detailsPresentation === presentation)
-            #expect(!policy.isConfirmingDiscard)
-            router.setDetailsPath([], presentationID: presentation.id)
-            policy.request(router: router, presentation: presentation)
-            #expect(policy.isConfirmingDiscard)
-            #expect(router.detailsPresentation === presentation)
-            router.presentDetails(.appointment(fixture.details.id))
-            policy.discard(router: router, presentation: presentation)
-            #expect(router.detailsPresentation === presentation)
-            router.pushDetails(.patient(UUID()), presentationID: presentation.id, visitID: visit)
-            #expect(presentation.path.isEmpty)
-        }
+        let router = Router(selectedScheduleDate: fixture.timestamp)
+        router.presentDetails(.appointment(fixture.details.id))
+        let presentation = try #require(router.detailsPresentation)
+        let visit = presentation.visitID
+        let policy = DetailsDismissal()
+        router.beginAppointmentCompletion(
+            fixture.details, visitID: visit, presentationID: presentation.id)
+        let model = try #require(presentation.completionDrafts[visit])
+        model.setAmountText("1000")
+        policy.request(router: router, presentation: presentation)
+        #expect(router.detailsPresentation === presentation)
+        #expect(!policy.isConfirmingDiscard)
+        router.setDetailsPath([], presentationID: presentation.id)
+        policy.request(router: router, presentation: presentation)
+        #expect(policy.isConfirmingDiscard)
+        #expect(router.detailsPresentation === presentation)
+        router.presentDetails(.appointment(fixture.details.id))
+        policy.discard(router: router, presentation: presentation)
+        #expect(router.detailsPresentation === presentation)
+        router.pushDetails(.patient(UUID()), presentationID: presentation.id, visitID: visit)
+        #expect(presentation.path.isEmpty)
     }
 
     @Test(arguments: Interruption.allCases)
@@ -62,7 +58,6 @@ struct AppointmentCompletionInterruptionTests {
         }
         try await withDependencies {
             $0.defaultDatabase = fixture.database
-            $0.calendar = FinancialDate.calendar
             $0.date.now = fixture.timestamp
         } operation: {
             let router = Router(selectedScheduleDate: fixture.timestamp)
@@ -133,7 +128,7 @@ struct AppointmentCompletionInterruptionTests {
                 #expect(router.detailsPresentation == nil)
                 #expect(
                     router.selectedScheduleDate
-                        == FinancialDate.day(fixture.timestamp.addingTimeInterval(86400)))
+                        == ClinicDate.day(fixture.timestamp.addingTimeInterval(86400)))
             case .destination:
                 #expect(presentation.currentRoute == .patient(fixture.details.patient.id))
                 #expect(router.detailsPresentation === presentation)
@@ -268,27 +263,23 @@ struct AppointmentCompletionInterruptionTests {
 
     @Test func onlyTheCurrentScheduledAppointmentCanOpenCompletion() throws {
         let fixture = try makeFixture()
-        try withDependencies {
-            $0.calendar = FinancialDate.calendar
-        } operation: {
-            let router = Router()
-            router.presentDetails(.appointment(fixture.details.id))
-            let id = try #require(router.detailsPresentation?.id)
-            router.beginAppointmentCompletion(
-                fixture.details, visitID: UUID(), presentationID: UUID())
+        let router = Router()
+        router.presentDetails(.appointment(fixture.details.id))
+        let id = try #require(router.detailsPresentation?.id)
+        router.beginAppointmentCompletion(
+            fixture.details, visitID: UUID(), presentationID: UUID())
+        #expect(router.detailsPresentation?.path.isEmpty == true)
+        for status in [Appointment.Status.completed, .cancelled] {
+            let terminal = AppointmentDetails(
+                appointment: Appointment(
+                    id: fixture.details.id, patientName: "Patient", start: fixture.timestamp,
+                    durationMinutes: 30, status: status), patient: fixture.details.patient)
+            router.beginAppointmentCompletion(terminal, visitID: UUID(), presentationID: id)
             #expect(router.detailsPresentation?.path.isEmpty == true)
-            for status in [Appointment.Status.completed, .cancelled] {
-                let terminal = AppointmentDetails(
-                    appointment: Appointment(
-                        id: fixture.details.id, patientName: "Patient", start: fixture.timestamp,
-                        durationMinutes: 30, status: status), patient: fixture.details.patient)
-                router.beginAppointmentCompletion(terminal, visitID: UUID(), presentationID: id)
-                #expect(router.detailsPresentation?.path.isEmpty == true)
-            }
-            router.pushDetails(.patient(fixture.details.patient.id))
-            router.beginAppointmentCompletion(fixture.details, visitID: UUID(), presentationID: id)
-            #expect(router.detailsPresentation?.path == [.patient(fixture.details.patient.id)])
         }
+        router.pushDetails(.patient(fixture.details.patient.id))
+        router.beginAppointmentCompletion(fixture.details, visitID: UUID(), presentationID: id)
+        #expect(router.detailsPresentation?.path == [.patient(fixture.details.patient.id)])
     }
 
     private func makeFixture() throws -> Fixture {

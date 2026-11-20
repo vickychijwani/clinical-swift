@@ -36,9 +36,9 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
         let nextRefresh =
             switch entry.content {
             case .schedule(let snapshot):
-                snapshot.nextRefreshDate(using: .autoupdatingCurrent)
+                snapshot.nextRefreshDate(using: ClinicDate.calendar)
             case .unavailable:
-                Calendar.autoupdatingCurrent.date(
+                ClinicDate.calendar.date(
                     byAdding: .minute,
                     value: 30,
                     to: entry.date
@@ -65,7 +65,7 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
         appointmentCount: Int,
         blockCount: Int = 1
     ) -> ClinicalScheduleEntry {
-        let calendar = Calendar.autoupdatingCurrent
+        let calendar = ClinicDate.calendar
         let today = calendar.startOfDay(for: date)
         let names = [
             "Aarav Mehta",
@@ -141,10 +141,9 @@ struct ClinicalScheduleWidgetView: View {
 
 private struct WidgetUnavailableView: View {
     let date: Date
-    @Environment(\.calendar) private var calendar
 
     var body: some View {
-        let day = ScheduleDay(date: date, calendar: calendar)
+        let day = ScheduleDay(date: date, calendar: ClinicDate.calendar)
         ZStack {
             if let destination = ClinicalURL.schedule(day).url {
                 Link(destination: destination) {
@@ -158,7 +157,7 @@ private struct WidgetUnavailableView: View {
             VStack(alignment: .leading) {
                 Text(
                     date,
-                    format: .dateTime.weekday(.wide).day().month(.abbreviated)
+                    format: ClinicDate.formatStyle.weekday(.wide).day().month(.abbreviated)
                 )
                 .font(.caption.bold())
                 .foregroundStyle(Color.accentColor)
@@ -183,6 +182,9 @@ struct ClinicalScheduleWidget: Widget {
             provider: ClinicalScheduleProvider()
         ) { entry in
             ClinicalScheduleWidgetView(entry: entry)
+                .environment(\.timeZone, ClinicDate.timeZone)
+                .environment(\.calendar, ClinicDate.calendar)
+                .environment(\.locale, ClinicDate.locale)
                 .containerBackground(for: .widget) {
                     Color("AppCanvas")
                 }

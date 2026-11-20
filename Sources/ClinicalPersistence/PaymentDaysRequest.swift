@@ -5,7 +5,7 @@ import SQLiteData
 public nonisolated struct PaymentDaysRequest: FetchKeyRequest {
     public let today: Date
 
-    public init(today: Date) { self.today = FinancialDate.day(today) }
+    public init(today: Date) { self.today = ClinicDate.day(today) }
 
     public func fetch(_ db: Database) throws -> [PaymentDay] {
         let rows =

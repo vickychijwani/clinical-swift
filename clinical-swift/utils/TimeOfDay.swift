@@ -24,7 +24,7 @@ nonisolated struct TimeOfDay: Comparable, Equatable {
         self.minute = minute
     }
 
-    init(date: Date, calendar: Calendar = .autoupdatingCurrent) {
+    init(date: Date, calendar: Calendar = ClinicDate.calendar) {
         let components = calendar.dateComponents([.hour, .minute], from: date)
         hour = components.hour ?? 0
         minute = components.minute ?? 0
@@ -51,10 +51,10 @@ nonisolated struct TimeOfDay: Comparable, Equatable {
     }
 
     var today: Date {
-        on(date: .now)
+        on(date: ClinicDate.today)
     }
 
-    func on(date: Date, using calendar: Calendar = .autoupdatingCurrent) -> Date {
+    func on(date: Date, using calendar: Calendar = ClinicDate.calendar) -> Date {
         date.setTime(hour, minute, using: calendar)
     }
 
@@ -85,9 +85,9 @@ extension TimeOfDay {
     func formatted(_ format: Format) -> String {
         switch format {
         case .full:
-            today.formatted(date: .omitted, time: .shortened)
+            today.formatted(ClinicDate.formatStyle.hour().minute())
         case .hourOnly:
-            today.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated)))
+            today.formatted(ClinicDate.formatStyle.hour(.defaultDigits(amPM: .abbreviated)))
         }
     }
 }

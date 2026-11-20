@@ -9,7 +9,7 @@ public nonisolated struct AccountHistoryRequest: FetchKeyRequest {
 
     public init(patientID: UUID, through: Date? = nil) {
         self.patientID = patientID
-        self.through = through.map(FinancialDate.day)
+        self.through = through.map(ClinicDate.day)
     }
 
     public func fetch(_ db: Database) throws -> [AccountEntry] {
@@ -20,7 +20,7 @@ public nonisolated struct AccountHistoryRequest: FetchKeyRequest {
 nonisolated private func patientEntriesQuery(_ patientID: UUID, through: Date?)
     -> some Statement<AccountEntryRecord> & Sendable
 {
-    let end = through.map(FinancialDate.nextDay) ?? .distantFuture
+    let end = through.map(ClinicDate.nextDay) ?? .distantFuture
     return AccountEntryRecord.where { $0.patientID.eq(patientID) }
         .where { $0.entryDate < end }
         .order { ($0.entryDate.asc(), $0.createdAt.asc(), $0.id.asc()) }
@@ -32,7 +32,7 @@ public nonisolated struct PatientLedgerRequest: FetchKeyRequest {
     public let through: Date?
     public init(patientID: UUID, through: Date? = nil) {
         self.patientID = patientID
-        self.through = through.map(FinancialDate.day)
+        self.through = through.map(ClinicDate.day)
     }
     public func fetch(_ db: Database) throws -> PatientLedger {
         try patientLedger(patientID: patientID, through: through, in: db)
@@ -62,7 +62,7 @@ public nonisolated struct AppointmentCoverageRequest: FetchKeyRequest {
     public let through: Date?
     public init(appointmentID: UUID, through: Date? = nil) {
         self.appointmentID = appointmentID
-        self.through = through.map(FinancialDate.day)
+        self.through = through.map(ClinicDate.day)
     }
     public func fetch(_ db: Database) throws -> AppointmentCoverage {
         guard let appointment = try AppointmentRecord.find(appointmentID).fetchOne(db) else {
@@ -114,8 +114,8 @@ public nonisolated struct CashFlowRequest: FetchKeyRequest {
     public let start: Date
     public let end: Date
     public init(start: Date, end: Date) {
-        self.start = FinancialDate.day(start)
-        self.end = FinancialDate.day(end)
+        self.start = ClinicDate.day(start)
+        self.end = ClinicDate.day(end)
     }
     public func fetch(_ db: Database) throws -> CashFlow {
         // Decode every dated row before selecting cash movements. An unknown kind must not disappear from a report.

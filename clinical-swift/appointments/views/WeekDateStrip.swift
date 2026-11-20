@@ -15,8 +15,8 @@ struct WeekDateStrip: View {
 
     init(
         selectedDate: Binding<Date>,
-        today: Date = .now,
-        calendar: Calendar = .autoupdatingCurrent,
+        today: Date,
+        calendar: Calendar = ClinicDate.calendar,
         displayMode: WeekDateStripDisplayMode = .schedule
     ) {
         self._selectedDate = selectedDate
@@ -284,23 +284,23 @@ private struct DateStripCell: View {
     }
 
     private var weekdayText: String {
-        date.formatted(.dateTime.weekday(.narrow))
+        date.formatted(ClinicDate.formatStyle.weekday(.narrow))
     }
 
     private var shortWeekdayText: String {
-        date.formatted(.dateTime.weekday(.abbreviated)).uppercased()
+        date.formatted(ClinicDate.formatStyle.weekday(.abbreviated)).uppercased()
     }
 
     private var dayText: String {
-        date.formatted(.dateTime.day())
+        date.formatted(ClinicDate.formatStyle.day())
     }
 
     private var monthText: String {
-        date.formatted(.dateTime.month(.abbreviated)).uppercased()
+        date.formatted(ClinicDate.formatStyle.month(.abbreviated)).uppercased()
     }
 
     private var accessibilityLabel: String {
-        date.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
+        date.formatted(ClinicDate.formatStyle.weekday(.wide).month(.wide).day().year())
     }
 
     private var accessibilityValue: String {
@@ -311,15 +311,15 @@ private struct DateStripCell: View {
 }
 
 #Preview("displayMode: schedule", traits: .sizeThatFitsLayout) {
-    @Previewable @State var selectedDate = Date.now.startOfDay()
+    @Previewable @State var selectedDate = ClinicDate.today
 
-    WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .schedule)
+    WeekDateStrip(selectedDate: $selectedDate, today: ClinicDate.today, displayMode: .schedule)
         .background(AppColor.canvas)
 }
 
 #Preview("displayMode: sheet", traits: .sizeThatFitsLayout) {
-    @Previewable @State var selectedDate = Date.now.startOfDay()
+    @Previewable @State var selectedDate = ClinicDate.today
 
-    WeekDateStrip(selectedDate: $selectedDate, today: .now, displayMode: .sheet)
+    WeekDateStrip(selectedDate: $selectedDate, today: ClinicDate.today, displayMode: .sheet)
         .background(AppColor.canvas)
 }

@@ -263,30 +263,18 @@ struct UnavailableTimeCalendarTests {
     private func makeCoordinator(_ database: DatabaseQueue, _ recorder: BlockCalendarRecorder)
         -> CalendarSyncCoordinator
     {
-        withDependencies {
-            var calendar = Calendar(identifier: .gregorian)
-            calendar.timeZone = .gmt
-            $0.calendar = calendar
-        } operation: {
-            CalendarSyncCoordinator(
-                database: database, calendarClient: recorder.client,
-                contactClient: AppointmentContactClient { _ in
-                    Issue.record("A block must not request a contact name.")
-                    return nil
-                })
-        }
+        CalendarSyncCoordinator(
+            database: database, calendarClient: recorder.client,
+            contactClient: AppointmentContactClient { _ in
+                Issue.record("A block must not request a contact name.")
+                return nil
+            })
     }
 
     private func activate(_ coordinator: CalendarSyncCoordinator) async throws {
         var finished = false
         let activation = Task {
-            await withDependencies {
-                var calendar = Calendar(identifier: .gregorian)
-                calendar.timeZone = .gmt
-                $0.calendar = calendar
-            } operation: {
-                await coordinator.activate()
-            }
+            await coordinator.activate()
             finished = true
         }
         defer { activation.cancel() }

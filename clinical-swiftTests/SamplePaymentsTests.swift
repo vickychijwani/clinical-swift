@@ -26,7 +26,7 @@ import Testing
                 #expect(entries.contains { $0.paymentMethod == nil && $0.kind == .receipt })
                 for entry in entries {
                     try entry.validate()
-                    #expect(entry.entryDate == FinancialDate.day(entry.entryDate))
+                    #expect(entry.entryDate == ClinicDate.day(entry.entryDate))
                 }
                 try database.seedSampleDataIfNeeded()
                 let count = try database.read { try AccountEntryRecord.count().fetchOne($0) }

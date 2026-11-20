@@ -10,11 +10,7 @@ import UIKit
 @MainActor
 struct RouterTests {
     @Test func staleFieldTrayExitCannotClearAReplacement() throws {
-        let router = withDependencies {
-            $0.calendar = Calendar(identifier: .gregorian)
-        } operation: {
-            Router()
-        }
+        let router = Router()
         router.requestScheduleCreation()
         let oldID = try #require(router.activePresentation?.id)
         router.presentationDidAppear(oldID)
@@ -163,170 +159,153 @@ struct RouterTests {
     }
 
     @Test func changingTheScheduleDateDismissesDetailsButSelectingTheSameDayDoesNot() throws {
-        let calendar = gregorianCalendar
-        let selectedDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
-        let sameDay = try Date("2026-07-18T15:00:00Z", strategy: .iso8601)
-        let nextDay = try Date("2026-07-19T00:00:00Z", strategy: .iso8601)
+        let selectedDate = try Date("2026-07-18T00:00:00+05:30", strategy: .iso8601)
+        let sameDay = try Date("2026-07-18T15:00:00+05:30", strategy: .iso8601)
+        let nextDay = try Date("2026-07-19T00:00:00+05:30", strategy: .iso8601)
 
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let router = makeRouter(selectedScheduleDate: selectedDate)
-            router.presentDetails(.appointment(UUID()))
-            let presentationID = try #require(router.detailsPresentation?.id)
-            router.presentationDidAppear(presentationID)
+        let router = makeRouter(selectedScheduleDate: selectedDate)
+        router.presentDetails(.appointment(UUID()))
+        let presentationID = try #require(router.detailsPresentation?.id)
+        router.presentationDidAppear(presentationID)
 
-            router.selectScheduleDate(sameDay)
-            #expect(router.detailsPresentation != nil)
+        router.selectScheduleDate(sameDay)
+        #expect(router.detailsPresentation != nil)
 
-            router.selectScheduleDate(nextDay)
-            #expect(router.selectedScheduleDate == nextDay)
-            #expect(router.detailsPresentation == nil)
+        router.selectScheduleDate(nextDay)
+        #expect(router.selectedScheduleDate == nextDay)
+        #expect(router.detailsPresentation == nil)
 
-            router.presentationDidDismiss(presentationID)
-            #expect(router.activePresentation?.id == nil)
-        }
+        router.presentationDidDismiss(presentationID)
+        #expect(router.activePresentation?.id == nil)
     }
 
     @Test func appointmentResolutionAlignsTheScheduleWithoutDismissingDetails() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
-        let appointmentDate = try Date("2026-07-22T11:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let initialDate = try Date("2026-07-18T00:00:00+05:30", strategy: .iso8601)
+        let appointmentDate = try Date("2026-07-22T11:00:00+05:30", strategy: .iso8601)
 
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let router = makeRouter(selectedScheduleDate: initialDate)
-            router.selectedTab = .patients
-            let appointmentID = UUID()
-            router.presentDetails(.appointment(appointmentID))
-            let presentationID = try #require(router.detailsPresentation?.id)
+        let router = makeRouter(selectedScheduleDate: initialDate)
+        router.selectedTab = .patients
+        let appointmentID = UUID()
+        router.presentDetails(.appointment(appointmentID))
+        let presentationID = try #require(router.detailsPresentation?.id)
 
-            #expect(
-                !router.scheduleIsAligned(
-                    with: appointmentDate,
-                    appointmentID: appointmentID,
-                    presentationID: presentationID
-                )
-            )
-
-            router.alignSchedule(
+        #expect(
+            !router.scheduleIsAligned(
                 with: appointmentDate,
                 appointmentID: appointmentID,
                 presentationID: presentationID
             )
+        )
 
-            #expect(router.selectedTab == .schedule)
-            #expect(router.selectedScheduleDate == appointmentDate.startOfDay(using: calendar))
-            #expect(router.detailsPresentation?.currentRoute == .appointment(appointmentID))
-            #expect(
-                router.scheduleIsAligned(
-                    with: appointmentDate,
-                    appointmentID: appointmentID,
-                    presentationID: presentationID
-                )
-            )
+        router.alignSchedule(
+            with: appointmentDate,
+            appointmentID: appointmentID,
+            presentationID: presentationID
+        )
 
-            let rescheduledDate = appointmentDate.date(byAddingDays: 2, using: calendar)
-            #expect(
-                !router.scheduleIsAligned(
-                    with: rescheduledDate,
-                    appointmentID: appointmentID,
-                    presentationID: presentationID
-                )
+        #expect(router.selectedTab == .schedule)
+        #expect(router.selectedScheduleDate == appointmentDate.startOfDay(using: calendar))
+        #expect(router.detailsPresentation?.currentRoute == .appointment(appointmentID))
+        #expect(
+            router.scheduleIsAligned(
+                with: appointmentDate,
+                appointmentID: appointmentID,
+                presentationID: presentationID
             )
-            router.alignSchedule(
+        )
+
+        let rescheduledDate = appointmentDate.date(byAddingDays: 2, using: calendar)
+        #expect(
+            !router.scheduleIsAligned(
                 with: rescheduledDate,
                 appointmentID: appointmentID,
                 presentationID: presentationID
             )
-            #expect(router.selectedScheduleDate == rescheduledDate)
-        }
+        )
+        router.alignSchedule(
+            with: rescheduledDate,
+            appointmentID: appointmentID,
+            presentationID: presentationID
+        )
+        #expect(router.selectedScheduleDate == rescheduledDate)
     }
 
     @Test func staleAppointmentResolutionCannotChangeTheSchedule() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
-        let staleDate = try Date("2026-07-20T11:00:00Z", strategy: .iso8601)
-        let currentDate = try Date("2026-07-21T11:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let initialDate = try Date("2026-07-18T00:00:00+05:30", strategy: .iso8601)
+        let staleDate = try Date("2026-07-20T11:00:00+05:30", strategy: .iso8601)
+        let currentDate = try Date("2026-07-21T11:00:00+05:30", strategy: .iso8601)
 
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let router = makeRouter(selectedScheduleDate: initialDate)
-            let staleID = UUID()
-            let currentID = UUID()
-            router.presentDetails(.appointment(staleID))
-            let presentationID = try #require(router.detailsPresentation?.id)
-            router.presentDetails(.appointment(currentID))
+        let router = makeRouter(selectedScheduleDate: initialDate)
+        let staleID = UUID()
+        let currentID = UUID()
+        router.presentDetails(.appointment(staleID))
+        let presentationID = try #require(router.detailsPresentation?.id)
+        router.presentDetails(.appointment(currentID))
 
-            router.alignSchedule(
-                with: staleDate,
-                appointmentID: staleID,
-                presentationID: presentationID
-            )
-            #expect(router.selectedScheduleDate == initialDate)
+        router.alignSchedule(
+            with: staleDate,
+            appointmentID: staleID,
+            presentationID: presentationID
+        )
+        #expect(router.selectedScheduleDate == initialDate)
 
-            router.alignSchedule(
-                with: currentDate,
-                appointmentID: currentID,
-                presentationID: presentationID
-            )
-            #expect(router.selectedScheduleDate == currentDate.startOfDay(using: calendar))
+        router.alignSchedule(
+            with: currentDate,
+            appointmentID: currentID,
+            presentationID: presentationID
+        )
+        #expect(router.selectedScheduleDate == currentDate.startOfDay(using: calendar))
 
-            router.dismissDetails()
-            router.alignSchedule(
-                with: staleDate,
-                appointmentID: currentID,
-                presentationID: presentationID
-            )
-            #expect(router.selectedScheduleDate == currentDate.startOfDay(using: calendar))
-        }
+        router.dismissDetails()
+        router.alignSchedule(
+            with: staleDate,
+            appointmentID: currentID,
+            presentationID: presentationID
+        )
+        #expect(router.selectedScheduleDate == currentDate.startOfDay(using: calendar))
     }
 
     @Test func crossNavigationRealignsAppointmentsWhilePreservingHistory() throws {
-        let calendar = gregorianCalendar
-        let dateX = try Date("2026-07-18T10:00:00Z", strategy: .iso8601)
-        let dateY = try Date("2026-07-24T15:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let dateX = try Date("2026-07-18T10:00:00+05:30", strategy: .iso8601)
+        let dateY = try Date("2026-07-24T15:00:00+05:30", strategy: .iso8601)
 
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let router = makeRouter(selectedScheduleDate: dateX)
-            let appointmentX = UUID()
-            let appointmentY = UUID()
-            let patientID = UUID()
-            router.presentDetails(.appointment(appointmentX))
-            let presentationID = try #require(router.detailsPresentation?.id)
-            router.alignSchedule(
-                with: dateX,
-                appointmentID: appointmentX,
-                presentationID: presentationID
-            )
+        let router = makeRouter(selectedScheduleDate: dateX)
+        let appointmentX = UUID()
+        let appointmentY = UUID()
+        let patientID = UUID()
+        router.presentDetails(.appointment(appointmentX))
+        let presentationID = try #require(router.detailsPresentation?.id)
+        router.alignSchedule(
+            with: dateX,
+            appointmentID: appointmentX,
+            presentationID: presentationID
+        )
 
-            router.pushDetails(.patient(patientID))
-            router.pushDetails(.appointment(appointmentY))
-            router.alignSchedule(
-                with: dateY,
-                appointmentID: appointmentY,
-                presentationID: presentationID
-            )
-            #expect(router.selectedScheduleDate == dateY.startOfDay(using: calendar))
+        router.pushDetails(.patient(patientID))
+        router.pushDetails(.appointment(appointmentY))
+        router.alignSchedule(
+            with: dateY,
+            appointmentID: appointmentY,
+            presentationID: presentationID
+        )
+        #expect(router.selectedScheduleDate == dateY.startOfDay(using: calendar))
 
-            router.setDetailsPath([.patient(patientID)], presentationID: presentationID)
-            #expect(router.selectedScheduleDate == dateY.startOfDay(using: calendar))
+        router.setDetailsPath([.patient(patientID)], presentationID: presentationID)
+        #expect(router.selectedScheduleDate == dateY.startOfDay(using: calendar))
 
-            router.setDetailsPath([], presentationID: presentationID)
-            router.alignSchedule(
-                with: dateX,
-                appointmentID: appointmentX,
-                presentationID: presentationID
-            )
+        router.setDetailsPath([], presentationID: presentationID)
+        router.alignSchedule(
+            with: dateX,
+            appointmentID: appointmentX,
+            presentationID: presentationID
+        )
 
-            #expect(router.selectedScheduleDate == dateX.startOfDay(using: calendar))
-            #expect(router.detailsPresentation?.root == .appointment(appointmentX))
-            #expect(router.detailsPresentation?.path == [])
-        }
+        #expect(router.selectedScheduleDate == dateX.startOfDay(using: calendar))
+        #expect(router.detailsPresentation?.root == .appointment(appointmentX))
+        #expect(router.detailsPresentation?.path == [])
     }
 
     @Test func newestPresentationWinsDuringDismissalAndInterruptedStateNeverRestores() throws {
@@ -367,25 +346,21 @@ struct RouterTests {
     }
 
     @Test func externalDestinationDiscardsQueuedReplacement() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let initialDate = try Date("2026-07-18T00:00:00+05:30", strategy: .iso8601)
         let destinationDay = try #require(ScheduleDay(year: 2026, month: 7, day: 25))
 
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let router = Router(selectedScheduleDate: initialDate)
-            router.presentDetails(.appointment(UUID()))
-            let presentationID = try #require(router.detailsPresentation?.id)
-            router.presentationDidAppear(presentationID)
-            router.requestPatientCreation()
+        let router = Router(selectedScheduleDate: initialDate)
+        router.presentDetails(.appointment(UUID()))
+        let presentationID = try #require(router.detailsPresentation?.id)
+        router.presentationDidAppear(presentationID)
+        router.requestPatientCreation()
 
-            router.openExternalSchedule(destinationDay)
-            router.presentationDidDismiss(presentationID)
+        router.openExternalSchedule(destinationDay)
+        router.presentationDidDismiss(presentationID)
 
-            #expect(router.activePresentation?.id == nil)
-            #expect(router.selectedScheduleDate == destinationDay.date(using: calendar))
-        }
+        #expect(router.activePresentation?.id == nil)
+        #expect(router.selectedScheduleDate == destinationDay.date(using: calendar))
     }
 
     @Test func externalAppointmentInterruptsEveryAppRootPresentation() throws {
@@ -456,47 +431,39 @@ struct RouterTests {
     }
 
     @Test func requestingAppointmentMessageByIDAlignsScheduleAndOpensMessageTray() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
-        let appointmentStart = try Date("2026-07-22T14:30:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let initialDate = try Date("2026-07-18T00:00:00+05:30", strategy: .iso8601)
+        let appointmentStart = try Date("2026-07-22T14:30:00+05:30", strategy: .iso8601)
         let appointmentID = UUID()
 
-        withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let router = makeRouter(selectedScheduleDate: initialDate)
-            router.selectedTab = .patients
+        let router = makeRouter(selectedScheduleDate: initialDate)
+        router.selectedTab = .patients
 
-            router.requestAppointmentMessage(id: appointmentID, date: appointmentStart)
+        router.requestAppointmentMessage(id: appointmentID, date: appointmentStart)
 
-            #expect(router.selectedTab == .schedule)
-            #expect(router.selectedScheduleDate == appointmentStart.startOfDay(using: calendar))
-            #expect(router.appointmentMessageRequest?.appointmentID == appointmentID)
-        }
+        #expect(router.selectedTab == .schedule)
+        #expect(router.selectedScheduleDate == appointmentStart.startOfDay(using: calendar))
+        #expect(router.appointmentMessageRequest?.appointmentID == appointmentID)
     }
 
     @Test func appointmentAndScheduleURLsUseAuthoritativeRouterEntryPoints() throws {
-        let calendar = gregorianCalendar
-        let initialDate = try Date("2026-07-18T00:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let initialDate = try Date("2026-07-18T00:00:00+05:30", strategy: .iso8601)
 
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let router = makeRouter(selectedScheduleDate: initialDate)
-            let appointmentID = UUID()
-            let appointmentURL = try #require(ClinicalURL.appointment(appointmentID).url)
+        let router = makeRouter(selectedScheduleDate: initialDate)
+        let appointmentID = UUID()
+        let appointmentURL = try #require(ClinicalURL.appointment(appointmentID).url)
 
-            #expect(router.open(appointmentURL))
-            #expect(router.selectedTab == .schedule)
-            #expect(router.detailsPresentation?.root == .appointment(appointmentID))
-            #expect(router.selectedScheduleDate == initialDate)
+        #expect(router.open(appointmentURL))
+        #expect(router.selectedTab == .schedule)
+        #expect(router.detailsPresentation?.root == .appointment(appointmentID))
+        #expect(router.selectedScheduleDate == initialDate)
 
-            let day = try #require(ScheduleDay(year: 2026, month: 7, day: 25))
-            let scheduleURL = try #require(ClinicalURL.schedule(day).url)
-            #expect(router.open(scheduleURL))
-            #expect(router.detailsPresentation == nil)
-            #expect(router.selectedScheduleDate == day.date(using: calendar))
-        }
+        let day = try #require(ScheduleDay(year: 2026, month: 7, day: 25))
+        let scheduleURL = try #require(ClinicalURL.schedule(day).url)
+        #expect(router.open(scheduleURL))
+        #expect(router.detailsPresentation == nil)
+        #expect(router.selectedScheduleDate == day.date(using: calendar))
     }
 
     private func assertExternalAppointmentInterrupts(_ router: Router) throws {
@@ -528,16 +495,6 @@ struct RouterTests {
     }
 
     private func makeRouter(selectedScheduleDate: Date = .now) -> Router {
-        withDependencies {
-            $0.calendar = gregorianCalendar
-        } operation: {
-            Router(selectedScheduleDate: selectedScheduleDate)
-        }
-    }
-
-    private var gregorianCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        return calendar
+        Router(selectedScheduleDate: selectedScheduleDate)
     }
 }

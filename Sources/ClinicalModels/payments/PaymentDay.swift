@@ -33,7 +33,7 @@ public nonisolated struct PaymentItem: Identifiable, Equatable, Sendable {
     public var amount: String { Self.amount(entry.amount, isReceipt: isReceipt) }
 
     public static func amount(_ value: Int, isReceipt: Bool) -> String {
-        (isReceipt ? "+₹" : "−₹") + value.formatted(.number.locale(Locale(identifier: "en_IN")))
+        (isReceipt ? "+₹" : "−₹") + value.formatted(.number.locale(ClinicDate.locale))
     }
 }
 
@@ -70,12 +70,12 @@ public nonisolated struct PaymentDay: Identifiable, Equatable, Sendable {
             return $0.id.uuidString > $1.id.uuidString
         }
         guard let earliest = payments.last?.entry.entryDate else { return [] }
-        let grouped = Dictionary(grouping: payments) { FinancialDate.day($0.entry.entryDate) }
-        var date = FinancialDate.day(today)
+        let grouped = Dictionary(grouping: payments) { ClinicDate.day($0.entry.entryDate) }
+        var date = ClinicDate.day(today)
         var sections: [Self] = []
-        while date >= FinancialDate.day(earliest) {
+        while date >= ClinicDate.day(earliest) {
             let rows = grouped[date] ?? []
-            if !rows.isEmpty || FinancialDate.calendar.component(.weekday, from: date) != 1 {
+            if !rows.isEmpty || ClinicDate.calendar.component(.weekday, from: date) != 1 {
                 var receipts: Int?
                 var expenses: Int?
                 for row in rows {
@@ -91,7 +91,7 @@ public nonisolated struct PaymentDay: Identifiable, Equatable, Sendable {
                         id: date, title: title(for: date, today: today), items: rows,
                         receipts: receipts, expenses: expenses))
             }
-            guard let previous = FinancialDate.calendar.date(byAdding: .day, value: -1, to: date)
+            guard let previous = ClinicDate.calendar.date(byAdding: .day, value: -1, to: date)
             else { throw AccountEntryError.invalidFields }
             date = previous
         }
@@ -99,14 +99,12 @@ public nonisolated struct PaymentDay: Identifiable, Equatable, Sendable {
     }
 
     public static func title(for date: Date, today: Date) -> String {
-        let calendar = FinancialDate.calendar
-        let day = FinancialDate.day(date)
-        let today = FinancialDate.day(today)
+        let calendar = ClinicDate.calendar
+        let day = ClinicDate.day(date)
+        let today = ClinicDate.day(today)
         if day == today { return "Today" }
-        if FinancialDate.nextDay(day) == today { return "Yesterday" }
-        let format = Date.FormatStyle(
-            locale: Locale(identifier: "en_IN"), calendar: calendar, timeZone: calendar.timeZone
-        ).weekday(.abbreviated).day().month(.abbreviated)
+        if ClinicDate.nextDay(day) == today { return "Yesterday" }
+        let format = ClinicDate.formatStyle.weekday(.abbreviated).day().month(.abbreviated)
         if calendar.component(.year, from: day) == calendar.component(.year, from: today) {
             return day.formatted(format)
         }

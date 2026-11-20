@@ -4,7 +4,7 @@ public nonisolated enum PatientNameSearch {
     public static func matches(
         _ name: String?,
         searchText: String,
-        locale: Locale = .autoupdatingCurrent
+        locale: Locale = ClinicDate.locale
     ) -> Bool {
         let queryWords = words(in: searchText)
         guard !queryWords.isEmpty else {

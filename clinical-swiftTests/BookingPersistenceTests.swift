@@ -10,7 +10,7 @@ import Testing
 struct BookingPersistenceTests {
     @Test func bookingDraftRecordIsReturnedByScheduleQuery() throws {
         let database = try testDatabase()
-        let calendar = Calendar.autoupdatingCurrent
+        let calendar = ClinicDate.calendar
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000005"))
         let selectedDate = Date(timeIntervalSinceReferenceDate: 20_000).startOfDay(using: calendar)
         let patient = Patient(
@@ -24,17 +24,13 @@ struct BookingPersistenceTests {
         )
         let now = selectedDate.setTime(9, 0, using: calendar)
         let appointmentID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000006"))
-        let record = try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let draft = AppointmentBookingDraft(
-                selectedPatient: patientItem.patient,
-                selectedDate: selectedDate,
-                start: selectedDate.setTime(10, 30, using: calendar),
-                durationMinutes: 45
-            )
-            return try draft.makeRecord(id: appointmentID, now: now)
-        }
+        let draft = AppointmentBookingDraft(
+            selectedPatient: patientItem.patient,
+            selectedDate: selectedDate,
+            start: selectedDate.setTime(10, 30, using: calendar),
+            durationMinutes: 45
+        )
+        let record = try draft.makeRecord(id: appointmentID, now: now)
 
         try database.write { db in
             try PatientRecord.insert { PatientRecord(patient) }

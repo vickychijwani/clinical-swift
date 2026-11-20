@@ -194,14 +194,11 @@ struct AppointmentCompletionTests {
     @Test func completionShowsSixSecondToastAndFollowUpBooksNextBusinessDayAfterToday() async throws
     {
         let clock = TestClock()
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
         let saturday = try Date("2026-04-25T14:00:00Z", strategy: .iso8601)
         let pastVisit = try Date("2026-04-10T11:00:00Z", strategy: .iso8601)
-        let expectedMonday = try Date("2026-04-27T00:00:00Z", strategy: .iso8601)
+        let expectedMonday = try Date("2026-04-26T18:30:00Z", strategy: .iso8601)
 
         try await withDependencies {
-            $0.calendar = calendar
             $0.date.now = saturday
             $0.continuousClock = clock
         } operation: {
@@ -228,7 +225,7 @@ struct AppointmentCompletionTests {
 
             // Tab and date changes keep the toast visible until the 6-second timeout.
             router.selectedTab = .patients
-            router.selectScheduleDate(pastVisit.date(byAddingDays: 1, using: calendar))
+            router.selectScheduleDate(pastVisit.date(byAddingDays: 1, using: ClinicDate.calendar))
             await clock.advance(by: .seconds(5))
             #expect(router.toast.current?.id == toast.id)
 
@@ -249,7 +246,6 @@ struct AppointmentCompletionTests {
     {
         let clock = TestClock()
         try await withDependencies {
-            $0.calendar = FinancialDate.calendar
             $0.continuousClock = clock
         } operation: {
             let router = Router()
@@ -307,11 +303,7 @@ struct AppointmentCompletionTests {
     }
 
     private func makeRouter() -> Router {
-        withDependencies {
-            $0.calendar = FinancialDate.calendar
-        } operation: {
-            Router()
-        }
+        Router()
     }
 
     private func makeModel() -> AppointmentCompletionModel {

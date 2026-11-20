@@ -33,7 +33,7 @@ import SQLiteData
                 }
                 for offset in [1, 3, 4, 7, 14, 30, 90, 400] {
                     guard
-                        let day = FinancialDate.calendar.date(
+                        let day = ClinicDate.calendar.date(
                             byAdding: .day, value: -offset, to: date)
                     else { throw AccountEntryError.invalidFields }
                     entries.append(

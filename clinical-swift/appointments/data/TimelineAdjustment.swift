@@ -1,5 +1,4 @@
 import ClinicalModels
-import Dependencies
 import Foundation
 import Observation
 
@@ -9,7 +8,6 @@ import Observation
 final class TimelineAdjustment {
     enum Edge { case move, duration }
 
-    @ObservationIgnored @Dependency(\.calendar) private var calendar
     private(set) var original: TimelineItem?
     private(set) var edge: Edge = .move
     private(set) var isDragging = false
@@ -22,7 +20,7 @@ final class TimelineAdjustment {
     {
         let date = date ?? items.first?.start ?? draft.start
         var items = items.filter { $0.id != draft.id }
-        if calendar.isDate(draft.start, inSameDayAs: date) {
+        if draft.start.isSameDayAs(date) {
             items.append(draft)
         }
         return items
@@ -49,8 +47,8 @@ final class TimelineAdjustment {
         expanded = TimelineScale(items: items).isBreakExpanded
         let time =
             edge == .duration
-            ? TimeOfDay(date: item.start, calendar: calendar) + item.durationMinutes
-            : TimeOfDay(date: item.start, calendar: calendar)
+            ? TimeOfDay(date: item.start) + item.durationMinutes
+            : TimeOfDay(date: item.start)
         anchorY = scale(items, draft: item).yOffset(for: time)
         translation = 0
         isDragging = true
@@ -76,8 +74,7 @@ final class TimelineAdjustment {
             hoverRequest = nil
         }
         if expanded, !overBreak,
-            !(Bitehaus.break.start..<Bitehaus.break.end).contains(
-                TimeOfDay(date: draft.start, calendar: calendar))
+            !(Bitehaus.break.start..<Bitehaus.break.end).contains(TimeOfDay(date: draft.start))
         {
             expanded = false
             return rebase(from: oldScale, draft: draft, items: items)
@@ -104,8 +101,8 @@ final class TimelineAdjustment {
     {
         let time =
             edge == .duration
-            ? TimeOfDay(date: draft.start, calendar: calendar) + draft.durationMinutes
-            : TimeOfDay(date: draft.start, calendar: calendar)
+            ? TimeOfDay(date: draft.start) + draft.durationMinutes
+            : TimeOfDay(date: draft.start)
         let delta = scale(items, draft: draft).yOffset(for: time) - oldScale.yOffset(for: time)
         anchorY += delta
         return delta
@@ -115,7 +112,7 @@ final class TimelineAdjustment {
         guard let original else { return }
         let proposed = scale.time(at: anchorY + translation).totalMinutes
         let snapped = Int((Double(proposed) / 5).rounded()) * 5
-        let originalStart = TimeOfDay(date: original.start, calendar: calendar).totalMinutes
+        let originalStart = TimeOfDay(date: original.start).totalMinutes
         let start: Int
         let end: Int
         switch edge {
@@ -129,7 +126,7 @@ final class TimelineAdjustment {
             end = min(max(snapped, originalStart + 15), Bitehaus.closing.totalMinutes)
         }
         draft = draft.rescheduled(
-            start: TimeOfDay(start / 60, start % 60).on(date: original.start, using: calendar),
+            start: TimeOfDay(start / 60, start % 60).on(date: original.start),
             durationMinutes: end - start)
     }
 }

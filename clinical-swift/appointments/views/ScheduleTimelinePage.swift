@@ -5,8 +5,8 @@ struct ScheduleTimelinePage: View {
     @Environment(\.scheduleCardTuning) private var cardTuning
 
     let date: Date
+    let today: Date
     let items: [TimelineItem]
-    let calendar: Calendar
     let itemInteractionsEnabled: Bool
     @Binding var scrollPosition: ScrollPosition
     let onSelectItem: (TimelineItem) -> Void
@@ -39,7 +39,7 @@ struct ScheduleTimelinePage: View {
                 Timeline(
                     items: items,
                     scale: TimelineScale(items: items),
-                    showsNowMarker: calendar.isDateInToday(date),
+                    showsNowMarker: date.isSameDayAs(today),
                     itemInteractionsEnabled: itemInteractionsEnabled,
                     onSelectItem: { if allowsSelection { onSelectItem($0) } },
                     onSelectDraft: { if allowsSelection { onSelectDraft() } },

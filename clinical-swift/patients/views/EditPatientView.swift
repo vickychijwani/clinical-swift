@@ -8,7 +8,7 @@ struct EditPatientView: View {
 
     @State private var model: PatientEditorModel
     @State private var dobRequest: DOBRequest?
-    @State private var draftDOB = Date()
+    @State private var draftDOB = ClinicDate.today
     private let onSave: @MainActor (Patient) -> Void
 
     init(
@@ -167,6 +167,7 @@ private nonisolated struct DOBRequest: Identifiable, Sendable {
 }
 
 private struct PatientDOBField: View {
+    @Environment(\.clinicToday) private var clinicToday
     let title: String
     @Binding var selection: Date?
     @Binding var dobRequest: DOBRequest?
@@ -174,7 +175,7 @@ private struct PatientDOBField: View {
 
     var body: some View {
         Button {
-            draftDOB = selection ?? Date()
+            draftDOB = selection.map(ClinicDate.day) ?? clinicToday
             dobRequest = DOBRequest()
         } label: {
             HStack {
@@ -183,8 +184,10 @@ private struct PatientDOBField: View {
 
                 Spacer()
 
-                Text(selection?.formatted(.dateTime.day().month().year()) ?? "Add")
-                    .foregroundStyle(selection == nil ? AppColor.secondaryText : AppColor.text)
+                Text(
+                    selection?.formatted(ClinicDate.formatStyle.day().month().year()) ?? "Add"
+                )
+                .foregroundStyle(selection == nil ? AppColor.secondaryText : AppColor.text)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(.rect)
@@ -197,13 +200,14 @@ private struct PatientDOBPicker: View {
     @Binding var dob: Date?
     @Binding var draftDOB: Date
     @Environment(\.trayDismiss) private var dismiss
+    @Environment(\.clinicToday) private var clinicToday
 
     var body: some View {
         NavigationStack {
             DatePicker(
                 "Date of birth",
                 selection: $draftDOB,
-                in: ...Date(),
+                in: ...clinicToday,
                 displayedComponents: .date
             )
             .datePickerStyle(.wheel)
@@ -220,7 +224,7 @@ private struct PatientDOBPicker: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        dob = draftDOB
+                        dob = ClinicDate.day(draftDOB)
                         dismiss()
                     }
                 }

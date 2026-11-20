@@ -15,16 +15,13 @@ struct PatientItemViewMetadata: Equatable {
 
     static func metadata(for item: PatientDetails) -> PatientItemViewMetadata {
         @Dependency(\.date.now) var referenceDate
-        @Dependency(\.calendar) var calendar
-        @Dependency(\.locale) var locale
 
         let patient = item.patient
         var parts: [String] = []
 
         if let demographics = demographics(
             for: patient,
-            referenceDate: referenceDate,
-            calendar: calendar
+            referenceDate: referenceDate
         ) {
             parts.append(demographics)
         }
@@ -35,11 +32,11 @@ struct PatientItemViewMetadata: Equatable {
 
         if let nextAppointmentDate = item.nextAppointmentDate {
             parts.append(
-                "Next \(formattedAppointmentDate(nextAppointmentDate, locale: locale))"
+                "Next \(formattedAppointmentDate(nextAppointmentDate))"
             )
         } else if patient.isUnknown {
             parts.append(
-                "Created \(formattedCreatedDate(patient.createdDate, locale: locale))"
+                "Created \(formattedCreatedDate(patient.createdDate))"
             )
         }
 
@@ -48,23 +45,20 @@ struct PatientItemViewMetadata: Equatable {
 
     static func demographics(for patient: Patient) -> String? {
         @Dependency(\.date.now) var referenceDate
-        @Dependency(\.calendar) var calendar
 
         return demographics(
             for: patient,
-            referenceDate: referenceDate,
-            calendar: calendar
+            referenceDate: referenceDate
         )
     }
 
     private static func demographics(
         for patient: Patient,
-        referenceDate: Date,
-        calendar: Calendar
+        referenceDate: Date
     ) -> String? {
         var parts: [String] = []
 
-        if let age = patient.age(on: referenceDate, calendar: calendar) {
+        if let age = patient.age(on: referenceDate, calendar: ClinicDate.calendar) {
             parts.append("\(age)y")
         }
 
@@ -79,26 +73,24 @@ struct PatientItemViewMetadata: Equatable {
         return parts.joined(separator: "/")
     }
 
-    private static func formattedAppointmentDate(_ date: Date, locale: Locale)
+    private static func formattedAppointmentDate(_ date: Date)
         -> String
     {
         date.formatted(
-            .dateTime
+            ClinicDate.formatStyle
                 .weekday(.abbreviated)
                 .day()
                 .month(.abbreviated)
-                .locale(locale)
         )
     }
 
-    private static func formattedCreatedDate(_ date: Date, locale: Locale)
+    private static func formattedCreatedDate(_ date: Date)
         -> String
     {
         date.formatted(
-            .dateTime
+            ClinicDate.formatStyle
                 .day()
                 .month(.abbreviated)
-                .locale(locale)
         )
     }
 }

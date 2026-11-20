@@ -1,3 +1,4 @@
+import ClinicalModels
 import CoreGraphics
 import CoreText
 import Foundation
@@ -18,9 +19,10 @@ nonisolated enum ScheduleCardStyle {
 
     static func formattedTime(_ date: Date, compact: Bool) -> String {
         if compact {
-            return date.formatted(.dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
+            return date.formatted(
+                ClinicDate.formatStyle.hour(.defaultDigits(amPM: .omitted)).minute())
         }
-        return date.formatted(.dateTime.hour().minute())
+        return date.formatted(ClinicDate.formatStyle.hour().minute())
     }
 }
 

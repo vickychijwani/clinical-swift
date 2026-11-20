@@ -1,22 +1,20 @@
-import Dependencies
 import Foundation
 
 extension Date {
     public nonisolated func isSameDayAs(_ date: Date) -> Bool {
-        @Dependency(\.calendar) var calendar
-        return calendar.isDate(self, inSameDayAs: date)
+        ClinicDate.calendar.isDate(self, inSameDayAs: date)
     }
 
-    public nonisolated func startOfDay(using calendar: Calendar = .autoupdatingCurrent) -> Date {
+    public nonisolated func startOfDay(using calendar: Calendar = ClinicDate.calendar) -> Date {
         calendar.startOfDay(for: self)
     }
 
-    public nonisolated func startOfWeek(using calendar: Calendar = .autoupdatingCurrent) -> Date {
+    public nonisolated func startOfWeek(using calendar: Calendar = ClinicDate.calendar) -> Date {
         calendar.dateInterval(of: .weekOfYear, for: self)?.start.startOfDay(using: calendar)
             ?? startOfDay(using: calendar)
     }
 
-    public nonisolated func weekDates(using calendar: Calendar = .autoupdatingCurrent) -> [Date] {
+    public nonisolated func weekDates(using calendar: Calendar = ClinicDate.calendar) -> [Date] {
         let weekStart = startOfWeek(using: calendar)
 
         return (0..<7).compactMap { dayOffset in
@@ -26,7 +24,7 @@ extension Date {
     }
 
     public nonisolated func date(
-        byAddingWeeks weeks: Int, using calendar: Calendar = .autoupdatingCurrent
+        byAddingWeeks weeks: Int, using calendar: Calendar = ClinicDate.calendar
     )
         -> Date
     {
@@ -35,7 +33,7 @@ extension Date {
     }
 
     public nonisolated func date(
-        byAddingDays days: Int, using calendar: Calendar = .autoupdatingCurrent
+        byAddingDays days: Int, using calendar: Calendar = ClinicDate.calendar
     )
         -> Date
     {
@@ -44,7 +42,7 @@ extension Date {
     }
 
     public nonisolated func addMinutes(
-        _ minutes: Int, using calendar: Calendar = .autoupdatingCurrent
+        _ minutes: Int, using calendar: Calendar = ClinicDate.calendar
     )
         -> Date?
     {
@@ -52,7 +50,7 @@ extension Date {
     }
 
     public nonisolated func setTime(
-        _ hour: Int, _ minute: Int, using calendar: Calendar = .autoupdatingCurrent
+        _ hour: Int, _ minute: Int, using calendar: Calendar = ClinicDate.calendar
     ) -> Date {
         calendar.date(
             bySettingHour: hour,

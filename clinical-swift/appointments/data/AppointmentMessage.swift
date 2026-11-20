@@ -51,7 +51,7 @@ nonisolated struct AppointmentMessageFormatter: Sendable {
 
         let formattedDate = details.appointment.start.formatted(
             Date.FormatStyle(
-                locale: calendar.locale ?? .autoupdatingCurrent,
+                locale: calendar.locale ?? ClinicDate.locale,
                 calendar: calendar,
                 timeZone: calendar.timeZone
             )

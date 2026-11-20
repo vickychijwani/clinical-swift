@@ -8,7 +8,6 @@ import SQLiteData
 
 @MainActor
 final class CalendarSyncCoordinator {
-    @Dependency(\.calendar) private var calendar
     private let database: any DatabaseWriter
     private let calendarClient: CalendarClient
     private let contactClient: AppointmentContactClient
@@ -232,7 +231,8 @@ final class CalendarSyncCoordinator {
         case .replaceBlock(let block):
             let payload = CalendarEventPayload(
                 title: block.label.map { "Blocked: \($0)" } ?? "Blocked",
-                start: block.start, end: block.end(using: calendar), notes: "", url: markerURL
+                start: block.start, end: block.end(using: ClinicDate.calendar), notes: "",
+                url: markerURL
             )
             let newLink = try await calendarClient.replaceEvent(record.link, payload)
             try await save(newLink, for: record)
@@ -289,7 +289,7 @@ final class CalendarSyncCoordinator {
         return CalendarEventPayload(
             title: details.patient.displayName,
             start: details.appointment.start,
-            end: details.appointment.end(using: calendar),
+            end: details.appointment.end(using: ClinicDate.calendar),
             notes: "Name: \(contactName ?? "")\nPhone: \(phone)",
             url: url
         )

@@ -2,8 +2,21 @@ import XCTest
 
 @MainActor
 enum TimelineUITestSupport {
+    static let clinicTimeZone = TimeZone(identifier: "Asia/Kolkata")!
+    static let clinicLocale = Locale(identifier: "en_IN")
+    static let clinicCalendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = clinicTimeZone
+        calendar.locale = clinicLocale
+        return calendar
+    }()
+    static var clinicFormatStyle: Date.FormatStyle {
+        Date.FormatStyle(locale: clinicLocale, calendar: clinicCalendar, timeZone: clinicTimeZone)
+    }
+
     static func launch(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchEnvironment["TZ"] = "America/Los_Angeles"
         app.launchArguments = ["--ui-testing-timeline-adjustment"] + arguments
         app.launch()
         XCTAssertTrue(original(app).existsOrWait(timeout: 5))
@@ -83,10 +96,11 @@ enum TimelineUITestSupport {
     }
 
     static func dayButton(_ app: XCUIApplication, offset: Int) -> XCUIElement {
-        guard let date = Calendar.current.date(byAdding: .day, value: offset, to: .now) else {
+        guard let date = clinicCalendar.date(byAdding: .day, value: offset, to: .now) else {
             preconditionFailure("The calendar must support day navigation.")
         }
-        return app.buttons[date.formatted(.dateTime.weekday(.wide).month(.wide).day().year())]
+        return app.buttons[
+            date.formatted(clinicFormatStyle.weekday(.wide).month(.wide).day().year())]
     }
 
     static func swipeTimeline(_ app: XCUIApplication, left: Bool) {

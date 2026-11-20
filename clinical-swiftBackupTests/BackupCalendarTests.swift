@@ -10,107 +10,97 @@ struct BackupCalendarTests {
     @Test func recoveryLeavesUnlinkedRecordsOutOfCalendar() async throws {
         let directory = try BackupFixture.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try await withDependencies {
-            $0.calendar = Calendar(identifier: .gregorian)
-        } operation: {
-            let database = try BackupFixture.database(at: directory.appending(path: "source.db"))
-            defer { try? database.close() }
-            try await database.write { db in
-                // These records model pre-integration data or samples excluded from sync.
-                try db.execute(
-                    sql:
-                        "DELETE FROM appointmentCalendarSync WHERE appointmentID = '20000000-0000-0000-0000-000000000001'"
-                )
-                try db.execute(
-                    sql:
-                        "DELETE FROM unavailableTimeCalendarSync WHERE unavailableTimeID = '30000000-0000-0000-0000-000000000001'"
-                )
-            }
-            let before = try BackupFixture.contents(database)
-            try BackupRestore.prepareCalendar(
-                database, cutoff: Date("2026-10-04T00:00:00Z", strategy: .iso8601))
-            let fake = RecoveryCalendar()
-            let coordinator = CalendarSyncCoordinator(
-                database: database, calendarClient: fake.client,
-                contactClient: .init(nameForPhone: { _ in nil }))
-            await coordinator.activate()
-            #expect(fake.payloads.isEmpty)
-            #expect(fake.deleted.count == 2)
-            let after = try BackupFixture.contents(database)
-            for table in ["patients", "appointments", "unavailableTimes"] {
-                #expect(after[table] == before[table])
-            }
-            #expect(
-                try await database.read { db in
-                    try Int.fetchOne(
-                        db,
-                        sql:
-                            "SELECT count(*) FROM appointmentCalendarSync WHERE appointmentID = '20000000-0000-0000-0000-000000000001'"
-                    )
-                } == 0)
-            #expect(
-                try await database.read { db in
-                    try Int.fetchOne(
-                        db,
-                        sql:
-                            "SELECT count(*) FROM unavailableTimeCalendarSync WHERE unavailableTimeID = '30000000-0000-0000-0000-000000000001'"
-                    )
-                } == 0)
+        let database = try BackupFixture.database(at: directory.appending(path: "source.db"))
+        defer { try? database.close() }
+        try await database.write { db in
+            // These records model pre-integration data or samples excluded from sync.
+            try db.execute(
+                sql:
+                    "DELETE FROM appointmentCalendarSync WHERE appointmentID = '20000000-0000-0000-0000-000000000001'"
+            )
+            try db.execute(
+                sql:
+                    "DELETE FROM unavailableTimeCalendarSync WHERE unavailableTimeID = '30000000-0000-0000-0000-000000000001'"
+            )
         }
+        let before = try BackupFixture.contents(database)
+        try BackupRestore.prepareCalendar(
+            database, cutoff: Date("2026-10-04T00:00:00Z", strategy: .iso8601))
+        let fake = RecoveryCalendar()
+        let coordinator = CalendarSyncCoordinator(
+            database: database, calendarClient: fake.client,
+            contactClient: .init(nameForPhone: { _ in nil }))
+        await coordinator.activate()
+        #expect(fake.payloads.isEmpty)
+        #expect(fake.deleted.count == 2)
+        let after = try BackupFixture.contents(database)
+        for table in ["patients", "appointments", "unavailableTimes"] {
+            #expect(after[table] == before[table])
+        }
+        #expect(
+            try await database.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql:
+                        "SELECT count(*) FROM appointmentCalendarSync WHERE appointmentID = '20000000-0000-0000-0000-000000000001'"
+                )
+            } == 0)
+        #expect(
+            try await database.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql:
+                        "SELECT count(*) FROM unavailableTimeCalendarSync WHERE unavailableTimeID = '30000000-0000-0000-0000-000000000001'"
+                )
+            } == 0)
     }
 
     @Test func recoveryAppliesSnapshotValuesAndRetriesEachFailedItem() async throws {
         let directory = try BackupFixture.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .gmt
-        try await withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let database = try BackupFixture.database(at: directory.appending(path: "source.db"))
-            defer { try? database.close() }
-            let cutoff = try Date("2026-10-04T00:00:00Z", strategy: .iso8601)
-            try BackupRestore.prepareCalendar(database, cutoff: cutoff)
-            let fake = RecoveryCalendar()
-            let coordinator = CalendarSyncCoordinator(
-                database: database, calendarClient: fake.client,
-                contactClient: .init(nameForPhone: { _ in nil }))
-            await coordinator.activate()
-            #expect(
-                fake.payloads.contains {
-                    $0.title == "Synthetic WAL update"
-                        && $0.start == (try? Date("2026-10-10T10:30:00Z", strategy: .iso8601))
-                })
-            #expect(fake.links.allSatisfy { $0.recoveryCutoff == cutoff })
-            #expect(fake.links.contains { $0.eventIdentifier == "old-event-id" })
-            #expect(fake.payloads.count >= 2)
-            #expect(fake.deleted.count == 2)
-            let pendingAfterFailure = try await database.read {
-                try Int.fetchOne(
-                    $0, sql: "SELECT count(*) FROM appointmentCalendarSync WHERE needsSync = 1")
-            }
-            #expect(pendingAfterFailure == 1)
-            let beforeRetry = fake.payloads.count
-            fake.failAppointment = false
-            await coordinator.activate()
-            #expect(fake.payloads.count > beforeRetry)
-            #expect(
-                try await database.read {
-                    try String.fetchOne(
-                        $0,
-                        sql:
-                            "SELECT eventIdentifier FROM appointmentCalendarSync WHERE appointmentID = '20000000-0000-0000-0000-000000000001'"
-                    )
-                } == "recovered-id")
-            #expect(
-                try await database.read {
-                    try Int.fetchOne($0, sql: "SELECT count(*) FROM clinicalCalendarRecovery")
-                } == 0)
-            #expect(
-                try await database.read {
-                    try Int.fetchOne($0, sql: "SELECT count(*) FROM appointments")
-                } == 3)
+        let database = try BackupFixture.database(at: directory.appending(path: "source.db"))
+        defer { try? database.close() }
+        let cutoff = try Date("2026-10-04T00:00:00Z", strategy: .iso8601)
+        try BackupRestore.prepareCalendar(database, cutoff: cutoff)
+        let fake = RecoveryCalendar()
+        let coordinator = CalendarSyncCoordinator(
+            database: database, calendarClient: fake.client,
+            contactClient: .init(nameForPhone: { _ in nil }))
+        await coordinator.activate()
+        #expect(
+            fake.payloads.contains {
+                $0.title == "Synthetic WAL update"
+                    && $0.start == (try? Date("2026-10-10T10:30:00Z", strategy: .iso8601))
+            })
+        #expect(fake.links.allSatisfy { $0.recoveryCutoff == cutoff })
+        #expect(fake.links.contains { $0.eventIdentifier == "old-event-id" })
+        #expect(fake.payloads.count >= 2)
+        #expect(fake.deleted.count == 2)
+        let pendingAfterFailure = try await database.read {
+            try Int.fetchOne(
+                $0, sql: "SELECT count(*) FROM appointmentCalendarSync WHERE needsSync = 1")
         }
+        #expect(pendingAfterFailure == 1)
+        let beforeRetry = fake.payloads.count
+        fake.failAppointment = false
+        await coordinator.activate()
+        #expect(fake.payloads.count > beforeRetry)
+        #expect(
+            try await database.read {
+                try String.fetchOne(
+                    $0,
+                    sql:
+                        "SELECT eventIdentifier FROM appointmentCalendarSync WHERE appointmentID = '20000000-0000-0000-0000-000000000001'"
+                )
+            } == "recovered-id")
+        #expect(
+            try await database.read {
+                try Int.fetchOne($0, sql: "SELECT count(*) FROM clinicalCalendarRecovery")
+            } == 0)
+        #expect(
+            try await database.read {
+                try Int.fetchOne($0, sql: "SELECT count(*) FROM appointments")
+            } == 3)
     }
 
     @Test func recoverySearchIncludesMovedEventsAndDistantFutureLinks() throws {

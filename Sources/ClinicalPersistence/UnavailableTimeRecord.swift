@@ -32,7 +32,7 @@ public nonisolated func unavailableTimesQuery(
     centeredOn date: Date,
     dayRadius: Int
 ) -> some Statement<UnavailableTimeRecord> & Sendable {
-    let calendar = Calendar.autoupdatingCurrent
+    let calendar = ClinicDate.calendar
     let center = calendar.startOfDay(for: date)
     let radius = max(dayRadius, 1)
     let start = calendar.date(byAdding: .day, value: -radius, to: center) ?? center

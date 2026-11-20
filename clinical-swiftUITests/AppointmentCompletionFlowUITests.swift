@@ -98,13 +98,14 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Done"].hittableOrWait(timeout: 5))
         XCTAssertFalse(app.textFields["Search patient by name"].exists)
 
-        let calendar = Calendar.autoupdatingCurrent
+        let calendar = TimelineUITestSupport.clinicCalendar
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now))!
         let nextBusinessDay =
             calendar.component(.weekday, from: tomorrow) == 1
             ? calendar.date(byAdding: .day, value: 1, to: tomorrow)!
             : tomorrow
-        let expectedTitle = nextBusinessDay.formatted(.dateTime.weekday().month().day())
+        let expectedTitle = nextBusinessDay.formatted(
+            TimelineUITestSupport.clinicFormatStyle.weekday().month().day())
         XCTAssertTrue(app.navigationBars[expectedTitle].existsOrWait(timeout: 3))
 
         let draft = app.buttons.matching(

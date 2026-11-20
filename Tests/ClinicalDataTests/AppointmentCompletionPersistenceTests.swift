@@ -18,8 +18,6 @@ struct AppointmentCompletionPersistenceTests {
         let timestamp = try Date("2026-10-25T18:45:00Z", strategy: .iso8601)
         try await withDependencies {
             $0.date.now = timestamp
-            $0.calendar = Calendar(identifier: .islamic)
-            $0.locale = Locale(identifier: "en_US")
         } operation: {
             try await database.completeAppointment(
                 id: Self.a, patientID: Self.p, amount: 1000, paymentMethod: method)
@@ -38,7 +36,7 @@ struct AppointmentCompletionPersistenceTests {
                 #expect(record.patientID == Self.p)
                 #expect(record.createdAt == timestamp)
                 #expect(record.updatedAt == timestamp)
-                #expect(record.entryDate == FinancialDate.day(timestamp))
+                #expect(record.entryDate == ClinicDate.day(timestamp))
                 #expect(record.note == nil)
             }
             let appointment = try #require(try AppointmentRecord.find(Self.a).fetchOne(db))
