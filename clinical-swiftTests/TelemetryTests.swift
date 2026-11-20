@@ -620,9 +620,15 @@ struct TelemetryTests {
             environment: .dev,
             isUploadEnabled: true
         )
+        let backgroundEnded = Mutex(false)
+        let scheduler = TelemetryBackgroundTaskScheduler(
+            begin: { _, _ in UIBackgroundTaskIdentifier(rawValue: 99) },
+            end: { _ in backgroundEnded.withLock { $0 = true } }
+        )
         let coordinator = withDependencies {
             $0.date = DateGenerator { currentNow.withLock { $0 } }
             $0.continuousClock = clock
+            $0.telemetryBackgroundTaskScheduler = scheduler
         } operation: {
             TelemetryCoordinator(
                 spool: spool,
@@ -708,7 +714,7 @@ struct TelemetryTests {
         #expect(attempts.withLock { $0 } == 6)
 
         coordinator.handleBackground()
-        await Task.yield()
+        try await waitUntil { backgroundEnded.withLock { $0 } }
         let t4 = t3.addingTimeInterval(60)
         currentNow.withLock { $0 = t4 }
         await clock.advance(by: .seconds(60))
@@ -876,6 +882,95 @@ struct TelemetryTests {
             deviceModel: "iPhone17,1",
             sql: sql
         )
+    }
+
+    @Test func liveRuntimeDropsDebugEntriesWhenVerboseIsDisabled() throws {
+        let dir = makeTempDirectory()
+        let suiteName = "in.bitehaus.clinical.runtime.debug.test.\(UUID().uuidString)"
+        let sharedDefaults = try #require(UserDefaults(suiteName: suiteName))
+        let standardSuiteName = "in.bitehaus.clinical.runtime.debug.std.\(UUID().uuidString)"
+        let standardDefaults = try #require(UserDefaults(suiteName: standardSuiteName))
+        defer {
+            try? FileManager.default.removeItem(at: dir)
+            sharedDefaults.removePersistentDomain(forName: suiteName)
+            standardDefaults.removePersistentDomain(forName: standardSuiteName)
+        }
+
+        let settings = TelemetrySettingsStore(
+            sharedDefaults: sharedDefaults,
+            standardDefaults: standardDefaults
+        )
+        let spool = TelemetrySpool(directory: dir, mirrorsToOSLog: false)
+        let runtime = TelemetryLiveRuntime(
+            configuration: TelemetryConfiguration(
+                ingestURL: nil,
+                dataset: "clinical-dev",
+                ingestToken: "",
+                environment: .dev,
+                isUploadEnabled: false
+            ),
+            settings: settings,
+            spool: spool,
+            builder: TelemetryRecordBuilder(
+                process: .app,
+                environment: .dev,
+                settings: settings
+            )
+        )
+
+        let start = try Date("2026-10-01T10:00:00Z", strategy: .iso8601)
+        runtime.record(
+            TelemetryEntry(
+                kind: .event,
+                level: .debug,
+                category: .schedule,
+                name: "schedule_window_loaded"
+            ),
+            now: start
+        )
+        runtime.record(
+            TelemetryEntry(
+                kind: .event,
+                level: .info,
+                category: .navigation,
+                name: "tab_selected"
+            ),
+            now: start
+        )
+
+        settings.setVerboseEnabled(true, now: start)
+        runtime.record(
+            TelemetryEntry(
+                kind: .event,
+                level: .debug,
+                category: .schedule,
+                name: "schedule_window_loaded"
+            ),
+            now: start.addingTimeInterval(60)
+        )
+
+        // After 24 hours verbose auto-expires and debug entries drop again.
+        let afterExpiry = start.addingTimeInterval(TelemetrySettingsStore.verboseDuration + 1)
+        runtime.record(
+            TelemetryEntry(
+                kind: .event,
+                level: .debug,
+                category: .schedule,
+                name: "schedule_window_loaded"
+            ),
+            now: afterExpiry
+        )
+
+        let exportURL = dir.appending(path: "export.ndjson")
+        let count = try spool.exportNDJSON(to: exportURL, now: afterExpiry)
+        #expect(count == 2)
+        let lines = try String(contentsOf: exportURL, encoding: .utf8)
+            .split(separator: "\n")
+        let decoded: [TelemetryRecord] = try lines.map { line in
+            try JSONDecoder().decode(TelemetryRecord.self, from: Data(line.utf8))
+        }
+        #expect(decoded.map(\.name) == ["tab_selected", "schedule_window_loaded"])
+        #expect(decoded.map(\.level) == [.info, .debug])
     }
 
     private func makeCoordinator(

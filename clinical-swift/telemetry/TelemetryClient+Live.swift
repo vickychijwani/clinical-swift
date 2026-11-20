@@ -12,7 +12,19 @@ nonisolated final class TelemetryLiveRuntime: Sendable {
     let spool: TelemetrySpool
     let builder: TelemetryRecordBuilder
 
-    private init() {
+    init(
+        configuration: TelemetryConfiguration,
+        settings: TelemetrySettingsStore,
+        spool: TelemetrySpool,
+        builder: TelemetryRecordBuilder
+    ) {
+        self.configuration = configuration
+        self.settings = settings
+        self.spool = spool
+        self.builder = builder
+    }
+
+    private convenience init() {
         let configuration = TelemetryConfiguration.live(context: .live)
         let settings = TelemetrySettingsStore()
         let directory =
@@ -20,14 +32,25 @@ nonisolated final class TelemetryLiveRuntime: Sendable {
             ?? FileManager.default.temporaryDirectory
             .appending(path: "Telemetry", directoryHint: .isDirectory)
             .appending(path: configuration.environment.rawValue, directoryHint: .isDirectory)
-        self.configuration = configuration
-        self.settings = settings
-        self.spool = TelemetrySpool(directory: directory)
-        self.builder = TelemetryRecordBuilder(
-            process: .app,
-            environment: configuration.environment,
-            settings: settings
+        self.init(
+            configuration: configuration,
+            settings: settings,
+            spool: TelemetrySpool(directory: directory),
+            builder: TelemetryRecordBuilder(
+                process: .app,
+                environment: configuration.environment,
+                settings: settings
+            )
         )
+    }
+
+    func record(_ entry: TelemetryEntry, now: Date = .now) {
+        // Verbose mode gates all debug logs and events, not only SQL traces.
+        if entry.level == .debug, !settings.isVerboseEnabled(at: now) {
+            return
+        }
+        let record = builder.makeRecord(from: entry, now: now)
+        spool.append(record, now: now)
     }
 }
 
@@ -35,9 +58,7 @@ nonisolated extension TelemetryClient: @retroactive DependencyKey {
     public nonisolated static let liveValue = Self(
         record: { entry in
             guard !TelemetryConfiguration.isUITesting() else { return }
-            let runtime = TelemetryLiveRuntime.shared
-            let record = runtime.builder.makeRecord(from: entry)
-            runtime.spool.append(record)
+            TelemetryLiveRuntime.shared.record(entry)
         },
         isVerboseEnabled: {
             guard !TelemetryConfiguration.isUITesting() else { return false }
