@@ -182,7 +182,7 @@ private struct AppStartup {
     #if DEBUG
         private static func isolatedUITest(router: Router) throws -> Self {
             let database = try prepareDependencies {
-                let database =
+                let database: any DatabaseWriter =
                     try CommandLine.arguments.contains("--ui-testing-appointment-completion")
                     ? AppointmentCompletionUITestData.makeDatabase()
                     : TimelineAdjustmentUITestView.makeDatabase()

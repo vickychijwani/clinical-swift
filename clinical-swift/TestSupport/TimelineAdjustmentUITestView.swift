@@ -38,11 +38,10 @@
             }
         }
 
-        static func makeDatabase() throws -> DatabaseQueue {
+        static func makeDatabase() throws -> any DatabaseWriter {
             let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
             try migrateDatabase(database)
             let patient = patient
-            let gate = saveGate
             try database.write { db in
                 try PatientRecord.insert {
                     PatientRecord(patient, now: .now)
@@ -64,21 +63,12 @@
                         label: "Travel", start: Date.now.setTime(11, 0), durationMinutes: 30,
                         createdAt: .now, updatedAt: .now)
                 }.execute(db)
-                if CommandLine.arguments.contains("--ui-testing-gated-save") {
-                    // Pause the test writer so the UI can swipe while the real save is pending.
-                    // The test releases it after its checks, so runner speed cannot end it early.
-                    db.add(
-                        function: GRDB.DatabaseFunction("ui_test_save_gate", argumentCount: 0) {
-                            _ in
-                            gate.wait()
-                            return 0
-                        })
-                    try db.execute(
-                        sql: """
-                            CREATE TEMP TRIGGER gate_appointment_save BEFORE INSERT ON appointments
-                            BEGIN SELECT ui_test_save_gate(); END
-                            """)
-                }
+            }
+            if CommandLine.arguments.contains("--ui-testing-gated-save") {
+                // Pause the test writer so the UI can swipe while the real save is pending.
+                // The test releases it after its checks, so runner speed cannot end it early.
+                // Suspend async writes before entering DatabaseQueue so main-thread @FetchAll setups cannot deadlock.
+                return GatedDatabaseWriter(base: database, gate: saveGate)
             }
             return database
         }
@@ -103,6 +93,8 @@
     final class UITestSaveGate {
         private(set) var isWaiting = false
         private nonisolated let condition = NSConditionLock(condition: 0)
+        private var isReleased = false
+        private var continuations: [CheckedContinuation<Void, Never>] = []
 
         nonisolated func wait() {
             Task { @MainActor in isWaiting = true }
@@ -111,10 +103,116 @@
             condition.unlock(withCondition: 1)
         }
 
+        /// Suspends async writes without blocking the DatabaseQueue serial queue.
+        func waitAsync() async {
+            guard !isReleased else { return }
+            isWaiting = true
+            await withCheckedContinuation { continuation in
+                continuations.append(continuation)
+            }
+        }
+
         func release() {
             condition.lock()
             condition.unlock(withCondition: 1)
+            isReleased = true
             isWaiting = false
+            let pending = continuations
+            continuations.removeAll()
+            for continuation in pending {
+                continuation.resume()
+            }
+        }
+    }
+
+    /// Delays async database writes until the UI test releases the save gate.
+    private nonisolated final class GatedDatabaseWriter: DatabaseWriter {
+        let base: DatabaseQueue
+        let gate: UITestSaveGate
+
+        init(base: DatabaseQueue, gate: UITestSaveGate) {
+            self.base = base
+            self.gate = gate
+        }
+
+        var configuration: Configuration { base.configuration }
+        var path: String { base.path }
+        func close() throws { try base.close() }
+        func interrupt() { base.interrupt() }
+
+        func read<T>(_ value: (Database) throws -> T) throws -> T {
+            try base.read(value)
+        }
+
+        func read<T: Sendable>(_ value: @Sendable (Database) throws -> T) async throws -> T {
+            try await base.read(value)
+        }
+
+        func asyncRead(_ value: @escaping @Sendable (Result<Database, Error>) -> Void) {
+            base.asyncRead(value)
+        }
+
+        func unsafeRead<T>(_ value: (Database) throws -> T) throws -> T {
+            try base.unsafeRead(value)
+        }
+
+        func unsafeRead<T: Sendable>(_ value: @Sendable (Database) throws -> T) async throws -> T {
+            try await base.unsafeRead(value)
+        }
+
+        func asyncUnsafeRead(_ value: @escaping @Sendable (Result<Database, Error>) -> Void) {
+            base.asyncUnsafeRead(value)
+        }
+
+        func unsafeReentrantRead<T>(_ value: (Database) throws -> T) throws -> T {
+            try base.unsafeReentrantRead(value)
+        }
+
+        func _add<Reducer: ValueReducer>(
+            observation: ValueObservation<Reducer>,
+            scheduling scheduler: some ValueObservationScheduler,
+            onChange: @escaping @Sendable (Reducer.Value) -> Void
+        ) -> AnyDatabaseCancellable {
+            base._add(observation: observation, scheduling: scheduler, onChange: onChange)
+        }
+
+        func writeWithoutTransaction<T>(_ updates: (Database) throws -> T) rethrows -> T {
+            try base.writeWithoutTransaction(updates)
+        }
+
+        func writeWithoutTransaction<T: Sendable>(
+            _ updates: @Sendable (Database) throws -> T
+        ) async throws -> T {
+            await gate.waitAsync()
+            return try await base.writeWithoutTransaction(updates)
+        }
+
+        func barrierWriteWithoutTransaction<T>(_ updates: (Database) throws -> T) throws -> T {
+            try base.barrierWriteWithoutTransaction(updates)
+        }
+
+        func barrierWriteWithoutTransaction<T: Sendable>(
+            _ updates: @Sendable (Database) throws -> T
+        ) async throws -> T {
+            try await base.barrierWriteWithoutTransaction(updates)
+        }
+
+        func asyncBarrierWriteWithoutTransaction(
+            _ updates: @escaping @Sendable (Result<Database, Error>) -> Void
+        ) {
+            base.asyncBarrierWriteWithoutTransaction(updates)
+        }
+
+        func asyncWriteWithoutTransaction(_ updates: @escaping @Sendable (Database) -> Void) {
+            base.asyncWriteWithoutTransaction(updates)
+        }
+
+        func unsafeReentrantWrite<T>(_ updates: (Database) throws -> T) rethrows -> T {
+            try base.unsafeReentrantWrite(updates)
+        }
+
+        func spawnConcurrentRead(_ value: @escaping @Sendable (Result<Database, Error>) -> Void) {
+            base.spawnConcurrentRead(value)
         }
     }
 #endif
