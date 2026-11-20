@@ -9,7 +9,7 @@ import SQLiteData
 
     let purpose: AppointmentBookingPurpose
     private let draftAppointmentID: Appointment.ID
-    private let originalInterval: (start: Date, durationMinutes: Int)?
+    private let originalStart: Date?
     var draft: AppointmentBookingDraft
     var searchText = ""
 
@@ -31,7 +31,7 @@ import SQLiteData
     ) {
         self.purpose = .create
         self.draftAppointmentID = UUID()
-        self.originalInterval = nil
+        self.originalStart = nil
         self.draft = AppointmentBookingDraft(
             selectedPatient: selectedPatient,
             selectedDate: selectedDate
@@ -44,7 +44,7 @@ import SQLiteData
         let appointment = details.appointment
         self.purpose = .edit(appointment.id)
         self.draftAppointmentID = appointment.id
-        self.originalInterval = (appointment.start, appointment.durationMinutes)
+        self.originalStart = appointment.start
         self.draft = AppointmentBookingDraft(
             selectedPatient: details.patient,
             selectedDate: appointment.start,
@@ -108,10 +108,8 @@ import SQLiteData
                     }
                     .execute(db)
             }
-            let didReschedule =
-                originalInterval.map {
-                    $0.start != start || $0.durationMinutes != durationMinutes
-                } ?? false
+            // Only a start-time change counts as rescheduled; confirmation messages omit duration.
+            let didReschedule = originalStart.map { $0 != start } ?? false
             return SavedAppointment(
                 id: appointmentID,
                 start: savedDate,

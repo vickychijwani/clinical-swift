@@ -3,10 +3,16 @@ import Foundation
 
 struct ToastAction {
     let title: String
+    let systemImage: String?
     let handler: @MainActor () -> Void
 
-    init(title: String, handler: @escaping @MainActor () -> Void) {
+    init(
+        title: String,
+        systemImage: String? = nil,
+        handler: @escaping @MainActor () -> Void
+    ) {
         self.title = title
+        self.systemImage = systemImage
         self.handler = handler
     }
 }
@@ -33,13 +39,18 @@ struct ToastItem: Identifiable {
         id: UUID = UUID(),
         message: String,
         actionTitle: String,
+        actionSystemImage: String? = nil,
         duration: Duration? = .seconds(4),
         action: @escaping @MainActor () -> Void
     ) {
         self.init(
             id: id,
             message: message,
-            action: ToastAction(title: actionTitle, handler: action),
+            action: ToastAction(
+                title: actionTitle,
+                systemImage: actionSystemImage,
+                handler: action
+            ),
             duration: duration
         )
     }
@@ -80,12 +91,13 @@ final class ToastStore {
     func show(
         message: String,
         actionTitle: String? = nil,
+        actionSystemImage: String? = nil,
         duration: Duration? = .seconds(4),
         action: (@MainActor () -> Void)? = nil
     ) {
         let toastAction =
             if let actionTitle, let action {
-                ToastAction(title: actionTitle, handler: action)
+                ToastAction(title: actionTitle, systemImage: actionSystemImage, handler: action)
             } else {
                 ToastAction?.none
             }

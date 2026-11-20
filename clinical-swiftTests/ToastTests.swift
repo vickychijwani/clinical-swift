@@ -69,6 +69,23 @@ struct ToastTests {
         #expect(store.current == nil)
     }
 
+    @Test func actionPreservesOptionalSystemImage() {
+        let (store, _) = makeStore()
+
+        store.show(
+            message: "Appointment booked",
+            actionTitle: "Message",
+            actionSystemImage: "arrow.up.message",
+            duration: nil
+        ) {}
+        #expect(store.current?.action?.title == "Message")
+        #expect(store.current?.action?.systemImage == "arrow.up.message")
+
+        store.show(message: "Completed", actionTitle: "Book follow-up", duration: nil) {}
+        #expect(store.current?.action?.title == "Book follow-up")
+        #expect(store.current?.action?.systemImage == nil)
+    }
+
     private func makeStore() -> (store: ToastStore, clock: TestClock<Duration>) {
         let clock = TestClock()
         let store = withDependencies {

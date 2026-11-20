@@ -357,13 +357,25 @@ final class ScheduleEditorSession: Identifiable {
             case .rescheduled: "Appointment rescheduled"
             case .updated: "Appointment updated"
             }
+        let action: ToastAction? =
+            switch saved.kind {
+            case .booked, .rescheduled:
+                ToastAction(
+                    title: "Message",
+                    systemImage: "arrow.up.message"
+                ) { [weak router] in
+                    router?.requestAppointmentMessage(id: saved.id, date: saved.start)
+                }
+            case .updated:
+                nil
+            }
         router.toast.show(
-            message: message,
-            actionTitle: "Message",
-            duration: Self.savedAppointmentToastDuration
-        ) { [weak router] in
-            router?.requestAppointmentMessage(id: saved.id, date: saved.start)
-        }
+            ToastItem(
+                message: message,
+                action: action,
+                duration: Self.savedAppointmentToastDuration
+            )
+        )
     }
 }
 

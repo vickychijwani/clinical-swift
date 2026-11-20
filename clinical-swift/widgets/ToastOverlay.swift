@@ -12,13 +12,10 @@ struct ToastView: View {
                     .font(.subheadline)
                     .foregroundStyle(AppColor.text)
                     .lineLimit(1)
-
-                Spacer(minLength: 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let action = toast.action {
-                    Button(action.title, action: onAction)
-                        .buttonStyle(.appGlassProminent)
-                        .controlSize(.small)
+                    ToastActionButton(action: action, onAction: onAction)
                 }
 
                 Button("Dismiss", systemImage: "xmark", action: onDismiss)
@@ -37,6 +34,24 @@ struct ToastView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("app-toast")
+    }
+}
+
+private struct ToastActionButton: View {
+    let action: ToastAction
+    let onAction: @MainActor () -> Void
+
+    var body: some View {
+        if let systemImage = action.systemImage {
+            Button(action.title, systemImage: systemImage, action: onAction)
+                .labelIconToTitleSpacing(4)
+                .buttonStyle(.appGlassProminent)
+                .controlSize(.small)
+        } else {
+            Button(action.title, action: onAction)
+                .buttonStyle(.appGlassProminent)
+                .controlSize(.small)
+        }
     }
 }
 

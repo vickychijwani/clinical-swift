@@ -1046,6 +1046,7 @@ struct ScheduleEditorSessionTests {
             let activeToast = try #require(router.toast.current)
             #expect(activeToast.message == "Appointment booked")
             #expect(activeToast.action?.title == "Message")
+            #expect(activeToast.action?.systemImage == "arrow.up.message")
             #expect(activeToast.duration == ScheduleEditorSession.savedAppointmentToastDuration)
 
             router.selectedTab = .patients
@@ -1106,6 +1107,7 @@ struct ScheduleEditorSessionTests {
             let activeToast = try #require(router.toast.current)
             #expect(activeToast.message == "Appointment rescheduled")
             #expect(activeToast.action?.title == "Message")
+            #expect(activeToast.action?.systemImage == "arrow.up.message")
 
             router.selectScheduleDate(date)
             router.toast.triggerAction(for: activeToast.id)
@@ -1116,7 +1118,7 @@ struct ScheduleEditorSessionTests {
         }
     }
 
-    @Test func patientOnlyEditShowsAppointmentUpdatedToastWithMessageAction() async throws {
+    @Test func patientOnlyEditShowsAppointmentUpdatedToastWithoutAction() async throws {
         let database = try testDatabase()
         let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
         let originalPatient = Patient(name: "Original Patient", createdDate: date)
@@ -1150,13 +1152,49 @@ struct ScheduleEditorSessionTests {
             #expect(await session.save())
             let activeToast = try #require(router.toast.current)
             #expect(activeToast.message == "Appointment updated")
-            #expect(activeToast.action?.title == "Message")
+            #expect(activeToast.action == nil)
+            #expect(activeToast.duration == ScheduleEditorSession.savedAppointmentToastDuration)
+        }
+    }
 
-            router.toast.triggerAction(for: activeToast.id)
-            #expect(router.toast.current == nil)
-            #expect(router.selectedTab == .schedule)
-            #expect(router.selectedScheduleDate == date.startOfDay(using: utcCalendar))
-            #expect(router.appointmentMessageRequest?.appointmentID == appointment.id)
+    @Test func durationOnlyEditShowsAppointmentUpdatedToastWithoutAction() async throws {
+        let database = try testDatabase()
+        let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Patient", createdDate: date)
+        let appointment = Appointment(
+            patientName: patient.displayName, start: date, durationMinutes: 30,
+            status: .scheduled)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
+            let record = try AppointmentRecord.persisted(
+                id: appointment.id, patientID: patient.id, start: date, durationMinutes: 30,
+                status: .scheduled, createdAt: date, updatedAt: date)
+            try AppointmentRecord.insert { record }.execute(db)
+        }
+        try await withDependencies {
+            $0.calendar = utcCalendar
+            $0.continuousClock = TestClock()
+            $0.date.now = date
+            $0.defaultDatabase = database
+        } operation: {
+            let router = Router(selectedScheduleDate: date)
+            router.requestAppointmentEdit(
+                AppointmentDetails(appointment: appointment, patient: patient))
+            let request = try #require(router.activePresentation)
+            let session = try finishingSession(
+                request: request, selectedDate: date, appointments: [appointment],
+                router: router)
+            guard case .appointment(let model) = session.editor else {
+                Issue.record("Expected an appointment editor")
+                return
+            }
+            model.draft.selectDuration(60)
+
+            #expect(await session.save())
+            let activeToast = try #require(router.toast.current)
+            #expect(activeToast.message == "Appointment updated")
+            #expect(activeToast.action == nil)
+            #expect(activeToast.duration == ScheduleEditorSession.savedAppointmentToastDuration)
         }
     }
 
