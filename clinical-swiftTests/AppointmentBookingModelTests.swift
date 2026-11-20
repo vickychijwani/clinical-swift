@@ -10,30 +10,29 @@ import Testing
 @MainActor
 struct AppointmentBookingModelTests {
     @Test func todayInitialPrefillStartsAtNextFiveMinuteBoundary() throws {
-        let calendar = gregorianCalendar
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let selectedDate = try Date("2026-04-21T00:00:00+05:30", strategy: .iso8601)
         let examples: [(now: Date, expectedStart: Date)] = [
             (
-                try Date("2026-04-21T16:13:00Z", strategy: .iso8601),
+                try Date("2026-04-21T16:13:00+05:30", strategy: .iso8601),
                 selectedDate.setTime(16, 15, using: calendar)
             ),
             (
-                try Date("2026-04-21T16:01:00Z", strategy: .iso8601),
+                try Date("2026-04-21T16:01:00+05:30", strategy: .iso8601),
                 selectedDate.setTime(16, 5, using: calendar)
             ),
             (
-                try Date("2026-04-21T16:15:55Z", strategy: .iso8601),
+                try Date("2026-04-21T16:15:55+05:30", strategy: .iso8601),
                 selectedDate.setTime(16, 15, using: calendar)
             ),
             (
-                try Date("2026-04-21T16:16:00Z", strategy: .iso8601),
+                try Date("2026-04-21T16:16:00+05:30", strategy: .iso8601),
                 selectedDate.setTime(16, 20, using: calendar)
             ),
         ]
 
         for example in examples {
             try withDependencies {
-                $0.calendar = calendar
                 $0.date.now = example.now
             } operation: {
                 let session = try bookingSession(date: selectedDate)
@@ -43,13 +42,12 @@ struct AppointmentBookingModelTests {
     }
 
     @Test func nonTodayInitialPrefillUsesPreferredDefaultRegardlessOfCurrentTime() throws {
-        let calendar = gregorianCalendar
-        let tomorrow = try Date("2026-04-22T00:00:00Z", strategy: .iso8601)
-        let yesterday = try Date("2026-04-20T00:00:00Z", strategy: .iso8601)
-        let now = try Date("2026-04-21T16:13:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let tomorrow = try Date("2026-04-22T00:00:00+05:30", strategy: .iso8601)
+        let yesterday = try Date("2026-04-20T00:00:00+05:30", strategy: .iso8601)
+        let now = try Date("2026-04-21T16:13:00+05:30", strategy: .iso8601)
 
         try withDependencies {
-            $0.calendar = calendar
             $0.date.now = now
         } operation: {
             let tomorrowSession = try bookingSession(date: tomorrow)
@@ -60,9 +58,9 @@ struct AppointmentBookingModelTests {
     }
 
     @Test func editingUpdatesMutableFieldsAndPreservesRecordIdentityAndStatus() async throws {
-        let calendar = gregorianCalendar
+        let calendar = ClinicDate.calendar
         let database = try testDatabase()
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let selectedDate = try Date("2026-04-21T00:00:00+05:30", strategy: .iso8601)
         let originalPatient = Patient(name: "Aarav Mehta", createdDate: selectedDate)
         let newPatient = Patient(name: "Anjali Desai", createdDate: selectedDate)
         let appointmentID = UUID()
@@ -89,7 +87,6 @@ struct AppointmentBookingModelTests {
 
         var savedDate: Date?
         let didSave = try await withDependencies {
-            $0.calendar = calendar
             $0.date.now = updatedAt
             $0.defaultDatabase = database
         } operation: {
@@ -127,14 +124,13 @@ struct AppointmentBookingModelTests {
     }
 
     @Test func editingMissingAppointmentFailsWithoutCallingSaveCallback() async throws {
-        let calendar = gregorianCalendar
+        let calendar = ClinicDate.calendar
         let database = try testDatabase()
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let selectedDate = try Date("2026-04-21T00:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Aarav Mehta", createdDate: selectedDate)
         var didCallSave = false
 
         let result = try await withDependencies {
-            $0.calendar = calendar
             $0.date.now = selectedDate
             $0.defaultDatabase = database
         } operation: {
@@ -158,8 +154,8 @@ struct AppointmentBookingModelTests {
 
     @Test func chargedAppointmentKeepsPatientAndReportsEditFailure() async throws {
         let database = try testDatabase()
-        let calendar = gregorianCalendar
-        let now = try Date("2026-10-24T09:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let now = try Date("2026-10-24T09:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Aarav Mehta", createdDate: now)
         let other = Patient(name: "Anjali Desai", createdDate: now)
         let appointment = Appointment(
@@ -167,7 +163,6 @@ struct AppointmentBookingModelTests {
             start: now.setTime(10, 0, using: calendar), durationMinutes: 30, status: .scheduled)
         try await withDependencies {
             $0.date.now = now
-            $0.calendar = calendar
             $0.defaultDatabase = database
         } operation: {
             try await database.write { db in
@@ -225,10 +220,5 @@ struct AppointmentBookingModelTests {
                 request: .appointmentEdit(AppointmentEditRequest(details: details)),
                 selectedDate: details.appointment.start, appointments: [],
                 onFinished: { onFinished($0.date) }))
-    }
-    private var gregorianCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        return calendar
     }
 }

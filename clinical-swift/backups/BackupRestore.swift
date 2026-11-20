@@ -52,7 +52,6 @@ nonisolated extension BackupRestoreJournal {
 /// Invoke only before opening live pools. File coordination also excludes reads in widget processes.
 @MainActor
 struct BackupRestore {
-    @Dependency(\.calendar) private var calendar
     @Dependency(\.telemetry) private var telemetry
     let store: BackupStateStore
     let databaseURL: URL
@@ -98,8 +97,8 @@ struct BackupRestore {
         try BackupFiles.createDirectory(recovery)
         let replacement = recovery.appending(path: "replacement.db")
         try FileManager.default.copyItem(at: snapshot.databaseURL, to: replacement)
-        let cutoff = calendar.startOfDay(
-            for: calendar.date(byAdding: .day, value: -7, to: recoveryDate) ?? recoveryDate)
+        let cutoff = ClinicDate.day(
+            ClinicDate.calendar.date(byAdding: .day, value: -7, to: recoveryDate) ?? recoveryDate)
         let database = try DatabaseQueue(path: replacement.path(percentEncoded: false))
         do {
             try migrator.migrate(database)

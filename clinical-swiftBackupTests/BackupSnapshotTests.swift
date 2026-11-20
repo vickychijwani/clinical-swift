@@ -145,100 +145,94 @@ struct BackupSnapshotTests {
         try live.close()
         let store = BackupStateStore(directory: directory.appending(path: "state"))
         try store.save(BackupState())
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let restore = BackupRestore(store: store, databaseURL: liveURL)
-            #expect(throws: BackupError.confirmationRequired) {
-                try restore.prepare(
-                    snapshot: snapshot, expectedDatasetID: BackupFixture.datasetID,
-                    recoveryDate: BackupFixture.capturedAt, confirmed: false)
-            }
+        let restore = BackupRestore(store: store, databaseURL: liveURL)
+        #expect(throws: BackupError.confirmationRequired) {
             try restore.prepare(
                 snapshot: snapshot, expectedDatasetID: BackupFixture.datasetID,
-                recoveryDate: BackupFixture.capturedAt, confirmed: true)
-            let installedPolicy = try restore.prepareForStartup()
-            #expect(!installedPolicy.seedSamples)
-            #expect(installedPolicy.recoverySafe)
-            #expect(!installedPolicy.allowsBackgroundBackups)
-            let resumedPolicy = try restore.prepareForStartup()
-            #expect(resumedPolicy.recoverySafe)
-            #expect(!resumedPolicy.allowsBackgroundBackups)
-            let restored = try DatabaseQueue(
-                path: liveURL.path(percentEncoded: false),
-                configuration: clinicalDatabaseConfiguration())
-            let contents = try BackupFixture.contents(restored)
-            #expect(contents["patients"] == original["patients"])
-            #expect(contents["appointments"] == original["appointments"])
-            #expect(contents["accountEntries"] == original["accountEntries"])
-            #expect(contents["patientBalances"] == original["patientBalances"])
-            let financialState = try restored.read { db in
-                (
-                    try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM accountEntries"),
-                    try Int.fetchOne(
-                        db,
-                        sql:
-                            "SELECT balance FROM patientBalances WHERE id = '10000000-0000-0000-0000-000000000001'"
-                    )
-                )
-            }
-            #expect(financialState.0 == 4)
-            #expect(financialState.1 == 1000)
-            let pending = try restored.read {
-                try String.fetchAll(
-                    $0,
-                    sql:
-                        "SELECT appointmentID FROM appointmentCalendarSync WHERE needsSync = 1 ORDER BY appointmentID"
-                )
-            }
-            #expect(
-                pending == [
-                    "20000000-0000-0000-0000-000000000001", "20000000-0000-0000-0000-000000000003",
-                    "40000000-0000-0000-0000-000000000001",
-                ])
-            let blocks = try restored.read {
-                try String.fetchAll(
-                    $0,
-                    sql:
-                        "SELECT unavailableTimeID FROM unavailableTimeCalendarSync WHERE needsSync = 1"
-                )
-            }
-            #expect(blocks == ["30000000-0000-0000-0000-000000000001"])
-            try restored.close()
-            #expect(try store.load().datasetID == snapshot.manifest.datasetID)
-            // Model termination after rollback intent is saved and live replacement starts.
-            var interrupted = try BackupFiles.load(
-                BackupRestoreJournal.self, from: restore.journalURL)
-            interrupted.phase = .rollingBack
-            try BackupFiles.save(interrupted, to: restore.journalURL)
-            try Data("interrupted rollback".utf8).write(to: liveURL)
-            let rollbackPolicy = try restore.prepareForStartup()
-            #expect(rollbackPolicy.recoverySafe)
-            #expect(!rollbackPolicy.allowsBackgroundBackups)
-            let rolledBackPolicy = try restore.prepareForStartup()
-            #expect(!rolledBackPolicy.seedSamples)
-            #expect(rolledBackPolicy.recoverySafe)
-            #expect(!rolledBackPolicy.allowsBackgroundBackups)
-            let rolledBack = try DatabaseQueue(
-                path: liveURL.path(percentEncoded: false),
-                configuration: clinicalDatabaseConfiguration())
-            #expect(try BackupFixture.contents(rolledBack) == before)
-            try rolledBack.close()
-            var accepting = try BackupFiles.load(
-                BackupRestoreJournal.self, from: restore.journalURL)
-            accepting.phase = .finalizing
-            try BackupFiles.save(accepting, to: restore.journalURL)
-            try FileManager.default.removeItem(
-                at: accepting.directory(in: store))
-            let finalizedPolicy = try restore.prepareForStartup()
-            #expect(finalizedPolicy.seedSamples)
-            #expect(finalizedPolicy.allowsBackgroundBackups)
-            #expect(
-                !FileManager.default.fileExists(
-                    atPath: restore.journalURL.path(percentEncoded: false)))
+                recoveryDate: BackupFixture.capturedAt, confirmed: false)
         }
+        try restore.prepare(
+            snapshot: snapshot, expectedDatasetID: BackupFixture.datasetID,
+            recoveryDate: BackupFixture.capturedAt, confirmed: true)
+        let installedPolicy = try restore.prepareForStartup()
+        #expect(!installedPolicy.seedSamples)
+        #expect(installedPolicy.recoverySafe)
+        #expect(!installedPolicy.allowsBackgroundBackups)
+        let resumedPolicy = try restore.prepareForStartup()
+        #expect(resumedPolicy.recoverySafe)
+        #expect(!resumedPolicy.allowsBackgroundBackups)
+        let restored = try DatabaseQueue(
+            path: liveURL.path(percentEncoded: false),
+            configuration: clinicalDatabaseConfiguration())
+        let contents = try BackupFixture.contents(restored)
+        #expect(contents["patients"] == original["patients"])
+        #expect(contents["appointments"] == original["appointments"])
+        #expect(contents["accountEntries"] == original["accountEntries"])
+        #expect(contents["patientBalances"] == original["patientBalances"])
+        let financialState = try await restored.read { db in
+            (
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM accountEntries"),
+                try Int.fetchOne(
+                    db,
+                    sql:
+                        "SELECT balance FROM patientBalances WHERE id = '10000000-0000-0000-0000-000000000001'"
+                )
+            )
+        }
+        #expect(financialState.0 == 4)
+        #expect(financialState.1 == 1000)
+        let pending = try await restored.read {
+            try String.fetchAll(
+                $0,
+                sql:
+                    "SELECT appointmentID FROM appointmentCalendarSync WHERE needsSync = 1 ORDER BY appointmentID"
+            )
+        }
+        #expect(
+            pending == [
+                "20000000-0000-0000-0000-000000000001", "20000000-0000-0000-0000-000000000003",
+                "40000000-0000-0000-0000-000000000001",
+            ])
+        let blocks = try await restored.read {
+            try String.fetchAll(
+                $0,
+                sql:
+                    "SELECT unavailableTimeID FROM unavailableTimeCalendarSync WHERE needsSync = 1"
+            )
+        }
+        #expect(blocks == ["30000000-0000-0000-0000-000000000001"])
+        try restored.close()
+        #expect(try store.load().datasetID == snapshot.manifest.datasetID)
+        // Model termination after rollback intent is saved and live replacement starts.
+        var interrupted = try BackupFiles.load(
+            BackupRestoreJournal.self, from: restore.journalURL)
+        interrupted.phase = .rollingBack
+        try BackupFiles.save(interrupted, to: restore.journalURL)
+        try Data("interrupted rollback".utf8).write(to: liveURL)
+        let rollbackPolicy = try restore.prepareForStartup()
+        #expect(rollbackPolicy.recoverySafe)
+        #expect(!rollbackPolicy.allowsBackgroundBackups)
+        let rolledBackPolicy = try restore.prepareForStartup()
+        #expect(!rolledBackPolicy.seedSamples)
+        #expect(rolledBackPolicy.recoverySafe)
+        #expect(!rolledBackPolicy.allowsBackgroundBackups)
+        let rolledBack = try DatabaseQueue(
+            path: liveURL.path(percentEncoded: false),
+            configuration: clinicalDatabaseConfiguration())
+        #expect(try BackupFixture.contents(rolledBack) == before)
+        try rolledBack.close()
+        var accepting = try BackupFiles.load(
+            BackupRestoreJournal.self, from: restore.journalURL)
+        accepting.phase = .finalizing
+        try BackupFiles.save(accepting, to: restore.journalURL)
+        try FileManager.default.removeItem(
+            at: accepting.directory(in: store))
+        let finalizedPolicy = try restore.prepareForStartup()
+        #expect(finalizedPolicy.seedSamples)
+        #expect(finalizedPolicy.allowsBackgroundBackups)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: restore.journalURL.path(percentEncoded: false)))
     }
 
     @Test func scopedReadPreventsDatabaseReplacement() throws {
@@ -357,13 +351,9 @@ struct BackupSnapshotTests {
             databaseFileID: "saved-db-id", manifestFileID: "saved-json-id")
         try store.save(state)
         let restore = BackupRestore(store: store, databaseURL: liveURL)
-        try withDependencies {
-            $0.calendar = Calendar(identifier: .gregorian)
-        } operation: {
-            try restore.prepare(
-                snapshot: snapshot, expectedDatasetID: BackupFixture.datasetID,
-                recoveryDate: BackupFixture.capturedAt, confirmed: true)
-        }
+        try restore.prepare(
+            snapshot: snapshot, expectedDatasetID: BackupFixture.datasetID,
+            recoveryDate: BackupFixture.capturedAt, confirmed: true)
         // Neither old container remains available when work resumes.
         let movedApp = directory.appending(path: "moved app")
         let movedGroup = directory.appending(path: "moved group")

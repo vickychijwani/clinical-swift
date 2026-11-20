@@ -12,13 +12,12 @@ struct ScheduleEditorSessionTests {
     @Test(arguments: [false, true])
     func concurrentSavesFinishOnceAndPreventFurtherChanges(unavailable: Bool) async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
             try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
             $0.defaultDatabase = database
         } operation: {
@@ -62,12 +61,11 @@ struct ScheduleEditorSessionTests {
 
     @Test(arguments: [false, true])
     func dateChangeKeepsManualIntervalAcrossConflictsAndBreaks(hold: Bool) throws {
-        let today = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
-        let tomorrow = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
-        let start = try Date("2026-10-02T12:30:00Z", strategy: .iso8601)
+        let today = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
+        let tomorrow = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
+        let start = try Date("2026-10-02T12:30:00+05:30", strategy: .iso8601)
         try withDependencies {
-            $0.calendar = utcCalendar
-            $0.date.now = try Date("2026-10-02T16:13:00Z", strategy: .iso8601)
+            $0.date.now = try Date("2026-10-02T16:13:00+05:30", strategy: .iso8601)
         } operation: {
             let session = try genericSession(
                 request: .scheduleCreation(ScheduleCreationRequest()), date: tomorrow, hold: hold)
@@ -76,7 +74,7 @@ struct ScheduleEditorSessionTests {
                 return
             }
             session.adjustment.release()
-            model.draft.selectStart(tomorrow.setTime(12, 30, using: utcCalendar))
+            model.draft.selectStart(tomorrow.setTime(12, 30, using: ClinicDate.calendar))
             model.draft.selectDuration(60)
             let before = session.scrollRequest
             session.selectDate(today)
@@ -94,106 +92,88 @@ struct ScheduleEditorSessionTests {
 
     @Test(arguments: [false, true])
     func draftIdentityPreventsDraggingAnotherItem(unavailable: Bool) throws {
-        let start = try Date("2026-10-02T12:00:00Z", strategy: .iso8601)
-        try withDependencies {
-            $0.calendar = utcCalendar
-        } operation: {
-            let session = try editingSession(unavailable: unavailable, start: start)
-            let draft = session.preview
-            let other: TimelineItem =
-                switch draft.id {
-                case .appointment(let id):
-                    .unavailableTime(UnavailableTime(id: id, start: start, durationMinutes: 30))
-                case .unavailableTime(let id):
-                    .appointment(
-                        Appointment(
-                            id: id, patientName: "Other", start: start, durationMinutes: 30,
-                            status: .scheduled))
-                }
-            session.beginAdjustment(other, edge: .move, items: [draft, other])
-            session.updateAdjustment(translation: 15, items: [draft, other])
-            #expect(!session.adjustment.isDragging)
-            #expect(session.preview.id == draft.id)
-            #expect(session.preview.start == start)
-        }
+        let start = try Date("2026-10-02T12:00:00+05:30", strategy: .iso8601)
+        let session = try editingSession(unavailable: unavailable, start: start)
+        let draft = session.preview
+        let other: TimelineItem =
+            switch draft.id {
+            case .appointment(let id):
+                .unavailableTime(UnavailableTime(id: id, start: start, durationMinutes: 30))
+            case .unavailableTime(let id):
+                .appointment(
+                    Appointment(
+                        id: id, patientName: "Other", start: start, durationMinutes: 30,
+                        status: .scheduled))
+            }
+        session.beginAdjustment(other, edge: .move, items: [draft, other])
+        session.updateAdjustment(translation: 15, items: [draft, other])
+        #expect(!session.adjustment.isDragging)
+        #expect(session.preview.id == draft.id)
+        #expect(session.preview.start == start)
     }
 
     @Test(arguments: [false, true])
     func dateSelectionPreservesDraftAndMovesItBetweenPages(unavailable: Bool) throws {
-        let calendar = Calendar.autoupdatingCurrent
-        let start = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let start = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
             .setTime(14, 0, using: calendar)
         let nextStart = start.date(byAddingDays: 1, using: calendar).setTime(14, 0, using: calendar)
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let session = try editingSession(unavailable: unavailable, start: start)
-            let original = session.preview
-            session.beginAdjustment(original, edge: .move, items: [original])
-            session.adjustment.release()
-            session.selectDate(nextStart)
-            #expect(session.preview.id == original.id)
-            #expect(session.preview.start == nextStart)
-            #expect(session.preview.durationMinutes == original.durationMinutes)
-            #expect(session.visibleItems([original], for: start).isEmpty)
-            #expect(session.visibleItems([], for: nextStart).map(\.id) == [original.id])
-            #expect(session.scale([], on: nextStart).isBreakExpanded)
-            #expect(!session.scale([], on: start).isBreakExpanded)
-        }
+        let session = try editingSession(unavailable: unavailable, start: start)
+        let original = session.preview
+        session.beginAdjustment(original, edge: .move, items: [original])
+        session.adjustment.release()
+        session.selectDate(nextStart)
+        #expect(session.preview.id == original.id)
+        #expect(session.preview.start == nextStart)
+        #expect(session.preview.durationMinutes == original.durationMinutes)
+        #expect(session.visibleItems([original], for: start).isEmpty)
+        #expect(session.visibleItems([], for: nextStart).map(\.id) == [original.id])
+        #expect(session.scale([], on: nextStart).isBreakExpanded)
+        #expect(!session.scale([], on: start).isBreakExpanded)
     }
 
     @Test(arguments: [false, true])
-    func dateSelectionKeepsClockTimeAcrossDaylightSavingChange(unavailable: Bool) throws {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(identifier: "America/New_York"))
-        let start = try Date("2026-10-31T16:00:00Z", strategy: .iso8601)
-        let nextStart = try Date("2026-11-01T17:00:00Z", strategy: .iso8601)
-        try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            let session = try editingSession(unavailable: unavailable, start: start)
-            session.selectDate(nextStart)
-            #expect(session.preview.start == nextStart)
-            #expect(session.preview.durationMinutes == 45)
-        }
+    func dateSelectionKeepsClinicClockTimeAcrossUSDaylightSavingChange(unavailable: Bool) throws {
+        let start = try Date("2026-10-31T12:00:00+05:30", strategy: .iso8601)
+        let nextStart = try Date("2026-11-01T12:00:00+05:30", strategy: .iso8601)
+        let session = try editingSession(unavailable: unavailable, start: start)
+        session.selectDate(nextStart)
+        #expect(session.preview.start == nextStart)
+        #expect(session.preview.durationMinutes == 45)
     }
 
     @Test(arguments: [false, true])
     func nextGestureUsesDraftControlAndMetadataChanges(unavailable: Bool) throws {
-        let start = try Date("2026-10-02T12:00:00Z", strategy: .iso8601)
-        let selectedStart = try Date("2026-10-02T16:00:00Z", strategy: .iso8601)
-        try withDependencies {
-            $0.calendar = utcCalendar
-        } operation: {
-            let session = try editingSession(unavailable: unavailable, start: start)
-            let staleItem = session.preview
-            session.beginAdjustment(staleItem, edge: .move, items: [])
-            session.updateAdjustment(translation: 15, items: [])
-            session.adjustment.release()
-            let patient = Patient(name: "Changed patient", createdDate: start)
-            switch session.editor {
-            case .appointment(let model):
-                session.selectPatient(patient)
-                model.draft.selectStart(selectedStart)
-                model.draft.selectDuration(45)
-            case .unavailableTime(let model):
-                model.draft.label = "Changed label"
-                session.isShowingSheet = false
-                model.draft.start = selectedStart
-                model.draft.durationMinutes = 45
-            }
-            #expect(session.preview.start == selectedStart)
-            #expect(session.preview.durationMinutes == 45)
-            session.beginAdjustment(staleItem, edge: .move, items: [])
-            session.updateAdjustment(translation: 15, items: [])
-            #expect(session.preview.start == selectedStart.addingTimeInterval(15 * 60))
-            #expect(session.preview.durationMinutes == 45)
-            switch session.preview {
-            case .appointment(let appointment):
-                #expect(appointment.patientName == patient.displayName)
-            case .unavailableTime(let block):
-                #expect(block.label == "Changed label")
-            }
+        let start = try Date("2026-10-02T12:00:00+05:30", strategy: .iso8601)
+        let selectedStart = try Date("2026-10-02T16:00:00+05:30", strategy: .iso8601)
+        let session = try editingSession(unavailable: unavailable, start: start)
+        let staleItem = session.preview
+        session.beginAdjustment(staleItem, edge: .move, items: [])
+        session.updateAdjustment(translation: 15, items: [])
+        session.adjustment.release()
+        let patient = Patient(name: "Changed patient", createdDate: start)
+        switch session.editor {
+        case .appointment(let model):
+            session.selectPatient(patient)
+            model.draft.selectStart(selectedStart)
+            model.draft.selectDuration(45)
+        case .unavailableTime(let model):
+            model.draft.label = "Changed label"
+            session.isShowingSheet = false
+            model.draft.start = selectedStart
+            model.draft.durationMinutes = 45
+        }
+        #expect(session.preview.start == selectedStart)
+        #expect(session.preview.durationMinutes == 45)
+        session.beginAdjustment(staleItem, edge: .move, items: [])
+        session.updateAdjustment(translation: 15, items: [])
+        #expect(session.preview.start == selectedStart.addingTimeInterval(15 * 60))
+        #expect(session.preview.durationMinutes == 45)
+        switch session.preview {
+        case .appointment(let appointment):
+            #expect(appointment.patientName == patient.displayName)
+        case .unavailableTime(let block):
+            #expect(block.label == "Changed label")
         }
     }
 
@@ -216,9 +196,8 @@ struct ScheduleEditorSessionTests {
     }
 
     @Test func initialHoldUsesItsOwnAdjustmentAndDoneRequiresPatientSelection() async throws {
-        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
         await withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             var didFinish = false
@@ -252,13 +231,12 @@ struct ScheduleEditorSessionTests {
     @Test(arguments: [false, true])
     func saveReleasesDragAndKeepsFailedPreviewForRetry(unavailable: Bool) async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
             try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
             $0.defaultDatabase = database
         } operation: {
@@ -317,7 +295,7 @@ struct ScheduleEditorSessionTests {
         async throws
     {
         let database = try testDatabase()
-        let date = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T11:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         let appointment = Appointment(
             patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
@@ -329,7 +307,6 @@ struct ScheduleEditorSessionTests {
             try AppointmentRecord.insert { record }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
             $0.defaultDatabase = database
         } operation: {
@@ -358,8 +335,8 @@ struct ScheduleEditorSessionTests {
 
     @Test func deletingMovedBlockUsesItsSavedIdentity() async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
-        let nextDate = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T11:00:00+05:30", strategy: .iso8601)
+        let nextDate = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
         let block = UnavailableTime(label: "Travel", start: date, durationMinutes: 60)
         try await database.write { db in
             try UnavailableTimeRecord.insert {
@@ -369,7 +346,6 @@ struct ScheduleEditorSessionTests {
             }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
             $0.defaultDatabase = database
         } operation: {
@@ -392,11 +368,10 @@ struct ScheduleEditorSessionTests {
     }
 
     @Test func bookingUsesTheRouterIDAndPrefillsBeforePresentation() throws {
-        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
-        let busyStart = try Date("2026-10-02T09:00:00Z", strategy: .iso8601)
-        let expectedStart = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
+        let busyStart = try Date("2026-10-02T09:00:00+05:30", strategy: .iso8601)
+        let expectedStart = try Date("2026-10-02T11:00:00+05:30", strategy: .iso8601)
         try withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             let patient = Patient(name: "Patient", createdDate: date)
@@ -421,10 +396,9 @@ struct ScheduleEditorSessionTests {
 
     @Test(arguments: [false, true])
     func editingReplacesOnlyTheMatchingItemType(unavailable: Bool) throws {
-        let start = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
-        let nextDate = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
+        let start = try Date("2026-10-02T11:00:00+05:30", strategy: .iso8601)
+        let nextDate = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
         try withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = start
         } operation: {
             let id = UUID()
@@ -462,10 +436,9 @@ struct ScheduleEditorSessionTests {
 
     @Test(arguments: [false, true])
     func scrollRequestsIncludeDateAndTypeChanges(unavailable: Bool) throws {
-        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
-        let nextDate = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
+        let nextDate = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
         try withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             let router = Router(selectedScheduleDate: date)
@@ -493,10 +466,9 @@ struct ScheduleEditorSessionTests {
     func completionRejectsAnOldSessionAndKeepsTheNewestReplacement(
         unavailable: Bool, editing: Bool
     ) throws {
-        let start = try Date("2026-10-02T11:00:00Z", strategy: .iso8601)
-        let savedDate = try Date("2026-10-03T11:00:00Z", strategy: .iso8601)
+        let start = try Date("2026-10-02T11:00:00+05:30", strategy: .iso8601)
+        let savedDate = try Date("2026-10-03T11:00:00+05:30", strategy: .iso8601)
         try withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = start
         } operation: {
             let router = Router(selectedScheduleDate: start)
@@ -531,7 +503,7 @@ struct ScheduleEditorSessionTests {
                     AppointmentBookingModel.SavedAppointment(
                         id: UUID(), start: savedDate, kind: .booked))
             #expect(session.finish(using: router, completion: completion))
-            #expect(router.selectedScheduleDate == savedDate.startOfDay(using: utcCalendar))
+            #expect(router.selectedScheduleDate == ClinicDate.day(savedDate))
             #expect(router.activePresentation == nil)
             router.requestScheduleCreation()
             router.requestScheduleCreation()
@@ -540,16 +512,15 @@ struct ScheduleEditorSessionTests {
             let replacementID = try #require(router.activePresentation?.id)
             #expect(!session.finish(using: router, completion: .discarded(date: start)))
             #expect(router.activePresentation?.id == replacementID)
-            #expect(router.selectedScheduleDate == savedDate.startOfDay(using: utcCalendar))
+            #expect(router.selectedScheduleDate == ClinicDate.day(savedDate))
         }
     }
 
     @Test(arguments: [false, true])
     func genericCreationSwitchesKeepIntervalAndClearFields(hold: Bool) throws {
-        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
-        let nextDate = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
+        let nextDate = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
         try withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             let router = Router(selectedScheduleDate: date)
@@ -633,14 +604,13 @@ struct ScheduleEditorSessionTests {
         async throws
     {
         let database = try testDatabase()
-        let date = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
             try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
         }
         try await withDependencies {
             $0.defaultDatabase = database
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             let session = try genericSession(
@@ -686,9 +656,8 @@ struct ScheduleEditorSessionTests {
     }
 
     @Test func typeChangeIsBlockedForSavedItemsAndPatientBooking() throws {
-        let date = try Date("2026-10-02T12:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-02T12:00:00+05:30", strategy: .iso8601)
         try withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             for unavailable in [false, true] {
@@ -745,9 +714,8 @@ struct ScheduleEditorSessionTests {
     func timelineHoldSnapsCenteredStartToQuarterHourAndClampsAtClinicHours(
         center: TimeOfDay, expectedStart: TimeOfDay
     ) throws {
-        let date = try Date("2026-10-26T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-26T00:00:00+05:30", strategy: .iso8601)
         withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             let session = ScheduleEditorSession(
@@ -759,7 +727,7 @@ struct ScheduleEditorSessionTests {
             }
             #expect(
                 model.draftAppointment.start
-                    == expectedStart.on(date: date, using: utcCalendar))
+                    == expectedStart.on(date: date, using: ClinicDate.calendar))
             #expect(model.draftAppointment.start.timeOfDay.totalMinutes % 15 == 0)
             #expect(model.draftAppointment.durationMinutes == 30)
             #expect(session.adjustment.isDragging)
@@ -767,7 +735,7 @@ struct ScheduleEditorSessionTests {
             session.updateAdjustment(translation: 0, items: [])
             #expect(
                 model.draftAppointment.start
-                    == expectedStart.on(date: date, using: utcCalendar))
+                    == expectedStart.on(date: date, using: ClinicDate.calendar))
         }
     }
 
@@ -775,13 +743,12 @@ struct ScheduleEditorSessionTests {
         async throws
     {
         let database = try testDatabase()
-        let date = try Date("2026-10-26T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-26T00:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
             try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
             $0.defaultDatabase = database
         } operation: {
@@ -825,8 +792,8 @@ struct ScheduleEditorSessionTests {
     @Test(arguments: [false, true], [false, true])
     func timelineChangesStayUnsavedUntilDone(unavailable: Bool, editing: Bool) async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-25T12:00:00Z", strategy: .iso8601)
-        let nextDate = try Date("2026-10-26T12:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-25T12:00:00+05:30", strategy: .iso8601)
+        let nextDate = try Date("2026-10-26T12:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         let appointment = Appointment(
             patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
@@ -849,7 +816,6 @@ struct ScheduleEditorSessionTests {
             }
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = date
             $0.defaultDatabase = database
         } operation: {
@@ -883,8 +849,8 @@ struct ScheduleEditorSessionTests {
             session.updateAdjustment(translation: -100, items: [])
             session.adjustment.release()
             session.selectDate(nextDate)
-            let expectedStart = TimeOfDay(date: movedStart, calendar: utcCalendar).on(
-                date: nextDate, using: utcCalendar)
+            let expectedStart = TimeOfDay(date: movedStart, calendar: ClinicDate.calendar).on(
+                date: nextDate, using: ClinicDate.calendar)
             #expect(session.preview.start == expectedStart)
             #expect(session.preview.durationMinutes == 15)
             #expect(savedDate == nil)
@@ -915,17 +881,16 @@ struct ScheduleEditorSessionTests {
 
     @Test func dateChangeDuringBookingInitializationUsesNewDateAndSavesIt() async throws {
         let database = try testDatabase()
-        let today = try Date("2026-10-02T00:00:00Z", strategy: .iso8601)
-        let day1 = try Date("2026-10-03T00:00:00Z", strategy: .iso8601)
-        let day2 = try Date("2026-10-05T00:00:00Z", strategy: .iso8601)
-        let day3 = try Date("2026-10-06T00:00:00Z", strategy: .iso8601)
+        let today = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
+        let day1 = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
+        let day2 = try Date("2026-10-05T00:00:00+05:30", strategy: .iso8601)
+        let day3 = try Date("2026-10-06T00:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Follow-up Patient", createdDate: today)
         try await database.write { db in
             try PatientRecord.insert { PatientRecord(patient, now: today) }.execute(db)
         }
 
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.date.now = today
             $0.defaultDatabase = database
         } operation: {
@@ -968,7 +933,7 @@ struct ScheduleEditorSessionTests {
 
             let day2Busy = Appointment(
                 patientName: "Other patient",
-                start: day2.setTime(10, 0, using: utcCalendar),
+                start: day2.setTime(10, 0, using: ClinicDate.calendar),
                 durationMinutes: 30,
                 status: .scheduled
             )
@@ -985,7 +950,7 @@ struct ScheduleEditorSessionTests {
             )
 
             let session = try #require(store.session)
-            let expectedStart = day2.setTime(10, 30, using: utcCalendar)
+            let expectedStart = day2.setTime(10, 30, using: ClinicDate.calendar)
             #expect(session.selectedDate == day2)
             #expect(session.preview.start == expectedStart)
 
@@ -1016,15 +981,14 @@ struct ScheduleEditorSessionTests {
 
     @Test func bookingAppointmentShowsToastWithMessageActionAndAutoDismisses() async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
-        let savedDay = try Date("2026-10-27T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-25T10:00:00+05:30", strategy: .iso8601)
+        let savedDay = try Date("2026-10-27T00:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         try await database.write { db in
             try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
         }
         let clock = TestClock()
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.continuousClock = clock
             $0.date.now = date
             $0.defaultDatabase = database
@@ -1076,8 +1040,8 @@ struct ScheduleEditorSessionTests {
 
     @Test func reschedulingAppointmentShowsToastWithMessageActionOnUpdatedDate() async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
-        let movedDay = try Date("2026-10-28T00:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-25T10:00:00+05:30", strategy: .iso8601)
+        let movedDay = try Date("2026-10-28T00:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         let appointment = Appointment(
             patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
@@ -1089,7 +1053,6 @@ struct ScheduleEditorSessionTests {
             try AppointmentRecord.insert { record }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.continuousClock = TestClock()
             $0.date.now = date
             $0.defaultDatabase = database
@@ -1120,7 +1083,7 @@ struct ScheduleEditorSessionTests {
 
     @Test func patientOnlyEditShowsAppointmentUpdatedToastWithoutAction() async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-25T10:00:00+05:30", strategy: .iso8601)
         let originalPatient = Patient(name: "Original Patient", createdDate: date)
         let replacementPatient = Patient(name: "Replacement Patient", createdDate: date)
         let appointment = Appointment(
@@ -1135,7 +1098,6 @@ struct ScheduleEditorSessionTests {
             try AppointmentRecord.insert { record }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.continuousClock = TestClock()
             $0.date.now = date
             $0.defaultDatabase = database
@@ -1159,7 +1121,7 @@ struct ScheduleEditorSessionTests {
 
     @Test func durationOnlyEditShowsAppointmentUpdatedToastWithoutAction() async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-25T10:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-25T10:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         let appointment = Appointment(
             patientName: patient.displayName, start: date, durationMinutes: 30,
@@ -1172,7 +1134,6 @@ struct ScheduleEditorSessionTests {
             try AppointmentRecord.insert { record }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.continuousClock = TestClock()
             $0.date.now = date
             $0.defaultDatabase = database
@@ -1200,9 +1161,8 @@ struct ScheduleEditorSessionTests {
 
     @Test func unavailableTimeSaveAndDeleteDoNotShowToast() async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-25T11:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-25T11:00:00+05:30", strategy: .iso8601)
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.continuousClock = TestClock()
             $0.date.now = date
             $0.defaultDatabase = database
@@ -1242,7 +1202,7 @@ struct ScheduleEditorSessionTests {
 
     @Test func failedSaveDiscardAndSupersededSessionDoNotShowToast() async throws {
         let database = try testDatabase()
-        let date = try Date("2026-10-25T11:00:00Z", strategy: .iso8601)
+        let date = try Date("2026-10-25T11:00:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Patient", createdDate: date)
         let appointment = Appointment(
             patientName: patient.displayName, start: date, durationMinutes: 30, status: .scheduled)
@@ -1250,7 +1210,6 @@ struct ScheduleEditorSessionTests {
             try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
         }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.continuousClock = TestClock()
             $0.date.now = date
             $0.defaultDatabase = database
@@ -1305,10 +1264,5 @@ struct ScheduleEditorSessionTests {
             })
         created = session
         return session
-    }
-    private var utcCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .gmt
-        return calendar
     }
 }

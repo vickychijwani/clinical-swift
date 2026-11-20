@@ -49,7 +49,7 @@ public nonisolated struct Patient: Identifiable, Hashable, Sendable {
         }
     }
 
-    public func age(on referenceDate: Date = .now, calendar: Calendar = .autoupdatingCurrent)
+    public func age(on referenceDate: Date = .now, calendar: Calendar = ClinicDate.calendar)
         -> Int?
     {
         guard let dob else {

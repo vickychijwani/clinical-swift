@@ -1,6 +1,5 @@
 import ClinicalModels
 import CoreGraphics
-import Dependencies
 import Foundation
 import Testing
 
@@ -10,24 +9,20 @@ import Testing
 struct TimelineAdjustmentTests {
     @Test(arguments: [false, true])
     func touchWithoutMovementKeepsStoredTimeAndDuration(unavailable: Bool) throws {
-        let start = try Date("2026-10-25T11:07:00Z", strategy: .iso8601)
+        let start = try Date("2026-10-25T11:07:00+05:30", strategy: .iso8601)
         var draft: TimelineItem =
             unavailable
             ? .unavailableTime(UnavailableTime(start: start, durationMinutes: 23))
             : .appointment(
                 Appointment(
                     patientName: "Patient", start: start, durationMinutes: 23, status: .scheduled))
-        withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            let model = TimelineAdjustment()
-            for edge in [TimelineAdjustment.Edge.move, .duration] {
-                model.begin(draft, edge: edge, items: [draft])
-                model.update(&draft, translation: 0, items: [draft])
-                model.release()
-                #expect(draft.start == start)
-                #expect(draft.durationMinutes == 23)
-            }
+        let model = TimelineAdjustment()
+        for edge in [TimelineAdjustment.Edge.move, .duration] {
+            model.begin(draft, edge: edge, items: [draft])
+            model.update(&draft, translation: 0, items: [draft])
+            model.release()
+            #expect(draft.start == start)
+            #expect(draft.durationMinutes == 23)
         }
     }
 
@@ -37,32 +32,28 @@ struct TimelineAdjustmentTests {
             id: appointment.id, label: "Travel", start: appointment.start, durationMinutes: 30)
         let items: [TimelineItem] = [.appointment(appointment), .unavailableTime(block)]
         var draft = TimelineItem.unavailableTime(block)
-        try withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            let model = TimelineAdjustment()
-            model.begin(draft, edge: .move, items: items)
-            model.update(&draft, translation: 13, items: items)
-            model.release()
-            #expect(draft.start.timeOfDay == TimeOfDay(12, 15))
-            model.begin(draft, edge: .duration, items: items)
-            model.update(&draft, translation: -100, items: items)
-            model.release()
-            guard case .unavailableTime(let preview) = draft else {
-                Issue.record("The adjustment must remain unavailable time.")
-                return
-            }
-            #expect(preview.id == block.id)
-            #expect(preview.label == block.label)
-            #expect(preview.start.timeOfDay == TimeOfDay(12, 15))
-            #expect(preview.durationMinutes == 15)
-            let engine = TimelineLayoutEngine(
-                availableWidth: 400, scale: TimelineScale(items: items))
-            let layout = try #require(
-                engine.layout(items: items, floatingID: .unavailableTime(block.id))
-                    .first { $0.id == .unavailableTime(block.id) })
-            #expect(layout.rect.width == Timeline.metrics.contentWidth(availableWidth: 400))
+        let model = TimelineAdjustment()
+        model.begin(draft, edge: .move, items: items)
+        model.update(&draft, translation: 13, items: items)
+        model.release()
+        #expect(draft.start.timeOfDay == TimeOfDay(12, 15))
+        model.begin(draft, edge: .duration, items: items)
+        model.update(&draft, translation: -100, items: items)
+        model.release()
+        guard case .unavailableTime(let preview) = draft else {
+            Issue.record("The adjustment must remain unavailable time.")
+            return
         }
+        #expect(preview.id == block.id)
+        #expect(preview.label == block.label)
+        #expect(preview.start.timeOfDay == TimeOfDay(12, 15))
+        #expect(preview.durationMinutes == 15)
+        let engine = TimelineLayoutEngine(
+            availableWidth: 400, scale: TimelineScale(items: items))
+        let layout = try #require(
+            engine.layout(items: items, floatingID: .unavailableTime(block.id))
+                .first { $0.id == .unavailableTime(block.id) })
+        #expect(layout.rect.width == Timeline.metrics.contentWidth(availableWidth: 400))
     }
 
     @Test func unavailableTimeUsesTheSameBreakDwellAndScrollCorrection() throws {
@@ -70,27 +61,23 @@ struct TimelineAdjustmentTests {
             label: "Travel", start: try appointment().start, durationMinutes: 30)
         var draft = TimelineItem.unavailableTime(block)
         let items = [draft]
-        withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            let model = TimelineAdjustment()
-            model.begin(draft, edge: .move, items: items)
-            model.update(&draft, translation: 76, items: items)
-            #expect(model.hoverRequest != nil)
-            #expect(!model.scale(items, draft: draft).isBreakExpanded)
-            let start = draft.start
-            #expect(model.expandBreak(draft: draft, items: items) > 0)
-            #expect(model.scale(items, draft: draft).isBreakExpanded)
-            #expect(draft.start == start)
-            model.update(&draft, translation: 200, items: items)
-            #expect(!model.scale(items, draft: draft).isBreakExpanded)
-        }
+        let model = TimelineAdjustment()
+        model.begin(draft, edge: .move, items: items)
+        model.update(&draft, translation: 76, items: items)
+        #expect(model.hoverRequest != nil)
+        #expect(!model.scale(items, draft: draft).isBreakExpanded)
+        let start = draft.start
+        #expect(model.expandBreak(draft: draft, items: items) > 0)
+        #expect(model.scale(items, draft: draft).isBreakExpanded)
+        #expect(draft.start == start)
+        model.update(&draft, translation: 200, items: items)
+        #expect(!model.scale(items, draft: draft).isBreakExpanded)
     }
 
     private func appointment(hour: Int = 12, minute: Int = 0) throws -> Appointment {
         Appointment(
             patientName: "Patient",
-            start: try Date("2026-10-25T00:00:00Z", strategy: .iso8601).setTime(hour, minute),
+            start: try Date("2026-10-25T00:00:00+05:30", strategy: .iso8601).setTime(hour, minute),
             durationMinutes: 30, status: .scheduled)
     }
 
@@ -107,11 +94,7 @@ struct TimelineAdjustmentTests {
     @Test func movingSnapsAndKeepsDuration() throws {
         var draft = TimelineItem.appointment(try appointment())
         let items = [draft]
-        let model = withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            TimelineAdjustment()
-        }
+        let model = TimelineAdjustment()
         model.begin(draft, edge: .move, items: items)
         model.update(&draft, translation: 13, items: items)
         #expect(draft.start.timeOfDay == TimeOfDay(12, 15))
@@ -124,11 +107,7 @@ struct TimelineAdjustmentTests {
         let appointment = try appointment()
         var draft = TimelineItem.appointment(appointment)
         let items = [draft]
-        let model = withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            TimelineAdjustment()
-        }
+        let model = TimelineAdjustment()
         model.begin(draft, edge: .duration, items: items)
         model.update(&draft, translation: -100, items: items)
         #expect(draft.start == appointment.start)
@@ -138,11 +117,7 @@ struct TimelineAdjustmentTests {
     @Test func passingBreakCancelsExpansion() throws {
         var draft = TimelineItem.appointment(try appointment())
         let items = [draft]
-        let model = withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            TimelineAdjustment()
-        }
+        let model = TimelineAdjustment()
         model.begin(draft, edge: .move, items: items)
         model.update(&draft, translation: 76, items: items)
         #expect(model.hoverRequest != nil)
@@ -157,11 +132,7 @@ struct TimelineAdjustmentTests {
     @Test func dwellExpandsAndExitCollapsesWithoutChangingTime() throws {
         var draft = TimelineItem.appointment(try appointment())
         let items = [draft]
-        let model = withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            TimelineAdjustment()
-        }
+        let model = TimelineAdjustment()
         model.begin(draft, edge: .move, items: items)
         model.update(&draft, translation: 76, items: items)
         let time = draft.start
@@ -181,11 +152,7 @@ struct TimelineAdjustmentTests {
         let other = try self.appointment(hour: 15)
         var draft = TimelineItem.appointment(appointment)
         let items = [appointment, other].map(TimelineItem.appointment)
-        let model = withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            TimelineAdjustment()
-        }
+        let model = TimelineAdjustment()
         model.begin(draft, edge: .move, items: items)
         model.update(&draft, translation: -100, items: items)
         #expect(draft.start.timeOfDay == TimeOfDay(12, 20))
@@ -195,11 +162,7 @@ struct TimelineAdjustmentTests {
     @Test func releaseWithoutMotionClearsDragStateAndOriginal() throws {
         let appointment = try appointment()
         let draft = TimelineItem.appointment(appointment)
-        let model = withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            TimelineAdjustment()
-        }
+        let model = TimelineAdjustment()
         model.begin(draft, edge: .move, items: [draft])
         model.release()
         #expect(!model.isDragging)
@@ -209,11 +172,7 @@ struct TimelineAdjustmentTests {
     @Test func nextGestureStartsFromCurrentDraft() throws {
         var draft = TimelineItem.appointment(try appointment())
         let items = [draft]
-        let model = withDependencies {
-            $0.calendar = .autoupdatingCurrent
-        } operation: {
-            TimelineAdjustment()
-        }
+        let model = TimelineAdjustment()
         model.begin(draft, edge: .move, items: items)
         model.update(&draft, translation: 15, items: items)
         model.release()

@@ -17,7 +17,7 @@ public nonisolated struct PatientLedger: Equatable, Sendable {
     public let charges: [Coverage]
 
     public init(entries: [AccountEntry], patientID: UUID, through date: Date? = nil) throws {
-        let end = date.map(FinancialDate.nextDay) ?? .distantFuture
+        let end = date.map(ClinicDate.nextDay) ?? .distantFuture
         let entries = try entries.filter {
             guard $0.patientID == patientID else { return false }
             try $0.validateValues()

@@ -189,14 +189,7 @@ struct AppointmentCalendarSyncCoordinatorTests {
     }
 
     private func activate(_ coordinator: CalendarSyncCoordinator) async {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
-
-        await withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            await coordinator.activate()
-        }
+        await coordinator.activate()
     }
 
     private func insertFixture(

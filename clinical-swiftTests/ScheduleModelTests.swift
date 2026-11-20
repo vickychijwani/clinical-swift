@@ -10,9 +10,9 @@ import Testing
 @MainActor
 struct ScheduleModelTests {
     @Test func loadVisibleDaysCachesPreviousSelectedAndNextAppointments() async throws {
-        let calendar = gregorianCalendar
+        let calendar = ClinicDate.calendar
         let database = try testDatabase()
-        let selectedDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let selectedDate = try Date("2026-04-21T00:00:00+05:30", strategy: .iso8601)
         let previousDate = selectedDate.date(byAddingDays: -1, using: calendar)
         let nextDate = selectedDate.date(byAddingDays: 1, using: calendar)
         let outsideDate = selectedDate.date(byAddingDays: 2, using: calendar)
@@ -39,7 +39,6 @@ struct ScheduleModelTests {
         )
 
         try await withDependencies {
-            $0.calendar = calendar
             $0.defaultDatabase = database
         } operation: {
             let model = ScheduleModel()
@@ -55,10 +54,10 @@ struct ScheduleModelTests {
     }
 
     @Test func appointmentsForBookingReadsStorageWhenOutsideLoadedWindow() async throws {
-        let calendar = gregorianCalendar
+        let calendar = ClinicDate.calendar
         let database = try testDatabase()
-        let loadedDate = try Date("2026-04-10T00:00:00Z", strategy: .iso8601)
-        let followUpDate = try Date("2026-04-21T00:00:00Z", strategy: .iso8601)
+        let loadedDate = try Date("2026-04-10T00:00:00+05:30", strategy: .iso8601)
+        let followUpDate = try Date("2026-04-21T00:00:00+05:30", strategy: .iso8601)
         let followUpBookedID = UUID()
         let followUpCancelledID = UUID()
 
@@ -76,7 +75,6 @@ struct ScheduleModelTests {
         )
 
         try await withDependencies {
-            $0.calendar = calendar
             $0.defaultDatabase = database
         } operation: {
             let model = ScheduleModel()
@@ -89,18 +87,12 @@ struct ScheduleModelTests {
     }
 
     @Test func addingOneDayCrossesSundaySaturdayBoundary() throws {
-        let calendar = gregorianCalendar
-        let sunday = try Date("2026-04-19T00:00:00Z", strategy: .iso8601)
-        let saturday = try Date("2026-04-18T00:00:00Z", strategy: .iso8601)
+        let calendar = ClinicDate.calendar
+        let sunday = try Date("2026-04-19T00:00:00+05:30", strategy: .iso8601)
+        let saturday = try Date("2026-04-18T00:00:00+05:30", strategy: .iso8601)
 
         #expect(sunday.date(byAddingDays: -1, using: calendar) == saturday)
         #expect(saturday.date(byAddingDays: 1, using: calendar) == sunday)
-    }
-
-    private var gregorianCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        return calendar
     }
 
     private func seedPatientAndAppointments(

@@ -18,7 +18,6 @@ enum Route: Hashable {
 
 @MainActor @Observable
 final class Router {
-    @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.date.now) private var now
     @ObservationIgnored @Dependency(\.telemetry) private var telemetry
 
@@ -61,8 +60,7 @@ final class Router {
     private var dismissingPresentationID: UUID?
 
     init(selectedScheduleDate: Date = .now, toast: ToastStore? = nil) {
-        @Dependency(\.calendar) var calendar
-        self.selectedScheduleDate = selectedScheduleDate.startOfDay(using: calendar)
+        self.selectedScheduleDate = ClinicDate.day(selectedScheduleDate)
         self.toast = toast ?? ToastStore()
     }
 
@@ -83,14 +81,14 @@ final class Router {
 
     func requestUnavailableTimeEdit(_ block: UnavailableTime) {
         selectedTab = .schedule
-        selectedScheduleDate = calendar.startOfDay(for: block.start)
+        selectedScheduleDate = ClinicDate.day(block.start)
         requestPresentation(
             .unavailableTimeEditor(UnavailableTimeEditorRequest(block: block)))
     }
 
     func finishScheduleEditor(_ presentationID: UUID, date: Date) {
         guard activePresentation?.id == presentationID else { return }
-        selectedScheduleDate = calendar.startOfDay(for: date)
+        selectedScheduleDate = ClinicDate.day(date)
         discardActivePresentation()
     }
 
@@ -206,8 +204,8 @@ final class Router {
     func selectScheduleDate(_ date: Date) {
         unavailableTimeNavigationRequest = nil
         navigationErrorMessage = nil
-        let normalizedDate = date.startOfDay(using: calendar)
-        guard !calendar.isDate(normalizedDate, inSameDayAs: selectedScheduleDate) else { return }
+        let normalizedDate = ClinicDate.day(date)
+        guard !normalizedDate.isSameDayAs(selectedScheduleDate) else { return }
 
         selectedScheduleDate = normalizedDate
         // Invariant: appointment details for date X must never remain over schedule date Y. A
@@ -232,7 +230,7 @@ final class Router {
         else { return }
 
         selectedTab = .schedule
-        selectedScheduleDate = appointmentDate.startOfDay(using: calendar)
+        selectedScheduleDate = ClinicDate.day(appointmentDate)
     }
 
     func scheduleIsAligned(
@@ -248,7 +246,7 @@ final class Router {
             )
         else { return false }
 
-        return calendar.isDate(appointmentDate, inSameDayAs: selectedScheduleDate)
+        return appointmentDate.isSameDayAs(selectedScheduleDate)
     }
 
     func isCurrentDetailsRoute(
@@ -263,26 +261,26 @@ final class Router {
 
     func requestAppointmentEdit(_ details: AppointmentDetails) {
         selectedTab = .schedule
-        selectedScheduleDate = details.appointment.start.startOfDay(using: calendar)
+        selectedScheduleDate = ClinicDate.day(details.appointment.start)
         requestPresentation(.appointmentEdit(AppointmentEditRequest(details: details)))
     }
 
     func requestAppointmentBooking(for patient: Patient, on date: Date? = nil) {
         selectedTab = .schedule
         if let date {
-            selectedScheduleDate = date.startOfDay(using: calendar)
+            selectedScheduleDate = ClinicDate.day(date)
         }
         requestPresentation(.appointmentBooking(AppointmentBookingRequest(patient: patient)))
     }
 
     func requestFollowUpBooking(for patient: Patient) {
-        let targetDate = Bitehaus.nextBusinessDay(after: now, using: calendar)
+        let targetDate = Bitehaus.nextBusinessDay(after: now, using: ClinicDate.calendar)
         requestAppointmentBooking(for: patient, on: targetDate)
     }
 
     func requestAppointmentMessage(id: Appointment.ID, date: Date) {
         selectedTab = .schedule
-        selectedScheduleDate = date.startOfDay(using: calendar)
+        selectedScheduleDate = ClinicDate.day(date)
         requestPresentation(
             .appointmentMessage(
                 AppointmentMessageRequest(appointmentID: id)
@@ -406,7 +404,7 @@ final class Router {
             return
         }
         selectedTab = .schedule
-        selectedScheduleDate = calendar.startOfDay(for: block.start)
+        selectedScheduleDate = ClinicDate.day(block.start)
     }
 
     func openAppointment(id: Appointment.ID) {
@@ -438,7 +436,7 @@ final class Router {
     }
 
     func openExternalSchedule(_ day: ScheduleDay) {
-        guard let date = day.date(using: calendar) else { return }
+        guard let date = day.date(using: ClinicDate.calendar) else { return }
 
         selectedTab = .schedule
         discardAllPresentations()

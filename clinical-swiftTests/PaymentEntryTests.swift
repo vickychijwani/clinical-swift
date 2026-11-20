@@ -151,7 +151,7 @@ struct PaymentEntryTests {
             #expect(entry.note == "Visiting clinic")
             #expect(entry.amount == 1000)
             #expect(entry.paymentMethod == .card)
-            #expect(entry.entryDate == FinancialDate.day(date))
+            #expect(entry.entryDate == ClinicDate.day(date))
             #expect(entry.createdDate == date)
             #expect(model.kind == .otherIncome)
             #expect(model.method == .card)
@@ -236,7 +236,7 @@ struct PaymentEntryTests {
             #expect(entries.count == 2)
             #expect(
                 entries.allSatisfy {
-                    $0.amount == 500 && $0.entryDate == FinancialDate.day(date)
+                    $0.amount == 500 && $0.entryDate == ClinicDate.day(date)
                         && $0.createdDate == date
                 })
             let charge = try #require(entries.first { $0.kind == .charge })

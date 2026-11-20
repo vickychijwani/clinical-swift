@@ -3,6 +3,9 @@
 Clinical is the source of truth. Calendar edits do not change clinic data. The
 next relevant Clinical change overwrites manual Calendar customizations.
 
+Synced Calendar events set `timeZone` to `Asia/Kolkata`. Outside India, Apple
+Calendar still displays device-local time unless Time Zone Override is enabled.
+
 ## Delivery across systems
 
 A Calendar failure must not undo a clinic save or lose pending work, including

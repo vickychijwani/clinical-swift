@@ -226,7 +226,7 @@ struct PaymentsModelTests {
             entry.note = " \n "
             let record = AccountEntryRecord(entry, updatedAt: PaymentsFixture.now)
             #expect(record.note == nil)
-            #expect(record.entryDate == FinancialDate.day(PaymentsFixture.now))
+            #expect(record.entryDate == ClinicDate.day(PaymentsFixture.now))
             let mapped = try record.entry()
             #expect(mapped.createdDate == entry.createdDate)
             for field in ["kind", "category", "paymentMethod"] {
@@ -249,7 +249,7 @@ struct PaymentsModelTests {
     @Test func reportsShareValueChecksWithoutRejectingFutureDates() throws {
         try PaymentsFixture.withClock {
             let patientID = PaymentsFixture.patientID
-            let future = FinancialDate.nextDay(PaymentsFixture.now)
+            let future = ClinicDate.nextDay(PaymentsFixture.now)
             let receipt = PaymentsFixture.entry(.receipt, 5, date: future)
             #expect(throws: AccountEntryError.futureDate) { try receipt.validate() }
             let report = try CashFlow(entries: [receipt])
@@ -283,20 +283,17 @@ struct PaymentsModelTests {
     }
 
     @Test func clinicDatesIgnoreDeviceCalendarAndRejectFutureDays() throws {
-        var device = Calendar(identifier: .buddhist)
-        device.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
         let midnight = try Date("2026-10-23T18:30:00Z", strategy: .iso8601)
         try withDependencies {
-            $0.calendar = device
             $0.date.now = midnight
         } operation: {
-            #expect(FinancialDate.today == midnight)
+            #expect(ClinicDate.today == midnight)
             var entry = PaymentsFixture.entry(.charge, 1, date: midnight.addingTimeInterval(86_399))
             try entry.validate()
             entry.entryDate = midnight.addingTimeInterval(86_400)
             #expect(throws: AccountEntryError.futureDate) { try entry.validate() }
             #expect(
-                FinancialDate.day(midnight.addingTimeInterval(-1))
+                ClinicDate.day(midnight.addingTimeInterval(-1))
                     == midnight.addingTimeInterval(-86_400))
         }
     }
@@ -636,7 +633,7 @@ struct PaymentsQueryTests {
         try PaymentsFixture.run { database in
             try database.write { db in
                 let start = try Date("2026-10-19T18:30:00Z", strategy: .iso8601)
-                let end = FinancialDate.nextDay(start)
+                let end = ClinicDate.nextDay(start)
                 let entries = [
                     AccountEntry(
                         details: .receipt(source: .otherIncome, paymentMethod: nil),
@@ -694,7 +691,7 @@ struct PaymentsQueryTests {
                 #expect(throws: AccountEntryError.invalidStoredValue("unexpected")) {
                     try CashFlowRequest(
                         start: PaymentsFixture.now,
-                        end: FinancialDate.nextDay(PaymentsFixture.now)
+                        end: ClinicDate.nextDay(PaymentsFixture.now)
                     ).fetch(db)
                 }
                 #expect(throws: AccountEntryError.invalidStoredValue("unexpected")) {
@@ -799,7 +796,7 @@ struct PaymentsBoundaryTests {
                 let stored = try #require(try AccountEntryRecord.find(charge.id).fetchOne(db))
                 #expect(stored.createdAt == charge.createdDate)
                 #expect(stored.updatedAt == editTime)
-                #expect(stored.entryDate == FinancialDate.day(PaymentsFixture.earlier))
+                #expect(stored.entryDate == ClinicDate.day(PaymentsFixture.earlier))
                 #expect(stored.note == nil)
                 #expect(
                     try patientLedger(
@@ -820,14 +817,14 @@ struct PaymentsBoundaryTests {
             try database.write { db in
                 for kind in AccountEntry.Kind.allCases {
                     let entry = PaymentsFixture.entry(
-                        kind, 100, date: FinancialDate.nextDay(PaymentsFixture.now))
+                        kind, 100, date: ClinicDate.nextDay(PaymentsFixture.now))
                     #expect(throws: AccountEntryError.futureDate) {
                         try PaymentsFixture.save([entry], in: db)
                     }
                 }
                 var charge = PaymentsFixture.entry(.charge, 100)
                 try PaymentsFixture.save([charge], in: db)
-                charge.entryDate = FinancialDate.nextDay(PaymentsFixture.now)
+                charge.entryDate = ClinicDate.nextDay(PaymentsFixture.now)
                 #expect(throws: AccountEntryError.futureDate) {
                     try saveAccountEntries(AccountEntryBatch(updates: [charge]), in: db)
                 }
@@ -858,7 +855,7 @@ struct PaymentsBoundaryTests {
         }
     }
 
-    @Test func pureCoverageChangesWithFinancialDateAndCreationOrder() throws {
+    @Test func pureCoverageChangesWithClinicDateAndCreationOrder() throws {
         try PaymentsFixture.withClock {
             var first = PaymentsFixture.entry(.charge, 50)
             let second = AccountEntry(
@@ -869,7 +866,7 @@ struct PaymentsBoundaryTests {
                 entries: [first, second, receipt], patientID: PaymentsFixture.patientID)
             #expect(ledger.charges.map(\.entryID) == [second.id, first.id])
             #expect(ledger.charges.map(\.covered) == [50, 10])
-            first.entryDate = FinancialDate.day(PaymentsFixture.earlier)
+            first.entryDate = ClinicDate.day(PaymentsFixture.earlier)
             let backdated = try PatientLedger(
                 entries: [first, second, receipt], patientID: PaymentsFixture.patientID)
             #expect(backdated.charges.map(\.entryID) == [first.id, second.id])
@@ -889,7 +886,7 @@ struct PaymentsBoundaryTests {
                 let summary = try PatientBalanceRecord.find(PaymentsFixture.patientID).fetchOne(db)
                 // Removing this receipt first would overflow, although its contribution is unchanged.
                 receipt.note = "Updated note"
-                receipt.entryDate = FinancialDate.day(PaymentsFixture.earlier)
+                receipt.entryDate = ClinicDate.day(PaymentsFixture.earlier)
                 receipt.details = .receipt(
                     source: .patient(PaymentsFixture.patientID), paymentMethod: .upi)
                 try saveAccountEntries(AccountEntryBatch(updates: [receipt]), in: db)

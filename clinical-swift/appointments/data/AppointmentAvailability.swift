@@ -9,7 +9,7 @@ nonisolated struct AppointmentAvailability {
     init(
         searchDate: Date,
         appointments: [Appointment],
-        calendar: Calendar = .autoupdatingCurrent
+        calendar: Calendar = ClinicDate.calendar
     ) {
         self.searchDate = searchDate
         self.appointments = appointments

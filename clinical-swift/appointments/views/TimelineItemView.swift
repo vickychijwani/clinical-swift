@@ -1,5 +1,4 @@
 import ClinicalModels
-import Dependencies
 import SwiftUI
 
 struct TimelineItemView: View {
@@ -251,12 +250,12 @@ private struct TimelineAdjustmentHandles: View {
 }
 
 private struct TimelineAdjustmentTooltip: View {
-    @Dependency(\.calendar) private var calendar
     let item: TimelineItem
 
     var body: some View {
+        let timeFormat = ClinicDate.formatStyle.hour().minute()
         Text(
-            "\(item.start.formatted(date: .omitted, time: .shortened)) – \(item.end(using: calendar).formatted(date: .omitted, time: .shortened)) · \(item.durationMinutes) min"
+            "\(item.start.formatted(timeFormat)) – \(item.end(using: ClinicDate.calendar).formatted(timeFormat)) · \(item.durationMinutes) min"
         )
         .font(.caption2.monospacedDigit())
         .foregroundStyle(AppColor.onAccent)

@@ -1,3 +1,4 @@
+import ClinicalModels
 import SwiftUI
 
 struct WidgetScheduleContentView: View {
@@ -42,7 +43,7 @@ private struct WidgetDateSectionView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(
                     section.date,
-                    format: .dateTime.weekday(.wide).day().month(.abbreviated)
+                    format: ClinicDate.formatStyle.weekday(.wide).day().month(.abbreviated)
                 )
                 .textCase(.uppercase)
                 .font(.caption.bold())
@@ -81,10 +82,9 @@ private struct WidgetDateSectionView: View {
 
 private struct WidgetSectionDestinationView: View {
     let date: Date
-    @Environment(\.calendar) private var calendar
 
     var body: some View {
-        let day = ScheduleDay(date: date, calendar: calendar)
+        let day = ScheduleDay(date: date, calendar: ClinicDate.calendar)
         if let destination = ClinicalURL.schedule(day).url {
             Link(destination: destination) {
                 Color.clear
@@ -100,14 +100,13 @@ private struct WidgetScheduleRowView: View {
     let row: WidgetPlannedRow
     let section: WidgetScheduleSection
     let rowHeight: CGFloat
-    @Environment(\.calendar) private var calendar
 
     var body: some View {
         switch row {
         case .item(let index):
             if section.items.indices.contains(index) {
                 let item = section.items[index]
-                if let destination = item.widgetURL(using: calendar) {
+                if let destination = item.widgetURL(using: ClinicDate.calendar) {
                     Link(destination: destination) {
                         WidgetItemCard(item: item)
                             .frame(maxWidth: .infinity)
@@ -154,11 +153,10 @@ private struct WidgetItemCard: View {
 private struct WidgetScheduleEmptyRowView: View {
     let section: WidgetScheduleSection
     let rowHeight: CGFloat
-    @Environment(\.calendar) private var calendar
 
     var body: some View {
         let message =
-            if calendar.component(.weekday, from: section.date) == 1 {
+            if ClinicDate.calendar.component(.weekday, from: section.date) == 1 {
                 "Vacation day 🌻"
             } else if section.isToday {
                 "No more appointments today"

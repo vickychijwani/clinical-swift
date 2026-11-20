@@ -21,7 +21,7 @@ struct Timeline: View {
     var onDone: @MainActor () async -> Void = {}
     var onDelete: (@MainActor () async -> Void)? = nil
 
-    var date: Date = .now
+    let date: Date
     // The parent supplies the session. View state would keep the previous editor's draft.
     var editorSession: ScheduleEditorSession?
     var isWorking = false
@@ -213,7 +213,8 @@ func sampleTimeline(
         items: items,
         scale: scale,
         showsNowMarker: true,
-        previewNowMarker: Date.now.setTime(9, 30)
+        previewNowMarker: Date.now.setTime(9, 30),
+        date: ClinicDate.today
     )
     .background(AppColor.canvas)
 }

@@ -60,9 +60,9 @@ final class ScheduleEditorSession: Identifiable {
         let minutes = center.totalMinutes - model.draft.durationMinutes / 2
         // Only the initial start uses 15-minute steps. Later drags use five-minute steps.
         let snapped = max(Int((Double(minutes) / 15).rounded()) * 15, 0)
-        @Dependency(\.calendar) var calendar
         model.draft.selectStart(
-            TimeOfDay(snapped / 60, snapped % 60).on(date: selectedDate, using: calendar))
+            TimeOfDay(snapped / 60, snapped % 60).on(
+                date: selectedDate, using: ClinicDate.calendar))
         editor = .appointment(model)
         adjustment.begin(preview, edge: .move, items: items)
     }
@@ -86,10 +86,10 @@ final class ScheduleEditorSession: Identifiable {
             }
             let model = AppointmentBookingModel(
                 selectedDate: selectedDate, selectedPatient: patient)
-            @Dependency(\.calendar) var calendar
+            let calendar = ClinicDate.calendar
             @Dependency(\.date.now) var now
             let earliestStart: Date?
-            if calendar.isDate(selectedDate, inSameDayAs: now) {
+            if selectedDate.isSameDayAs(now) {
                 let minutes = TimeOfDay(date: now, calendar: calendar).totalMinutes
                 earliestStart = now.startOfDay(using: calendar).addMinutes(
                     ((minutes + 4) / 5) * 5, using: calendar)
@@ -161,8 +161,7 @@ final class ScheduleEditorSession: Identifiable {
     }
 
     var selectedDate: Date {
-        @Dependency(\.calendar) var calendar
-        return calendar.startOfDay(for: preview.start)
+        ClinicDate.day(preview.start)
     }
 
     var allowsDateSelection: Bool { !isWorking && !didFinish }
@@ -235,12 +234,11 @@ final class ScheduleEditorSession: Identifiable {
     }
 
     func selectDate(_ date: Date) {
-        @Dependency(\.calendar) var calendar
         guard allowsDateSelection, !adjustment.isDragging,
-            !calendar.isDate(date, inSameDayAs: selectedDate)
+            !date.isSameDayAs(selectedDate)
         else { return }
-        let start = TimeOfDay(date: preview.start, calendar: calendar).on(
-            date: date, using: calendar)
+        let start = TimeOfDay(date: preview.start, calendar: ClinicDate.calendar).on(
+            date: date, using: ClinicDate.calendar)
         setInterval(start: start, duration: preview.durationMinutes)
         scrollRevision += 1
     }
@@ -317,7 +315,6 @@ final class ScheduleEditorSession: Identifiable {
     }
 
     func visibleItems(_ items: [TimelineItem], for date: Date) -> [TimelineItem] {
-        @Dependency(\.calendar) var calendar
         let editedID: TimelineItem.ID?
         switch editor {
         case .appointment(let model):
@@ -328,7 +325,7 @@ final class ScheduleEditorSession: Identifiable {
         }
         var items = items.filter { $0.id != editedID }
         let preview = preview
-        if calendar.isDate(preview.start, inSameDayAs: date) {
+        if preview.start.isSameDayAs(date) {
             items.append(preview)
         }
         return items

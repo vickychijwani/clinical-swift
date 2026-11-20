@@ -98,7 +98,7 @@ nonisolated struct ScheduleDay: Equatable, Hashable, Sendable, CustomStringConve
             return nil
         }
 
-        let calendar = Calendar.current
+        let calendar = ClinicDate.calendar
         guard
             let date = calendar.date(
                 from: DateComponents(year: year, month: month, day: day)
@@ -132,14 +132,14 @@ nonisolated struct ScheduleDay: Equatable, Hashable, Sendable, CustomStringConve
         self.init(year: year, month: month, day: day)
     }
 
-    init(date: Date, calendar: Calendar) {
+    init(date: Date, calendar: Calendar = ClinicDate.calendar) {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         year = components.year ?? 1
         month = components.month ?? 1
         day = components.day ?? 1
     }
 
-    func date(using calendar: Calendar) -> Date? {
+    func date(using calendar: Calendar = ClinicDate.calendar) -> Date? {
         guard
             let date = calendar.date(
                 from: DateComponents(year: year, month: month, day: day)

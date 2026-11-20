@@ -1,5 +1,4 @@
 import ClinicalModels
-import Dependencies
 import Foundation
 import GRDB
 
@@ -43,7 +42,7 @@ nonisolated struct WidgetScheduleSnapshot: Sendable {
     let generatedAt: Date
     let sections: [WidgetScheduleSection]
 
-    func nextRefreshDate(using calendar: Calendar) -> Date {
+    func nextRefreshDate(using calendar: Calendar = ClinicDate.calendar) -> Date {
         let nextMidnight =
             calendar.date(
                 byAdding: .day,
@@ -63,7 +62,6 @@ nonisolated struct WidgetScheduleSnapshot: Sendable {
 }
 
 nonisolated struct WidgetScheduleRepository: Sendable {
-    @Dependency(\.calendar) private var calendar
     let databaseURL: URL
 
     init(databaseURL: URL) {
@@ -84,6 +82,7 @@ nonisolated struct WidgetScheduleRepository: Sendable {
     }
 
     private func snapshot(in database: Database, at now: Date) throws -> WidgetScheduleSnapshot {
+        let calendar = ClinicDate.calendar
         let today = calendar.startOfDay(for: now)
         let endExclusive = calendar.date(byAdding: .day, value: 3, to: today) ?? today
         let startValue = Self.databaseDateString(today)

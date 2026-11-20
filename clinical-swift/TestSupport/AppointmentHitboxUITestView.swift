@@ -50,7 +50,8 @@ import ClinicalModels
                             selectedAppointment = nil
                             selectedBlock = block
                         }
-                    }
+                    },
+                    date: ClinicDate.today
                 )
                 .frame(width: 300)
                 .frame(maxWidth: .infinity, alignment: .leading)

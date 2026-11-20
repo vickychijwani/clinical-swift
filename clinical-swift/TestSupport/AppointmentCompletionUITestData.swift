@@ -9,7 +9,7 @@
     enum AppointmentCompletionUITestData {
         static let saveGate = UITestSaveGate()
 
-        static func openForm(router: Router, database: DatabaseQueue) throws {
+        static func openForm(router: Router, database: any DatabaseReader) throws {
             let id = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10))
             guard
                 let details = try database.read({ db in

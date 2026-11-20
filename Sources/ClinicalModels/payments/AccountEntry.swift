@@ -1,27 +1,6 @@
 import Dependencies
 import Foundation
 
-/// Financial days follow the clinic, even when the device uses another calendar or time zone.
-public nonisolated enum FinancialDate {
-    public static var calendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        // This identifier is part of Foundation's time zone database.
-        calendar.timeZone = TimeZone(identifier: "Asia/Kolkata")!
-        return calendar
-    }
-
-    public static var today: Date {
-        @Dependency(\.date.now) var now
-        return day(now)
-    }
-
-    public static func day(_ date: Date) -> Date { calendar.startOfDay(for: date) }
-
-    public static func nextDay(_ date: Date) -> Date {
-        calendar.date(byAdding: .day, value: 1, to: day(date))!
-    }
-}
-
 public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
     public enum Kind: String, CaseIterable, Sendable {
         case charge = "charge"
@@ -154,7 +133,7 @@ public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
         self.id = id
         self.details = details
         self.amount = amount
-        self.entryDate = FinancialDate.day(entryDate ?? now)
+        self.entryDate = ClinicDate.day(entryDate ?? now)
         self.createdDate = createdDate ?? now
         self.note = note?.nilIfBlank
     }
@@ -171,7 +150,7 @@ public nonisolated struct AccountEntry: Identifiable, Hashable, Sendable {
 
     public func validate() throws {
         try validateValues()
-        guard FinancialDate.day(entryDate) <= FinancialDate.today else {
+        guard ClinicDate.day(entryDate) <= ClinicDate.today else {
             throw AccountEntryError.futureDate
         }
     }

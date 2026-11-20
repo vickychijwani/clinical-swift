@@ -15,7 +15,10 @@ struct BackupSettingsView: View {
                     LabeledContent("Status", value: backups.status)
                     if let capturedAt = backups.state.lastSuccess?.capturedAt {
                         LabeledContent("Last successful snapshot") {
-                            Text(capturedAt, format: .dateTime.day().month().year().hour().minute())
+                            Text(
+                                capturedAt,
+                                format: ClinicDate.formatStyle.day().month().year().hour().minute()
+                            )
                         }
                     } else {
                         LabeledContent("Last successful snapshot", value: "None")
@@ -54,7 +57,8 @@ struct BackupSettingsView: View {
                         LabeledContent("Last upload") {
                             Text(
                                 lastUploadedAt,
-                                format: .dateTime.day().month().year().hour().minute())
+                                format: ClinicDate.formatStyle.day().month().year().hour().minute()
+                            )
                         }
                     } else {
                         LabeledContent("Last upload", value: "Never")
@@ -83,7 +87,7 @@ struct BackupSettingsView: View {
                 } footer: {
                     if let expiresAt = telemetry.verboseExpiresAt, telemetry.isVerboseEnabled {
                         Text(
-                            "Verbose logging captures debug logs and SQL statements. It turns off automatically at \(expiresAt, format: .dateTime.day().month().hour().minute())."
+                            "Verbose logging captures debug logs and SQL statements. It turns off automatically at \(expiresAt, format: ClinicDate.formatStyle.day().month().hour().minute())."
                         )
                     }
                 }

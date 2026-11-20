@@ -103,10 +103,6 @@ struct AppIntentsTests {
     }
 
     private func makeRouter() -> Router {
-        withDependencies {
-            $0.calendar = Calendar(identifier: .gregorian)
-        } operation: {
-            Router()
-        }
+        Router()
     }
 }

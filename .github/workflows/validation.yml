@@ -31,6 +31,8 @@ jobs:
         run: swift package resolve
       - name: Check shared package versions
         run: swift scripts/check_package_versions.swift
+      - name: Check ClinicDate usage
+        run: swift scripts/check_clinic_date.swift
       - name: Test package
         run: >-
           swift test --disable-automatic-resolution

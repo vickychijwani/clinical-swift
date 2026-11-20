@@ -26,7 +26,7 @@ nonisolated enum CompletionAmount {
     }
 
     static func formatted(_ amount: Int) -> String {
-        amount.formatted(.number.locale(Locale(identifier: "en_IN")).grouping(.automatic))
+        amount.formatted(.number.locale(ClinicDate.locale).grouping(.automatic))
     }
 
     static func isDigit(_ character: Character) -> Bool {

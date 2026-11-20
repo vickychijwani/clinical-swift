@@ -49,7 +49,6 @@ struct AppointmentDetailsCard: View {
 
 struct AppointmentDetailsSummary: View {
     @Environment(\.appPalette) private var palette
-    @Dependency(\.locale) private var locale
 
     let appointment: Appointment
 
@@ -83,21 +82,19 @@ struct AppointmentDetailsSummary: View {
 
     private var formattedDate: String {
         appointment.start.formatted(
-            .dateTime
+            ClinicDate.formatStyle
                 .weekday(.abbreviated)
                 .day()
                 .month(.abbreviated)
                 .year()
-                .locale(locale)
         )
     }
 
     private var formattedTimeRange: String {
         (appointment.start..<appointment.end).formatted(
-            .interval
+            ClinicDate.intervalFormatStyle
                 .hour()
                 .minute()
-                .locale(locale)
         )
     }
 
@@ -109,7 +106,6 @@ struct AppointmentDetailsSummary: View {
 #Preview("Standard") {
     withDependencies {
         $0.date.now = AppointmentDetailsCard.previewAppointment.start
-        $0.locale = Locale(identifier: "en_IN")
     } operation: {
         AppointmentDetailsCard(
             appointment: AppointmentDetailsCard.previewAppointment,
@@ -126,7 +122,6 @@ struct AppointmentDetailsSummary: View {
 #Preview("Patient timeline") {
     withDependencies {
         $0.date.now = AppointmentDetailsCard.previewAppointment.start
-        $0.locale = Locale(identifier: "en_IN")
     } operation: {
         AppointmentDetailsCard(
             appointment: AppointmentDetailsCard.previewAppointment,

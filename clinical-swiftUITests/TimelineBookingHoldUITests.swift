@@ -30,8 +30,9 @@ nonisolated final class TimelineBookingHoldUITests: XCTestCase {
     @MainActor func testHoldAndDragOnAppointmentMovesTheSameCard() {
         let app = TimelineUITestSupport.launch()
         let card = TimelineUITestSupport.original(app)
+        // Target the uncovered top half so the overlapping 12:15 PM front card is not hit.
         TimelineUITestSupport.hold(
-            card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5)), move: 17)
+            card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.25)), move: 17)
         XCTAssertTrue(app.buttons["Done"].hittableOrWait(timeout: 3))
         XCTAssertEqual(TimelineUITestSupport.time(card), "12:15 PM")
         XCTAssertEqual(card.value as? String, "30 min")

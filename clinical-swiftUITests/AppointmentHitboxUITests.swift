@@ -13,6 +13,7 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
     @MainActor
     func testLongNameDoesNotStealTapFromRightAppointment() {
         let app = XCUIApplication()
+        app.launchEnvironment["TZ"] = "America/Los_Angeles"
         app.launchArguments = ["--ui-testing-appointment-hitboxes"]
         app.launch()
 
@@ -50,6 +51,7 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
     @MainActor
     func testMixedThreeColumnCardsKeepSeparateTapAreas() {
         let app = XCUIApplication()
+        app.launchEnvironment["TZ"] = "America/Los_Angeles"
         app.launchArguments = ["--ui-testing-appointment-hitboxes", "--ui-testing-mixed-hitboxes"]
         app.launch()
         let status = app.staticTexts["selection-status"]
@@ -75,6 +77,7 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
     @MainActor
     func testUnavailableTimeEditorKeepsDateSelectionAndConfirmsDiscard() {
         let app = XCUIApplication()
+        app.launchEnvironment["TZ"] = "America/Los_Angeles"
         app.launchArguments = ["--ui-testing-timeline-adjustment"]
         app.launch()
         let action = app.buttons["Add"]
@@ -95,14 +98,15 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(draft.existsOrWait(timeout: 5))
         let draftID = draft.identifier
-        let calendar = Calendar.current
+        let calendar = TimelineUITestSupport.clinicCalendar
         let offset = calendar.component(.weekday, from: .now) == 1 ? 1 : -1
         guard let alternateDate = calendar.date(byAdding: .day, value: offset, to: .now) else {
             XCTFail("The adjacent date is missing.")
             return
         }
         let dateButton = app.buttons[
-            alternateDate.formatted(.dateTime.weekday(.wide).month(.wide).day().year())]
+            alternateDate.formatted(
+                TimelineUITestSupport.clinicFormatStyle.weekday(.wide).month(.wide).day().year())]
         XCTAssertTrue(dateButton.exists)
         dateButton.tap()
         XCTAssertTrue((dateButton.value as? String)?.contains("Selected") == true)

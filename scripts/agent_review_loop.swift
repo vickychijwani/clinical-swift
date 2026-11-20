@@ -1084,6 +1084,55 @@ private func submitCheckRun(
     return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
+private let supportedReactions: Set<String> = [
+    "+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes",
+]
+
+/// Returns the GitHub reactions API endpoint for comment events, or nil when reactions do not apply.
+func commentReactionEndpoint(repo: String, eventName: String, commentID: String?) -> String? {
+    guard let commentID = commentID?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !commentID.isEmpty
+    else {
+        return nil
+    }
+    switch eventName {
+    case "issue_comment":
+        return "repos/\(repo)/issues/comments/\(commentID)/reactions"
+    case "pull_request_review_comment":
+        return "repos/\(repo)/pulls/comments/\(commentID)/reactions"
+    default:
+        return nil
+    }
+}
+
+private func addCommentReaction(
+    repo: String,
+    eventName: String,
+    commentID: String?,
+    content: String
+) throws {
+    guard supportedReactions.contains(content) else {
+        throw ReviewLoopError(description: "Unsupported reaction content: \(content)")
+    }
+    guard let endpoint = commentReactionEndpoint(repo: repo, eventName: eventName, commentID: commentID)
+    else {
+        return
+    }
+    let result = try runProcess(
+        arguments: [
+            "gh", "api",
+            "--method", "POST",
+            "-H", "Accept: application/vnd.github+json",
+            endpoint,
+            "-f", "content=\(content)",
+        ]
+    )
+    guard result.exitCode == 0 else {
+        let details = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw ReviewLoopError(description: "gh api POST \(endpoint) failed: \(details)")
+    }
+}
+
 enum MonitorPhaseKind: String, Codable, Equatable {
     case review
     case address
@@ -1288,7 +1337,7 @@ private func runCLI() -> Int32 {
     guard let subcommand = args.first else {
         FileHandle.standardError.write(
             Data(
-                "Usage: agent_review_loop.swift <parse-trigger|parse-mention|discover|codex-skills-config|check-run|monitor-record> [options]\n"
+                "Usage: agent_review_loop.swift <parse-trigger|parse-mention|discover|codex-skills-config|check-run|react|monitor-record> [options]\n"
                     .utf8))
         return 2
     }
@@ -1395,6 +1444,21 @@ private func runCLI() -> Int32 {
                 recreateIfCompleted: parsed.flags.contains("recreate-if-completed")
             )
             print(checkRunID)
+            return 0
+
+        case "react":
+            guard let repo = parsed.values["repo"], !repo.isEmpty,
+                let event = parsed.values["event"], !event.isEmpty
+            else {
+                throw ReviewLoopError(description: "Missing required flags: --repo, --event")
+            }
+            let content = parsed.values["content"] ?? "eyes"
+            try addCommentReaction(
+                repo: repo,
+                eventName: event,
+                commentID: parsed.values["comment-id"],
+                content: content
+            )
             return 0
 
         case "monitor-record":
