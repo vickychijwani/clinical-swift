@@ -37,51 +37,6 @@ nonisolated struct ScheduleCardTuning: Codable, Equatable, Sendable {
         var stripWidth = 16.0
         var shadowOpacity = 0.09
         var shadowRadius = 2.0
-
-        init(
-            mode: Mode = .textAware,
-            separation: Separation = .shadow,
-            stripWidth: Double = 16.0,
-            shadowOpacity: Double = 0.09,
-            shadowRadius: Double = 2.0
-        ) {
-            self.mode = mode
-            self.separation = separation
-            self.stripWidth = stripWidth
-            self.shadowOpacity = shadowOpacity
-            self.shadowRadius = shadowRadius
-        }
-
-        init(from decoder: Decoder) throws {
-            let values = try decoder.container(keyedBy: CodingKeys.self)
-            mode = try values.decodeIfPresent(Mode.self, forKey: .mode) ?? .textAware
-            // Fall back to `.shadow` if saved preferences still contain removed separation styles.
-            let rawSeparation = try values.decodeIfPresent(String.self, forKey: .separation)
-            separation = rawSeparation.flatMap(Separation.init(rawValue:)) ?? .shadow
-            stripWidth = try values.decodeIfPresent(Double.self, forKey: .stripWidth) ?? 16.0
-            shadowOpacity = try values.decodeIfPresent(Double.self, forKey: .shadowOpacity) ?? 0.09
-            shadowRadius = try values.decodeIfPresent(Double.self, forKey: .shadowRadius) ?? 2.0
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case mode, separation, stripWidth, shadowOpacity, shadowRadius
-        }
-    }
-
-    init() {}
-
-    // Keep saved opacity values when the local tool gains new controls.
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        surfaceOpacity = try values.decodeIfPresent(Double.self, forKey: .surfaceOpacity) ?? 0.8
-        otherContentOpacity =
-            try values.decodeIfPresent(Double.self, forKey: .otherContentOpacity) ?? 0.3
-        lift = try values.decodeIfPresent(Lift.self, forKey: .lift) ?? Lift()
-        overlap = try values.decodeIfPresent(Overlap.self, forKey: .overlap) ?? Overlap()
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case surfaceOpacity, otherContentOpacity, lift, overlap
     }
 }
 

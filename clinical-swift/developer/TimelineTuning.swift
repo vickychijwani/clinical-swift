@@ -14,7 +14,6 @@ extension View {
 final class TimelineTuning {
     private let defaults: UserDefaults
     private static let storageKey = "developer.timelineTuning.v1"
-    private static let appearanceRevisionKey = "developer.timelineTuning.appearanceRevision"
 
     var state: SavedState {
         didSet {
@@ -29,23 +28,6 @@ final class TimelineTuning {
         state =
             defaults.data(forKey: Self.storageKey)
             .flatMap { try? JSONDecoder().decode(SavedState.self, from: $0) } ?? SavedState()
-        // Apply the approved values once. Later Card lab edits still persist.
-        let appearanceRevision = defaults.integer(forKey: Self.appearanceRevisionKey)
-        if appearanceRevision < 3 {
-            let defaultsTuning = ScheduleCardTuning()
-            if appearanceRevision < 1 {
-                state.cards = defaultsTuning
-            } else {
-                if appearanceRevision < 2 {
-                    state.cards.surfaceOpacity = defaultsTuning.surfaceOpacity
-                }
-                state.cards.overlap = defaultsTuning.overlap
-            }
-            if let data = try? JSONEncoder().encode(state) {
-                defaults.set(data, forKey: Self.storageKey)
-            }
-            defaults.set(3, forKey: Self.appearanceRevisionKey)
-        }
     }
 
     func reset() {
