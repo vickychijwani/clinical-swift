@@ -25,7 +25,9 @@ nonisolated struct TelemetryExportDocument: Transferable, Sendable {
 @MainActor @Observable
 final class TelemetryCoordinator {
     @ObservationIgnored @Dependency(\.date.now) private var now
+    @ObservationIgnored @Dependency(\.continuousClock) private var clock
     @ObservationIgnored @Dependency(\.telemetry) private var telemetry
+    @ObservationIgnored @Dependency(\.telemetryBackgroundTaskScheduler) private var backgroundTaskScheduler
 
     private(set) var isUploading = false
     private(set) var pendingSegmentCount = 0
@@ -46,6 +48,9 @@ final class TelemetryCoordinator {
     private var activeFlushTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
     private var debounceIsUrgent = false
+    private var retryTask: Task<Void, Never>?
+    private var retryDeadline: Date?
+    private var isForeground = true
     private var consecutiveFailures = 0
 
     init(
@@ -166,11 +171,11 @@ final class TelemetryCoordinator {
         let delay = urgent ? errorFlushDelay : normalFlushDelay
         debounceTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(for: delay)
+                try await self?.clock.sleep(for: delay)
             } catch {
                 return
             }
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
             self.debounceTask = nil
             self.debounceIsUrgent = false
             await self.flush(manual: false)
@@ -178,19 +183,17 @@ final class TelemetryCoordinator {
     }
 
     func handleForeground() {
+        isForeground = true
         refreshState()
-        debounceTask?.cancel()
-        debounceTask = nil
-        debounceIsUrgent = false
+        cancelScheduledTasks()
         Task { @MainActor [weak self] in
             await self?.flush(manual: false)
         }
     }
 
     func handleBackground() {
-        debounceTask?.cancel()
-        debounceTask = nil
-        debounceIsUrgent = false
+        isForeground = false
+        cancelScheduledTasks()
 
         guard configuration.isUploadEnabled, !isAuthHalted else {
             let spool = self.spool
@@ -201,10 +204,14 @@ final class TelemetryCoordinator {
             return
         }
 
-        let handle = BackgroundFlushHandle()
-        let taskID = UIApplication.shared.beginBackgroundTask(
-            withName: "in.bitehaus.clinical.telemetry.flush"
-        ) {
+        let scheduler = backgroundTaskScheduler
+        let handle = BackgroundFlushHandle(
+            endTask: scheduler.end,
+            onExpire: { [weak self] in
+                self?.activeFlushTask?.cancel()
+            }
+        )
+        let taskID = scheduler.begin("in.bitehaus.clinical.telemetry.flush") {
             Task { @MainActor in
                 handle.expire()
             }
@@ -217,9 +224,7 @@ final class TelemetryCoordinator {
     }
 
     func sendNow() async {
-        debounceTask?.cancel()
-        debounceTask = nil
-        debounceIsUrgent = false
+        cancelScheduledTasks()
         isAuthHalted = false
         backoffUntil = nil
         consecutiveFailures = 0
@@ -228,14 +233,27 @@ final class TelemetryCoordinator {
 
     func flush(manual: Bool) async {
         if let activeFlushTask {
-            await activeFlushTask.value
+            if Task.isCancelled {
+                activeFlushTask.cancel()
+                return
+            }
+            await withTaskCancellationHandler {
+                await activeFlushTask.value
+            } onCancel: {
+                activeFlushTask.cancel()
+            }
             return
         }
+        guard !Task.isCancelled else { return }
         let task = Task { @MainActor in
             await self.performFlush(manual: manual)
         }
         activeFlushTask = task
-        await task.value
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         activeFlushTask = nil
     }
 
@@ -247,7 +265,10 @@ final class TelemetryCoordinator {
         }
         if !manual {
             guard !isAuthHalted else { return }
-            if let backoffUntil, now < backoffUntil { return }
+            if let backoffUntil, now < backoffUntil {
+                scheduleRetryIfNeeded(until: backoffUntil)
+                return
+            }
         }
 
         isUploading = true
@@ -282,6 +303,7 @@ final class TelemetryCoordinator {
                 pendingSegmentCount = queue.count
                 continue
             }
+            guard !Task.isCancelled else { break }
 
             var request = URLRequest(url: ingestURL)
             request.httpMethod = "POST"
@@ -306,6 +328,7 @@ final class TelemetryCoordinator {
 
                 case 401, 403:
                     isAuthHalted = true
+                    cancelRetryTask()
                     recordUploadError(
                         "Telemetry upload unauthorized (HTTP \(http.statusCode)). Check the Axiom ingest token."
                     )
@@ -316,7 +339,9 @@ final class TelemetryCoordinator {
                         Self.parseRetryAfter(
                             http.value(forHTTPHeaderField: "Retry-After"), now: now)
                         ?? nextExponentialBackoff()
-                    backoffUntil = now.addingTimeInterval(delay)
+                    let deadline = now.addingTimeInterval(delay)
+                    backoffUntil = deadline
+                    scheduleRetryIfNeeded(until: deadline, allowZeroDelay: true)
                     recordUploadError(
                         "Telemetry upload throttled (HTTP \(http.statusCode)). Retrying later."
                     )
@@ -348,6 +373,7 @@ final class TelemetryCoordinator {
             } catch let error as URLError where error.code == .cancelled {
                 break
             } catch {
+                if Task.isCancelled { break }
                 applyBackoff(
                     message: "Telemetry upload failed: \(error.localizedDescription)"
                 )
@@ -361,6 +387,7 @@ final class TelemetryCoordinator {
     private func handleSuccess(data: Data) {
         consecutiveFailures = 0
         backoffUntil = nil
+        cancelRetryTask()
         let uploadedAt = now
         lastUploadedAt = uploadedAt
         settings.lastUploadedAt = uploadedAt
@@ -381,8 +408,50 @@ final class TelemetryCoordinator {
 
     private func applyBackoff(message: String) {
         let delay = nextExponentialBackoff()
-        backoffUntil = now.addingTimeInterval(delay)
+        let deadline = now.addingTimeInterval(delay)
+        backoffUntil = deadline
+        scheduleRetryIfNeeded(until: deadline)
         recordUploadError(message)
+    }
+
+    private func cancelScheduledTasks() {
+        debounceTask?.cancel()
+        debounceTask = nil
+        debounceIsUrgent = false
+        cancelRetryTask()
+    }
+
+    private func cancelRetryTask() {
+        retryTask?.cancel()
+        retryTask = nil
+        retryDeadline = nil
+    }
+
+    private func scheduleRetryIfNeeded(until deadline: Date, allowZeroDelay: Bool = false) {
+        guard isForeground, configuration.isUploadEnabled, !isAuthHalted else { return }
+        let remaining = deadline.timeIntervalSince(now)
+        if allowZeroDelay {
+            guard remaining >= 0 else { return }
+        } else {
+            guard remaining > 0 else { return }
+        }
+        if retryDeadline == deadline, retryTask != nil {
+            return
+        }
+        cancelRetryTask()
+        retryDeadline = deadline
+        let delay = Duration.seconds(max(0, remaining))
+        retryTask = Task { @MainActor [weak self] in
+            do {
+                try await self?.clock.sleep(for: delay)
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.retryTask = nil
+            self.retryDeadline = nil
+            await self.flush(manual: false)
+        }
     }
 
     private func nextExponentialBackoff() -> TimeInterval {
@@ -465,13 +534,54 @@ private nonisolated struct AxiomIngestResponse: Decodable, Sendable {
     }
 }
 
+nonisolated struct TelemetryBackgroundTaskScheduler: DependencyKey, Sendable {
+    var begin:
+        @MainActor (
+            _ name: String,
+            _ expirationHandler: @escaping @Sendable () -> Void
+        ) -> UIBackgroundTaskIdentifier
+    var end: @MainActor (UIBackgroundTaskIdentifier) -> Void
+
+    static let liveValue = Self(
+        begin: { name, expirationHandler in
+            UIApplication.shared.beginBackgroundTask(
+                withName: name,
+                expirationHandler: expirationHandler
+            )
+        },
+        end: { taskID in
+            UIApplication.shared.endBackgroundTask(taskID)
+        }
+    )
+
+    static let testValue = liveValue
+}
+
+nonisolated extension DependencyValues {
+    var telemetryBackgroundTaskScheduler: TelemetryBackgroundTaskScheduler {
+        get { self[TelemetryBackgroundTaskScheduler.self] }
+        set { self[TelemetryBackgroundTaskScheduler.self] = newValue }
+    }
+}
+
 @MainActor
 private final class BackgroundFlushHandle {
     var taskID: UIBackgroundTaskIdentifier = .invalid
     var uploadTask: Task<Void, Never>?
+    private let endTask: @MainActor (UIBackgroundTaskIdentifier) -> Void
+    private let onExpire: @MainActor () -> Void
+
+    init(
+        endTask: @escaping @MainActor (UIBackgroundTaskIdentifier) -> Void,
+        onExpire: @escaping @MainActor () -> Void
+    ) {
+        self.endTask = endTask
+        self.onExpire = onExpire
+    }
 
     func expire() {
         uploadTask?.cancel()
+        onExpire()
         finish()
     }
 
@@ -479,6 +589,6 @@ private final class BackgroundFlushHandle {
         guard taskID != .invalid else { return }
         let id = taskID
         taskID = .invalid
-        UIApplication.shared.endBackgroundTask(id)
+        endTask(id)
     }
 }

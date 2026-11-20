@@ -397,7 +397,7 @@ nonisolated final class TelemetrySpool: Sendable {
         let callback: (@Sendable (TelemetryLevel) -> Void)? = state.withLock { state in
             do {
                 try ensureDirectory()
-                let handle = try openActiveHandle(&state)
+                let handle = try openActiveHandle(&state, now: now)
                 try handle.seekToEnd()
                 // Always use throwing write(contentsOf:) so a full disk cannot raise an ObjC exception.
                 try handle.write(contentsOf: lineData)
@@ -588,13 +588,21 @@ nonisolated final class TelemetrySpool: Sendable {
         )
     }
 
-    private func openActiveHandle(_ state: inout State) throws -> FileHandle {
+    private func openActiveHandle(_ state: inout State, now: Date) throws -> FileHandle {
         let path = activeFileURL.path(percentEncoded: false)
         if let handle = state.fileHandle, FileManager.default.fileExists(atPath: path) {
             return handle
         }
         try? state.fileHandle?.close()
         state.fileHandle = nil
+        if FileManager.default.fileExists(atPath: path) {
+            // Seal the prior active file before appending so a crash-torn trailing line
+            // cannot join with the next record and drop it on seal.
+            _ = sealActiveLocked(&state, now: now)
+            if FileManager.default.fileExists(atPath: path) {
+                trimTornTrailingLineLocked()
+            }
+        }
         if !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: nil)
             var values = URLResourceValues()
@@ -605,6 +613,16 @@ nonisolated final class TelemetrySpool: Sendable {
         let handle = try FileHandle(forWritingTo: activeFileURL)
         state.fileHandle = handle
         return handle
+    }
+
+    private func trimTornTrailingLineLocked() {
+        guard let data = try? Data(contentsOf: activeFileURL), !data.isEmpty, data.last != 0x0A else {
+            return
+        }
+        let validPrefixLength = data.lastIndex(of: 0x0A).map { $0 + 1 } ?? 0
+        guard let handle = try? FileHandle(forUpdating: activeFileURL) else { return }
+        defer { try? handle.close() }
+        try? handle.truncate(atOffset: UInt64(validPrefixLength))
     }
 
     private func sealActiveLocked(_ state: inout State, now: Date) -> URL? {

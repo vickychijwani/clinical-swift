@@ -3,6 +3,7 @@ import Dependencies
 import Foundation
 import Synchronization
 import Testing
+import UIKit
 
 @testable import clinical_swift
 
@@ -123,21 +124,32 @@ struct TelemetryTests {
         try handle.write(contentsOf: Data("{\"_time\":\"2026-10-01T10:00:02Z\",\"broken".utf8))
         try handle.close()
 
+        // Simulate relaunch appending a new record before any manual seal runs.
+        let relaunchedSpool = TelemetrySpool(directory: dir, mirrorsToOSLog: false)
+        let record3 = makeRecord(seq: 3, level: .info, name: "relaunch_event")
+        relaunchedSpool.append(record3, now: try Date("2026-10-01T10:00:04Z", strategy: .iso8601))
+
         let sealed = try #require(
-            spool.sealActiveSegment(now: try Date("2026-10-01T10:00:05Z", strategy: .iso8601)))
-        let lines = spool.readValidatedLines(at: sealed)
-        #expect(lines.count == 2)
+            relaunchedSpool.sealActiveSegment(
+                now: try Date("2026-10-01T10:00:05Z", strategy: .iso8601)))
+        #expect(relaunchedSpool.readValidatedLines(at: sealed).count == 1)
+        let allSealedLines = relaunchedSpool.listSealedSegments().flatMap {
+            relaunchedSpool.readValidatedLines(at: $0.url)
+        }
+        #expect(allSealedLines.count == 3)
 
         let exportURL = dir.appending(path: "export.ndjson")
-        let exportedCount = try spool.exportNDJSON(to: exportURL)
-        #expect(exportedCount == 2)
+        let exportedCount = try relaunchedSpool.exportNDJSON(to: exportURL)
+        #expect(exportedCount == 3)
         let exportedText = try String(contentsOf: exportURL, encoding: .utf8)
         let exportedLines = exportedText.split(separator: "\n")
-        #expect(exportedLines.count == 2)
-        for line in exportedLines {
-            let parsed = try JSONDecoder().decode(TelemetryRecord.self, from: Data(line.utf8))
-            #expect(parsed.name == "first_event" || parsed.name == "second_event")
-        }
+        #expect(exportedLines.count == 3)
+        let exportedNames = try Set(
+            exportedLines.map {
+                try JSONDecoder().decode(TelemetryRecord.self, from: Data($0.utf8)).name
+            }
+        )
+        #expect(exportedNames == ["first_event", "second_event", "relaunch_event"])
     }
 
     @Test func spoolRotatesAtByteLimitAndEvictsDebugSegmentsFirst() throws {
@@ -443,6 +455,277 @@ struct TelemetryTests {
         #expect(dropCoordinator.lastUploadError?.contains("413") == true)
     }
 
+    @Test func coordinatorCancelsActiveAndWaitingUploadsOnBackgroundExpiry() async throws {
+        let now = try Date("2026-10-01T12:00:00Z", strategy: .iso8601)
+
+        // Part 1: Background flush owns the active upload and expires while the request is held open.
+        try await verifyBackgroundExpiryCancelsHeldUpload(now: now, startForegroundFirst: false)
+
+        // Part 2: Background flush joins an in-flight foreground upload and expires while waiting.
+        try await verifyBackgroundExpiryCancelsHeldUpload(now: now, startForegroundFirst: true)
+    }
+
+    private func verifyBackgroundExpiryCancelsHeldUpload(
+        now: Date,
+        startForegroundFirst: Bool
+    ) async throws {
+        let state = Mutex<(
+            startedCount: Int,
+            cancelledCount: Int,
+            expirationHandler: (@Sendable () -> Void)?,
+            endedTaskIDs: [UIBackgroundTaskIdentifier],
+            startedContinuation: CheckedContinuation<Void, Never>?,
+            cancelledContinuation: CheckedContinuation<Void, Never>?
+        )>((0, 0, nil, [], nil, nil))
+
+        let scheduler = TelemetryBackgroundTaskScheduler(
+            begin: { _, expirationHandler in
+                state.withLock { $0.expirationHandler = expirationHandler }
+                return UIBackgroundTaskIdentifier(rawValue: 77)
+            },
+            end: { taskID in
+                state.withLock { $0.endedTaskIDs.append(taskID) }
+            }
+        )
+
+        let (coordinator, spool, cleanup) = try makeAsyncCoordinator(
+            now: now,
+            scheduler: scheduler
+        ) { _, _, onCancel in
+            onCancel {
+                let continuation = state.withLock { s -> CheckedContinuation<Void, Never>? in
+                    s.cancelledCount += 1
+                    let cont = s.cancelledContinuation
+                    s.cancelledContinuation = nil
+                    return cont
+                }
+                continuation?.resume()
+            }
+            let continuation = state.withLock { s -> CheckedContinuation<Void, Never>? in
+                s.startedCount += 1
+                let cont = s.startedContinuation
+                s.startedContinuation = nil
+                return cont
+            }
+            continuation?.resume()
+        }
+        defer { cleanup() }
+
+        spool.append(makeRecord(seq: 1, level: .info, name: "held_upload"), now: now)
+
+        let foregroundTask: Task<Void, Never>? =
+            startForegroundFirst
+            ? Task { @MainActor in
+                await withDependencies {
+                    $0.date.now = now
+                } operation: {
+                    await coordinator.flush(manual: false)
+                }
+            }
+            : nil
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let alreadyStarted = state.withLock { s -> Bool in
+                if s.startedCount > 0 { return true }
+                s.startedContinuation = continuation
+                return false
+            }
+            if alreadyStarted {
+                continuation.resume()
+            } else if !startForegroundFirst {
+                coordinator.handleBackground()
+            }
+        }
+
+        if startForegroundFirst {
+            coordinator.handleBackground()
+            // Yield so handleBackground's upload task enters flush and awaits activeFlushTask.
+            await Task.yield()
+        }
+
+        let handler = try #require(state.withLock { $0.expirationHandler })
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let alreadyCancelled = state.withLock { s -> Bool in
+                if s.cancelledCount > 0 { return true }
+                s.cancelledContinuation = continuation
+                return false
+            }
+            if alreadyCancelled {
+                continuation.resume()
+            } else {
+                handler()
+            }
+        }
+
+        if let foregroundTask {
+            await foregroundTask.value
+        }
+
+        try await waitUntil {
+            !coordinator.isUploading && state.withLock { !$0.endedTaskIDs.isEmpty }
+        }
+
+        #expect(state.withLock { $0.cancelledCount } == 1)
+        #expect(state.withLock { $0.endedTaskIDs } == [UIBackgroundTaskIdentifier(rawValue: 77)])
+        #expect(!coordinator.isUploading)
+        #expect(coordinator.lastUploadError == nil)
+        #expect(spool.listSealedSegments().count == 1)
+    }
+
+    @Test func coordinatorSchedulesAutomaticRetryOnBackoffWithoutAnotherWriteOrForeground() async throws {
+        let start = try Date("2026-10-01T12:00:00Z", strategy: .iso8601)
+        let currentNow = Mutex(start)
+        let clock = TestClock()
+        let attempts = Mutex(0)
+
+        let dir = makeTempDirectory()
+        let suiteName = "in.bitehaus.clinical.retry.test.\(UUID().uuidString)"
+        let sharedDefaults = try #require(UserDefaults(suiteName: suiteName))
+        let standardSuiteName = "in.bitehaus.clinical.retry.std.\(UUID().uuidString)"
+        let standardDefaults = try #require(UserDefaults(suiteName: standardSuiteName))
+        let spool = TelemetrySpool(directory: dir, mirrorsToOSLog: false)
+        let settings = TelemetrySettingsStore(
+            sharedDefaults: sharedDefaults,
+            standardDefaults: standardDefaults
+        )
+        let tokenKey = UUID().uuidString
+        let scriptedResponses: [(Int, [String: String]?)] = [
+            (500, nil),
+            (200, nil),
+            (429, ["Retry-After": "120"]),
+            (200, nil),
+            (200, nil),
+            (500, nil),
+        ]
+        TelemetryMockURLProtocol.register(key: tokenKey) { request in
+            let attempt = attempts.withLock { value -> Int in
+                value += 1
+                return value
+            }
+            let (status, headers) =
+                attempt <= scriptedResponses.count ? scriptedResponses[attempt - 1] : (500, nil)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: status, httpVersion: nil, headerFields: headers)!
+            let body = status == 200 ? Data("{\"ingested\":1,\"failed\":0}".utf8) : Data()
+            return (response, body)
+        }
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [TelemetryMockURLProtocol.self]
+        sessionConfig.httpAdditionalHeaders = ["X-Telemetry-Test-Key": tokenKey]
+        let session = URLSession(configuration: sessionConfig)
+        let config = TelemetryConfiguration(
+            ingestURL: URL(string: "https://api.axiom.co/v1/datasets/clinical-dev/ingest"),
+            dataset: "clinical-dev",
+            ingestToken: "test-token",
+            environment: .dev,
+            isUploadEnabled: true
+        )
+        let coordinator = withDependencies {
+            $0.date = DateGenerator { currentNow.withLock { $0 } }
+            $0.continuousClock = clock
+        } operation: {
+            TelemetryCoordinator(
+                spool: spool,
+                settings: settings,
+                configuration: config,
+                session: session,
+                normalFlushDelay: .milliseconds(500),
+                errorFlushDelay: .milliseconds(100),
+                attachWriteHook: true
+            )
+        }
+        defer {
+            TelemetryMockURLProtocol.unregister(key: tokenKey)
+            session.invalidateAndCancel()
+            try? FileManager.default.removeItem(at: dir)
+            sharedDefaults.removePersistentDomain(forName: suiteName)
+            standardDefaults.removePersistentDomain(forName: standardSuiteName)
+        }
+
+        // Write a record, let the debounced flush hit a transient 500, then let the scheduled retry
+        // succeed at the 30s backoff deadline without another write or foreground event.
+        spool.append(makeRecord(seq: 1, level: .info, name: "transient_500"), now: start)
+        await Task.yield()
+
+        let afterDebounce = start.addingTimeInterval(0.5)
+        currentNow.withLock { $0 = afterDebounce }
+        await clock.advance(by: .milliseconds(500))
+        try await waitUntil { attempts.withLock { $0 } >= 1 && !coordinator.isUploading }
+
+        #expect(attempts.withLock { $0 } == 1)
+        #expect(coordinator.backoffUntil == afterDebounce.addingTimeInterval(30))
+        #expect(spool.listSealedSegments().count == 1)
+
+        let afterBackoff = afterDebounce.addingTimeInterval(30)
+        currentNow.withLock { $0 = afterBackoff }
+        await clock.advance(by: .seconds(30))
+        try await waitUntil { attempts.withLock { $0 } >= 2 && !coordinator.isUploading }
+
+        #expect(attempts.withLock { $0 } == 2)
+        #expect(coordinator.backoffUntil == nil)
+        #expect(coordinator.lastUploadError == nil)
+        #expect(spool.listSealedSegments().isEmpty)
+
+        // Now verify 429 Retry-After schedules a retry, and an earlier debounce does not bypass or
+        // break the scheduled 120s retry.
+        spool.append(makeRecord(seq: 2, level: .info, name: "rate_limited"), now: afterBackoff)
+        await Task.yield()
+        let t1 = afterBackoff.addingTimeInterval(0.5)
+        currentNow.withLock { $0 = t1 }
+        await clock.advance(by: .milliseconds(500))
+        try await waitUntil { attempts.withLock { $0 } >= 3 && !coordinator.isUploading }
+
+        #expect(attempts.withLock { $0 } == 3)
+        #expect(coordinator.backoffUntil == t1.addingTimeInterval(120))
+
+        // Trigger a faster error debounce before the 120s deadline.
+        spool.append(makeRecord(seq: 3, level: .error, name: "early_error"), now: t1.addingTimeInterval(1))
+        await Task.yield()
+        let t2 = t1.addingTimeInterval(2)
+        currentNow.withLock { $0 = t2 }
+        await clock.advance(by: .seconds(1))
+        await Task.yield()
+        #expect(attempts.withLock { $0 } == 3)
+
+        let afterRetryAfter = t1.addingTimeInterval(120)
+        currentNow.withLock { $0 = afterRetryAfter }
+        await clock.advance(by: .seconds(119))
+        try await waitUntil { attempts.withLock { $0 } >= 5 && !coordinator.isUploading }
+
+        #expect(attempts.withLock { $0 } == 5)
+        #expect(coordinator.backoffUntil == nil)
+        #expect(coordinator.lastUploadError == nil)
+        #expect(spool.listSealedSegments().isEmpty)
+
+        // Backgrounding cancels any pending active-app retry timer and does not schedule a new
+        // retry timer if the background flush fails.
+        spool.append(makeRecord(seq: 4, level: .info, name: "bg_cancel"), now: afterRetryAfter)
+        await Task.yield()
+        let t3 = afterRetryAfter.addingTimeInterval(0.5)
+        currentNow.withLock { $0 = t3 }
+        await clock.advance(by: .milliseconds(500))
+        try await waitUntil { attempts.withLock { $0 } >= 6 && !coordinator.isUploading }
+        #expect(attempts.withLock { $0 } == 6)
+
+        coordinator.handleBackground()
+        await Task.yield()
+        let t4 = t3.addingTimeInterval(60)
+        currentNow.withLock { $0 = t4 }
+        await clock.advance(by: .seconds(60))
+        await Task.yield()
+        #expect(attempts.withLock { $0 } == 6)
+    }
+
+    private func waitUntil(
+        timeout: Duration = .seconds(2),
+        condition: () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while !condition() && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
     @Test func verboseLoggingAutoExpiresAfterTwentyFourHours() throws {
         let start = try Date("2026-10-01T08:00:00Z", strategy: .iso8601)
         let suiteName = "in.bitehaus.clinical.verbose.test.\(UUID().uuidString)"
@@ -599,10 +882,24 @@ struct TelemetryTests {
         now: Date,
         handler: @escaping @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
     ) throws -> (TelemetryCoordinator, TelemetrySpool, () -> Void) {
+        try makeAsyncCoordinator(now: now) { request, complete, _ in
+            do {
+                complete(.success(try handler(request)))
+            } catch {
+                complete(.failure(error))
+            }
+        }
+    }
+
+    private func makeAsyncCoordinator(
+        now: Date,
+        scheduler: TelemetryBackgroundTaskScheduler = .testValue,
+        asyncHandler: @escaping TelemetryMockURLProtocol.AsyncHandler
+    ) throws -> (TelemetryCoordinator, TelemetrySpool, () -> Void) {
         let dir = makeTempDirectory()
-        let suiteName = "in.bitehaus.clinical.coord.test.\(UUID().uuidString)"
+        let suiteName = "in.bitehaus.clinical.coord.async.test.\(UUID().uuidString)"
         let sharedDefaults = try #require(UserDefaults(suiteName: suiteName))
-        let standardSuiteName = "in.bitehaus.clinical.coord.std.\(UUID().uuidString)"
+        let standardSuiteName = "in.bitehaus.clinical.coord.async.std.\(UUID().uuidString)"
         let standardDefaults = try #require(UserDefaults(suiteName: standardSuiteName))
 
         let spool = TelemetrySpool(directory: dir, mirrorsToOSLog: false)
@@ -611,7 +908,7 @@ struct TelemetryTests {
             standardDefaults: standardDefaults
         )
         let tokenKey = UUID().uuidString
-        TelemetryMockURLProtocol.register(key: tokenKey, handler: handler)
+        TelemetryMockURLProtocol.registerAsync(key: tokenKey, handler: asyncHandler)
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [TelemetryMockURLProtocol.self]
         sessionConfig.httpAdditionalHeaders = ["X-Telemetry-Test-Key": tokenKey]
@@ -626,6 +923,8 @@ struct TelemetryTests {
         )
         let coordinator = withDependencies {
             $0.date.now = now
+            $0.continuousClock = TestClock()
+            $0.telemetryBackgroundTaskScheduler = scheduler
         } operation: {
             TelemetryCoordinator(
                 spool: spool,
@@ -666,10 +965,33 @@ struct TelemetryTests {
 
 private nonisolated final class TelemetryMockURLProtocol: URLProtocol, @unchecked Sendable {
     typealias Handler = @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
+    typealias Completion = @Sendable (Result<(HTTPURLResponse, Data), any Error>) -> Void
+    typealias AsyncHandler = @Sendable (
+        URLRequest,
+        @escaping Completion,
+        _ registerCancel: @escaping @Sendable (@escaping @Sendable () -> Void) -> Void
+    ) -> Void
 
-    private static let handlers = Mutex<[String: Handler]>([:])
+    private static let handlers = Mutex<[String: AsyncHandler]>([:])
+
+    private struct LoadingState {
+        var finished = false
+        var onCancel: (@Sendable () -> Void)?
+    }
+
+    private let loadingState = Mutex(LoadingState())
 
     static func register(key: String, handler: @escaping Handler) {
+        registerAsync(key: key) { request, complete, _ in
+            do {
+                complete(.success(try handler(request)))
+            } catch {
+                complete(.failure(error))
+            }
+        }
+    }
+
+    static func registerAsync(key: String, handler: @escaping AsyncHandler) {
         handlers.withLock { $0[key] = handler }
     }
 
@@ -693,15 +1015,47 @@ private nonisolated final class TelemetryMockURLProtocol: URLProtocol, @unchecke
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
-        do {
-            let (response, data) = try handler(request)
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
-        }
+        handler(
+            request,
+            { [weak self] result in
+                guard let self else { return }
+                let shouldFinish = self.loadingState.withLock { state -> Bool in
+                    guard !state.finished else { return false }
+                    state.finished = true
+                    return true
+                }
+                guard shouldFinish else { return }
+                switch result {
+                case .success(let (response, data)):
+                    self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                    self.client?.urlProtocol(self, didLoad: data)
+                    self.client?.urlProtocolDidFinishLoading(self)
+                case .failure(let error):
+                    self.client?.urlProtocol(self, didFailWithError: error)
+                }
+            },
+            { [weak self] onCancel in
+                guard let self else { return }
+                let alreadyFinished = self.loadingState.withLock { state -> Bool in
+                    if state.finished { return true }
+                    state.onCancel = onCancel
+                    return false
+                }
+                if alreadyFinished {
+                    onCancel()
+                }
+            }
+        )
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        let onCancel = loadingState.withLock { state -> (@Sendable () -> Void)? in
+            guard !state.finished else { return nil }
+            state.finished = true
+            return state.onCancel
+        }
+        guard let onCancel else { return }
+        onCancel()
+        client?.urlProtocol(self, didFailWithError: URLError(.cancelled))
+    }
 }
