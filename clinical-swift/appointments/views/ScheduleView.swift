@@ -7,7 +7,7 @@ private let scheduleDayRadius = 3
 
 struct ScheduleView: View {
     @Environment(\.appPalette) private var palette
-    @Dependency(\.calendar) private var calendar
+    @Environment(\.clinicToday) private var clinicToday
     @Environment(Router.self) private var router
 
     /// `nil` means normal schedule mode. A session owns the editor and its draft preview.
@@ -27,19 +27,19 @@ struct ScheduleView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            WeekDateStrip(selectedDate: selectedDateBinding)
+            WeekDateStrip(selectedDate: selectedDateBinding, today: clinicToday)
 
             CalendarDayPager(
                 selectedDate: selectedDateBinding,
-                calendar: calendar,
+                calendar: ClinicDate.calendar,
                 dayRadius: scheduleDayRadius,
                 isPagingEnabled: editorSession?.allowsDateSelection != false
                     && editorSession?.adjustment.isDragging != true
             ) { date in
                 ScheduleTimelinePage(
                     date: date,
+                    today: clinicToday,
                     items: visibleItems(for: date),
-                    calendar: calendar,
                     itemInteractionsEnabled: !hasEditor,
                     scrollPosition: scrollPositionBinding(for: date),
                     onSelectItem: selectItem,
@@ -74,7 +74,7 @@ struct ScheduleView: View {
         .background(palette[.canvas])
         .navigationTitle(
             router.selectedScheduleDate.formatted(
-                .dateTime
+                ClinicDate.formatStyle
                     .weekday()
                     .month()
                     .day())
@@ -185,7 +185,7 @@ struct ScheduleView: View {
         guard editorSession?.allowsDateSelection != false,
             editorSession?.adjustment.isDragging != true
         else { return }
-        let selectedDate = date.startOfDay(using: calendar)
+        let selectedDate = ClinicDate.day(date)
         router.selectScheduleDate(selectedDate)
         editorSession?.selectDate(selectedDate)
     }

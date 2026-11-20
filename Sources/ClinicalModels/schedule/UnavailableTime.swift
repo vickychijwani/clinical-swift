@@ -1,4 +1,3 @@
-import Dependencies
 import Foundation
 
 public nonisolated struct UnavailableTime: Identifiable, Equatable, Sendable {
@@ -17,11 +16,10 @@ public nonisolated struct UnavailableTime: Identifiable, Equatable, Sendable {
     public var displayLabel: String { label ?? "Blocked" }
 
     public var end: Date {
-        @Dependency(\.calendar) var calendar
-        return end(using: calendar)
+        end(using: ClinicDate.calendar)
     }
 
-    public func end(using calendar: Calendar) -> Date {
+    public func end(using calendar: Calendar = ClinicDate.calendar) -> Date {
         calendar.date(byAdding: .minute, value: durationMinutes, to: start) ?? start
     }
 }

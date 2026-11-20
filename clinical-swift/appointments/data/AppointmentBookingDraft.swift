@@ -1,12 +1,9 @@
 import ClinicalModels
 import ClinicalPersistence
-import Dependencies
 import Foundation
 
 struct AppointmentBookingDraft: Equatable, Sendable {
     static let durationOptions = ScheduleDurationSection.options
-
-    @Dependency(\.calendar) private var calendar
 
     var selectedPatient: Patient?
     var selectedDate: Date
@@ -24,10 +21,10 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         self.start = start ?? selectedDate
         self.durationMinutes = durationMinutes
 
-        let normalizedDate = selectedDate.startOfDay(using: calendar)
+        let normalizedDate = ClinicDate.day(selectedDate)
         self.selectedDate = normalizedDate
         self.start = normalizedStart(
-            start ?? Bitehaus.opening.on(date: normalizedDate, using: calendar),
+            start ?? Bitehaus.opening.on(date: normalizedDate, using: ClinicDate.calendar),
             selectedDate: normalizedDate,
             durationMinutes: durationMinutes
         )
@@ -50,7 +47,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
     }
 
     mutating func selectDate(_ date: Date) {
-        selectedDate = date.startOfDay(using: calendar)
+        selectedDate = ClinicDate.day(date)
         start = normalizedStart(
             start,
             selectedDate: selectedDate,
@@ -80,10 +77,10 @@ struct AppointmentBookingDraft: Equatable, Sendable {
             throw AppointmentBookingValidationError.missingPatient
         }
 
-        let opening = Bitehaus.opening.on(date: selectedDate, using: calendar)
-        let closing = Bitehaus.closing.on(date: selectedDate, using: calendar)
+        let opening = Bitehaus.opening.on(date: selectedDate, using: ClinicDate.calendar)
+        let closing = Bitehaus.closing.on(date: selectedDate, using: ClinicDate.calendar)
         guard durationMinutes >= 15, start >= opening,
-            let end = calendar.date(
+            let end = ClinicDate.calendar.date(
                 byAdding: .minute,
                 value: durationMinutes,
                 to: start
@@ -119,7 +116,8 @@ struct AppointmentBookingDraft: Equatable, Sendable {
         selectedDate: Date,
         durationMinutes: Int
     ) -> Date {
-        let proposedMinutes = TimeOfDay(date: proposedTime, calendar: calendar).totalMinutes
+        let proposedMinutes = TimeOfDay(date: proposedTime, calendar: ClinicDate.calendar)
+            .totalMinutes
         let openingMinutes = Bitehaus.opening.totalMinutes
         let maxStartMinutes = Bitehaus.closing.totalMinutes - durationMinutes
         let clampedMinutes =
@@ -133,7 +131,7 @@ struct AppointmentBookingDraft: Equatable, Sendable {
             clampedMinutes / 60,
             clampedMinutes % 60
         )
-        .on(date: selectedDate.startOfDay(using: calendar), using: calendar)
+        .on(date: ClinicDate.day(selectedDate), using: ClinicDate.calendar)
     }
 }
 

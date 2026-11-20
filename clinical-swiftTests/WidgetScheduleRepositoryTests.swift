@@ -1,6 +1,5 @@
 import ClinicalModels
 import ClinicalPersistence
-import Dependencies
 import Foundation
 import GRDB
 import SQLiteData
@@ -11,44 +10,43 @@ import Testing
 struct WidgetScheduleRepositoryTests {
     @Test func filtersByEndTimeAndStatusAndPreservesStartOrder() throws {
         let database = try testDatabase()
-        let calendar = utcCalendar()
-        let now = try Date("2026-07-13T10:30:00Z", strategy: .iso8601)
+        let now = try Date("2026-07-13T10:30:00+05:30", strategy: .iso8601)
         let patient = Patient(name: "Aarav Mehta", createdDate: now)
         let unknownPatient = Patient(name: nil, phone: "+919820144532", createdDate: now)
 
         let inProgress = try appointment(
             patientID: patient.id,
-            start: "2026-07-13T09:45:00Z",
+            start: "2026-07-13T09:45:00+05:30",
             duration: 60,
             status: .scheduled
         )
         let ended = try appointment(
             patientID: patient.id,
-            start: "2026-07-13T09:00:00Z",
+            start: "2026-07-13T09:00:00+05:30",
             duration: 60,
             status: .scheduled
         )
         let endsNow = try appointment(
             patientID: patient.id,
-            start: "2026-07-13T10:00:00Z",
+            start: "2026-07-13T10:00:00+05:30",
             duration: 30,
             status: .scheduled
         )
         let completedButStillRunning = try appointment(
             patientID: unknownPatient.id,
-            start: "2026-07-13T10:15:00Z",
+            start: "2026-07-13T10:15:00+05:30",
             duration: 60,
             status: .completed
         )
         let cancelled = try appointment(
             patientID: patient.id,
-            start: "2026-07-13T11:00:00Z",
+            start: "2026-07-13T11:00:00+05:30",
             duration: 60,
             status: .cancelled
         )
         let tomorrow = try appointment(
             patientID: patient.id,
-            start: "2026-07-14T09:00:00Z",
+            start: "2026-07-14T09:00:00+05:30",
             duration: 45,
             status: .scheduled
         )
@@ -63,12 +61,8 @@ struct WidgetScheduleRepositoryTests {
             }
         }
 
-        let snapshot = try withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            try WidgetScheduleRepository(databaseURL: URL(filePath: "/unused"))
-                .snapshot(in: database, at: now)
-        }
+        let snapshot = try WidgetScheduleRepository(databaseURL: URL(filePath: "/unused"))
+            .snapshot(in: database, at: now)
 
         #expect(snapshot.sections.count == 3)
         #expect(
@@ -86,9 +80,8 @@ struct WidgetScheduleRepositoryTests {
     }
 
     @Test func nextRefreshIsTheEarlierOfAppointmentEndAndMidnight() throws {
-        let calendar = utcCalendar()
-        let now = try Date("2026-07-13T10:30:00Z", strategy: .iso8601)
-        let start = try Date("2026-07-13T10:15:00Z", strategy: .iso8601)
+        let now = try Date("2026-07-13T10:30:00+05:30", strategy: .iso8601)
+        let start = try Date("2026-07-13T10:15:00+05:30", strategy: .iso8601)
         let appointment = Appointment(
             id: UUID(),
             patientName: "Aarav Mehta",
@@ -100,14 +93,16 @@ struct WidgetScheduleRepositoryTests {
             generatedAt: now,
             sections: [
                 WidgetScheduleSection(
-                    date: calendar.startOfDay(for: now),
+                    date: ClinicDate.day(now),
                     isToday: true,
                     items: [.appointment(appointment)]
                 )
             ]
         )
 
-        #expect(snapshot.nextRefreshDate(using: calendar) == appointment.end(using: calendar))
+        #expect(
+            snapshot.nextRefreshDate(using: ClinicDate.calendar)
+                == appointment.end(using: ClinicDate.calendar))
     }
 
     private func appointment(
@@ -126,11 +121,5 @@ struct WidgetScheduleRepositoryTests {
             createdAt: start,
             updatedAt: start
         )
-    }
-
-    private func utcCalendar() -> Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
-        return calendar
     }
 }

@@ -16,7 +16,6 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -38,7 +37,6 @@ struct AppointmentMessageModelTests {
 
         try await withDependencies {
             $0.appointmentMessagingClient = recorder.client
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -65,7 +63,6 @@ struct AppointmentMessageModelTests {
         await withDependencies {
             $0.appointmentMessagingClient = recorder.client
             $0.defaultDatabase = database
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -91,7 +88,6 @@ struct AppointmentMessageModelTests {
         let details = appointmentDetails(phone: "+91 98201 44532")
 
         withDependencies {
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -109,7 +105,6 @@ struct AppointmentMessageModelTests {
         await withDependencies {
             $0.appointmentMessagingClient = recorder.client
             $0.defaultDatabase = database
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -133,7 +128,6 @@ struct AppointmentMessageModelTests {
                 #expect(phone == "+919820144532")
                 return "Aarav Mobile"
             }
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -151,7 +145,6 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -170,7 +163,6 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -194,7 +186,6 @@ struct AppointmentMessageModelTests {
 
         withDependencies {
             $0.appointmentMessagingClient = recorder.client
-            $0.calendar = fixedCalendar
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
@@ -228,13 +219,6 @@ struct AppointmentMessageModelTests {
 
     private var fixedNow: Date {
         Date(timeIntervalSinceReferenceDate: 0)
-    }
-
-    private var fixedCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = Locale(identifier: "en_US_POSIX")
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
-        return calendar
     }
 }
 

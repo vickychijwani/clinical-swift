@@ -77,16 +77,9 @@ struct PaymentListTests {
     @Test func relativeDatesUseClinicMidnightAndClinicYear() throws {
         let before = try PaymentListFixture.date("2026-12-31T18:29:59Z")
         let after = try PaymentListFixture.date("2026-12-31T18:30:00Z")
-        var deviceCalendar = Calendar(identifier: .buddhist)
-        deviceCalendar.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
-        withDependencies {
-            $0.calendar = deviceCalendar
-            $0.locale = Locale(identifier: "ar_SA")
-        } operation: {
-            #expect(PaymentDay.title(for: before, today: before) == "Today")
-            #expect(PaymentDay.title(for: before, today: after) == "Yesterday")
-            #expect(PaymentDay.title(for: after, today: after) == "Today")
-        }
+        #expect(PaymentDay.title(for: before, today: before) == "Today")
+        #expect(PaymentDay.title(for: before, today: after) == "Yesterday")
+        #expect(PaymentDay.title(for: after, today: after) == "Today")
         let april = try PaymentListFixture.date("2026-04-17T12:00:00Z")
         #expect(PaymentDay.title(for: april, today: before) == "Fri, 17 Apr")
         #expect(PaymentDay.title(for: april, today: after) == "Fri, 17 Apr 2026")
@@ -146,7 +139,7 @@ struct PaymentListTests {
             #expect(changed[2].items == [payment])
         }
         let midnight = try PaymentListFixture.item(date: "2026-10-25T18:30:00Z")
-        #expect(FinancialDate.day(midnight.entry.entryDate) == days[1].id)
+        #expect(ClinicDate.day(midnight.entry.entryDate) == days[1].id)
     }
 
     @Test func totalsFailOnOverflowRatherThanDroppingAnEntry() throws {
@@ -257,7 +250,7 @@ struct PaymentListTests {
             #expect(days.count == 1)
             #expect(days.first?.receipts == 50)
             #expect(days.first?.expenses == nil)
-            try await $days.load(PaymentDaysRequest(today: FinancialDate.nextDay(sunday)))
+            try await $days.load(PaymentDaysRequest(today: ClinicDate.nextDay(sunday)))
             #expect(days.first?.title == "Today")
             #expect(days.first?.items.isEmpty == true)
         }

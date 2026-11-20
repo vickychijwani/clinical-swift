@@ -2,6 +2,7 @@ import ClinicalModels
 import SwiftUI
 
 struct PaymentsView: View {
+    @Environment(\.clinicToday) private var clinicToday
     @Environment(\.scenePhase) private var scenePhase
     @State private var model = PaymentsModel()
 
@@ -62,10 +63,15 @@ struct PaymentsView: View {
             BackupWarningToolbar()
         }
         .colorLabOverlay(isVisible: true)
-        .task(id: scenePhase) {
-            if scenePhase == .active { await model.followClinicDays() }
+        .task(id: PaymentsLoadKey(today: clinicToday, isActive: scenePhase == .active)) {
+            if scenePhase == .active { await model.load(today: clinicToday) }
         }
     }
+}
+
+private struct PaymentsLoadKey: Equatable {
+    let today: Date
+    let isActive: Bool
 }
 
 struct PaymentRow: View {

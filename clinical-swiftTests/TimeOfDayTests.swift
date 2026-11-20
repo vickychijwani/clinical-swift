@@ -44,7 +44,7 @@ struct TimeOfDayTests {
     @Test func appliesTimeOfDayToExistingDate() {
         let referenceDate = Date(timeIntervalSinceReferenceDate: 804_600_000)
         let updatedDate = TimeOfDay(16, 20).on(date: referenceDate)
-        let components = Calendar.current.dateComponents(
+        let components = ClinicDate.calendar.dateComponents(
             [.year, .month, .day, .hour, .minute, .second],
             from: updatedDate
         )

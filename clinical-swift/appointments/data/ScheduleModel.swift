@@ -6,7 +6,6 @@ import SQLiteData
 /// A query-backed cache for explicitly requested schedule days. Selection intentionally belongs to
 /// `Router`, because external appointment and schedule entry points must update the visible day too.
 @MainActor @Observable class ScheduleModel {
-    @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @FetchAll(AppointmentPatientSelection.none) private var appointmentRows
 
@@ -15,25 +14,25 @@ import SQLiteData
 
     func unavailableTimes(for date: Date) -> [UnavailableTime] {
         unavailableTimeRows.map(\.unavailableTime).filter {
-            calendar.isDate($0.start, inSameDayAs: date)
+            $0.start.isSameDayAs(date)
         }
     }
 
     func appointments(for date: Date) -> [Appointment] {
-        let selectedDate = date.startOfDay(using: calendar)
+        let selectedDate = ClinicDate.day(date)
         return
             appointmentRows
             .compactMap { $0.details?.appointment }
-            .filter { calendar.isDate($0.start, inSameDayAs: selectedDate) }
+            .filter { $0.start.isSameDayAs(selectedDate) }
     }
 
     /// Reads the target day from storage when booking jumps outside the loaded timeline window.
     func appointmentsForBooking(on date: Date) async -> [Appointment] {
-        let day = date.startOfDay(using: calendar)
+        let day = ClinicDate.day(date)
         if let loadedWindow, loadedWindow.contains(day) {
             return appointments(for: day)
         }
-        let query = querySchedule(selectedDate: day, calendar: calendar)
+        let query = querySchedule(selectedDate: day, calendar: ClinicDate.calendar)
         let rows =
             (try? await database.read { db in
                 try query.fetchAll(db)
@@ -46,7 +45,7 @@ import SQLiteData
     }
 
     func loadVisibleDays(centeredOn date: Date, dayRadius: Int) async throws {
-        let centerDate = date.startOfDay(using: calendar)
+        let centerDate = ClinicDate.day(date)
         let radius = max(dayRadius, 1)
         try await $unavailableTimeRows.load(
             unavailableTimesQuery(centeredOn: centerDate, dayRadius: dayRadius)
@@ -54,8 +53,8 @@ import SQLiteData
         try await $appointmentRows.load(
             queryScheduleWindow(centeredOn: centerDate, dayRadius: dayRadius)
         )
-        let start = centerDate.date(byAddingDays: -radius, using: calendar)
-        let end = centerDate.date(byAddingDays: radius, using: calendar)
+        let start = centerDate.date(byAddingDays: -radius, using: ClinicDate.calendar)
+        let end = centerDate.date(byAddingDays: radius, using: ClinicDate.calendar)
         loadedWindow = start...end
     }
 }

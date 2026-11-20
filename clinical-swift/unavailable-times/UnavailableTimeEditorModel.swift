@@ -9,12 +9,11 @@ struct UnavailableTimeDraft {
     var durationMinutes: Int
 
     func validate() throws {
-        @Dependency(\.calendar) var calendar
-        let opening = Bitehaus.opening.on(date: start, using: calendar)
-        let closing = Bitehaus.closing.on(date: start, using: calendar)
+        let opening = Bitehaus.opening.on(date: start, using: ClinicDate.calendar)
+        let closing = Bitehaus.closing.on(date: start, using: ClinicDate.calendar)
         guard durationMinutes > 0,
             start >= opening,
-            let end = calendar.date(byAdding: .minute, value: durationMinutes, to: start),
+            let end = ClinicDate.calendar.date(byAdding: .minute, value: durationMinutes, to: start),
             end <= closing
         else { throw UnavailableTimeError.invalidTime }
     }
@@ -24,7 +23,6 @@ struct UnavailableTimeDraft {
 @MainActor @Observable
 final class UnavailableTimeEditorModel {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
-    @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.date.now) private var now
 
     let purpose: UnavailableTimeEditorPurpose
@@ -51,7 +49,7 @@ final class UnavailableTimeEditorModel {
         )
     }
 
-    var selectedDate: Date { calendar.startOfDay(for: draft.start) }
+    var selectedDate: Date { ClinicDate.day(draft.start) }
     var preview: UnavailableTime {
         UnavailableTime(
             id: blockID, label: draft.label, start: draft.start,

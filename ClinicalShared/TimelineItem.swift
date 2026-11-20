@@ -67,14 +67,14 @@ nonisolated enum TimelineItem: Identifiable, Sendable {
         }
     }
 
-    func end(using calendar: Calendar) -> Date {
+    func end(using calendar: Calendar = ClinicDate.calendar) -> Date {
         switch self {
         case .appointment(let value): value.end(using: calendar)
         case .unavailableTime(let value): value.end(using: calendar)
         }
     }
 
-    func widgetURL(using calendar: Calendar) -> URL? {
+    func widgetURL(using calendar: Calendar = ClinicDate.calendar) -> URL? {
         switch self {
         case .appointment(let appointment): ClinicalURL.appointment(appointment.id).url
         case .unavailableTime(let block):

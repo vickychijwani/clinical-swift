@@ -155,8 +155,8 @@ public nonisolated func correctPatientBalance(
         guard try PatientRecord.find(patientID).fetchOne(db) != nil else {
             throw AccountEntryError.missingPatient(patientID)
         }
-        let date = FinancialDate.day(date)
-        guard date <= FinancialDate.today else { throw AccountEntryError.futureDate }
+        let date = ClinicDate.day(date)
+        guard date <= ClinicDate.today else { throw AccountEntryError.futureDate }
         let balance = try AccountHistoryRequest(patientID: patientID, through: date).fetch(db)
             .reduce(0) { try addingMoney($0, $1.balanceChange) }
         let (difference, overflow) = target.subtractingReportingOverflow(balance)

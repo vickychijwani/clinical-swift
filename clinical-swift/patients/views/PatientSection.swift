@@ -12,7 +12,7 @@ struct PatientSection: Identifiable, Hashable {
         searchText: String = "",
         matchingPhoneNumbers: Set<String>? = nil
     ) -> [PatientSection] {
-        let locale = Locale.autoupdatingCurrent
+        let locale = ClinicDate.locale
         let filteredItems = items.filter { item in
             if let matchingPhoneNumbers {
                 guard let phone = item.patient.phone else { return false }

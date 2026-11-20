@@ -87,9 +87,9 @@ struct MixedScheduleTests {
     }
 
     @Test func widgetReadsMixedItemsAndRefreshesAtFirstEnd() throws {
-        let calendar = utcCalendar
+        let calendar = ClinicDate.calendar
         let database = try testDatabase()
-        let now = try instant("2026-10-02T10:30:00Z")
+        let now = try instant("2026-10-02T10:30:00+05:30")
         let patient = Patient(name: "Patient", createdDate: now)
         let appointment = try AppointmentRecord.persisted(
             id: UUID(), patientID: patient.id, start: now, durationMinutes: 60, status: .scheduled,
@@ -98,15 +98,11 @@ struct MixedScheduleTests {
             try PatientRecord.insert { PatientRecord(patient) }.execute(db)
             try AppointmentRecord.insert { appointment }.execute(db)
         }
-        let repository = withDependencies {
-            $0.calendar = calendar
-        } operation: {
-            WidgetScheduleRepository(databaseURL: URL(filePath: "/unused"))
-        }
+        let repository = WidgetScheduleRepository(databaseURL: URL(filePath: "/unused"))
         #expect(try repository.snapshot(in: database, at: now).sections[0].items.count == 1)
         let blockStarts = [
-            "2026-10-02T10:00:00Z", "2026-10-02T10:30:00Z", "2026-10-03T09:00:00Z",
-            "2026-10-04T09:00:00Z", "2026-10-05T09:00:00Z",
+            "2026-10-02T10:00:00+05:30", "2026-10-02T10:30:00+05:30", "2026-10-03T09:00:00+05:30",
+            "2026-10-04T09:00:00+05:30", "2026-10-05T09:00:00+05:30",
         ]
         let blocks = try blockStarts.map { start in
             let date = try instant(start)
@@ -135,7 +131,8 @@ struct MixedScheduleTests {
         #expect(later.nextRefreshDate(using: calendar) == now.addingTimeInterval(60 * 60))
         let night = try repository.snapshot(in: database, at: now.addingTimeInterval(2 * 60 * 60))
         #expect(night.sections[0].items.isEmpty)
-        #expect(night.nextRefreshDate(using: calendar) == (try instant("2026-10-03T00:00:00Z")))
+        #expect(
+            night.nextRefreshDate(using: calendar) == (try instant("2026-10-03T00:00:00+05:30")))
         #expect(blocks[0].unavailableTime.displayLabel == "Blocked")
     }
 
@@ -176,52 +173,47 @@ struct MixedScheduleTests {
     }
 
     @Test func blockNavigationAndEditorHandoffsRejectOldResults() throws {
-        let date = try instant("2026-10-02T09:00:00Z")
-        try withDependencies {
-            $0.calendar = utcCalendar
-        } operation: {
-            let router = Router(selectedScheduleDate: date)
-            router.requestScheduleCreation()
-            let editor = try #require(router.activePresentation)
-            router.presentationDidAppear(editor.id)
-            router.requestScheduleCreation()
-            #expect(router.activePresentation == nil)
-            router.presentationDidDismiss(editor.id)
-            #expect(router.activePresentation != nil)
-            router.finishScheduleEditor(editor.id, date: date.addingTimeInterval(24 * 60 * 60))
-            #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: date))
-            #expect(router.activePresentation != nil)
-            let block = UnavailableTime(
-                start: date.addingTimeInterval(24 * 60 * 60), durationMinutes: 60)
-            #expect(router.open((try #require(ClinicalURL.unavailableTime(block.id).url))))
-            let first = try #require(router.unavailableTimeNavigationRequest)
-            router.openExternalSchedule(ScheduleDay(date: date, calendar: utcCalendar))
-            router.completeUnavailableTimeNavigation(first, block: block)
-            #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: date))
-            router.openUnavailableTime(block.id)
-            router.completeUnavailableTimeNavigation(
-                try #require(router.unavailableTimeNavigationRequest), block: block)
-            #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: block.start))
-            #expect(router.activePresentation == nil)
-            router.openUnavailableTime(UUID())
-            router.completeUnavailableTimeNavigation(
-                try #require(router.unavailableTimeNavigationRequest), block: nil)
-            #expect(router.navigationErrorMessage != nil)
-            #expect(
-                ClinicalURL((try #require(ClinicalURL.unavailableTime(block.id).url)))
-                    == .unavailableTime(block.id))
-            #expect(
-                ClinicalURL(try #require(URL(string: "clinical://unavailable-times/invalid")))
-                    == nil)
-        }
+        let date = try instant("2026-10-02T09:00:00+05:30")
+        let router = Router(selectedScheduleDate: date)
+        router.requestScheduleCreation()
+        let editor = try #require(router.activePresentation)
+        router.presentationDidAppear(editor.id)
+        router.requestScheduleCreation()
+        #expect(router.activePresentation == nil)
+        router.presentationDidDismiss(editor.id)
+        #expect(router.activePresentation != nil)
+        router.finishScheduleEditor(editor.id, date: date.addingTimeInterval(24 * 60 * 60))
+        #expect(router.selectedScheduleDate == ClinicDate.day(date))
+        #expect(router.activePresentation != nil)
+        let block = UnavailableTime(
+            start: date.addingTimeInterval(24 * 60 * 60), durationMinutes: 60)
+        #expect(router.open((try #require(ClinicalURL.unavailableTime(block.id).url))))
+        let first = try #require(router.unavailableTimeNavigationRequest)
+        router.openExternalSchedule(ScheduleDay(date: date, calendar: ClinicDate.calendar))
+        router.completeUnavailableTimeNavigation(first, block: block)
+        #expect(router.selectedScheduleDate == ClinicDate.day(date))
+        router.openUnavailableTime(block.id)
+        router.completeUnavailableTimeNavigation(
+            try #require(router.unavailableTimeNavigationRequest), block: block)
+        #expect(router.selectedScheduleDate == ClinicDate.day(block.start))
+        #expect(router.activePresentation == nil)
+        router.openUnavailableTime(UUID())
+        router.completeUnavailableTimeNavigation(
+            try #require(router.unavailableTimeNavigationRequest), block: nil)
+        #expect(router.navigationErrorMessage != nil)
+        #expect(
+            ClinicalURL((try #require(ClinicalURL.unavailableTime(block.id).url)))
+                == .unavailableTime(block.id))
+        #expect(
+            ClinicalURL(try #require(URL(string: "clinical://unavailable-times/invalid")))
+                == nil)
     }
 
     @Test func observedBlocksPageWithoutChangingBookingAvailability() async throws {
         let database = try testDatabase()
-        let date = try instant("2026-10-02T09:00:00Z")
+        let date = try instant("2026-10-02T09:00:00+05:30")
         try await withDependencies {
             $0.defaultDatabase = database
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             let model = ScheduleModel()
@@ -303,12 +295,11 @@ struct MixedScheduleTests {
 
     @Test func calendarBlockURLLoadsItsStoredDate() async throws {
         let database = try testDatabase()
-        let start = try instant("2026-10-04T14:00:00Z")
+        let start = try instant("2026-10-04T14:00:00+05:30")
         let block = UnavailableTimeRecord(
             id: UUID(), start: start, durationMinutes: 60, createdAt: start, updatedAt: start)
         try await database.write { db in try UnavailableTimeRecord.insert { block }.execute(db) }
         try await withDependencies {
-            $0.calendar = utcCalendar
             $0.defaultDatabase = database
         } operation: {
             let router = Router()
@@ -316,7 +307,7 @@ struct MixedScheduleTests {
             router.openUnavailableTime(block.id)
             let request = try #require(router.unavailableTimeNavigationRequest)
             await router.resolveUnavailableTime(request)
-            #expect(router.selectedScheduleDate == utcCalendar.startOfDay(for: block.start))
+            #expect(router.selectedScheduleDate == ClinicDate.day(block.start))
             #expect(router.activePresentation == nil)
             router.openUnavailableTime(UUID())
             await router.resolveUnavailableTime(
@@ -325,10 +316,5 @@ struct MixedScheduleTests {
         }
     }
 
-    private var utcCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .gmt
-        return calendar
-    }
     private func instant(_ string: String) throws -> Date { try Date(string, strategy: .iso8601) }
 }

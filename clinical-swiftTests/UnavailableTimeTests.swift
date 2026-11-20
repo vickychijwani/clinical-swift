@@ -12,10 +12,9 @@ import Testing
 struct UnavailableTimeTests {
     @Test func createEditDeleteKeepIdentityAndTimestamps() async throws {
         let database = try testDatabase()
-        let date = try instant("2026-10-02T09:00:00Z")
+        let date = try instant("2026-10-02T09:00:00+05:30")
         try await withDependencies {
             $0.defaultDatabase = database
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             var finishedDates: [Date] = []
@@ -74,20 +73,19 @@ struct UnavailableTimeTests {
 
     @Test func validationAllowsBreaksAndRejectsInvalidIntervals() async throws {
         let database = try testDatabase()
-        let date = try instant("2026-10-02T09:00:00Z")
+        let date = try instant("2026-10-02T09:00:00+05:30")
         try await withDependencies {
             $0.defaultDatabase = database
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             let (session, model) = try creatingSession(start: date, durationMinutes: 30) { _ in }
-            model.draft.start = try instant("2026-10-02T13:00:00Z")
+            model.draft.start = try instant("2026-10-02T13:00:00+05:30")
             model.draft.durationMinutes = 120
             try model.draft.validate()
             #expect(await session.save())
             for (start, duration) in [
-                ("2026-10-02T08:59:00Z", 30), ("2026-10-02T20:30:00Z", 60),
-                ("2026-10-02T09:00:00Z", 0),
+                ("2026-10-02T08:59:00+05:30", 30), ("2026-10-02T20:30:00+05:30", 60),
+                ("2026-10-02T09:00:00+05:30", 0),
             ] {
                 let invalid = UnavailableTimeDraft(
                     label: "", start: try instant(start), durationMinutes: duration)
@@ -98,10 +96,9 @@ struct UnavailableTimeTests {
 
     @Test func missingRowsAndWriteFailuresKeepEditorOpen() async throws {
         let database = try testDatabase()
-        let start = try instant("2026-10-02T14:07:00Z")
+        let start = try instant("2026-10-02T14:07:00+05:30")
         try await withDependencies {
             $0.defaultDatabase = database
-            $0.calendar = utcCalendar
             $0.date.now = start
         } operation: {
             let block = UnavailableTime(start: start, durationMinutes: 45)
@@ -208,7 +205,7 @@ struct UnavailableTimeTests {
     func competingActionsAreRejectedWhileWriteIsPending(editing: Bool, deleting: Bool) async throws
     {
         let database = try testDatabase()
-        let date = try instant("2026-10-02T09:00:00Z")
+        let date = try instant("2026-10-02T09:00:00+05:30")
         let block = UnavailableTime(label: "Travel", start: date, durationMinutes: 60)
         let gate = WriteGate()
         defer { gate.release() }
@@ -235,7 +232,6 @@ struct UnavailableTimeTests {
         }
         try await withDependencies {
             $0.defaultDatabase = database
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             var finishedDates: [Date] = []
@@ -263,7 +259,7 @@ struct UnavailableTimeTests {
 
             gate.release()
             #expect(await first.value)
-            #expect(finishedDates == [deleting ? utcCalendar.startOfDay(for: date) : date])
+            #expect(finishedDates == [deleting ? ClinicDate.day(date) : date])
             #expect(session.didFinish)
             #expect(!session.isWorking)
             let recordID = model.blockID
@@ -276,10 +272,9 @@ struct UnavailableTimeTests {
 
     @Test func failedEditAndDeleteKeepTheRowAndItsDeliveryRevision() async throws {
         let database = try testDatabase()
-        let date = try instant("2026-10-02T09:00:00Z")
+        let date = try instant("2026-10-02T09:00:00+05:30")
         try await withDependencies {
             $0.defaultDatabase = database
-            $0.calendar = utcCalendar
             $0.date.now = date
         } operation: {
             let (create, createModel) = try creatingSession(start: date, durationMinutes: 30) { _ in
@@ -383,12 +378,6 @@ struct UnavailableTimeTests {
         }
 
         private struct Timeout: Error {}
-    }
-
-    private var utcCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
-        return calendar
     }
 
     private func instant(_ string: String) throws -> Date {

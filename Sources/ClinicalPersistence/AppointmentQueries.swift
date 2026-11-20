@@ -28,7 +28,7 @@ public nonisolated struct AppointmentPatientSelection: Identifiable, Sendable {
 
 public nonisolated func querySchedule(
     selectedDate: Date,
-    calendar: Calendar = .autoupdatingCurrent
+    calendar: Calendar = ClinicDate.calendar
 ) -> some Statement<AppointmentPatientSelection> & Sendable {
     let start = selectedDate.startOfDay(using: calendar)
     let endExclusive = calendar.date(byAdding: .day, value: 1, to: start) ?? start
@@ -40,7 +40,7 @@ public nonisolated func queryScheduleWindow(
     centeredOn selectedDate: Date,
     dayRadius: Int
 ) -> some Statement<AppointmentPatientSelection> & Sendable {
-    let calendar = Calendar.autoupdatingCurrent
+    let calendar = ClinicDate.calendar
     let dayRadius = max(dayRadius, 1)
     let center = selectedDate.startOfDay(using: calendar)
     let start = center.date(byAddingDays: -dayRadius, using: calendar)

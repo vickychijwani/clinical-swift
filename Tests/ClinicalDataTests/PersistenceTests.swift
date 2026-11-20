@@ -160,7 +160,7 @@ struct PersistenceTests {
 
     @Test func earliestVisibleAppointmentIncludesCompletedAndIgnoresCancelledRows() throws {
         let database = try testDatabase()
-        let calendar = Calendar.autoupdatingCurrent
+        let calendar = ClinicDate.calendar
         let patientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000007"))
         let otherPatientID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000008"))
         let cancelledID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000009"))

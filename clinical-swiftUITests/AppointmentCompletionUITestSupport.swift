@@ -6,6 +6,7 @@ enum AppointmentCompletionUITestSupport {
 
     static func launch(_ arguments: [String] = [], fromSchedule: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchEnvironment["TZ"] = "America/Los_Angeles"
         app.launchArguments = ["--ui-testing-appointment-completion"] + arguments
         if !fromSchedule { app.launchArguments.append("--completion-open-form") }
         app.launch()

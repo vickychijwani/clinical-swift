@@ -7,7 +7,7 @@ import Testing
 
 struct PatientItemViewMetadataTests {
     @Test func buildsNamedPatientItemViewMetadataWithoutCreatedDateFallback() throws {
-        let calendar = fixedCalendar()
+        let calendar = ClinicDate.calendar
         let dob = try #require(calendar.date(1990, 6, 10))
         let createdDate = try #require(calendar.date(2026, 5, 28))
         let referenceDate = try #require(calendar.date(2026, 6, 27))
@@ -20,8 +20,6 @@ struct PatientItemViewMetadataTests {
 
         let (metadata, demographics) = withDependencies {
             $0.date.now = referenceDate
-            $0.calendar = calendar
-            $0.locale = Locale(identifier: "en_US_POSIX")
         } operation: {
             (
                 PatientItemViewMetadata.metadata(
@@ -38,7 +36,7 @@ struct PatientItemViewMetadataTests {
     }
 
     @Test func unknownPatientUsesCreatedDateWhenNextAppointmentIsMissing() throws {
-        let calendar = fixedCalendar()
+        let calendar = ClinicDate.calendar
         let dob = try #require(calendar.date(1990, 6, 10))
         let createdDate = try #require(calendar.date(2026, 5, 28))
         let referenceDate = try #require(calendar.date(2026, 6, 27))
@@ -52,8 +50,6 @@ struct PatientItemViewMetadataTests {
 
         let metadata = withDependencies {
             $0.date.now = referenceDate
-            $0.calendar = calendar
-            $0.locale = Locale(identifier: "en_US_POSIX")
         } operation: {
             PatientItemViewMetadata.metadata(
                 for: PatientDetails(patient: patient, nextAppointmentDate: nil)
@@ -68,7 +64,7 @@ struct PatientItemViewMetadataTests {
     }
 
     @Test func nextAppointmentTakesPriorityOverUnknownCreatedDate() throws {
-        let calendar = fixedCalendar()
+        let calendar = ClinicDate.calendar
         let nextAppointment = try #require(calendar.date(2026, 6, 11, hour: 18))
         let createdDate = try #require(calendar.date(2026, 5, 28))
         let referenceDate = try #require(calendar.date(2026, 6, 27))
@@ -80,8 +76,6 @@ struct PatientItemViewMetadataTests {
 
         let metadata = withDependencies {
             $0.date.now = referenceDate
-            $0.calendar = calendar
-            $0.locale = Locale(identifier: "en_US_POSIX")
         } operation: {
             PatientItemViewMetadata.metadata(
                 for: PatientDetails(patient: patient, nextAppointmentDate: nextAppointment)
@@ -91,12 +85,5 @@ struct PatientItemViewMetadataTests {
         #expect(metadata.parts.count == 2)
         #expect(metadata.parts[0] == "+91 98201 44532")
         #expect(metadata.parts[1].hasPrefix("Next"))
-    }
-
-    private func fixedCalendar() -> Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = Locale(identifier: "en_US_POSIX")
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
-        return calendar
     }
 }

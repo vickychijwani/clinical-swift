@@ -1,4 +1,5 @@
 import AppIntents
+import ClinicalModels
 import GRDB
 import OSLog
 import SQLiteData
@@ -65,6 +66,10 @@ struct ClinicalApp: App {
                     #endif
                 }
             }
+            .environment(\.timeZone, ClinicDate.timeZone)
+            .environment(\.calendar, ClinicDate.calendar)
+            .environment(\.locale, ClinicDate.locale)
+            .modifier(ClinicDayModifier())
             .task {
                 await backups?.opportunity()
             }

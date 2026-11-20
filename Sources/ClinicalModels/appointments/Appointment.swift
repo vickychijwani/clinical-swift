@@ -1,9 +1,6 @@
-import Dependencies
 import Foundation
 
 public struct Appointment: Identifiable, Sendable {
-    @Dependency(\.calendar) private var calendar
-
     public let id: UUID
     public let patientName: String
     public let start: Date
@@ -11,10 +8,10 @@ public struct Appointment: Identifiable, Sendable {
     public let status: Status
 
     public var end: Date {
-        end(using: calendar)
+        end(using: ClinicDate.calendar)
     }
 
-    public func end(using calendar: Calendar) -> Date {
+    public func end(using calendar: Calendar = ClinicDate.calendar) -> Date {
         calendar.date(byAdding: .minute, value: durationMinutes, to: start) ?? start
     }
 

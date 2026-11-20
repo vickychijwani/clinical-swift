@@ -16,7 +16,7 @@ struct CalendarDayPager<Content: View>: View {
 
     init(
         selectedDate: Binding<Date>,
-        calendar: Calendar = .autoupdatingCurrent,
+        calendar: Calendar = ClinicDate.calendar,
         dayRadius: Int,
         isPagingEnabled: Bool = true,
         @ViewBuilder content: @escaping (Date) -> Content

@@ -20,7 +20,7 @@ public nonisolated struct AccountEntryRecord: Identifiable, Sendable {
         self.id = entry.id
         self.kind = entry.kind.rawValue
         self.amount = entry.amount
-        self.entryDate = FinancialDate.day(entry.entryDate)
+        self.entryDate = ClinicDate.day(entry.entryDate)
         self.patientID = entry.patientID
         self.appointmentID = entry.appointmentID
         self.category = entry.category?.rawValue

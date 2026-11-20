@@ -18,8 +18,8 @@ Allow temporary credit while applying related changes together. Historical
 balances can be negative because a receipt can precede its charge. Backdated
 changes alter past reports; creation timestamps are not an edit audit trail.
 
-Financial days use the Gregorian calendar in Asia/Kolkata, regardless of device
-settings. A balance through a date includes that whole clinic day. Corrections
+Financial days follow the [clinic date rule](architecture.md#clinic-date-and-locale).
+A balance through a date includes that whole clinic day. Corrections
 must use current history, not screen totals. Reject arithmetic overflow.
 
 Keep linked charges on cancellation. Financial history prevents patient deletion,

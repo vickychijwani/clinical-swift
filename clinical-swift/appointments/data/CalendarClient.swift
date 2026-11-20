@@ -1,3 +1,4 @@
+import ClinicalModels
 import EventKit
 import Foundation
 
@@ -130,7 +131,7 @@ private actor EventKitAdapter {
         event.startDate = payload.start
         event.endDate = payload.end
         event.isAllDay = false
-        event.timeZone = .autoupdatingCurrent
+        event.timeZone = ClinicDate.timeZone
         event.notes = payload.notes
         event.url = payload.url
         try eventStore.save(event, span: .thisEvent)

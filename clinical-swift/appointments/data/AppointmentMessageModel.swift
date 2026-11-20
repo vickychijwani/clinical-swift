@@ -7,7 +7,6 @@ import MessageUI
 final class AppointmentMessageModel {
     @ObservationIgnored @Dependency(\.appointmentMessagingClient) private var messagingClient
     @ObservationIgnored @Dependency(\.appointmentContactClient) private var contactClient
-    @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.date.now) private var now
 
     let details: AppointmentDetails
@@ -76,7 +75,7 @@ final class AppointmentMessageModel {
             details: details,
             includesLocation: includesLocation,
             now: now,
-            calendar: calendar
+            calendar: ClinicDate.calendar
         )
         .message()
     }
