@@ -4,150 +4,6 @@ import Foundation
 
 /// Layout Engine for Timeline view
 /// Must remain independent of SwiftUI
-
-struct TimelineMetrics {
-    /// Height of 1 hour in pixels
-    let hourHeight: CGFloat
-
-    /// Width of time labels in left column of timeline
-    let timeColumnWidth: CGFloat
-
-    /// Padding above timeline
-    let verticalPadding: CGFloat
-
-    /// Margin left/right of appointment card, relative to hour marker lines
-    let horizontalCardMargin: CGFloat
-
-    /// Margin above/below an appointment card, to separate edges clearly from hour markers
-    let verticalCardMargin: CGFloat
-
-    /// Horizontal spacing between appointments that overlap in time
-    let overlapColumnSpacing: CGFloat
-
-    /// Height used to represent the clinic break when it is compact
-    let compactBreakHeight: CGFloat
-
-    var contentLeadingInset: CGFloat {
-        timeColumnWidth + horizontalCardMargin + 4
-    }
-
-    func contentWidth(availableWidth: CGFloat) -> CGFloat {
-        max(
-            availableWidth
-                - timeColumnWidth
-                - horizontalCardMargin * 2, 0)
-    }
-
-    /// Number of vertical pixels representing 1 minute
-    fileprivate var pixelsPerMinute: CGFloat {
-        hourHeight / 60
-    }
-}
-
-struct TimelineScale {
-    enum BreakPresentation {
-        case compact
-        case expanded
-    }
-
-    let breakPresentation: BreakPresentation
-
-    init(items: [TimelineItem], breakPresentation: BreakPresentation? = nil) {
-        if let breakPresentation {
-            self.breakPresentation = breakPresentation
-            return
-        }
-        self.breakPresentation =
-            items.contains { item in
-                (Bitehaus.break.start..<Bitehaus.break.end).contains(
-                    item.start.timeOfDay
-                )
-            } ? .expanded : .compact
-    }
-
-    var isBreakExpanded: Bool {
-        breakPresentation == .expanded
-    }
-
-    var breakHeight: CGFloat {
-        switch breakPresentation {
-        case .compact:
-            Timeline.metrics.compactBreakHeight
-        case .expanded:
-            (Bitehaus.break.start..<Bitehaus.break.end).px
-        }
-    }
-
-    var totalHeight: CGFloat {
-        yOffset(for: Bitehaus.closing)
-    }
-
-    var hourMarkers: [TimeOfDay] {
-        (Bitehaus.opening.hour...Bitehaus.closing.hour)
-            .map { TimeOfDay($0, 0) }
-            .filter { time in
-                isBreakExpanded
-                    || time <= Bitehaus.break.start
-                    || time >= Bitehaus.break.end
-            }
-    }
-
-    /// Content coordinate excluding Timeline's outer vertical padding.
-    func yOffset(for proposedTime: TimeOfDay) -> CGFloat {
-        let time = min(max(proposedTime, Bitehaus.opening), Bitehaus.closing)
-        let firstSegmentHeight = Bitehaus.break.start.minutes(since: Bitehaus.opening).px
-
-        if time <= Bitehaus.break.start {
-            return time.minutes(since: Bitehaus.opening).px
-        }
-
-        if time < Bitehaus.break.end {
-            let elapsedBreakMinutes = time.minutes(since: Bitehaus.break.start)
-            let breakDurationMinutes = Bitehaus.break.end.minutes(since: Bitehaus.break.start)
-            let breakProgress = CGFloat(elapsedBreakMinutes) / CGFloat(breakDurationMinutes)
-
-            return firstSegmentHeight + breakHeight * breakProgress
-        }
-
-        return firstSegmentHeight
-            + breakHeight
-            + time.minutes(since: Bitehaus.break.end).px
-    }
-
-    func height(from start: TimeOfDay, to end: TimeOfDay) -> CGFloat {
-        max(yOffset(for: end) - yOffset(for: start), 0)
-    }
-
-    /// Invert the same piecewise scale used to draw cards, including compact break minutes.
-    func time(at proposedY: CGFloat) -> TimeOfDay {
-        let y = min(max(proposedY, 0), totalHeight)
-        let breakY = yOffset(for: Bitehaus.break.start)
-        let minutes: CGFloat
-        if y <= breakY {
-            minutes = y / Timeline.metrics.hourHeight * 60
-        } else if y < breakY + breakHeight {
-            minutes =
-                CGFloat(Bitehaus.break.start.minutes(since: Bitehaus.opening))
-                + (y - breakY) / breakHeight
-                * CGFloat(Bitehaus.break.end.minutes(since: Bitehaus.break.start))
-        } else {
-            minutes =
-                CGFloat(Bitehaus.break.end.minutes(since: Bitehaus.opening))
-                + (y - breakY - breakHeight) / Timeline.metrics.hourHeight * 60
-        }
-        return Bitehaus.opening + Int(minutes.rounded())
-    }
-
-    func showsTime(_ time: TimeOfDay) -> Bool {
-        guard (Bitehaus.opening..<Bitehaus.closing).contains(time) else {
-            return false
-        }
-
-        return isBreakExpanded
-            || !(Bitehaus.break.start..<Bitehaus.break.end).contains(time)
-    }
-}
-
 struct TimelineLayoutEngine {
     let availableWidth: CGFloat
     let scale: TimelineScale
@@ -185,7 +41,7 @@ struct TimelineLayoutEngine {
         }
         for item in floating {
             let rect = CGRect(
-                x: Timeline.metrics.contentLeadingInset,
+                x: scale.metrics.contentLeadingInset,
                 y: cardY(for: item),
                 width: cardWidth,
                 height: cardHeight(for: item)
@@ -218,7 +74,7 @@ struct TimelineLayoutEngine {
         guard group.count > 1 else {
             return group.enumerated().map { offset, item in
                 let rect = CGRect(
-                    x: Timeline.metrics.contentLeadingInset,
+                    x: scale.metrics.contentLeadingInset,
                     y: cardY(for: item),
                     width: cardWidth,
                     height: cardHeight(for: item)
@@ -291,8 +147,8 @@ struct TimelineLayoutEngine {
         group: [TimelineItem], startingZIndex: Int
     ) -> [TimelineItemLayoutInfo] {
         let bounds = HorizontalSpan(
-            min: Timeline.metrics.contentLeadingInset,
-            max: Timeline.metrics.contentLeadingInset + cardWidth
+            min: scale.metrics.contentLeadingInset,
+            max: scale.metrics.contentLeadingInset + cardWidth
         )
         guard bounds.width > 0 else {
             return fallbackNonOverlappingColumns(group: group, startingZIndex: startingZIndex)
@@ -539,7 +395,8 @@ struct TimelineLayoutEngine {
                         nextFairWidth >= minimumWidth
                     {
                         if bestCandidate == nil
-                            || requiredAdvance < (bestCandidate?.advance ?? .infinity) - Self.epsilon
+                            || requiredAdvance < (bestCandidate?.advance ?? .infinity)
+                                - Self.epsilon
                         {
                             bestCandidate = (candidate, measured, requiredAdvance)
                         }
@@ -823,7 +680,7 @@ struct TimelineLayoutEngine {
     }
 
     private var cardWidth: CGFloat {
-        Timeline.metrics.contentWidth(availableWidth: availableWidth)
+        scale.metrics.contentWidth(availableWidth: availableWidth)
     }
 
     private func cardWidth(columnCount: Int) -> CGFloat {
@@ -831,7 +688,7 @@ struct TimelineLayoutEngine {
             return cardWidth
         }
 
-        let spacing = Timeline.metrics.overlapColumnSpacing * CGFloat(columnCount - 1)
+        let spacing = scale.metrics.overlapColumnSpacing * CGFloat(columnCount - 1)
         return max((cardWidth - spacing) / CGFloat(columnCount), 0)
     }
 
@@ -842,19 +699,19 @@ struct TimelineLayoutEngine {
                 to: item.start.timeOfDay + item.durationMinutes
             )
                 // 2x to account for top and bottom clearance both
-                - Timeline.metrics.verticalCardMargin * 2,
+                - scale.metrics.verticalCardMargin * 2,
             0
         )
     }
 
     private func cardX(column: Int, columnWidth: CGFloat) -> CGFloat {
-        Timeline.metrics.contentLeadingInset
-            + CGFloat(column) * (columnWidth + Timeline.metrics.overlapColumnSpacing)
+        scale.metrics.contentLeadingInset
+            + CGFloat(column) * (columnWidth + scale.metrics.overlapColumnSpacing)
     }
 
     private func cardY(for item: TimelineItem) -> CGFloat {
         return scale.yOffset(for: item.start.timeOfDay)
-            + Timeline.metrics.verticalCardMargin
+            + scale.metrics.verticalCardMargin
     }
 
     private func overlappingGroups(
@@ -972,111 +829,6 @@ struct TimelineLayoutEngine {
     private static let epsilon: CGFloat = 0.001
 }
 
-/// Exact 2D geometric verifier enforcing content visibility and continuous time-edge visibility.
-nonisolated enum TimelineLayoutValidator {
-    enum Violation: Equatable, CustomStringConvertible, Sendable {
-        case outOfBounds(TimelineItem.ID)
-        case nonPositiveWidth(TimelineItem.ID)
-        case contentObscured(covered: TimelineItem.ID, by: TimelineItem.ID)
-        case timeEdgeObscured(covered: TimelineItem.ID, by: TimelineItem.ID)
-        case contentFencedOut(TimelineItem.ID)
-
-        var description: String {
-            switch self {
-            case .outOfBounds(let id):
-                "Card \(id.sortKey) extends outside timeline bounds"
-            case .nonPositiveWidth(let id):
-                "Card \(id.sortKey) has non-positive width"
-            case .contentObscured(let covered, let by):
-                "Card \(covered.sortKey) content is obscured by \(by.sortKey)"
-            case .timeEdgeObscured(let covered, let by):
-                "Card \(covered.sortKey) continuous time-edge strip is obscured by \(by.sortKey)"
-            case .contentFencedOut(let id):
-                "Card \(id.sortKey) has no remaining content width after trailing inset"
-            }
-        }
-    }
-
-    private static let epsilon: CGFloat = 0.01
-
-    static func validate(
-        entries: [ValidatedLayoutEntry],
-        bounds: HorizontalSpan,
-        stripWidth: CGFloat
-    ) -> [Violation] {
-        let stripWidth = max(stripWidth, 0)
-        let sorted = entries.sorted { $0.layoutInfo.zIndex < $1.layoutInfo.zIndex }
-        var violations: [Violation] = []
-
-        for index in sorted.indices {
-            let lower = sorted[index]
-            let lowerRect = lower.layoutInfo.rect
-
-            if lowerRect.width <= epsilon {
-                violations.append(.nonPositiveWidth(lower.layoutInfo.id))
-                continue
-            }
-            if lowerRect.minX < bounds.min - epsilon || lowerRect.maxX > bounds.max + epsilon {
-                violations.append(.outOfBounds(lower.layoutInfo.id))
-            }
-            if lowerRect.width - lower.layoutInfo.contentTrailingInset <= epsilon {
-                violations.append(.contentFencedOut(lower.layoutInfo.id))
-            }
-
-            let requiredStrip = min(stripWidth, lowerRect.width)
-            let leftStrip = CGRect(
-                x: lowerRect.minX,
-                y: lowerRect.minY,
-                width: requiredStrip,
-                height: lowerRect.height
-            )
-
-            for upperIndex in (index + 1)..<sorted.count {
-                let upper = sorted[upperIndex]
-                guard upper.layoutInfo.zIndex > lower.layoutInfo.zIndex else { continue }
-
-                let upperRect = upper.layoutInfo.rect
-                if intersects(lower.contentRect, upperRect) {
-                    violations.append(
-                        .contentObscured(
-                            covered: lower.layoutInfo.id,
-                            by: upper.layoutInfo.id
-                        )
-                    )
-                }
-
-                if intersects(leftStrip, upperRect) {
-                    violations.append(
-                        .timeEdgeObscured(
-                            covered: lower.layoutInfo.id,
-                            by: upper.layoutInfo.id
-                        )
-                    )
-                }
-            }
-        }
-
-        return violations
-    }
-
-    private static func intersects(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
-        let overlap = lhs.intersection(rhs)
-        return !overlap.isNull && overlap.width > epsilon && overlap.height > epsilon
-    }
-}
-
-nonisolated struct HorizontalSpan: Equatable, Sendable {
-    let min: CGFloat
-    let max: CGFloat
-
-    var width: CGFloat { Swift.max(max - min, 0) }
-}
-
-struct ValidatedLayoutEntry {
-    let layoutInfo: TimelineItemLayoutInfo
-    let contentRect: CGRect
-}
-
 struct TimelineItemLayoutInfo: Identifiable {
     let id: TimelineItem.ID
     let item: TimelineItem
@@ -1131,18 +883,4 @@ private struct PlacedItem {
 private struct TimelineItemColumnAssignment {
     let item: TimelineItem
     let column: Int
-}
-
-extension Minutes {
-    var px: CGFloat {
-        CGFloat(self) * Timeline.metrics.pixelsPerMinute
-    }
-}
-
-extension ClosedRange where Bound == TimeOfDay {
-    var px: CGFloat { self.minutes.px }
-}
-
-extension Range where Bound == TimeOfDay {
-    var px: CGFloat { self.minutes.px }
 }
