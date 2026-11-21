@@ -30,6 +30,7 @@ struct AppointmentDetailsView: View {
                 if canRender(details) {
                     AppointmentDetailsContent(
                         model: model,
+                        presentationID: presentationID,
                         onComplete: {
                             router.beginAppointmentCompletion(
                                 details, visitID: visitID, presentationID: presentationID)
@@ -49,6 +50,7 @@ struct AppointmentDetailsView: View {
             } else if hasResolvedInitialDetails {
                 AppointmentDetailsContent(
                     model: model,
+                    presentationID: presentationID,
                     onSelectPatient: onSelectPatient
                 )
             } else {
@@ -115,15 +117,18 @@ private struct AppointmentDetailsContent: View {
 
     @Bindable var model: AppointmentDetailsModel
 
+    let presentationID: DetailsPresentation.ID
     let onSelectPatient: @MainActor @Sendable (Patient.ID) -> Void
     var onComplete: @MainActor () -> Void = {}
 
     init(
         model: AppointmentDetailsModel,
+        presentationID: DetailsPresentation.ID,
         onComplete: @escaping @MainActor () -> Void = {},
         onSelectPatient: @escaping @MainActor @Sendable (Patient.ID) -> Void
     ) {
         self.model = model
+        self.presentationID = presentationID
         self.onComplete = onComplete
         self.onSelectPatient = onSelectPatient
     }
@@ -171,7 +176,7 @@ private struct AppointmentDetailsContent: View {
 
     private func performStatusUpdate(_ status: Appointment.Status) async {
         if await model.updateStatus(to: status) {
-            router.dismissDetails()
+            router.dismissDetails(presentationID: presentationID)
         }
     }
 }
@@ -226,7 +231,8 @@ private struct AppointmentDetailsActionsView: View {
     }
     NavigationStack {
         AppointmentDetailsContent(
-            model: AppointmentDetailsModel(appointmentID: sampleAppointments[0].id)
+            model: AppointmentDetailsModel(appointmentID: sampleAppointments[0].id),
+            presentationID: UUID()
         ) { _ in }
     }
     .environment(Router())
