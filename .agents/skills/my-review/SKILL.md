@@ -32,6 +32,7 @@ Evaluate tests against [testing.md](../../../docs/testing.md).
 - Post one GitHub review on the pull request using the COMMENT event. Never use APPROVE or REQUEST_CHANGES.
 - Post as your assigned GitHub App identity (clinical-antigravity[bot] or clinical-codex[bot]).
 - Start the top-level review body with a short, honest summary of what looks solid and what the inline comments cover.
+- End the top-level review body (not inline comments) with a blank line and the footer `<sub><Model Display Name> · <effort></sub>` using the model and effort from your prompt.
 - If you find no actionable issues after checking all four perspectives, post one COMMENT review with a brief summary of what you checked and state that you found no issues.
 - Do NOT post:
   - Speculative edge cases with no realistic trigger in this app.
