@@ -17,17 +17,17 @@ struct TimelineHourGrid: View {
                 Text(time.formatted(.hourOnly))
                     .font(.caption)
                     .foregroundStyle(AppColor.hour)
-                    .position(x: Timeline.metrics.timeColumnWidth - 8, y: y)
+                    .position(x: scale.metrics.timeColumnWidth - 8, y: y)
             }
         }
         .allowsHitTesting(false)
     }
 
     private var contentWidth: CGFloat {
-        Timeline.metrics.contentWidth(availableWidth: availableWidth)
+        scale.metrics.contentWidth(availableWidth: availableWidth)
     }
 
     private var contentCenterX: CGFloat {
-        Timeline.metrics.contentLeadingInset + contentWidth / 2
+        scale.metrics.contentLeadingInset + contentWidth / 2
     }
 }

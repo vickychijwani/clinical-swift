@@ -27,15 +27,7 @@ struct Timeline: View {
     var isWorking = false
     @State private var lastDragEnd: ContinuousClock.Instant?
 
-    static let metrics = TimelineMetrics(
-        hourHeight: 60,
-        timeColumnWidth: 40,
-        verticalPadding: 8,
-        horizontalCardMargin: 12,
-        verticalCardMargin: 0,
-        overlapColumnSpacing: 0,
-        compactBreakHeight: 32
-    )
+    static let metrics = TimelineMetrics.standard
 
     var body: some View {
         Group {
@@ -129,7 +121,7 @@ struct Timeline: View {
             }
         }
         .frame(height: scale.totalHeight)
-        .padding(.vertical, Timeline.metrics.verticalPadding)
+        .padding(.vertical, scale.metrics.verticalPadding)
     }
 
     private func isDraft(_ item: TimelineItem) -> Bool {

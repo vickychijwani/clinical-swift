@@ -658,6 +658,112 @@ struct TimelineLayoutTests {
         #expect(expandedScale.showsTime(TimeOfDay(14, 30)))
     }
 
+    @Test func timelineScaleUsesInjectedCustomMetrics() {
+        let customMetrics = TimelineMetrics(
+            hourHeight: 120,
+            timeColumnWidth: 50,
+            verticalPadding: 12,
+            horizontalCardMargin: 10,
+            verticalCardMargin: 4,
+            overlapColumnSpacing: 6,
+            compactBreakHeight: 48
+        )
+        let compactScale = TimelineScale(items: [], metrics: customMetrics)
+        let expandedScale = TimelineScale(
+            items: [appointment(id: UUID(), startHour: 14, startMinute: 0, duration: 30)],
+            metrics: customMetrics
+        )
+
+        #expect(customMetrics.height(for: 30) == 60)
+        #expect(customMetrics.height(for: TimeOfDay(9, 0)..<TimeOfDay(10, 30)) == 180)
+        #expect(customMetrics.height(for: TimeOfDay(9, 0)...TimeOfDay(10, 30)) == 180)
+
+        #expect(compactScale.breakHeight == 48)
+        #expect(compactScale.yOffset(for: TimeOfDay(10, 30)) == 180)
+        #expect(compactScale.yOffset(for: TimeOfDay(14, 30)) == 504)
+        #expect(compactScale.yOffset(for: TimeOfDay(17, 30)) == 708)
+        #expect(compactScale.totalHeight == 1128)
+        #expect(compactScale.time(at: 180) == TimeOfDay(10, 30))
+        #expect(compactScale.time(at: 504) == TimeOfDay(14, 30))
+        #expect(compactScale.time(at: 708) == TimeOfDay(17, 30))
+
+        #expect(expandedScale.breakHeight == 360)
+        #expect(expandedScale.yOffset(for: TimeOfDay(14, 30)) == 660)
+        #expect(expandedScale.totalHeight == 1440)
+        #expect(expandedScale.time(at: 660) == TimeOfDay(14, 30))
+    }
+
+    @Test func layoutEngineUsesInjectedCustomMetricsFromScale() throws {
+        let customMetrics = TimelineMetrics(
+            hourHeight: 120,
+            timeColumnWidth: 50,
+            verticalPadding: 12,
+            horizontalCardMargin: 10,
+            verticalCardMargin: 4,
+            overlapColumnSpacing: 6,
+            compactBreakHeight: 48
+        )
+        let width: CGFloat = 400
+        let expectedLeading = customMetrics.contentLeadingInset
+        let expectedWidth = customMetrics.contentWidth(availableWidth: width)
+
+        let singleID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000011"))
+        let floatingID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000012"))
+        let singleItems = [
+            appointment(id: singleID, startHour: 9, startMinute: 30, duration: 30),
+            appointment(id: floatingID, startHour: 11, startMinute: 0, duration: 30),
+        ]
+        let singleScale = TimelineScale(items: singleItems, metrics: customMetrics)
+        let singleLayouts = TimelineLayoutEngine(
+            availableWidth: width, scale: singleScale
+        ).layout(items: singleItems, floatingID: .appointment(floatingID))
+
+        let single = try layout(for: singleID, in: singleLayouts)
+        let floating = try layout(for: floatingID, in: singleLayouts)
+        #expect(single.rect.minX == expectedLeading)
+        #expect(single.rect.width == expectedWidth)
+        #expect(single.rect.minY == 64)
+        #expect(single.rect.height == 52)
+        #expect(floating.rect.minX == expectedLeading)
+        #expect(floating.rect.width == expectedWidth)
+        #expect(floating.rect.minY == 244)
+        #expect(floating.rect.height == 52)
+
+        let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000021"))
+        let secondID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000022"))
+        let overlapItems = [
+            appointment(id: firstID, name: "Anjali", startHour: 10, startMinute: 0, duration: 120),
+            appointment(id: secondID, name: "Kabir", startHour: 11, startMinute: 30, duration: 30),
+        ]
+        let overlapScale = TimelineScale(items: overlapItems, metrics: customMetrics)
+
+        let legacyLayouts = TimelineLayoutEngine(
+            availableWidth: width,
+            scale: overlapScale,
+            overlap: .init(mode: .current)
+        ).layout(items: overlapItems)
+        let legacyFirst = try layout(for: firstID, in: legacyLayouts)
+        let legacySecond = try layout(for: secondID, in: legacyLayouts)
+        let expectedColumnWidth = (expectedWidth - customMetrics.overlapColumnSpacing) / 2
+        #expect(legacyFirst.rect.minX == expectedLeading)
+        #expect(legacyFirst.rect.width == expectedColumnWidth)
+        #expect(
+            legacySecond.rect.minX
+                == expectedLeading + expectedColumnWidth + customMetrics.overlapColumnSpacing)
+
+        let cascadeLayouts = TimelineLayoutEngine(
+            availableWidth: width,
+            scale: overlapScale,
+            overlap: .init(mode: .cascade, stripWidth: 18)
+        ).layout(items: overlapItems)
+        let cascadeFirst = try layout(for: firstID, in: cascadeLayouts)
+        let cascadeSecond = try layout(for: secondID, in: cascadeLayouts)
+        #expect(cascadeFirst.rect.minX == expectedLeading)
+        #expect(cascadeFirst.rect.width == expectedWidth)
+        #expect(cascadeSecond.rect.minX == expectedLeading + 18)
+        #expect(cascadeSecond.rect.width == expectedWidth - 18)
+    }
+
     private var legacyEngine: TimelineLayoutEngine {
         TimelineLayoutEngine(
             availableWidth: availableWidth,
