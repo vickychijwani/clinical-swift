@@ -30,26 +30,24 @@ final class CalendarSyncCoordinator {
         self.contactClient = contactClient
 
         let telemetry = self.telemetry
-        observation = DatabaseRegionObservation(
-            tracking: Table("appointmentCalendarSync"), Table("unavailableTimeCalendarSync")
-        )
-        .start(
-            in: database,
-            onError: { error in
-                telemetry.log(
-                    .error,
-                    category: .calendar,
-                    name: "calendar_observation_failed",
-                    message: "Calendar sync database observation failed",
-                    error: error
-                )
-            },
-            onChange: { [weak self] _ in
-                Task { @MainActor in
-                    await self?.requestDrain()
+        observation = calendarSyncOutboxObservation()
+            .start(
+                in: database,
+                onError: { error in
+                    telemetry.log(
+                        .error,
+                        category: .calendar,
+                        name: "calendar_observation_failed",
+                        message: "Calendar sync database observation failed",
+                        error: error
+                    )
+                },
+                onChange: { [weak self] _ in
+                    Task { @MainActor in
+                        await self?.requestDrain()
+                    }
                 }
-            }
-        )
+            )
         eventChanges = Task { [weak self] in
             for await _ in NotificationCenter.default.notifications(named: .EKEventStoreChanged) {
                 guard !Task.isCancelled else { return }
@@ -129,52 +127,7 @@ final class CalendarSyncCoordinator {
     private func drainPendingRecords() async {
         let records: [CalendarSyncWork]
         do {
-            records = try await database.read { db in
-                var recoveryCutoffs: [String: Date] = [:]
-                if try db.tableExists("clinicalCalendarRecovery") {
-                    for row in try Row.fetchAll(
-                        db, sql: "SELECT source, sourceID, cutoff FROM clinicalCalendarRecovery")
-                    {
-                        let source: String = row["source"]
-                        let id: String = row["sourceID"]
-                        recoveryCutoffs[source + ":" + id] = row["cutoff"]
-                    }
-                }
-                let appointments =
-                    try AppointmentCalendarSyncRecord
-                    .where { $0.needsSync.eq(true) }
-                    .order { ($0.updatedAt.asc(), $0.appointmentID.asc()) }
-                    .fetchAll(db)
-                    .map {
-                        CalendarSyncWork(
-                            source: .appointment($0.appointmentID),
-                            link: CalendarEventLink(
-                                eventIdentifier: $0.eventIdentifier, eventStart: $0.eventStart,
-                                recoveryCutoff: recoveryCutoffs[
-                                    "appointmentCalendarSync:"
-                                        + $0.appointmentID.uuidString.lowercased()]),
-                            revision: $0.revision
-                        )
-                    }
-                let blocks =
-                    try UnavailableTimeCalendarSyncRecord
-                    .where { $0.needsSync.eq(true) }
-                    .order { ($0.updatedAt.asc(), $0.unavailableTimeID.asc()) }
-                    .fetchAll(db)
-                    .map {
-                        CalendarSyncWork(
-                            source: .unavailableTime($0.unavailableTimeID),
-                            link: CalendarEventLink(
-                                eventIdentifier: $0.eventIdentifier, eventStart: $0.eventStart,
-                                recoveryCutoff: recoveryCutoffs[
-                                    "unavailableTimeCalendarSync:"
-                                        + $0.unavailableTimeID.uuidString.lowercased()]),
-                            revision: $0.revision
-                        )
-                    }
-                // Process appointment work first. Each source keeps its pending order.
-                return appointments + blocks
-            }
+            records = try await database.fetchPendingCalendarSyncWork()
         } catch {
             telemetry.log(
                 .error,
@@ -205,8 +158,8 @@ final class CalendarSyncCoordinator {
                     name: "calendar_item_sync_failed",
                     message: "Calendar sync failed for source \(record.source.sortKey)",
                     error: error,
-                    recordID: record.source.uuid.uuidString.lowercased(),
-                    source: record.source.table
+                    recordID: record.source.id.uuidString.lowercased(),
+                    source: record.source.outboxTableName
                 )
             }
         }
@@ -241,22 +194,12 @@ final class CalendarSyncCoordinator {
             }
         }
 
-        if let cutoff = record.link.recoveryCutoff {
-            let table =
-                switch record.source {
-                case .appointment: "appointments"
-                case .unavailableTime: "unavailableTimes"
-                }
-            let sourceIsEligible = try await database.read { db in
-                try Int.fetchOne(
-                    db,
-                    sql:
-                        "SELECT julianday(start) + durationMinutes / 1440.0 >= julianday(?) FROM \(table) WHERE id = ?",
-                    arguments: [cutoff, record.source.uuid.uuidString.lowercased()])
-            }
-            let eligible =
-                sourceIsEligible.map { $0 == 1 }
-                ?? (record.link.eventStart.map { $0 >= cutoff } ?? false)
+        if let cutoff = record.recoveryCutoff {
+            let eligible = try await database.isEligibleForCalendarRecovery(
+                record.source,
+                eventStart: record.eventStart,
+                cutoff: cutoff
+            )
             if !eligible {
                 // A newer edit can move a restored row outside the fixed recovery window.
                 try await save(record.link, for: record)
@@ -267,7 +210,7 @@ final class CalendarSyncCoordinator {
         switch source {
         case .remove(let fallbackStart):
             try await calendarClient.deleteEvent(record.link, markerURL, fallbackStart)
-            try await deleteSyncRecordIfCurrent(record)
+            try await database.deleteCalendarSyncWorkIfCurrent(record)
         case .replace(let details):
             let payload = try await eventPayload(for: details)
             let newLink = try await calendarClient.replaceEvent(record.link, payload)
@@ -340,77 +283,30 @@ final class CalendarSyncCoordinator {
     }
 
     private func save(_ link: CalendarEventLink, for record: CalendarSyncWork) async throws {
-        let updatedAt = Date.now
-        try await database.write { db in
-            // SQL identifiers come only from the typed source. Values use database bindings.
-            // A stale result must retain its new event link for the next pending revision.
-            try db.execute(
-                sql: """
-                    UPDATE "\(record.source.table)"
-                    SET eventIdentifier = ?, eventStart = ?,
-                        needsSync = CASE WHEN revision = ? THEN 0 ELSE needsSync END,
-                        updatedAt = CASE WHEN revision = ? THEN ? ELSE updatedAt END
-                    WHERE "\(record.source.keyColumn)" = ?
-                    """,
-                arguments: [
-                    link.eventIdentifier, link.eventStart, record.revision,
-                    record.revision, updatedAt, record.source.uuid.uuidString.lowercased(),
-                ]
-            )
-            if try db.tableExists("clinicalCalendarRecovery") {
-                try db.execute(
-                    sql: """
-                        DELETE FROM clinicalCalendarRecovery WHERE source = ? AND sourceID = ?
-                        AND EXISTS (SELECT 1 FROM \(record.source.table) WHERE \(record.source.keyColumn) = ? AND needsSync = 0)
-                        """,
-                    arguments: [
-                        record.source.table, record.source.uuid.uuidString.lowercased(),
-                        record.source.uuid.uuidString.lowercased(),
-                    ])
-            }
-        }
-    }
-
-    private func deleteSyncRecordIfCurrent(_ record: CalendarSyncWork) async throws {
-        try await database.write { db in
-            try db.execute(
-                sql:
-                    "DELETE FROM \"\(record.source.table)\" WHERE \"\(record.source.keyColumn)\" = ? AND revision = ?",
-                arguments: [record.source.uuid.uuidString.lowercased(), record.revision]
-            )
-            if db.changesCount > 0, try db.tableExists("clinicalCalendarRecovery") {
-                try db.execute(
-                    sql: "DELETE FROM clinicalCalendarRecovery WHERE source = ? AND sourceID = ?",
-                    arguments: [record.source.table, record.source.uuid.uuidString.lowercased()])
-            }
-        }
+        try await database.saveCalendarSyncLink(
+            eventIdentifier: link.eventIdentifier,
+            eventStart: link.eventStart,
+            for: record,
+            at: .now
+        )
     }
 }
 
-nonisolated private struct CalendarSyncWork: Sendable {
-    let source: TimelineItem.ID
-    let link: CalendarEventLink
-    let revision: Int
+nonisolated extension CalendarSyncWork {
+    fileprivate var link: CalendarEventLink {
+        CalendarEventLink(
+            eventIdentifier: eventIdentifier,
+            eventStart: eventStart,
+            recoveryCutoff: recoveryCutoff
+        )
+    }
 }
 
-nonisolated extension TimelineItem.ID {
-    fileprivate var uuid: UUID {
+nonisolated extension CalendarSyncSource {
+    fileprivate var sortKey: String {
         switch self {
-        case .appointment(let id), .unavailableTime(let id): id
-        }
-    }
-
-    fileprivate var table: String {
-        switch self {
-        case .appointment: "appointmentCalendarSync"
-        case .unavailableTime: "unavailableTimeCalendarSync"
-        }
-    }
-
-    fileprivate var keyColumn: String {
-        switch self {
-        case .appointment: "appointmentID"
-        case .unavailableTime: "unavailableTimeID"
+        case .appointment(let id): "appointment-\(id.uuidString)"
+        case .unavailableTime(let id): "unavailable-time-\(id.uuidString)"
         }
     }
 
