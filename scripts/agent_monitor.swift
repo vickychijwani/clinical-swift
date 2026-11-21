@@ -306,19 +306,37 @@ private func classifyPromptPhase(_ prompt: String) -> (kind: String, phase: Stri
     if prompt.hasPrefix("Address review comments on PR #") {
         return ("review-loop", "address")
     }
-    if prompt.hasPrefix("You were tagged by ") {
-        return ("bot-trigger", "bot")
+    if prompt.hasPrefix("You were asked by ") {
+        return ("ask", "ask")
     }
     return nil
 }
 
 private func defaultPhaseLabel(_ phase: String) -> String {
-    switch phase {
-    case "review": "Review"
-    case "address": "Address"
-    case "bot": "Bot Run"
-    default: phase.capitalized
+    if phase.hasPrefix("review-") {
+        return "Review"
     }
+    switch phase {
+    case "review": return "Review"
+    case "address": return "Address"
+    case "ask": return "Ask"
+    default: return phase.capitalized
+    }
+}
+
+private func phaseSortRank(_ phase: String) -> (Int, Int, String) {
+    if phase.hasPrefix("review-") {
+        let model = String(phase.dropFirst("review-".count))
+        let order = ["sol": 0, "neon": 1, "hydrogen": 2, "opus": 3]
+        return (0, order[model] ?? 99, phase)
+    }
+    if phase == "address" {
+        return (1, 0, phase)
+    }
+    if phase == "ask" {
+        return (2, 0, phase)
+    }
+    return (3, 0, phase)
 }
 
 // MARK: - Stream Parsers
@@ -629,6 +647,11 @@ private func handleAgyStreamEvent(
     case "init":
         if let convID = stringValue(obj["conversation_id"]), !convID.isEmpty {
             acc.sessionID = convID
+        }
+        if let initObj = obj["init"] as? [String: Any],
+            let model = stringValue(initObj["model"]), !model.isEmpty
+        {
+            acc.model = model
         }
 
     case "step_update":
@@ -1382,7 +1405,7 @@ private func groupLocalPhasesIntoRuns(_ entries: [LocalPhaseEntry]) -> [MonitorR
         let createdAt = sorted.first?.startedAt ?? ""
         let updatedAt = sorted.map(\.updatedAt).max() ?? createdAt
         let isLive = sorted.contains { $0.isLive }
-        let kind = sorted.contains { $0.kind == "review-loop" } ? "review-loop" : "bot-trigger"
+        let kind = sorted.contains { $0.kind == "review-loop" } ? "review-loop" : "ask"
 
         runs.append(
             MonitorRunView(
@@ -1433,7 +1456,6 @@ func loadMonitorSnapshot(
     let runsDir = URL(fileURLWithPath: monitorDirectory, isDirectory: true)
         .appending(path: "runs", directoryHint: .isDirectory)
     let isoFormatter = ISO8601DateFormatter()
-    let phaseOrder = ["review", "address", "bot"]
 
     var runs: [MonitorRunView] = []
     var knownSessionIDs = Set<String>()
@@ -1449,13 +1471,28 @@ func loadMonitorSnapshot(
                 let runRecord = try? JSONDecoder().decode(MonitorRunRecord.self, from: runData)
             else { continue }
 
-            var phases: [MonitorPhaseView] = []
-            for phaseName in phaseOrder {
-                let phaseFile = runDir.appending(path: "\(phaseName).json")
+            let phaseFiles =
+                ((try? fm.contentsOfDirectory(
+                    at: runDir,
+                    includingPropertiesForKeys: [.isRegularFileKey],
+                    options: [.skipsHiddenFiles]
+                )) ?? [])
+                .filter { $0.pathExtension == "json" && $0.lastPathComponent != "run.json" }
+
+            var decodedPhases: [MonitorPhaseRecord] = []
+            for phaseFile in phaseFiles {
                 guard let phaseData = try? Data(contentsOf: phaseFile),
                     let phaseRecord = try? JSONDecoder().decode(
-                        MonitorPhaseRecord.self, from: phaseData)
+                        MonitorPhaseRecord.self, from: phaseData),
+                    phaseRecord.phase == "address" || phaseRecord.phase == "ask"
+                        || phaseRecord.phase.hasPrefix("review-")
                 else { continue }
+                decodedPhases.append(phaseRecord)
+            }
+            decodedPhases.sort { phaseSortRank($0.phase) < phaseSortRank($1.phase) }
+
+            var phases: [MonitorPhaseView] = []
+            for phaseRecord in decodedPhases {
 
                 let streamText: String
                 if let streamPath = phaseRecord.streamFile,
@@ -1530,7 +1567,7 @@ func loadMonitorSnapshot(
                 MonitorRunView(
                     runID: runRecord.runID,
                     kind: runRecord.kind
-                        ?? (phases.contains { $0.phase == "bot" } ? "bot-trigger" : "review-loop"),
+                        ?? (phases.contains { $0.phase == "ask" } ? "ask" : "review-loop"),
                     source: "workflow",
                     prNumber: runRecord.prNumber,
                     prBranch: runRecord.prBranch,
@@ -2265,8 +2302,10 @@ private let monitorHTML = #"""
     background: var(--surface-2);
     color: var(--muted);
   }
-  .harness-tag.codex { background: var(--green-soft); color: var(--green); }
-  .harness-tag.antigravity { background: var(--accent-soft); color: var(--accent); }
+  .harness-tag.codex, .harness-tag.sol { background: var(--green-soft); color: var(--green); }
+  .harness-tag.antigravity, .harness-tag.neon { background: var(--accent-soft); color: var(--accent); }
+  .harness-tag.hydrogen { background: rgba(20, 184, 166, 0.14); color: #5eead4; }
+  .harness-tag.opus { background: rgba(249, 115, 22, 0.16); color: #fb923c; }
 
   .tab-meta {
     font-size: 11.5px;
@@ -2598,7 +2637,7 @@ private let monitorHTML = #"""
     <main class="main" id="main">
       <div class="empty-state">
         <h2>Waiting for agent runs</h2>
-        <p>Comment <code>/review</code>, <code>/address</code>, <code>@clinical-codex</code>, or <code>@clinical-antigravity</code> on a PR to watch the loop live.</p>
+        <p>Comment <code>/review</code>, <code>/address</code>, or <code>/ask</code> on a PR to watch the loop live.</p>
       </div>
     </main>
   </div>
@@ -2722,6 +2761,31 @@ function harnessLabel(harness) {
   return harness || "Agent";
 }
 
+function modelShortLabel(model) {
+  if (!model) return "";
+  const lower = String(model).toLowerCase();
+  if (lower.startsWith("gpt-6.1-sol")) return "6.1 Sol";
+  if (lower.startsWith("gemini-4-neon")) return "4 Neon";
+  if (lower.startsWith("gemini-4-hydrogen")) return "4 Hydrogen";
+  if (lower.startsWith("claude-opus-5-5") || lower.startsWith("claude-opus")) return "Opus 5.5";
+  return String(model);
+}
+
+function agentBadgeLabel(harness, model) {
+  const h = harnessLabel(harness);
+  const m = modelShortLabel(model);
+  return m ? `${h} · ${m}` : h;
+}
+
+function agentBadgeClass(harness, model) {
+  const lower = String(model || "").toLowerCase();
+  if (lower.startsWith("gpt-6.1-sol")) return "sol";
+  if (lower.startsWith("gemini-4-neon")) return "neon";
+  if (lower.startsWith("gemini-4-hydrogen")) return "hydrogen";
+  if (lower.startsWith("claude-opus")) return "opus";
+  return harness || "";
+}
+
 function pickInitialPhase(run) {
   if (!run || !run.phases.length) return null;
   const active = run.phases.find((p) => p.status === "running");
@@ -2781,10 +2845,11 @@ function renderSidebar() {
   for (const run of runs) {
     const selected = run.runID === state.selectedRunID ? "selected" : "";
     const title = run.prNumber ? `PR #${run.prNumber}` : `Run ${run.runID}`;
-    const kind = run.kind === "bot-trigger" ? "Bot" : "Review Loop";
+    const kind = run.kind === "ask" ? "Ask" : "Review Loop";
     const pills = run.phases.map((p) => {
-      const letter = p.phase.startsWith("review") ? "R" : p.phase.startsWith("address") ? "A" : "B";
-      return `<span class="mini-pill ${phaseDotClass(p)}" title="${escapeHTML(p.label)} (${harnessLabel(p.harness)}): ${p.conclusion || p.status}">${letter}</span>`;
+      const letter = p.phase.startsWith("review") ? "R" : p.phase.startsWith("address") ? "A" : "Q";
+      const badge = agentBadgeLabel(p.harness, p.model);
+      return `<span class="mini-pill ${phaseDotClass(p)}" title="${escapeHTML(p.label)} (${escapeHTML(badge)}): ${p.conclusion || p.status}">${letter}</span>`;
     }).join("");
     const sub = run.prBranch || (run.source === "local-sessions" ? "Local sessions" : run.runID);
     html += `
@@ -2815,7 +2880,7 @@ function renderSidebar() {
   }
 }
 
-function renderEventCard(ev, harness) {
+function renderEventCard(ev, harness, model) {
   const showReasoning = el("showReasoning").checked;
   const expandTools = el("expandTools").checked;
 
@@ -2837,7 +2902,7 @@ function renderEventCard(ev, harness) {
     return `
       <div class="event-msg">
         <div class="event-msg-head">
-          <span>${escapeHTML(harnessLabel(harness))}</span>
+          <span>${escapeHTML(agentBadgeLabel(harness, model))}</span>
         </div>
         <div class="md">${renderMarkdown(ev.text || "")}</div>
       </div>`;
@@ -2911,7 +2976,7 @@ function renderMain(force = false) {
     main.innerHTML = `
       <div class="empty-state">
         <h2>Waiting for agent runs</h2>
-        <p>Comment <code>/review</code>, <code>/address</code>, <code>@clinical-codex</code>, or <code>@clinical-antigravity</code> on a PR to watch the loop live.</p>
+        <p>Comment <code>/review</code>, <code>/address</code>, or <code>/ask</code> on a PR to watch the loop live.</p>
       </div>`;
     return;
   }
@@ -2921,6 +2986,8 @@ function renderMain(force = false) {
     run.runID,
     run.updatedAt,
     phase ? phase.phase : "",
+    phase ? phase.status : "",
+    phase ? phase.model : "",
     phase ? phase.updatedAt : "",
     phase ? phase.events.length : 0,
     el("showReasoning").checked,
@@ -2945,11 +3012,13 @@ function renderMain(force = false) {
     const dur = formatDuration(p.startedAt, p.completedAt);
     const tok = formatTokens(p.usage);
     const timerAttr = p.status === "running" && p.startedAt ? `data-live-start="${escapeHTML(p.startedAt)}"` : "";
+    const badgeClass = agentBadgeClass(p.harness, p.model);
+    const badgeLabel = agentBadgeLabel(p.harness, p.model);
     return `
       <button class="tab-btn ${active}" data-phase="${escapeHTML(p.phase)}">
         <span class="dot ${dotClass}"></span>
         <span>${escapeHTML(p.label)}</span>
-        <span class="harness-tag ${escapeHTML(p.harness || "")}">${escapeHTML(harnessLabel(p.harness))}</span>
+        <span class="harness-tag ${escapeHTML(badgeClass)}">${escapeHTML(badgeLabel)}</span>
         <span class="tab-meta">
           <span ${timerAttr}>${escapeHTML(dur)}</span>${dur && tok ? " · " : ""}${escapeHTML(tok)}
         </span>
@@ -2962,15 +3031,17 @@ function renderMain(force = false) {
   if (phase) {
     const sessionKey = `session-${run.runID}-${phase.phase}`;
     const sessionOpen = state.expandedIDs.has(sessionKey) ? "open" : "";
+    const phaseBadge = agentBadgeLabel(phase.harness, phase.model);
     timelineHTML += `
       <details class="session-card" data-ev-id="${escapeHTML(sessionKey)}" ${sessionOpen}>
         <summary>
-          <span>${escapeHTML(harnessLabel(phase.harness))}${phase.botLogin ? ` · ${escapeHTML(phase.botLogin)}` : ""}${phase.model ? ` · ${escapeHTML(phase.model)}` : ""}</span>
+          <span>${escapeHTML(phaseBadge)}${phase.botLogin ? ` · ${escapeHTML(phase.botLogin)}` : ""}${phase.model ? ` · ${escapeHTML(phase.model)}` : ""}</span>
           <span class="tab-meta">Session details ▾</span>
         </summary>
         <div class="session-kv">
           <div class="k">Status</div><div class="v">${escapeHTML(phase.conclusion || phase.status)}</div>
           ${phase.sessionID ? `<div class="k">Session ID</div><div class="v">${escapeHTML(phase.sessionID)}</div>` : ""}
+          ${phase.model ? `<div class="k">Model</div><div class="v">${escapeHTML(phase.model)}</div>` : ""}
           ${phase.effort ? `<div class="k">Effort</div><div class="v">${escapeHTML(phase.effort)}</div>` : ""}
           ${phase.worktreePath ? `<div class="k">Worktree</div><div class="v">${escapeHTML(phase.worktreePath)}</div>` : ""}
         </div>
@@ -2982,19 +3053,19 @@ function renderMain(force = false) {
         phase.status === "queued"
           ? `${phase.label} is queued and waiting to start…`
           : phase.status === "running"
-          ? `${harnessLabel(phase.harness)} started. Waiting for first output…`
+          ? `${phaseBadge} started. Waiting for first output…`
           : phase.conclusion === "skipped"
           ? `${phase.label} was skipped.`
           : "No streamed events captured for this phase.";
       timelineHTML += `<div class="empty-state"><p>${escapeHTML(waitMsg)}</p></div>`;
     } else {
-      timelineHTML += phase.events.map((ev) => renderEventCard(ev, phase.harness)).join("");
+      timelineHTML += phase.events.map((ev) => renderEventCard(ev, phase.harness, phase.model)).join("");
     }
 
     const dur = formatDuration(phase.startedAt, phase.completedAt);
     const statusText =
       phase.status === "running"
-        ? `${harnessLabel(phase.harness)} is running…`
+        ? `${phaseBadge} is running…`
         : phase.status === "queued"
         ? "Queued"
         : `Completed (${phase.conclusion || "done"})`;

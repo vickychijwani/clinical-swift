@@ -81,44 +81,162 @@ private func createSuperDB(
     }
 }
 
+private func createAgyConversationDB(
+    at agyDir: URL,
+    rows: [(convID: String, worktree: String, modifiedTime: String, model: String?)]
+) throws {
+    let fm = FileManager.default
+    try fm.createDirectory(at: agyDir, withIntermediateDirectories: true)
+    let dbPath = agyDir.appending(path: "conversation_summaries.db").path
+
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+        let db
+    else {
+        if let db { sqlite3_close(db) }
+        throw TestFailure(description: "Could not create test Antigravity DB at \(dbPath)")
+    }
+    defer { sqlite3_close(db) }
+
+    let createSQL = """
+        CREATE TABLE conversation_summaries (
+            conversation_id TEXT PRIMARY KEY,
+            last_modified_time TEXT NOT NULL,
+            workspace_uris TEXT NOT NULL
+        );
+        """
+    guard sqlite3_exec(db, createSQL, nil, nil, nil) == SQLITE_OK else {
+        throw TestFailure(description: "Failed creating conversation_summaries table")
+    }
+
+    let insertSQL = "INSERT INTO conversation_summaries VALUES (?, ?, ?);"
+    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    for row in rows {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK, let stmt else {
+            throw TestFailure(description: "Failed preparing Antigravity insert")
+        }
+        defer { sqlite3_finalize(stmt) }
+        let urisData = try JSONEncoder().encode([URL(fileURLWithPath: row.worktree).absoluteString])
+        let uris = String(decoding: urisData, as: UTF8.self)
+        sqlite3_bind_text(stmt, 1, row.convID, -1, transient)
+        sqlite3_bind_text(stmt, 2, row.modifiedTime, -1, transient)
+        sqlite3_bind_text(stmt, 3, uris, -1, transient)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw TestFailure(description: "Failed inserting Antigravity row \(row.convID)")
+        }
+
+        if let model = row.model {
+            let logsDir = agyDir.appending(
+                path: "brain/\(row.convID)/.system_generated/logs", directoryHint: .isDirectory)
+            try fm.createDirectory(at: logsDir, withIntermediateDirectories: true)
+            let transcript = """
+                {"step_index":0,"type":"USER_INPUT","content":"hello"}
+                {"step_index":1,"type":"PLANNER_RESPONSE","model":"\(model)","content":"done"}
+                """
+            try transcript.write(
+                to: logsDir.appending(path: "transcript.jsonl"), atomically: true, encoding: .utf8)
+        }
+    }
+}
+
 #if AGENT_REVIEW_LOOP_TESTS
     private func testParseTrigger() throws {
         try expect(
             parseTrigger(eventName: "issue_comment", commentBody: "/review")
-                == TriggerPlan(action: .review, prNumber: nil, reviewerOverride: nil, dryRun: false),
+                == TriggerPlan(
+                    action: .review,
+                    prNumber: nil,
+                    reviewerOverride: nil,
+                    reviewAll: false,
+                    authorOverride: nil,
+                    dryRun: false
+                ),
             "/review should parse"
         )
         try expect(
-            parseTrigger(eventName: "issue_comment", commentBody: "  /review   codex \n")
+            parseTrigger(eventName: "issue_comment", commentBody: "  /review   sol \n")
                 == TriggerPlan(
-                    action: .review, prNumber: nil, reviewerOverride: .codex, dryRun: false),
-            "/review codex should trim whitespace"
+                    action: .review,
+                    prNumber: nil,
+                    reviewerOverride: [.sol],
+                    reviewAll: false,
+                    authorOverride: nil,
+                    dryRun: false
+                ),
+            "/review sol should trim whitespace"
         )
         try expect(
-            parseTrigger(eventName: "issue_comment", commentBody: "/review antigravity")
+            parseTrigger(eventName: "issue_comment", commentBody: "/review opus sol opus hydrogen")
                 == TriggerPlan(
-                    action: .review, prNumber: nil, reviewerOverride: .antigravity, dryRun: false),
-            "/review antigravity should parse"
+                    action: .review,
+                    prNumber: nil,
+                    reviewerOverride: [.opus, .sol, .hydrogen],
+                    reviewAll: false,
+                    authorOverride: nil,
+                    dryRun: false
+                ),
+            "Multi-reviewer /review should preserve order and deduplicate"
+        )
+        try expect(
+            parseTrigger(eventName: "issue_comment", commentBody: "/review all")
+                == TriggerPlan(
+                    action: .review,
+                    prNumber: nil,
+                    reviewerOverride: nil,
+                    reviewAll: true,
+                    authorOverride: nil,
+                    dryRun: false
+                ),
+            "/review all should set reviewAll"
         )
         try expect(
             parseTrigger(eventName: "issue_comment", commentBody: "/address\n")
                 == TriggerPlan(
-                    action: .address, prNumber: nil, reviewerOverride: nil, dryRun: false),
+                    action: .address,
+                    prNumber: nil,
+                    reviewerOverride: nil,
+                    reviewAll: false,
+                    authorOverride: nil,
+                    dryRun: false
+                ),
             "/address should parse"
+        )
+        try expect(
+            parseTrigger(eventName: "issue_comment", commentBody: "/address opus")
+                == TriggerPlan(
+                    action: .address,
+                    prNumber: nil,
+                    reviewerOverride: nil,
+                    reviewAll: false,
+                    authorOverride: .opus,
+                    dryRun: false
+                ),
+            "/address opus should parse author override"
         )
         try expect(
             parseTrigger(
                 eventName: "workflow_dispatch",
                 dispatchAction: "review",
-                dispatchReviewer: "auto",
+                dispatchReviewer: "all",
+                dispatchAuthor: "neon",
                 dispatchPRNumber: "28",
                 dispatchDryRun: "true"
-            ) == TriggerPlan(action: .review, prNumber: 28, reviewerOverride: nil, dryRun: true),
-            "workflow_dispatch auto dry_run should parse"
+            )
+                == TriggerPlan(
+                    action: .review,
+                    prNumber: 28,
+                    reviewerOverride: nil,
+                    reviewAll: true,
+                    authorOverride: .neon,
+                    dryRun: true
+                ),
+            "workflow_dispatch all with author override should parse"
         )
 
         for invalid in [
-            "", "/review claude", "/review codex extra", "/address codex", "looks good",
+            "", "/review codex", "/review antigravity", "/review all opus", "/review sol extra",
+            "/address codex", "/address sol opus", "looks good",
         ] {
             do {
                 _ = try parseTrigger(eventName: "issue_comment", commentBody: invalid)
@@ -127,107 +245,104 @@ private func createSuperDB(
         }
     }
 
-    private func testParseMention() throws {
+    private func testParseAsk() throws {
         try expect(
-            parseMention(
-                eventName: "issue_comment", commentBody: "@clinical-codex fix the failing test")
-                == MentionPlan(
+            parseAsk(eventName: "issue_comment", commentBody: "/ask fix the failing test")
+                == AskPlan(
                     matched: true,
-                    harness: .codex,
+                    modelOverride: nil,
                     prNumber: nil,
-                    instructions: "@clinical-codex fix the failing test",
+                    instructions: "fix the failing test",
                     dryRun: false
                 ),
-            "Start mention should match codex"
+            "Bare /ask should default to auto author model"
         )
         try expect(
-            parseMention(
+            parseAsk(
                 eventName: "pull_request_review_comment",
-                commentBody: "Please rename this helper @Clinical-Antigravity[bot]"
+                commentBody: "/ask opus please rename this helper"
             )
-                == MentionPlan(
+                == AskPlan(
                     matched: true,
-                    harness: .antigravity,
+                    modelOverride: .opus,
                     prNumber: nil,
-                    instructions: "Please rename this helper @Clinical-Antigravity[bot]",
+                    instructions: "please rename this helper",
                     dryRun: false
                 ),
-            "Mid/end mention with [bot] should match antigravity case-insensitively"
+            "/ask opus should extract model override and instructions"
         )
         try expect(
-            parseMention(
+            parseAsk(
                 eventName: "pull_request_review",
-                commentBody:
-                    "> @clinical-codex earlier note\n\n@clinical-antigravity please handle this"
+                commentBody: "  /ask   Hydrogen\ncheck line 42"
             )
-                == MentionPlan(
+                == AskPlan(
                     matched: true,
-                    harness: .antigravity,
+                    modelOverride: .hydrogen,
                     prNumber: nil,
-                    instructions:
-                        "> @clinical-codex earlier note\n\n@clinical-antigravity please handle this",
+                    instructions: "check line 42",
                     dryRun: false
                 ),
-            "Quoted mention of the other bot must be ignored"
-        )
-        try expect(
-            parseMention(
-                eventName: "issue_comment",
-                commentBody: "@clinical-codex\n```swift\nlet x = 1\n```"
-            ).matched == true,
-            "Code block instructions after tag should count as valid instructions"
-        )
-        try expect(
-            parseMention(
-                eventName: "issue_comment",
-                commentBody: "---\n@clinical-codex\nplease check"
-            ).harness == .codex,
-            "Multiline comment starting with -- should parse cleanly"
+            "/ask should accept case-insensitive model name and multiline instructions"
         )
 
         for nonMatch in [
             "",
             "looks good",
-            "email user@clinical-codex.com",
-            "@clinical-codex-v2 do something",
-            "@clinical-codex[other] do something",
-            "Use `@clinical-codex` to wake up the bot",
-            "```\n@clinical-antigravity\n```",
-            "> @clinical-codex fix this",
+            "/asking about this",
+            "@clinical-codex fix this",
+            "@clinical-antigravity fix this",
+            "Use /ask opus to run opus",
         ] {
-            let plan = try parseMention(eventName: "issue_comment", commentBody: nonMatch)
-            try expect(!plan.matched, "Comment '\(nonMatch)' must not match a bot tag")
+            let plan = try parseAsk(eventName: "issue_comment", commentBody: nonMatch)
+            try expect(!plan.matched, "Comment '\(nonMatch)' must not match /ask")
         }
 
         for invalid in [
-            "@clinical-codex @clinical-antigravity do this",
-            "@clinical-codex[bot] and @clinical-antigravity",
-            "@clinical-codex",
-            "@clinical-antigravity[bot]:   ",
-            "> @clinical-antigravity old\n\n@clinical-codex",
+            "/ask",
+            "/ask   ",
+            "/ask opus",
+            "/ask sol   \n",
         ] {
             do {
-                _ = try parseMention(eventName: "issue_comment", commentBody: invalid)
-                throw TestFailure(description: "Should reject invalid mention comment '\(invalid)'")
+                _ = try parseAsk(eventName: "issue_comment", commentBody: invalid)
+                throw TestFailure(description: "Should reject invalid /ask comment '\(invalid)'")
             } catch is ReviewLoopError {}
         }
 
         try expect(
-            parseMention(
+            parseAsk(
                 eventName: "workflow_dispatch",
-                dispatchBot: "antigravity",
+                dispatchModel: "auto",
                 dispatchInstructions: "Update the docs",
                 dispatchPRNumber: "31",
                 dispatchDryRun: "true"
             )
-                == MentionPlan(
+                == AskPlan(
                     matched: true,
-                    harness: .antigravity,
+                    modelOverride: nil,
                     prNumber: 31,
                     instructions: "Update the docs",
                     dryRun: true
                 ),
-            "workflow_dispatch mention should parse"
+            "workflow_dispatch auto /ask should parse"
+        )
+        try expect(
+            parseAsk(
+                eventName: "workflow_dispatch",
+                dispatchModel: "opus",
+                dispatchInstructions: "Audit memory usage",
+                dispatchPRNumber: "31",
+                dispatchDryRun: "false"
+            )
+                == AskPlan(
+                    matched: true,
+                    modelOverride: .opus,
+                    prNumber: 31,
+                    instructions: "Audit memory usage",
+                    dryRun: false
+                ),
+            "workflow_dispatch explicit model /ask should parse"
         )
     }
 
@@ -338,57 +453,172 @@ private func createSuperDB(
             ]
         )
 
-        // 1. Codex detached worktree discovery.
+        let resolvedAgyWT = agyWT.standardizedFileURL.resolvingSymlinksInPath().path
+        let opusAgyDir = root.appending(path: "agy-opus", directoryHint: .isDirectory)
+        try createAgyConversationDB(
+            at: opusAgyDir,
+            rows: [
+                (
+                    convID: "conv-older", worktree: resolvedAgyWT,
+                    modifiedTime: "2026-11-20T01:00:00Z", model: "gemini-4-neon-high"
+                ),
+                (
+                    convID: "conv-newer", worktree: resolvedAgyWT,
+                    modifiedTime: "2026-11-20T02:00:00Z", model: "claude-opus-5-5-high"
+                ),
+            ]
+        )
+
+        let hydrogenAgyDir = root.appending(path: "agy-hydrogen", directoryHint: .isDirectory)
+        try createAgyConversationDB(
+            at: hydrogenAgyDir,
+            rows: [
+                (
+                    convID: "conv-h", worktree: resolvedAgyWT,
+                    modifiedTime: "2026-11-20T03:00:00Z", model: "gemini-4-hydrogen-high"
+                )
+            ]
+        )
+
+        let emptyAgyDir = root.appending(path: "agy-empty", directoryHint: .isDirectory)
+
+        // 1. Codex detached worktree discovery -> sol author, neon default reviewer, all = [neon, opus].
         let codexRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
             branch: "codex/detached-pr",
             headSHA: baseSHA,
             action: .review,
-            reviewerOverride: nil,
             superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
         try expect(
             codexRes.status == "ok",
             "Codex detached worktree should succeed: \(codexRes.error ?? "")")
-        try expect(codexRes.authorHarness == .codex, "Expected codex author")
-        try expect(codexRes.reviewerHarness == .antigravity, "Expected antigravity reviewer")
+        try expect(codexRes.author == AgentModel.sol.profile, "Expected sol author")
+        try expect(
+            codexRes.reviewers == [AgentModel.neon.profile], "Expected neon default reviewer")
 
-        // 2. Antigravity worktree discovery.
-        let agyRes = discoverLoopContext(
+        let codexAllRes = discoverLoopContext(
+            canonicalRepoPath: canonical.path,
+            branch: "codex/detached-pr",
+            headSHA: baseSHA,
+            action: .review,
+            reviewAll: true,
+            superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
+            homeDirectory: home.path,
+            requireClean: true
+        )
+        try expect(
+            codexAllRes.status == "ok"
+                && codexAllRes.reviewers == [AgentModel.neon.profile, AgentModel.opus.profile],
+            "Expected /review all on sol PR to run [neon, opus]"
+        )
+
+        // 2. Antigravity worktree auto-detects Opus, Hydrogen, or falls back to Neon.
+        let agyOpusRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
             branch: "feature_one",
             headSHA: agySHA,
             action: .review,
-            reviewerOverride: nil,
             superDBPath: dbPath,
+            agyDirectory: opusAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
-        try expect(agyRes.status == "ok", "Antigravity worktree should succeed")
-        try expect(agyRes.authorHarness == .antigravity, "Expected antigravity author")
-        try expect(agyRes.reviewerHarness == .codex, "Expected codex reviewer")
+        try expect(agyOpusRes.status == "ok", "Antigravity Opus worktree should succeed")
+        try expect(agyOpusRes.author == AgentModel.opus.profile, "Expected opus author")
+        try expect(
+            agyOpusRes.reviewers == [AgentModel.sol.profile],
+            "Expected sol default reviewer for opus PR")
 
-        // 3. super.engineering with multiple providers picks latest (codex) and adds note.
+        let agyOpusAllRes = discoverLoopContext(
+            canonicalRepoPath: canonical.path,
+            branch: "feature_one",
+            headSHA: agySHA,
+            action: .review,
+            reviewAll: true,
+            superDBPath: dbPath,
+            agyDirectory: opusAgyDir.path,
+            homeDirectory: home.path,
+            requireClean: true
+        )
+        try expect(
+            agyOpusAllRes.reviewers == [AgentModel.sol.profile, AgentModel.neon.profile],
+            "Expected /review all on opus PR to run [sol, neon]"
+        )
+
+        let agyHydrogenAllRes = discoverLoopContext(
+            canonicalRepoPath: canonical.path,
+            branch: "feature_one",
+            headSHA: agySHA,
+            action: .review,
+            reviewAll: true,
+            superDBPath: dbPath,
+            agyDirectory: hydrogenAgyDir.path,
+            homeDirectory: home.path,
+            requireClean: true
+        )
+        try expect(
+            agyHydrogenAllRes.author == AgentModel.hydrogen.profile
+                && agyHydrogenAllRes.reviewers == [AgentModel.sol.profile, AgentModel.opus.profile],
+            "Expected /review all on hydrogen PR to run [sol, opus]"
+        )
+
+        let agyFallbackRes = discoverLoopContext(
+            canonicalRepoPath: canonical.path,
+            branch: "feature_one",
+            headSHA: agySHA,
+            action: .review,
+            superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
+            homeDirectory: home.path,
+            requireClean: true
+        )
+        try expect(
+            agyFallbackRes.status == "ok" && agyFallbackRes.author == AgentModel.neon.profile,
+            "Missing Antigravity DB should fall back cleanly to neon"
+        )
+
+        // 3. Explicit /address override overrides detected author.
+        let addressOverrideRes = discoverLoopContext(
+            canonicalRepoPath: canonical.path,
+            branch: "feature_one",
+            headSHA: agySHA,
+            action: .address,
+            authorOverride: .opus,
+            superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
+            homeDirectory: home.path,
+            requireClean: true
+        )
+        try expect(
+            addressOverrideRes.status == "ok"
+                && addressOverrideRes.author == AgentModel.opus.profile,
+            "/address opus should override detected author"
+        )
+
+        // 4. super.engineering with multiple providers picks latest (codex -> sol) and adds note.
         let superRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
             branch: "codex/super-branch",
             headSHA: superSHA,
             action: .review,
-            reviewerOverride: nil,
             superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
         try expect(superRes.status == "ok", "super.engineering codex worktree should succeed")
-        try expect(superRes.authorHarness == .codex, "Expected codex author from super DB")
+        try expect(superRes.author == AgentModel.sol.profile, "Expected sol author from super DB")
         try expect(
             superRes.notes.contains(where: { $0.contains("Multiple super.engineering providers") }),
             "Expected multiple-provider log note"
         )
 
-        // 4. Non-codex super.engineering provider stops when no override.
+        // 5. Non-codex super.engineering provider stops when no override.
         let claudeDBPath = root.appending(path: "super-claude.db").path
         try createSuperDB(
             at: claudeDBPath,
@@ -399,38 +629,39 @@ private func createSuperDB(
             branch: "codex/super-branch",
             headSHA: superSHA,
             action: .review,
-            reviewerOverride: nil,
             superDBPath: claudeDBPath,
+            agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: false
         )
         try expect(claudeRes.status == "error", "Non-codex super.engineering provider must stop")
 
-        // 5. /review <reviewer> override falls back to other harness for unknown path.
+        // 6. /review <reviewer> override falls back to default reviewer for unknown path.
         let overrideRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
             branch: "main",
             headSHA: baseSHA,
             action: .review,
-            reviewerOverride: .codex,
+            reviewerOverride: [.sol],
             superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
         try expect(overrideRes.status == "ok", "Override should allow unknown path")
-        try expect(overrideRes.reviewerHarness == .codex, "Override reviewer should be codex")
+        try expect(overrideRes.reviewers == [AgentModel.sol.profile], "Override reviewer should be sol")
         try expect(
-            overrideRes.authorHarness == .antigravity,
-            "Override fallback author should be antigravity")
+            overrideRes.author == AgentModel.neon.profile,
+            "Override fallback author should be neon")
 
-        // 6. --require-clean catches stale HEAD and dirty working tree.
+        // 7. --require-clean catches stale HEAD and dirty working tree.
         let staleRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
             branch: "feature_one",
             headSHA: baseSHA,
             action: .address,
-            reviewerOverride: nil,
             superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
@@ -444,8 +675,8 @@ private func createSuperDB(
             branch: "feature_one",
             headSHA: agySHA,
             action: .address,
-            reviewerOverride: nil,
             superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
@@ -454,55 +685,71 @@ private func createSuperDB(
             "Dirty worktree must fail"
         )
 
-        // 7. Mention discovery accepts explicit cross-harness bot on any located PR worktree.
-        let mentionCrossRes = discoverLoopContext(
+        // 8. /ask discovery supports both auto-detected author and explicit cross-model override.
+        let askAutoRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
-            branch: "codex/detached-pr",
-            headSHA: baseSHA,
-            action: .mention,
-            reviewerOverride: nil,
-            targetHarness: .antigravity,
+            branch: "feature_one",
+            headSHA: agySHA,
+            action: .ask,
+            targetModel: nil,
             superDBPath: dbPath,
-            homeDirectory: home.path,
-            requireClean: true
-        )
-        try expect(
-            mentionCrossRes.status == "ok"
-                && mentionCrossRes.authorHarness == .antigravity
-                && mentionCrossRes.worktreePath != nil,
-            "Mention discovery should allow @clinical-antigravity in a Codex worktree"
-        )
-
-        let mentionSuperRes = discoverLoopContext(
-            canonicalRepoPath: canonical.path,
-            branch: "codex/super-branch",
-            headSHA: superSHA,
-            action: .mention,
-            reviewerOverride: nil,
-            targetHarness: .codex,
-            superDBPath: claudeDBPath,
-            homeDirectory: home.path,
-            requireClean: true
-        )
-        try expect(
-            mentionSuperRes.status == "ok" && mentionSuperRes.authorHarness == .codex,
-            "Mention discovery should work on super.engineering worktree regardless of DB provider"
-        )
-
-        let mentionMissingRes = discoverLoopContext(
-            canonicalRepoPath: canonical.path,
-            branch: "missing-branch",
-            headSHA: "deadbeef",
-            action: .mention,
-            reviewerOverride: nil,
-            targetHarness: .codex,
-            superDBPath: dbPath,
+            agyDirectory: opusAgyDir.path,
             homeDirectory: home.path,
             requireClean: false
         )
         try expect(
-            mentionMissingRes.status == "error",
-            "Mention discovery without a local worktree must fail even when requireClean is false"
+            askAutoRes.status == "ok" && askAutoRes.author == AgentModel.opus.profile,
+            "Bare /ask should auto-detect opus author from Antigravity DB"
+        )
+
+        let askCrossRes = discoverLoopContext(
+            canonicalRepoPath: canonical.path,
+            branch: "codex/detached-pr",
+            headSHA: baseSHA,
+            action: .ask,
+            targetModel: .opus,
+            superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
+            homeDirectory: home.path,
+            requireClean: true
+        )
+        try expect(
+            askCrossRes.status == "ok"
+                && askCrossRes.author == AgentModel.opus.profile
+                && askCrossRes.worktreePath != nil,
+            "/ask opus should run in a Codex worktree"
+        )
+
+        let askSuperRes = discoverLoopContext(
+            canonicalRepoPath: canonical.path,
+            branch: "codex/super-branch",
+            headSHA: superSHA,
+            action: .ask,
+            targetModel: .sol,
+            superDBPath: claudeDBPath,
+            agyDirectory: emptyAgyDir.path,
+            homeDirectory: home.path,
+            requireClean: true
+        )
+        try expect(
+            askSuperRes.status == "ok" && askSuperRes.author == AgentModel.sol.profile,
+            "/ask with explicit model should work on super.engineering worktree regardless of DB provider"
+        )
+
+        let askMissingRes = discoverLoopContext(
+            canonicalRepoPath: canonical.path,
+            branch: "missing-branch",
+            headSHA: "deadbeef",
+            action: .ask,
+            targetModel: .sol,
+            superDBPath: dbPath,
+            agyDirectory: emptyAgyDir.path,
+            homeDirectory: home.path,
+            requireClean: false
+        )
+        try expect(
+            askMissingRes.status == "error",
+            "/ask without a local worktree must fail even when requireClean is false"
         )
     }
 
@@ -646,7 +893,7 @@ private func createSuperDB(
             monitorDirectory: monitorDir.path,
             runID: "999",
             kind: "review-loop",
-            phase: .review,
+            phase: "review-sol",
             prNumber: 33,
             prBranch: "overlay_toast_widget",
             prHeadSHA: "abc123",
@@ -660,13 +907,13 @@ private func createSuperDB(
         try recordMonitorState(
             monitorDirectory: monitorDir.path,
             runID: "999",
-            phase: .review,
+            phase: "review-sol",
             botLogin: "clinical-codex[bot]",
             model: "gpt-6.1-sol",
             effort: "high",
             worktreePath: "/tmp/pr",
             prompt: "Review PR #33",
-            streamFile: monitorDir.appending(path: "runs/999/review.jsonl").path,
+            streamFile: monitorDir.appending(path: "runs/999/review-sol.jsonl").path,
             status: .running,
             timestamp: "2026-11-19T08:01:00Z"
         )
@@ -674,7 +921,7 @@ private func createSuperDB(
         try recordMonitorState(
             monitorDirectory: monitorDir.path,
             runID: "999",
-            phase: .review,
+            phase: "review-sol",
             status: .completed,
             conclusion: "success",
             timestamp: "2026-11-19T08:03:00Z"
@@ -686,13 +933,26 @@ private func createSuperDB(
         try expect(runRecord.createdAt == "2026-11-19T08:00:00Z", "Expected createdAt preserved")
         try expect(runRecord.updatedAt == "2026-11-19T08:03:00Z", "Expected updatedAt updated")
 
-        let phaseData = try Data(contentsOf: monitorDir.appending(path: "runs/999/review.json"))
+        let phaseData = try Data(contentsOf: monitorDir.appending(path: "runs/999/review-sol.json"))
         let phaseRecord = try JSONDecoder().decode(MonitorPhaseRecord.self, from: phaseData)
+        try expect(phaseRecord.phase == "review-sol", "Expected phase review-sol")
         try expect(phaseRecord.harness == .codex, "Expected harness preserved across updates")
         try expect(phaseRecord.prompt == "Review PR #33", "Expected prompt preserved across updates")
         try expect(phaseRecord.startedAt == "2026-11-19T08:01:00Z", "Expected startedAt preserved")
         try expect(phaseRecord.completedAt == "2026-11-19T08:03:00Z", "Expected completedAt set")
         try expect(phaseRecord.conclusion == "success", "Expected conclusion recorded")
+
+        for legacyPhase in ["review", "bot", "review-unknown"] {
+            do {
+                try recordMonitorState(
+                    monitorDirectory: monitorDir.path,
+                    runID: "999",
+                    phase: legacyPhase,
+                    status: .queued
+                )
+                throw TestFailure(description: "Should reject phase '\(legacyPhase)'")
+            } catch is ReviewLoopError {}
+        }
     }
 
     private func testCommentReactionEndpoint() throws {
@@ -732,7 +992,7 @@ private func createSuperDB(
         do {
             try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
             try testParseTrigger()
-            try testParseMention()
+            try testParseAsk()
             try testWorktreeClassificationAndParsing()
             try testDiscoveryIntegration(in: tempRoot)
             try testCodexSkillsConfig(in: tempRoot)
@@ -796,31 +1056,51 @@ private func createSuperDB(
         let cliBinary = tempDir.appending(path: "cli_binary")
         _ = try runShell(["swiftc", sourceURL.path, "-o", cliBinary.path])
         let triggerOut = try runShell([
-            cliBinary.path, "parse-trigger", "--event", "issue_comment", "--body", "/review codex",
+            cliBinary.path, "parse-trigger", "--event", "issue_comment", "--body",
+            "/review sol opus",
         ])
         try expect(
-            triggerOut.contains("\"reviewerOverride\":\"codex\""), "CLI parse-trigger failed")
-        let mentionOut = try runShell([
-            cliBinary.path, "parse-mention", "--event", "issue_comment", "--body",
-            "---\n@clinical-antigravity fix it",
+            triggerOut.contains("\"reviewerOverride\":[\"sol\",\"opus\"]"),
+            "CLI parse-trigger failed")
+        let askOut = try runShell([
+            cliBinary.path, "parse-ask", "--event", "issue_comment", "--body",
+            "/ask opus fix it",
         ])
         try expect(
-            mentionOut.contains("\"matched\":true")
-                && mentionOut.contains("\"harness\":\"antigravity\""),
-            "CLI parse-mention failed"
+            askOut.contains("\"matched\":true")
+                && askOut.contains("\"modelOverride\":\"opus\""),
+            "CLI parse-ask failed"
         )
         let monitorDir = tempDir.appending(path: "cli-monitor")
         _ = try runShell([
             cliBinary.path, "monitor-record",
             "--monitor-dir", monitorDir.path,
             "--run-id", "42",
-            "--phase", "bot",
+            "--phase", "review-opus",
             "--harness", "antigravity",
+            "--model", "claude-opus-5-5",
+            "--effort", "high",
             "--status", "queued",
         ])
         try expect(
-            FileManager.default.fileExists(atPath: monitorDir.appending(path: "runs/42/bot.json").path),
-            "CLI monitor-record failed"
+            FileManager.default.fileExists(
+                atPath: monitorDir.appending(path: "runs/42/review-opus.json").path),
+            "CLI monitor-record review-opus failed"
+        )
+        _ = try runShell([
+            cliBinary.path, "monitor-record",
+            "--monitor-dir", monitorDir.path,
+            "--run-id", "43",
+            "--phase", "ask",
+            "--harness", "antigravity",
+            "--model", "claude-opus-5-5",
+            "--effort", "high",
+            "--status", "queued",
+        ])
+        try expect(
+            FileManager.default.fileExists(
+                atPath: monitorDir.appending(path: "runs/43/ask.json").path),
+            "CLI monitor-record ask failed"
         )
         _ = try runShell([
             cliBinary.path, "react",

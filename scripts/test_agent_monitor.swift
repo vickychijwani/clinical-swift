@@ -56,7 +56,7 @@ private func expect(_ condition: Bool, _ message: String) throws {
     private func testAgyStreamJSONParsing() throws {
         let stream = """
             warning: --mode auto is not available for this account
-            {"event":"init","conversation_id":"conv-456","init":{"cwd":"/tmp/pr"}}
+            {"event":"init","conversation_id":"conv-456","init":{"model":"claude-opus-5-5","cwd":"/tmp/pr"}}
             {"event":"step_update","step_update":{"conversation_id":"conv-456","step_index":0,"state":"DONE","step_type":"user_input"}}
             {"event":"step_update","step_update":{"conversation_id":"conv-456","step_index":1,"state":"DONE","step_type":"agent_response","duration_seconds":2.5,"usage":{"input_tokens":100,"output_tokens":20,"thinking_tokens":15,"cache_read_tokens":50}}}
             {"event":"step_update","step_update":{"conversation_id":"conv-456","step_index":2,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"make test"}}}}
@@ -68,6 +68,7 @@ private func expect(_ condition: Bool, _ message: String) throws {
 
         let parsed = parseAgentStream(text: stream)
         try expect(parsed.sessionID == "conv-456", "Expected conversation_id")
+        try expect(parsed.model == "claude-opus-5-5", "Expected model from agy init event")
         try expect(parsed.events.count == 4, "Expected notice + reasoning + tool + message")
         try expect(parsed.events[0].kind == "notice", "Expected warning notice")
         try expect(parsed.events[1].kind == "reasoning", "Expected silent thinking summary")
@@ -129,11 +130,17 @@ private func expect(_ condition: Bool, _ message: String) throws {
         try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: agyConvLogs, withIntermediateDirectories: true)
 
-        let streamFile = runDir.appending(path: "review.jsonl")
+        let solStreamFile = runDir.appending(path: "review-sol.jsonl")
         try """
             {"type":"thread.started","thread_id":"recorded-thread"}
             {"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"Looking at diff"}}
-            """.write(to: streamFile, atomically: true, encoding: .utf8)
+            """.write(to: solStreamFile, atomically: true, encoding: .utf8)
+
+        let opusStreamFile = runDir.appending(path: "review-opus.jsonl")
+        try """
+            {"event":"init","conversation_id":"opus-conv","init":{"model":"claude-opus-5-5","cwd":"/tmp/pr-opus"}}
+            {"event":"result","result":{"conversation_id":"opus-conv","status":"SUCCESS","response":"Done."}}
+            """.write(to: opusStreamFile, atomically: true, encoding: .utf8)
 
         let runJSON = """
             {
@@ -150,22 +157,69 @@ private func expect(_ condition: Bool, _ message: String) throws {
             """
         try runJSON.write(to: runDir.appending(path: "run.json"), atomically: true, encoding: .utf8)
 
-        let reviewJSON = """
+        let reviewSolJSON = """
             {
-              "phase": "review",
+              "phase": "review-sol",
               "harness": "codex",
               "botLogin": "clinical-codex[bot]",
               "model": "gpt-6.1-sol",
               "effort": "high",
-              "worktreePath": "/tmp/pr",
+              "worktreePath": "/tmp/pr-sol",
               "prompt": "Review PR #33",
-              "streamFile": "\(streamFile.path)",
+              "streamFile": "\(solStreamFile.path)",
               "status": "running",
               "startedAt": "2026-11-19T08:00:10Z",
               "updatedAt": "2026-11-19T08:01:00Z"
             }
             """
-        try reviewJSON.write(
+        try reviewSolJSON.write(
+            to: runDir.appending(path: "review-sol.json"), atomically: true, encoding: .utf8)
+
+        let reviewOpusJSON = """
+            {
+              "phase": "review-opus",
+              "harness": "antigravity",
+              "botLogin": "clinical-antigravity[bot]",
+              "model": "claude-opus-5-5",
+              "effort": "high",
+              "worktreePath": "/tmp/pr-opus",
+              "prompt": "Review PR #33",
+              "streamFile": "\(opusStreamFile.path)",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-11-19T08:00:10Z",
+              "completedAt": "2026-11-19T08:00:50Z",
+              "updatedAt": "2026-11-19T08:00:50Z"
+            }
+            """
+        try reviewOpusJSON.write(
+            to: runDir.appending(path: "review-opus.json"), atomically: true, encoding: .utf8)
+
+        let addressJSON = """
+            {
+              "phase": "address",
+              "harness": "antigravity",
+              "botLogin": "clinical-antigravity[bot]",
+              "model": "gemini-4-neon",
+              "effort": "high",
+              "status": "queued",
+              "updatedAt": "2026-11-19T08:00:05Z"
+            }
+            """
+        try addressJSON.write(
+            to: runDir.appending(path: "address.json"), atomically: true, encoding: .utf8)
+
+        // Legacy review.json should be ignored.
+        let legacyReviewJSON = """
+            {
+              "phase": "review",
+              "harness": "codex",
+              "status": "completed",
+              "conclusion": "success",
+              "updatedAt": "2026-11-19T07:59:00Z"
+            }
+            """
+        try legacyReviewJSON.write(
             to: runDir.appending(path: "review.json"), atomically: true, encoding: .utf8)
 
         // Matching rollout with same session ID should be deduplicated.
@@ -197,6 +251,14 @@ private func expect(_ condition: Bool, _ message: String) throws {
         )
         try expect(snapshot.runs.count == 2, "Expected 1 workflow run + 1 grouped local PR #31 run")
         try expect(snapshot.runs[0].runID == "777", "Expected live workflow run sorted first")
+        try expect(
+            snapshot.runs[0].phases.map(\.phase) == ["review-sol", "review-opus", "address"],
+            "Expected ordered multi-reviewer phases without legacy review.json"
+        )
+        try expect(
+            snapshot.runs[0].phases[1].model == "claude-opus-5-5",
+            "Expected opus review phase model"
+        )
         try expect(snapshot.runs[1].runID == "local-pr-31", "Expected grouped local PR #31 run")
         try expect(snapshot.runs[1].phases.count == 2, "Expected Review + Address tabs on PR #31")
         try expect(snapshot.runs[1].phases[0].harness == "codex", "Expected first tab codex review")
