@@ -248,6 +248,20 @@ private func createSuperDB(
         )
         try expect(
             classifyWorktreePath(
+                "/Users/tester/.gemini/antigravity/worktrees/d5426dc2-8684-4b55-944e-7a28e4cfe969/subagent-Router-self-7d334d49",
+                homeDirectory: home)
+                == .antigravity,
+            "Antigravity subagent worktree path should classify"
+        )
+        try expect(
+            classifyWorktreePath(
+                "/Users/tester/.gemini/antigravity/worktrees/other-repo/my_branch",
+                homeDirectory: home)
+                == .unknown,
+            "Other Antigravity repo path should classify as unknown"
+        )
+        try expect(
+            classifyWorktreePath(
                 "/Users/tester/.super.engineering/worktrees/clinical-swift/sc-vortex",
                 homeDirectory: home)
                 == .superEngineering,

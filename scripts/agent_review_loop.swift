@@ -521,6 +521,7 @@ func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind
     // Expected layouts:
     // - .codex/worktrees/<id>/clinical-swift
     // - .gemini/antigravity/worktrees/clinical-swift/<name>
+    // - .gemini/antigravity/worktrees/<conversation-id>/<name>
     // - .super.engineering/worktrees/clinical-swift/<name>
     if components.count == 4 && components[0] == ".codex" && components[1] == "worktrees"
         && components[3] == "clinical-swift"
@@ -528,7 +529,8 @@ func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind
         return .codex
     }
     if components.count == 5 && components[0] == ".gemini" && components[1] == "antigravity"
-        && components[2] == "worktrees" && components[3] == "clinical-swift"
+        && components[2] == "worktrees"
+        && (components[3] == "clinical-swift" || UUID(uuidString: components[3]) != nil)
     {
         return .antigravity
     }
