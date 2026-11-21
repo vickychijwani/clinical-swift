@@ -175,8 +175,12 @@ private struct AppointmentDetailsContent: View {
     }
 
     private func performStatusUpdate(_ status: Appointment.Status) async {
-        if await model.updateStatus(to: status) {
-            router.dismissDetails(presentationID: presentationID)
+        let visitID =
+            router.detailsPresentation?.id == presentationID
+            ? router.detailsPresentation?.visitID
+            : nil
+        if await model.updateStatus(to: status), let visitID {
+            router.dismissDetails(presentationID: presentationID, visitID: visitID)
         }
     }
 }

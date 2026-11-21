@@ -166,6 +166,27 @@ struct RouterTests {
         #expect(router.detailsPresentation == nil)
     }
 
+    @Test func lateDetailsDismissalDoesNotDismissInPlaceReplacementWithSamePresentationID() throws {
+        let router = makeRouter()
+        router.presentDetails(.appointment(UUID()))
+        let presentationID = try #require(router.detailsPresentation?.id)
+        let oldVisitID = try #require(router.detailsPresentation?.visitID)
+
+        let replacementAppointmentID = UUID()
+        router.presentDetails(.appointment(replacementAppointmentID))
+        let newVisitID = try #require(router.detailsPresentation?.visitID)
+        #expect(router.detailsPresentation?.id == presentationID)
+        #expect(newVisitID != oldVisitID)
+
+        router.dismissDetails(presentationID: presentationID, visitID: oldVisitID)
+        #expect(router.detailsPresentation?.id == presentationID)
+        #expect(router.detailsPresentation?.visitID == newVisitID)
+        #expect(router.detailsPresentation?.root == .appointment(replacementAppointmentID))
+
+        router.dismissDetails(presentationID: presentationID, visitID: newVisitID)
+        #expect(router.detailsPresentation == nil)
+    }
+
     @Test func presentingDetailsAgainReusesTheSessionAndReplacesHistory() throws {
         let router = makeRouter()
         router.presentDetails(.appointment(UUID()))

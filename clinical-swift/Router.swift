@@ -191,7 +191,18 @@ final class Router {
     }
 
     func dismissDetails(presentationID: UUID) {
-        guard let presentation = detailsPresentation, presentation.id == presentationID,
+        dismissDetailsIfMatching(presentationID: presentationID, visitID: nil)
+    }
+
+    func dismissDetails(presentationID: UUID, visitID: UUID) {
+        dismissDetailsIfMatching(presentationID: presentationID, visitID: visitID)
+    }
+
+    private func dismissDetailsIfMatching(presentationID: UUID, visitID: UUID?) {
+        // A sheet ID survives in-place root replacement, so async callers check visitID too.
+        guard let presentation = detailsPresentation,
+            presentation.id == presentationID,
+            visitID == nil || presentation.visitID == visitID,
             !presentation.isSavingCompletion
         else { return }
         discardActivePresentation()
