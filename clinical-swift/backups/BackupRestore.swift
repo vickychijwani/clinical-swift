@@ -269,33 +269,6 @@ struct BackupRestore {
     }
 
     static func prepareCalendar(_ database: any DatabaseWriter, cutoff: Date) throws {
-        try database.write { db in
-            // This private table keeps the fixed recovery window across restarts and retries.
-            try db.execute(
-                sql:
-                    "CREATE TABLE IF NOT EXISTS clinicalCalendarRecovery (source TEXT NOT NULL, sourceID TEXT NOT NULL, cutoff TEXT NOT NULL, PRIMARY KEY (source, sourceID)) STRICT"
-            )
-            try db.execute(sql: "DELETE FROM clinicalCalendarRecovery")
-            for (table, key, source) in [
-                ("appointmentCalendarSync", "appointmentID", "appointments"),
-                ("unavailableTimeCalendarSync", "unavailableTimeID", "unavailableTimes"),
-            ] {
-                // Keep every historical link and tombstone, but stop excluded pending delivery.
-                // Records without saved Calendar work must not enter Calendar during recovery.
-                try db.execute(
-                    sql: """
-                        UPDATE \(table) SET needsSync = CASE
-                          WHEN EXISTS (SELECT 1 FROM \(source) s WHERE s.id = \(table).\(key)
-                            AND julianday(s.start) + s.durationMinutes / 1440.0 >= julianday(?)) THEN 1
-                          WHEN NOT EXISTS (SELECT 1 FROM \(source) s WHERE s.id = \(table).\(key))
-                            AND julianday(eventStart) >= julianday(?) THEN 1 ELSE 0 END,
-                          revision = revision + 1
-                        """, arguments: [cutoff, cutoff])
-                try db.execute(
-                    sql:
-                        "INSERT INTO clinicalCalendarRecovery SELECT ?, \(key), ? FROM \(table) WHERE needsSync = 1",
-                    arguments: [table, cutoff])
-            }
-        }
+        try database.prepareCalendarRecovery(cutoff: cutoff)
     }
 }
