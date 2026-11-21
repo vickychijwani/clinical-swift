@@ -92,16 +92,8 @@
     @MainActor @Observable
     final class UITestSaveGate {
         private(set) var isWaiting = false
-        private nonisolated let condition = NSConditionLock(condition: 0)
         private var isReleased = false
         private var continuations: [CheckedContinuation<Void, Never>] = []
-
-        nonisolated func wait() {
-            Task { @MainActor in isWaiting = true }
-            // GRDB requires a synchronous callback. Block only its writer, until release sets 1.
-            condition.lock(whenCondition: 1)
-            condition.unlock(withCondition: 1)
-        }
 
         /// Suspends async writes without blocking the DatabaseQueue serial queue.
         func waitAsync() async {
@@ -113,8 +105,6 @@
         }
 
         func release() {
-            condition.lock()
-            condition.unlock(withCondition: 1)
             isReleased = true
             isWaiting = false
             let pending = continuations
@@ -126,7 +116,7 @@
     }
 
     /// Delays async database writes until the UI test releases the save gate.
-    private nonisolated final class GatedDatabaseWriter: DatabaseWriter {
+    nonisolated final class GatedDatabaseWriter: DatabaseWriter {
         let base: DatabaseQueue
         let gate: UITestSaveGate
 

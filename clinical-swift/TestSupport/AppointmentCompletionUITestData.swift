@@ -24,10 +24,9 @@
                 details, visitID: presentation.visitID, presentationID: presentation.id)
         }
 
-        static func makeDatabase() throws -> DatabaseQueue {
+        static func makeDatabase() throws -> any DatabaseWriter {
             let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
             try migrateDatabase(database)
-            let gate = saveGate
             try database.write { db in
                 let patientID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1))
                 let unknown = CommandLine.arguments.contains("--completion-unknown-patient")
@@ -53,21 +52,12 @@
                                 amount: 500),
                         ]), in: db)
                 }
-                if CommandLine.arguments.contains("--completion-gated-save") {
-                    // Hold the real transaction while UI tests check its disabled controls.
-                    // Only the test can release it, so a slow runner cannot miss the saving state.
-                    db.add(
-                        function: DatabaseFunction("completion_test_gate", argumentCount: 0) { _ in
-                            gate.wait()
-                            return 0
-                        })
-                    try db.execute(
-                        sql: """
-                            CREATE TEMP TRIGGER gate_completion BEFORE UPDATE OF status ON appointments
-                            WHEN NEW.status = 'completed'
-                            BEGIN SELECT completion_test_gate(); END
-                            """)
-                }
+            }
+            if CommandLine.arguments.contains("--completion-gated-save") {
+                // Hold the real save while UI tests check its disabled controls.
+                // Only the test can release it, so a slow runner cannot miss the saving state.
+                // Suspend async writes before entering DatabaseQueue so main-thread @FetchAll setups cannot deadlock.
+                return GatedDatabaseWriter(base: database, gate: saveGate)
             }
             return database
         }

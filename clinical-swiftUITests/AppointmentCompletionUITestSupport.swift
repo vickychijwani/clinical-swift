@@ -18,6 +18,9 @@ enum AppointmentCompletionUITestSupport {
             app.buttons["Complete"].tap()
         }
         XCTAssertTrue(app.navigationBars["Complete Appointment"].existsOrWait(timeout: 5))
+        // Wait for the initial amount-field keyboard so an immediate Back tap does not interrupt
+        // keyboard presentation and leave XCUITest's animation-idle tracker stuck.
+        XCTAssertTrue(app.keyboards.firstMatch.existsOrWait(timeout: 3))
         return app
     }
 
