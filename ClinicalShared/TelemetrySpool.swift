@@ -657,12 +657,11 @@ nonisolated final class TelemetrySpool: Sendable {
             validatedPayload.append(0x0A)
         }
 
-        let isDebugOnly = extracted.hasDebug && !extracted.hasElevated
         let sealedURL = directory.appending(
             path: Self.makeSegmentFilename(
                 timestampMillis: Self.unixMillis(now),
                 process: .app,
-                isDebug: isDebugOnly
+                isDebug: extracted.isDebugOnly
             ))
         do {
             try validatedPayload.write(to: sealedURL, options: [.atomic])
@@ -692,8 +691,7 @@ nonisolated final class TelemetrySpool: Sendable {
 
     private struct ExtractedLines {
         let lines: [Data]
-        let hasDebug: Bool
-        let hasElevated: Bool
+        let isDebugOnly: Bool
     }
 
     private static func extractValidatedLines(
@@ -711,27 +709,21 @@ nonisolated final class TelemetrySpool: Sendable {
         }
 
         var validLines: [Data] = []
-        var hasDebug = false
-        var hasElevated = false
+        var hasNonDebug = false
 
         for slice in rawSlices where !slice.isEmpty {
             let lineData = Data(slice)
             guard
                 let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
             else { continue }
-            if let level = object["level"] as? String {
-                if level == TelemetryLevel.debug.rawValue {
-                    hasDebug = true
-                } else if level == TelemetryLevel.warning.rawValue
-                    || level == TelemetryLevel.error.rawValue
-                    || level == TelemetryLevel.fault.rawValue
-                {
-                    hasElevated = true
-                }
+            // Treat missing, unknown, and non-debug levels conservatively so normal events
+            // are not evicted ahead of debug-only segments.
+            if (object["level"] as? String) != TelemetryLevel.debug.rawValue {
+                hasNonDebug = true
             }
             validLines.append(lineData)
         }
-        return ExtractedLines(lines: validLines, hasDebug: hasDebug, hasElevated: hasElevated)
+        return ExtractedLines(lines: validLines, isDebugOnly: !validLines.isEmpty && !hasNonDebug)
     }
 
     static func unixMillis(_ date: Date) -> Int64 {
