@@ -102,7 +102,7 @@ struct BackupRestore {
         let database = try DatabaseQueue(path: replacement.path(percentEncoded: false))
         do {
             try migrator.migrate(database)
-            try Self.prepareCalendar(database, cutoff: cutoff)
+            try database.prepareCalendarRecovery(cutoff: cutoff)
             try database.close()
         } catch {
             try? database.close()
@@ -266,9 +266,5 @@ struct BackupRestore {
             name: "backup_restore_finalized",
             recordID: journal.recoveryID.uuidString.lowercased()
         )
-    }
-
-    static func prepareCalendar(_ database: any DatabaseWriter, cutoff: Date) throws {
-        try database.prepareCalendarRecovery(cutoff: cutoff)
     }
 }

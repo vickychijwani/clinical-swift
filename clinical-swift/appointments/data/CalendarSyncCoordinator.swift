@@ -210,7 +210,7 @@ final class CalendarSyncCoordinator {
         switch source {
         case .remove(let fallbackStart):
             try await calendarClient.deleteEvent(record.link, markerURL, fallbackStart)
-            try await deleteSyncRecordIfCurrent(record)
+            try await database.deleteCalendarSyncWorkIfCurrent(record)
         case .replace(let details):
             let payload = try await eventPayload(for: details)
             let newLink = try await calendarClient.replaceEvent(record.link, payload)
@@ -289,10 +289,6 @@ final class CalendarSyncCoordinator {
             for: record,
             at: .now
         )
-    }
-
-    private func deleteSyncRecordIfCurrent(_ record: CalendarSyncWork) async throws {
-        try await database.deleteCalendarSyncWorkIfCurrent(record)
     }
 }
 

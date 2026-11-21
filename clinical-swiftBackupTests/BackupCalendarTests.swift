@@ -1,3 +1,4 @@
+import ClinicalPersistence
 import Dependencies
 import Foundation
 import GRDB
@@ -24,8 +25,8 @@ struct BackupCalendarTests {
             )
         }
         let before = try BackupFixture.contents(database)
-        try BackupRestore.prepareCalendar(
-            database, cutoff: Date("2026-10-04T00:00:00Z", strategy: .iso8601))
+        try database.prepareCalendarRecovery(
+            cutoff: Date("2026-10-04T00:00:00Z", strategy: .iso8601))
         let fake = RecoveryCalendar()
         let coordinator = CalendarSyncCoordinator(
             database: database, calendarClient: fake.client,
@@ -61,7 +62,7 @@ struct BackupCalendarTests {
         let database = try BackupFixture.database(at: directory.appending(path: "source.db"))
         defer { try? database.close() }
         let cutoff = try Date("2026-10-04T00:00:00Z", strategy: .iso8601)
-        try BackupRestore.prepareCalendar(database, cutoff: cutoff)
+        try database.prepareCalendarRecovery(cutoff: cutoff)
         let fake = RecoveryCalendar()
         let coordinator = CalendarSyncCoordinator(
             database: database, calendarClient: fake.client,
