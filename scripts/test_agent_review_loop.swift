@@ -999,6 +999,199 @@ private func createAgyConversationDB(
         )
     }
 
+    private func testUnresolvedReviewThreads() throws {
+        let emptyJSON = """
+            {
+              "data": {
+                "repository": {
+                  "pullRequest": {
+                    "reviewThreads": {
+                      "pageInfo": { "hasNextPage": false, "endCursor": null },
+                      "nodes": []
+                    }
+                  }
+                }
+              }
+            }
+            """
+        let emptyCount = try countUnresolvedReviewThreads(
+            repo: "vickychijwani/clinical-swift",
+            prNumber: 39,
+            fetchPage: { _, _, _, _ in emptyJSON }
+        )
+        try expect(emptyCount == 0, "Empty reviewThreads should yield 0")
+
+        let page1 = """
+            {
+              "data": {
+                "repository": {
+                  "pullRequest": {
+                    "reviewThreads": {
+                      "pageInfo": { "hasNextPage": true, "endCursor": "cursor-1" },
+                      "nodes": [
+                        {
+                          "isResolved": true,
+                          "comments": {
+                            "nodes": [
+                              { "author": { "__typename": "Bot", "login": "clinical-codex" } }
+                            ]
+                          }
+                        },
+                        {
+                          "isResolved": false,
+                          "comments": {
+                            "nodes": [
+                              { "author": { "__typename": "Bot", "login": "clinical-codex" } }
+                            ]
+                          }
+                        },
+                        {
+                          "isResolved": false,
+                          "comments": {
+                            "nodes": [
+                              { "author": { "__typename": "User", "login": "clinical-codex" } }
+                            ]
+                          }
+                        },
+                        {
+                          "isResolved": false,
+                          "comments": {
+                            "nodes": [
+                              { "author": { "__typename": "User", "login": "stranger" } },
+                              { "author": null }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+            """
+        let page2 = """
+            {
+              "data": {
+                "repository": {
+                  "pullRequest": {
+                    "reviewThreads": {
+                      "pageInfo": { "hasNextPage": false, "endCursor": "cursor-2" },
+                      "nodes": [
+                        {
+                          "isResolved": false,
+                          "comments": {
+                            "nodes": [
+                              { "author": { "__typename": "Bot", "login": "clinical-antigravity" } }
+                            ]
+                          }
+                        },
+                        {
+                          "isResolved": false,
+                          "comments": {
+                            "nodes": [
+                              { "author": { "__typename": "User", "login": "VickyChijwani" } }
+                            ]
+                          }
+                        },
+                        {
+                          "isResolved": false,
+                          "comments": {
+                            "nodes": [
+                              { "author": { "__typename": "User", "login": "stranger" } },
+                              { "author": { "__typename": "Bot", "login": "clinical-codex[bot]" } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+            """
+        var requestedCursors: [String?] = []
+        let paginatedCount = try countUnresolvedReviewThreads(
+            repo: "vickychijwani/clinical-swift",
+            prNumber: 42,
+            fetchPage: { owner, name, prNumber, after in
+                try expect(owner == "vickychijwani" && name == "clinical-swift", "Repo split mismatch")
+                try expect(prNumber == 42, "PR number mismatch")
+                requestedCursors.append(after)
+                return after == nil ? page1 : page2
+            }
+        )
+        try expect(
+            requestedCursors == [nil, "cursor-1"],
+            "Expected two GraphQL pages with cursor-1, got \(requestedCursors)"
+        )
+        // Page 1: 1 (Bot clinical-codex); ignores resolved, User spoof clinical-codex, stranger/null.
+        // Page 2: 3 (Bot clinical-antigravity, owner case-insensitive, mixed stranger + trusted bot).
+        try expect(
+            paginatedCount == 4,
+            "Expected 4 trusted unresolved threads across pages, got \(paginatedCount)"
+        )
+
+        let errorJSON = """
+            { "errors": [{ "message": "API rate limit exceeded" }] }
+            """
+        var threwGraphQLError = false
+        do {
+            _ = try parseReviewThreadPage(errorJSON)
+        } catch {
+            threwGraphQLError = true
+        }
+        try expect(threwGraphQLError, "GraphQL errors payload must throw")
+
+        let missingPRJSON = """
+            { "data": { "repository": { "pullRequest": null } } }
+            """
+        var threwMissingPR = false
+        do {
+            _ = try parseReviewThreadPage(missingPRJSON)
+        } catch {
+            threwMissingPR = true
+        }
+        try expect(threwMissingPR, "Missing pullRequest payload must throw")
+
+        var threwBadRepo = false
+        do {
+            _ = try countUnresolvedReviewThreads(
+                repo: "not-a-repo",
+                prNumber: 1,
+                fetchPage: { _, _, _, _ in emptyJSON }
+            )
+        } catch {
+            threwBadRepo = true
+        }
+        try expect(threwBadRepo, "Invalid repo string must throw")
+
+        let loopJSON = """
+            {
+              "data": {
+                "repository": {
+                  "pullRequest": {
+                    "reviewThreads": {
+                      "pageInfo": { "hasNextPage": true, "endCursor": "same-cursor" },
+                      "nodes": []
+                    }
+                  }
+                }
+              }
+            }
+            """
+        var threwLoopCursor = false
+        do {
+            _ = try countUnresolvedReviewThreads(
+                repo: "owner/repo",
+                prNumber: 1,
+                fetchPage: { _, _, _, _ in loopJSON }
+            )
+        } catch {
+            threwLoopCursor = true
+        }
+        try expect(threwLoopCursor, "Repeated pagination cursor must throw")
+    }
+
     private func runAllTests() {
         let tempRoot = FileManager.default.temporaryDirectory.appending(
             path: "agent-review-loop-tests-\(UUID().uuidString)")
@@ -1012,6 +1205,7 @@ private func createAgyConversationDB(
             try testCodexSkillsConfig(in: tempRoot)
             try testCheckRunPayload()
             try testCommentReactionEndpoint()
+            try testUnresolvedReviewThreads()
             try testMonitorRecord(in: tempRoot)
             print("PASS agent review loop unit and integration tests")
         } catch {

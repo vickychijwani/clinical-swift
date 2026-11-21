@@ -707,7 +707,7 @@ jobs:
               checkout_dir=$(cd "$checkout_dir" && pwd -P)
             fi
 
-            prompt="Review PR #$PR_NUMBER in $GITHUB_REPOSITORY using the my-review skill. You are running in a clean checkout of the PR head (do not modify files). Your assigned GitHub App identity is $rev_bot ($rev_display · $rev_effort)."
+            prompt="Review PR #$PR_NUMBER in $GITHUB_REPOSITORY using the my-review skill. You are running in a clean checkout of the PR head (do not modify files). Skip routine builds and test runs; the author and CI already run them. Run a targeted build or test only to confirm a specific suspected defect. Your assigned GitHub App identity is $rev_bot ($rev_display · $rev_effort)."
 
             if [[ "$rev_harness" == "codex" ]]; then
               skills_repo=$([[ "$DRY_RUN" == "true" ]] && echo "$pr_base_dir" || echo "$checkout_dir")
@@ -986,7 +986,7 @@ jobs:
           app-id: ${{ vars.CLINICAL_ANTIGRAVITY_APP_ID || secrets.CLINICAL_ANTIGRAVITY_APP_ID }}
           private-key: ${{ secrets.CLINICAL_ANTIGRAVITY_PRIVATE_KEY }}
 
-      - name: Verify original worktree is clean and at PR head
+      - name: Verify PR comments and worktree
         id: verify
         env:
           GH_TOKEN: ${{ github.token }}
@@ -994,12 +994,15 @@ jobs:
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
           PR_BRANCH: ${{ needs.plan.outputs.pr_branch }}
           PR_HEAD_SHA: ${{ needs.review.outputs.pr_head_sha || needs.plan.outputs.pr_head_sha }}
+          RUN_REVIEW: ${{ needs.plan.outputs.run_review }}
           AUTHOR_OVERRIDE: ${{ needs.plan.outputs.author_override }}
           AUTHOR_JSON: ${{ needs.plan.outputs.author_json }}
           CHECK_RUN_ID: ${{ needs.review.outputs.address_check_run_id || needs.plan.outputs.address_check_run_id }}
           DRY_RUN: ${{ needs.plan.outputs.dry_run }}
         run: |
           set -euo pipefail
+          script="$GITHUB_WORKSPACE/scripts/agent_review_loop.swift"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           author_id=$(jq -r '.id' <<< "$AUTHOR_JSON")
           author_display=$(jq -r '.displayName' <<< "$AUTHOR_JSON")
 
@@ -1010,8 +1013,6 @@ jobs:
             reason="New commits were pushed during review; skipping address on stale review."
             echo "$reason ($PR_HEAD_SHA -> $live_head_sha)"
             if [[ "$DRY_RUN" != "true" ]]; then
-              run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-              script="$GITHUB_WORKSPACE/scripts/agent_review_loop.swift"
               if [[ -n "$CHECK_RUN_ID" ]]; then
                 GH_TOKEN="$AUTHOR_TOKEN" swift "$script" check-run \
                   --repo "$GITHUB_REPOSITORY" \
@@ -1042,6 +1043,40 @@ jobs:
             fi
             echo "skipped=true" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          unresolved_count=$(swift "$script" unresolved-review-threads \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$PR_NUMBER")
+
+          if [[ "$unresolved_count" -eq 0 ]]; then
+            if [[ "$DRY_RUN" == "true" && "$RUN_REVIEW" == "true" ]]; then
+              echo "DRY RUN: PR #$PR_NUMBER has no unresolved review comments (continuing to print address dry-run plan because review was a dry run)."
+            else
+              reason="No unresolved review comments on PR #$PR_NUMBER."
+              echo "$reason Skipping address."
+              if [[ "$DRY_RUN" != "true" ]]; then
+                if [[ -n "$CHECK_RUN_ID" ]]; then
+                  GH_TOKEN="$AUTHOR_TOKEN" swift "$script" check-run \
+                    --repo "$GITHUB_REPOSITORY" \
+                    --check-run-id "$CHECK_RUN_ID" \
+                    --status completed \
+                    --conclusion skipped \
+                    --title "Address skipped ($author_display)" \
+                    --summary "$reason" \
+                    --details-url "$run_url" >/dev/null || true
+                fi
+                swift "$script" monitor-record \
+                  --run-id "$GITHUB_RUN_ID" \
+                  --phase address \
+                  --status completed \
+                  --conclusion skipped >/dev/null || true
+              fi
+              echo "skipped=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            echo "Found $unresolved_count unresolved review thread(s) on PR #$PR_NUMBER."
           fi
 
           discover_args=(

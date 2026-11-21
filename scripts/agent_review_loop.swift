@@ -5,7 +5,7 @@ struct ReviewLoopError: Error, CustomStringConvertible {
     let description: String
 }
 
-enum Harness: String, Codable, Equatable {
+enum Harness: String, Codable, Equatable, CaseIterable {
     case codex
     case antigravity
 
@@ -1275,6 +1275,219 @@ private func addCommentReaction(
     }
 }
 
+struct GraphQLReviewActor: Codable, Equatable {
+    let typeName: String?
+    let login: String
+
+    enum CodingKeys: String, CodingKey {
+        case typeName = "__typename"
+        case login
+    }
+
+    /// Normalizes GraphQL Bot logins (which omit `[bot]`) to match REST bot logins.
+    var normalizedLogin: String {
+        let trimmed = login.trimmingCharacters(in: .whitespacesAndNewlines)
+        if typeName == "Bot", !trimmed.hasSuffix("[bot]") {
+            return "\(trimmed)[bot]"
+        }
+        return trimmed
+    }
+}
+
+struct GraphQLReviewComment: Codable, Equatable {
+    let author: GraphQLReviewActor?
+}
+
+struct GraphQLReviewThread: Equatable {
+    let isResolved: Bool
+    let comments: [GraphQLReviewComment]
+}
+
+struct GraphQLReviewThreadPage: Equatable {
+    let threads: [GraphQLReviewThread]
+    let hasNextPage: Bool
+    let endCursor: String?
+}
+
+private struct GraphQLReviewThreadsResponse: Decodable {
+    struct GraphQLErrorItem: Decodable {
+        let message: String
+    }
+
+    struct DataPayload: Decodable {
+        let repository: Repository?
+    }
+
+    struct Repository: Decodable {
+        let pullRequest: PullRequest?
+    }
+
+    struct PullRequest: Decodable {
+        let reviewThreads: ReviewThreadConnection
+    }
+
+    struct ReviewThreadConnection: Decodable {
+        let pageInfo: PageInfo
+        let nodes: [ReviewThreadNode?]?
+    }
+
+    struct PageInfo: Decodable {
+        let hasNextPage: Bool
+        let endCursor: String?
+    }
+
+    struct ReviewThreadNode: Decodable {
+        let isResolved: Bool
+        let comments: CommentConnection
+    }
+
+    struct CommentConnection: Decodable {
+        let nodes: [GraphQLReviewComment?]?
+    }
+
+    let data: DataPayload?
+    let errors: [GraphQLErrorItem]?
+}
+
+/// Decodes one page of GitHub GraphQL pullRequest.reviewThreads JSON.
+func parseReviewThreadPage(_ json: String) throws -> GraphQLReviewThreadPage {
+    let response: GraphQLReviewThreadsResponse
+    do {
+        response = try JSONDecoder().decode(
+            GraphQLReviewThreadsResponse.self, from: Data(json.utf8))
+    } catch {
+        throw ReviewLoopError(
+            description: "Failed decoding GitHub GraphQL reviewThreads response: \(error)")
+    }
+    if let errors = response.errors, !errors.isEmpty {
+        let messages = errors.map(\.message).joined(separator: "; ")
+        throw ReviewLoopError(description: "GitHub GraphQL error: \(messages)")
+    }
+    guard let connection = response.data?.repository?.pullRequest?.reviewThreads else {
+        throw ReviewLoopError(
+            description: "Pull request reviewThreads missing from GitHub GraphQL response.")
+    }
+    let threads = (connection.nodes ?? []).compactMap { node -> GraphQLReviewThread? in
+        guard let node else { return nil }
+        return GraphQLReviewThread(
+            isResolved: node.isResolved,
+            comments: (node.comments.nodes ?? []).compactMap { $0 }
+        )
+    }
+    return GraphQLReviewThreadPage(
+        threads: threads,
+        hasNextPage: connection.pageInfo.hasNextPage,
+        endCursor: connection.pageInfo.endCursor
+    )
+}
+
+/// Counts unresolved PR review threads with at least one comment from a trusted author.
+func countTrustedUnresolvedReviewThreads(
+    _ threads: [GraphQLReviewThread],
+    repositoryOwner: String
+) -> Int {
+    let trustedLogins = Set(
+        ([repositoryOwner] + Harness.allCases.map(\.botLogin)).map { $0.lowercased() }
+    )
+    return threads.filter { thread in
+        guard !thread.isResolved else { return false }
+        return thread.comments.contains { comment in
+            guard let actor = comment.author else { return false }
+            return trustedLogins.contains(actor.normalizedLogin.lowercased())
+        }
+    }.count
+}
+
+/// Paginates all PR review threads and counts trusted unresolved threads.
+func countUnresolvedReviewThreads(
+    repo: String,
+    prNumber: Int,
+    fetchPage: (_ owner: String, _ name: String, _ prNumber: Int, _ after: String?) throws -> String
+) throws -> Int {
+    guard prNumber > 0 else {
+        throw ReviewLoopError(description: "Invalid --pr-number value: \(prNumber)")
+    }
+    let parts = repo.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+    guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
+        throw ReviewLoopError(description: "Invalid --repo value '\(repo)'. Expected owner/name.")
+    }
+    let owner = parts[0]
+    let name = parts[1]
+
+    var allThreads: [GraphQLReviewThread] = []
+    var cursor: String?
+    var seenCursors = Set<String>()
+
+    while true {
+        let json = try fetchPage(owner, name, prNumber, cursor)
+        let page = try parseReviewThreadPage(json)
+        allThreads.append(contentsOf: page.threads)
+        guard page.hasNextPage else { break }
+        guard let nextCursor = page.endCursor, !nextCursor.isEmpty else {
+            throw ReviewLoopError(description: "Missing endCursor for next reviewThreads page.")
+        }
+        guard seenCursors.insert(nextCursor).inserted else {
+            throw ReviewLoopError(
+                description: "Repeated reviewThreads pagination cursor: \(nextCursor).")
+        }
+        cursor = nextCursor
+    }
+
+    return countTrustedUnresolvedReviewThreads(allThreads, repositoryOwner: owner)
+}
+
+private func fetchReviewThreadsPage(
+    owner: String,
+    name: String,
+    prNumber: Int,
+    after: String?
+) throws -> String {
+    let query = """
+        query($owner: String!, $name: String!, $number: Int!, $after: String) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              reviewThreads(first: 100, after: $after) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  isResolved
+                  comments(first: 100) {
+                    nodes {
+                      author {
+                        __typename
+                        login
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+    var arguments = [
+        "gh", "api", "graphql",
+        "-f", "query=\(query)",
+        "-f", "owner=\(owner)",
+        "-f", "name=\(name)",
+        "-F", "number=\(prNumber)",
+    ]
+    if let after {
+        arguments.append(contentsOf: ["-f", "after=\(after)"])
+    }
+    let result = try runProcess(arguments: arguments)
+    guard result.exitCode == 0 else {
+        let details = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw ReviewLoopError(
+            description:
+                "gh api graphql reviewThreads failed for \(owner)/\(name)#\(prNumber): \(details)"
+        )
+    }
+    return result.stdout
+}
+
 /// Validates monitor phase identifiers (`review-<model>`, `address`, or `ask`).
 func isValidMonitorPhase(_ raw: String) -> Bool {
     if raw == "address" || raw == "ask" {
@@ -1518,7 +1731,7 @@ private func runCLI() -> Int32 {
     guard let subcommand = args.first else {
         FileHandle.standardError.write(
             Data(
-                "Usage: agent_review_loop.swift <parse-trigger|parse-ask|discover|codex-skills-config|check-run|react|monitor-record> [options]\n"
+                "Usage: agent_review_loop.swift <parse-trigger|parse-ask|discover|codex-skills-config|check-run|react|unresolved-review-threads|monitor-record> [options]\n"
                     .utf8))
         return 2
     }
@@ -1646,6 +1859,23 @@ private func runCLI() -> Int32 {
                 commentID: parsed.values["comment-id"],
                 content: content
             )
+            return 0
+
+        case "unresolved-review-threads":
+            guard let repo = parsed.values["repo"], !repo.isEmpty,
+                let prText = parsed.values["pr-number"],
+                let prNumber = Int(prText), prNumber > 0
+            else {
+                throw ReviewLoopError(
+                    description: "Missing or invalid flags: --repo, --pr-number"
+                )
+            }
+            let count = try countUnresolvedReviewThreads(
+                repo: repo,
+                prNumber: prNumber,
+                fetchPage: fetchReviewThreadsPage
+            )
+            print(count)
             return 0
 
         case "monitor-record":
