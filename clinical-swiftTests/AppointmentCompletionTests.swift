@@ -233,11 +233,12 @@ struct AppointmentCompletionTests {
             #expect(router.toast.current == nil)
             #expect(router.selectedTab == .schedule)
             #expect(router.selectedScheduleDate == expectedMonday)
-            guard case .appointmentBooking(let booking) = router.activePresentation else {
+            guard case .bookAppointment(let bookedPatient) = router.scheduleEditorRequest?.kind
+            else {
                 Issue.record("Expected follow-up appointment booking presentation.")
                 return
             }
-            #expect(booking.patient == patient)
+            #expect(bookedPatient == patient)
         }
     }
 

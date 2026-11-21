@@ -222,11 +222,10 @@ struct MixedScheduleTests {
             try await database.write { db in
                 try PatientRecord.insert { PatientRecord(patient) }.execute(db)
             }
-            let booking = try #require(
-                ScheduleEditorSession(
-                    request: .appointmentBooking(AppointmentBookingRequest(patient: patient)),
-                    selectedDate: date, appointments: model.appointments(for: date),
-                    onFinished: { _ in }))
+            let booking = ScheduleEditorSession(
+                request: .bookAppointment(patient),
+                selectedDate: date, appointments: model.appointments(for: date),
+                onFinished: { _ in })
             let before = booking.preview.start
             let blocks = (-3...4).map { day in
                 UnavailableTimeRecord(
@@ -306,13 +305,35 @@ struct MixedScheduleTests {
             router.requestScheduleCreation()
             router.openUnavailableTime(block.id)
             let request = try #require(router.unavailableTimeNavigationRequest)
-            await router.resolveUnavailableTime(request)
+            await UnavailableTimeLookup.resolve(request, using: router)
             #expect(router.selectedScheduleDate == ClinicDate.day(block.start))
             #expect(router.activePresentation == nil)
             router.openUnavailableTime(UUID())
-            await router.resolveUnavailableTime(
-                try #require(router.unavailableTimeNavigationRequest))
+            await UnavailableTimeLookup.resolve(
+                try #require(router.unavailableTimeNavigationRequest), using: router)
             #expect(router.navigationErrorMessage == "This unavailable time no longer exists.")
+        }
+    }
+
+    @Test func unavailableTimeLookupFailureSetsLoadErrorAndIgnoresStaleRequests() async throws {
+        let database = try DatabaseQueue()
+        try await withDependencies {
+            $0.defaultDatabase = database
+        } operation: {
+            let router = Router()
+            router.openUnavailableTime(UUID())
+            let failedRequest = try #require(router.unavailableTimeNavigationRequest)
+            await UnavailableTimeLookup.resolve(failedRequest, using: router)
+            #expect(router.unavailableTimeNavigationRequest == nil)
+            #expect(router.navigationErrorMessage == "The unavailable time could not be loaded.")
+
+            router.openUnavailableTime(UUID())
+            let staleRequest = try #require(router.unavailableTimeNavigationRequest)
+            router.openUnavailableTime(UUID())
+            let currentRequest = try #require(router.unavailableTimeNavigationRequest)
+            await UnavailableTimeLookup.resolve(staleRequest, using: router)
+            #expect(router.unavailableTimeNavigationRequest == currentRequest)
+            #expect(router.navigationErrorMessage == nil)
         }
     }
 

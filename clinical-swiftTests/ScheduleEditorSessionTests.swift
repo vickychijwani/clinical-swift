@@ -22,11 +22,10 @@ struct ScheduleEditorSessionTests {
             $0.defaultDatabase = database
         } operation: {
             var finishedDates: [Date] = []
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: .scheduleCreation(ScheduleCreationRequest()), selectedDate: date,
-                    appointments: []
-                ) { finishedDates.append($0.date) })
+            let session = ScheduleEditorSession(
+                request: .create(), selectedDate: date,
+                appointments: []
+            ) { finishedDates.append($0.date) }
             session.selectPatient(patient)
             if unavailable { session.selectType(.unavailableTime) }
             let preview = session.preview
@@ -64,11 +63,12 @@ struct ScheduleEditorSessionTests {
         let today = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
         let tomorrow = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
         let start = try Date("2026-10-02T12:30:00+05:30", strategy: .iso8601)
-        try withDependencies {
-            $0.date.now = try Date("2026-10-02T16:13:00+05:30", strategy: .iso8601)
+        let now = try Date("2026-10-02T16:13:00+05:30", strategy: .iso8601)
+        withDependencies {
+            $0.date.now = now
         } operation: {
-            let session = try genericSession(
-                request: .scheduleCreation(ScheduleCreationRequest()), date: tomorrow, hold: hold)
+            let session = genericSession(
+                request: .create(), date: tomorrow, hold: hold)
             guard case .appointment(let model) = session.editor else {
                 Issue.record("The session must contain an appointment editor.")
                 return
@@ -93,7 +93,7 @@ struct ScheduleEditorSessionTests {
     @Test(arguments: [false, true])
     func draftIdentityPreventsDraggingAnotherItem(unavailable: Bool) throws {
         let start = try Date("2026-10-02T12:00:00+05:30", strategy: .iso8601)
-        let session = try editingSession(unavailable: unavailable, start: start)
+        let session = editingSession(unavailable: unavailable, start: start)
         let draft = session.preview
         let other: TimelineItem =
             switch draft.id {
@@ -118,7 +118,7 @@ struct ScheduleEditorSessionTests {
         let start = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
             .setTime(14, 0, using: calendar)
         let nextStart = start.date(byAddingDays: 1, using: calendar).setTime(14, 0, using: calendar)
-        let session = try editingSession(unavailable: unavailable, start: start)
+        let session = editingSession(unavailable: unavailable, start: start)
         let original = session.preview
         session.beginAdjustment(original, edge: .move, items: [original])
         session.adjustment.release()
@@ -136,7 +136,7 @@ struct ScheduleEditorSessionTests {
     func dateSelectionKeepsClinicClockTimeAcrossUSDaylightSavingChange(unavailable: Bool) throws {
         let start = try Date("2026-10-31T12:00:00+05:30", strategy: .iso8601)
         let nextStart = try Date("2026-11-01T12:00:00+05:30", strategy: .iso8601)
-        let session = try editingSession(unavailable: unavailable, start: start)
+        let session = editingSession(unavailable: unavailable, start: start)
         session.selectDate(nextStart)
         #expect(session.preview.start == nextStart)
         #expect(session.preview.durationMinutes == 45)
@@ -146,7 +146,7 @@ struct ScheduleEditorSessionTests {
     func nextGestureUsesDraftControlAndMetadataChanges(unavailable: Bool) throws {
         let start = try Date("2026-10-02T12:00:00+05:30", strategy: .iso8601)
         let selectedStart = try Date("2026-10-02T16:00:00+05:30", strategy: .iso8601)
-        let session = try editingSession(unavailable: unavailable, start: start)
+        let session = editingSession(unavailable: unavailable, start: start)
         let staleItem = session.preview
         session.beginAdjustment(staleItem, edge: .move, items: [])
         session.updateAdjustment(translation: 15, items: [])
@@ -177,22 +177,19 @@ struct ScheduleEditorSessionTests {
         }
     }
 
-    private func editingSession(unavailable: Bool, start: Date) throws -> ScheduleEditorSession {
-        let request: AppPresentation =
+    private func editingSession(unavailable: Bool, start: Date) -> ScheduleEditorSession {
+        let request: ScheduleEditorRequest =
             unavailable
-            ? .unavailableTimeEditor(
-                UnavailableTimeEditorRequest(
-                    block: UnavailableTime(label: "Travel", start: start, durationMinutes: 45)))
-            : .appointmentEdit(
-                AppointmentEditRequest(
-                    details: AppointmentDetails(
-                        appointment: Appointment(
-                            patientName: "Patient", start: start, durationMinutes: 45,
-                            status: .scheduled),
-                        patient: Patient(name: "Patient", createdDate: start))))
-        return try #require(
-            ScheduleEditorSession(
-                request: request, selectedDate: start, appointments: [], onFinished: { _ in }))
+            ? .editUnavailableTime(
+                UnavailableTime(label: "Travel", start: start, durationMinutes: 45))
+            : .editAppointment(
+                AppointmentDetails(
+                    appointment: Appointment(
+                        patientName: "Patient", start: start, durationMinutes: 45,
+                        status: .scheduled),
+                    patient: Patient(name: "Patient", createdDate: start)))
+        return ScheduleEditorSession(
+            request: request, selectedDate: start, appointments: [], onFinished: { _ in })
     }
 
     @Test func initialHoldUsesItsOwnAdjustmentAndDoneRequiresPatientSelection() async throws {
@@ -241,11 +238,10 @@ struct ScheduleEditorSessionTests {
             $0.defaultDatabase = database
         } operation: {
             var finishedDates: [Date] = []
-            let request = AppPresentation.scheduleCreation(ScheduleCreationRequest())
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: request, selectedDate: date, appointments: []
-                ) { finishedDates.append($0.date) })
+            let request = ScheduleEditorRequest.create()
+            let session = ScheduleEditorSession(
+                request: request, selectedDate: date, appointments: []
+            ) { finishedDates.append($0.date) }
             session.selectPatient(patient)
             if unavailable { session.selectType(.unavailableTime) }
             session.isShowingSheet = false
@@ -311,14 +307,11 @@ struct ScheduleEditorSessionTests {
             $0.defaultDatabase = database
         } operation: {
             var didFinish = false
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: .appointmentEdit(
-                        AppointmentEditRequest(
-                            details: AppointmentDetails(appointment: appointment, patient: patient))
-                    ),
-                    selectedDate: date, appointments: [appointment]
-                ) { _ in didFinish = true })
+            let session = ScheduleEditorSession(
+                request: .editAppointment(
+                    AppointmentDetails(appointment: appointment, patient: patient)),
+                selectedDate: date, appointments: [appointment]
+            ) { _ in didFinish = true }
             session.beginAdjustment(session.preview, edge: .move, items: [])
             session.updateAdjustment(translation: 15, items: [])
             let preview = session.preview
@@ -350,12 +343,10 @@ struct ScheduleEditorSessionTests {
             $0.defaultDatabase = database
         } operation: {
             var finishedDates: [Date] = []
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: .unavailableTimeEditor(
-                        UnavailableTimeEditorRequest(block: block)),
-                    selectedDate: date, appointments: []
-                ) { finishedDates.append($0.date) })
+            let session = ScheduleEditorSession(
+                request: .editUnavailableTime(block),
+                selectedDate: date, appointments: []
+            ) { finishedDates.append($0.date) }
             #expect(session.canDelete)
             session.selectDate(nextDate)
             session.beginAdjustment(session.preview, edge: .move, items: [])
@@ -363,7 +354,8 @@ struct ScheduleEditorSessionTests {
             await session.delete()
             #expect(!session.adjustment.isDragging)
             #expect(finishedDates == [nextDate])
-            #expect(try await database.read { try UnavailableTimeRecord.fetchAll($0).isEmpty })
+            let isEmpty = try await database.read { try UnavailableTimeRecord.fetchAll($0).isEmpty }
+            #expect(isEmpty)
         }
     }
 
@@ -371,18 +363,17 @@ struct ScheduleEditorSessionTests {
         let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
         let busyStart = try Date("2026-10-02T09:00:00+05:30", strategy: .iso8601)
         let expectedStart = try Date("2026-10-02T11:00:00+05:30", strategy: .iso8601)
-        try withDependencies {
+        withDependencies {
             $0.date.now = date
         } operation: {
             let patient = Patient(name: "Patient", createdDate: date)
-            let request = AppointmentBookingRequest(patient: patient)
+            let request = ScheduleEditorRequest.bookAppointment(patient)
             let appointment = Appointment(
                 patientName: "Other patient", start: busyStart, durationMinutes: 120,
                 status: .scheduled)
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: .appointmentBooking(request), selectedDate: date,
-                    appointments: [appointment], onFinished: { _ in }))
+            let session = ScheduleEditorSession(
+                request: request, selectedDate: date,
+                appointments: [appointment], onFinished: { _ in })
             guard case .appointment(let model) = session.editor else {
                 Issue.record("The session must contain an appointment editor.")
                 return
@@ -398,7 +389,7 @@ struct ScheduleEditorSessionTests {
     func editingReplacesOnlyTheMatchingItemType(unavailable: Bool) throws {
         let start = try Date("2026-10-02T11:00:00+05:30", strategy: .iso8601)
         let nextDate = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
-        try withDependencies {
+        withDependencies {
             $0.date.now = start
         } operation: {
             let id = UUID()
@@ -406,18 +397,16 @@ struct ScheduleEditorSessionTests {
                 id: id, patientName: "Patient", start: start, durationMinutes: 60,
                 status: .scheduled)
             let block = UnavailableTime(id: id, label: "Travel", start: start, durationMinutes: 60)
-            let request: AppPresentation =
+            let request: ScheduleEditorRequest =
                 unavailable
-                ? .unavailableTimeEditor(UnavailableTimeEditorRequest(block: block))
-                : .appointmentEdit(
-                    AppointmentEditRequest(
-                        details: AppointmentDetails(
-                            appointment: appointment,
-                            patient: Patient(name: "Patient", createdDate: start))))
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: request, selectedDate: start, appointments: [appointment],
-                    onFinished: { _ in }))
+                ? .editUnavailableTime(block)
+                : .editAppointment(
+                    AppointmentDetails(
+                        appointment: appointment,
+                        patient: Patient(name: "Patient", createdDate: start)))
+            let session = ScheduleEditorSession(
+                request: request, selectedDate: start, appointments: [appointment],
+                onFinished: { _ in })
             let items: [TimelineItem] = [.appointment(appointment), .unavailableTime(block)]
             let siblingID: TimelineItem.ID = unavailable ? .appointment(id) : .unavailableTime(id)
             #expect(session.preview.start == start)
@@ -443,11 +432,10 @@ struct ScheduleEditorSessionTests {
         } operation: {
             let router = Router(selectedScheduleDate: date)
             router.requestScheduleCreation()
-            let request = try #require(router.activePresentation)
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: request, selectedDate: date,
-                    appointments: [], onFinished: { _ in }))
+            let request = try #require(router.scheduleEditorRequest)
+            let session = ScheduleEditorSession(
+                request: request, selectedDate: date,
+                appointments: [], onFinished: { _ in })
             if unavailable { session.selectType(.unavailableTime) }
             let initial = session.scrollRequest
             session.selectDate(nextDate)
@@ -489,11 +477,10 @@ struct ScheduleEditorSessionTests {
             } else {
                 router.requestScheduleCreation()
             }
-            let request = try #require(router.activePresentation)
-            let session = try #require(
-                ScheduleEditorSession(
-                    request: request, selectedDate: start,
-                    appointments: [], onFinished: { _ in }))
+            let request = try #require(router.scheduleEditorRequest)
+            let session = ScheduleEditorSession(
+                request: request, selectedDate: start,
+                appointments: [], onFinished: { _ in })
             if unavailable && !editing { session.selectType(.unavailableTime) }
             router.presentationDidAppear(session.id)
             let completion: ScheduleEditorSession.Completion =
@@ -525,8 +512,8 @@ struct ScheduleEditorSessionTests {
         } operation: {
             let router = Router(selectedScheduleDate: date)
             router.requestScheduleCreation()
-            let request = try #require(router.activePresentation)
-            let session = try genericSession(request: request, date: date, hold: hold)
+            let request = try #require(router.scheduleEditorRequest)
+            let session = genericSession(request: request, date: date, hold: hold)
             #expect(session.allowsTypeSelection)
             #expect(session.itemType == .appointment)
             #expect(session.preview.durationMinutes == 30)
@@ -592,8 +579,8 @@ struct ScheduleEditorSessionTests {
             }
             #expect(returnedBlock.draft.label.isEmpty)
             #expect(session.visibleItems([], for: nextDate).count == 1)
-            let fresh = try genericSession(
-                request: .scheduleCreation(ScheduleCreationRequest()), date: date, hold: hold)
+            let fresh = genericSession(
+                request: .create(), date: date, hold: hold)
             #expect(fresh.itemType == .appointment)
             #expect(fresh.preview.durationMinutes == 30)
         }
@@ -613,8 +600,8 @@ struct ScheduleEditorSessionTests {
             $0.defaultDatabase = database
             $0.date.now = date
         } operation: {
-            let session = try genericSession(
-                request: .scheduleCreation(ScheduleCreationRequest()), date: date, hold: hold)
+            let session = genericSession(
+                request: .create(), date: date, hold: hold)
             if hold { session.releaseBooking(session.adjustment) }
             session.selectPatient(patient)
             let interval = session.preview
@@ -657,11 +644,11 @@ struct ScheduleEditorSessionTests {
 
     @Test func typeChangeIsBlockedForSavedItemsAndPatientBooking() throws {
         let date = try Date("2026-10-02T12:00:00+05:30", strategy: .iso8601)
-        try withDependencies {
+        withDependencies {
             $0.date.now = date
         } operation: {
             for unavailable in [false, true] {
-                let session = try editingSession(unavailable: unavailable, start: date)
+                let session = editingSession(unavailable: unavailable, start: date)
                 let preview = session.preview
                 #expect(!session.allowsTypeSelection)
                 #expect(!session.isShowingSheet)
@@ -669,16 +656,15 @@ struct ScheduleEditorSessionTests {
                 #expect(session.preview.id == preview.id)
             }
             let patient = Patient(name: "Patient", createdDate: date)
-            let booking = try #require(
-                ScheduleEditorSession(
-                    request: .appointmentBooking(AppointmentBookingRequest(patient: patient)),
-                    selectedDate: date, appointments: [], onFinished: { _ in }))
+            let booking = ScheduleEditorSession(
+                request: .bookAppointment(patient),
+                selectedDate: date, appointments: [], onFinished: { _ in })
             #expect(!booking.allowsTypeSelection)
             #expect(!booking.isShowingSheet)
             booking.selectType(.unavailableTime)
             #expect(booking.itemType == .appointment)
-            let generic = try genericSession(
-                request: .scheduleCreation(ScheduleCreationRequest()), date: date, hold: false)
+            let generic = genericSession(
+                request: .create(), date: date, hold: false)
             let preview = generic.preview
             generic.beginAdjustment(preview, edge: .move, items: [])
             generic.selectType(.unavailableTime)
@@ -687,7 +673,7 @@ struct ScheduleEditorSessionTests {
         }
     }
 
-    private func genericSession(request: AppPresentation, date: Date, hold: Bool) throws
+    private func genericSession(request: ScheduleEditorRequest, date: Date, hold: Bool)
         -> ScheduleEditorSession
     {
         if hold {
@@ -695,9 +681,8 @@ struct ScheduleEditorSessionTests {
                 bookingID: request.id, selectedDate: date, center: TimeOfDay(12, 0), items: [],
                 onFinished: { _ in })
         }
-        return try #require(
-            ScheduleEditorSession(
-                request: request, selectedDate: date, appointments: [], onFinished: { _ in }))
+        return ScheduleEditorSession(
+            request: request, selectedDate: date, appointments: [], onFinished: { _ in })
     }
     @Test(arguments: [
         (TimeOfDay(9, 0), TimeOfDay(9, 0)),
@@ -820,22 +805,21 @@ struct ScheduleEditorSessionTests {
             $0.defaultDatabase = database
         } operation: {
             var savedDate: Date?
-            let request: AppPresentation
+            let request: ScheduleEditorRequest
             if editing {
                 request =
                     unavailable
-                    ? .unavailableTimeEditor(UnavailableTimeEditorRequest(block: block))
-                    : .appointmentEdit(
-                        AppointmentEditRequest(
-                            details: AppointmentDetails(appointment: appointment, patient: patient))
-                    )
+                    ? .editUnavailableTime(block)
+                    : .editAppointment(
+                        AppointmentDetails(appointment: appointment, patient: patient))
             } else {
-                request = .scheduleCreation(ScheduleCreationRequest())
+                request = .create()
             }
-            let session = try #require(
-                ScheduleEditorSession(request: request, selectedDate: date, appointments: []) {
-                    savedDate = $0.date
-                })
+            let session = ScheduleEditorSession(
+                request: request, selectedDate: date, appointments: []
+            ) {
+                savedDate = $0.date
+            }
             if !editing {
                 session.selectPatient(patient)
                 if unavailable { session.selectType(.unavailableTime) }
@@ -897,7 +881,7 @@ struct ScheduleEditorSessionTests {
             let router = Router(selectedScheduleDate: today)
             let store = ScheduleEditorStore()
             router.requestAppointmentBooking(for: patient, on: day1)
-            let request = try #require(router.activePresentation)
+            let request = try #require(router.scheduleEditorRequest)
 
             var resumeFirstRead: CheckedContinuation<[Appointment], Never>?
             var firstReadStarted: CheckedContinuation<Void, Never>?
@@ -995,8 +979,8 @@ struct ScheduleEditorSessionTests {
         } operation: {
             let router = Router(selectedScheduleDate: date)
             router.requestScheduleCreation()
-            let request = try #require(router.activePresentation)
-            let session = try finishingSession(
+            let request = try #require(router.scheduleEditorRequest)
+            let session = finishingSession(
                 request: request, selectedDate: date, router: router)
             session.selectPatient(patient)
             session.selectDate(savedDay)
@@ -1024,8 +1008,8 @@ struct ScheduleEditorSessionTests {
             // Verify auto-dismiss after the configured duration on a fresh booking.
             router.dismissPresentation()
             router.requestScheduleCreation()
-            let secondRequest = try #require(router.activePresentation)
-            let secondSession = try finishingSession(
+            let secondRequest = try #require(router.scheduleEditorRequest)
+            let secondSession = finishingSession(
                 request: secondRequest, selectedDate: date, router: router)
             secondSession.selectPatient(patient)
             #expect(await secondSession.save())
@@ -1060,8 +1044,8 @@ struct ScheduleEditorSessionTests {
             let router = Router(selectedScheduleDate: date)
             router.requestAppointmentEdit(
                 AppointmentDetails(appointment: appointment, patient: patient))
-            let request = try #require(router.activePresentation)
-            let session = try finishingSession(
+            let request = try #require(router.scheduleEditorRequest)
+            let session = finishingSession(
                 request: request, selectedDate: date, appointments: [appointment],
                 router: router)
             session.selectDate(movedDay)
@@ -1105,8 +1089,8 @@ struct ScheduleEditorSessionTests {
             let router = Router(selectedScheduleDate: date)
             router.requestAppointmentEdit(
                 AppointmentDetails(appointment: appointment, patient: originalPatient))
-            let request = try #require(router.activePresentation)
-            let session = try finishingSession(
+            let request = try #require(router.scheduleEditorRequest)
+            let session = finishingSession(
                 request: request, selectedDate: date, appointments: [appointment],
                 router: router)
             session.selectPatient(replacementPatient)
@@ -1141,8 +1125,8 @@ struct ScheduleEditorSessionTests {
             let router = Router(selectedScheduleDate: date)
             router.requestAppointmentEdit(
                 AppointmentDetails(appointment: appointment, patient: patient))
-            let request = try #require(router.activePresentation)
-            let session = try finishingSession(
+            let request = try #require(router.scheduleEditorRequest)
+            let session = finishingSession(
                 request: request, selectedDate: date, appointments: [appointment],
                 router: router)
             guard case .appointment(let model) = session.editor else {
@@ -1171,8 +1155,8 @@ struct ScheduleEditorSessionTests {
 
             // Create unavailable time.
             router.requestScheduleCreation()
-            let createRequest = try #require(router.activePresentation)
-            let createSession = try finishingSession(
+            let createRequest = try #require(router.scheduleEditorRequest)
+            let createSession = finishingSession(
                 request: createRequest, selectedDate: date, router: router)
             createSession.selectType(.unavailableTime)
             #expect(await createSession.save())
@@ -1184,16 +1168,16 @@ struct ScheduleEditorSessionTests {
 
             // Edit unavailable time.
             router.requestUnavailableTimeEdit(savedBlock)
-            let editRequest = try #require(router.activePresentation)
-            let editSession = try finishingSession(
+            let editRequest = try #require(router.scheduleEditorRequest)
+            let editSession = finishingSession(
                 request: editRequest, selectedDate: date, router: router)
             #expect(await editSession.save())
             #expect(router.toast.current == nil)
 
             // Delete unavailable time.
             router.requestUnavailableTimeEdit(savedBlock)
-            let deleteRequest = try #require(router.activePresentation)
-            let deleteSession = try finishingSession(
+            let deleteRequest = try #require(router.scheduleEditorRequest)
+            let deleteSession = finishingSession(
                 request: deleteRequest, selectedDate: date, router: router)
             #expect(await deleteSession.delete())
             #expect(router.toast.current == nil)
@@ -1219,8 +1203,8 @@ struct ScheduleEditorSessionTests {
             // Failed save (editing a missing appointment).
             router.requestAppointmentEdit(
                 AppointmentDetails(appointment: appointment, patient: patient))
-            let failedRequest = try #require(router.activePresentation)
-            let failedSession = try finishingSession(
+            let failedRequest = try #require(router.scheduleEditorRequest)
+            let failedSession = finishingSession(
                 request: failedRequest, selectedDate: date, router: router)
             #expect(!(await failedSession.save()))
             #expect(failedSession.errorMessage != nil)
@@ -1234,8 +1218,8 @@ struct ScheduleEditorSessionTests {
 
             // Stale/superseded session finish.
             router.requestScheduleCreation()
-            let oldRequest = try #require(router.activePresentation)
-            let oldSession = try finishingSession(
+            let oldRequest = try #require(router.scheduleEditorRequest)
+            let oldSession = finishingSession(
                 request: oldRequest, selectedDate: date, router: router)
             oldSession.selectPatient(patient)
             router.requestScheduleCreation()
@@ -1247,21 +1231,172 @@ struct ScheduleEditorSessionTests {
         }
     }
 
+    @Test func storeBeginHoldCreatesAndManagesCreationAndEditSessions() async throws {
+        let date = try Date("2026-10-26T00:00:00+05:30", strategy: .iso8601)
+        let otherDate = try Date("2026-10-27T00:00:00+05:30", strategy: .iso8601)
+        let patient = Patient(name: "Aarav Mehta", createdDate: date)
+        let scheduled = Appointment(
+            patientName: patient.displayName,
+            start: date.setTime(11, 0, using: ClinicDate.calendar),
+            durationMinutes: 30,
+            status: .scheduled
+        )
+        let completed = Appointment(
+            patientName: patient.displayName,
+            start: date.setTime(12, 0, using: ClinicDate.calendar),
+            durationMinutes: 30,
+            status: .completed
+        )
+        let block = UnavailableTime(
+            label: "Travel",
+            start: date.setTime(15, 0, using: ClinicDate.calendar),
+            durationMinutes: 60
+        )
+
+        try await withDependencies {
+            $0.date.now = date
+        } operation: {
+            let router = Router(selectedScheduleDate: date)
+            let store = ScheduleEditorStore()
+
+            // Wrong day is rejected before changing router or store state.
+            #expect(
+                store.beginHold(
+                    on: nil,
+                    center: TimeOfDay(12, 0),
+                    date: otherDate,
+                    items: [],
+                    router: router,
+                    detailsForAppointment: { _ in nil },
+                    onFinished: { _, _ in }
+                ) == nil)
+            #expect(!store.hasEditor(for: router))
+
+            // Holding on empty timeline creates a centered creation session synchronously.
+            let created = try #require(
+                store.beginHold(
+                    on: nil,
+                    center: TimeOfDay(12, 0),
+                    date: date,
+                    items: [],
+                    router: router,
+                    detailsForAppointment: { _ in nil },
+                    onFinished: { id, completion in
+                        store.finish(id, completion: completion, router: router)
+                    }
+                ))
+            let createdRequest = try #require(router.scheduleEditorRequest)
+            #expect(created.id == createdRequest.id)
+            #expect(store.activeSession(for: createdRequest) === created)
+            #expect(created.adjustment.isDragging)
+            #expect(!created.isShowingSheet)
+
+            // Subsequent async prepare keeps the synchronously installed hold session.
+            await store.prepare(
+                request: createdRequest,
+                router: router,
+                appointmentsForBooking: { _ in
+                    Issue.record("Should not reload booking appointments for an active hold.")
+                    return []
+                },
+                onFinished: { _, _ in }
+            )
+            #expect(store.session === created)
+
+            // A second hold while an editor is active is rejected.
+            #expect(
+                store.beginHold(
+                    on: .unavailableTime(block),
+                    center: TimeOfDay(15, 0),
+                    date: date,
+                    items: [.unavailableTime(block)],
+                    router: router,
+                    detailsForAppointment: { _ in nil },
+                    onFinished: { _, _ in }
+                ) == nil)
+
+            // Date selection stays blocked while dragging and syncs both router and session after release.
+            store.selectDate(otherDate, using: router)
+            #expect(router.selectedScheduleDate == date)
+            #expect(store.selectedDate(using: router) == date)
+            created.adjustment.release()
+            store.selectDate(otherDate, using: router)
+            #expect(router.selectedScheduleDate == otherDate)
+            #expect(store.selectedDate(using: router) == otherDate)
+
+            // Finishing with a stale ID does nothing; finishing with the active ID clears both.
+            #expect(!store.finish(UUID(), completion: .discarded(date: date), router: router))
+            #expect(store.session === created)
+            #expect(store.finish(created.id, completion: .discarded(date: date), router: router))
+            #expect(store.session == nil)
+            #expect(router.scheduleEditorRequest == nil)
+            #expect(router.selectedScheduleDate == date)
+
+            // Holding on a completed appointment is rejected.
+            #expect(
+                store.beginHold(
+                    on: .appointment(completed),
+                    center: TimeOfDay(12, 0),
+                    date: date,
+                    items: [.appointment(completed)],
+                    router: router,
+                    detailsForAppointment: {
+                        AppointmentDetails(appointment: $0, patient: patient)
+                    },
+                    onFinished: { _, _ in }
+                ) == nil)
+
+            // Holding on a scheduled appointment starts an edit session and begins adjustment.
+            let appointmentSession = try #require(
+                store.beginHold(
+                    on: .appointment(scheduled),
+                    center: TimeOfDay(11, 0),
+                    date: date,
+                    items: [.appointment(scheduled)],
+                    router: router,
+                    detailsForAppointment: {
+                        AppointmentDetails(appointment: $0, patient: patient)
+                    },
+                    onFinished: { _, _ in }
+                ))
+            #expect(appointmentSession.adjustment.isDragging)
+            #expect(appointmentSession.preview.id == .appointment(scheduled.id))
+            #expect(store.finish(appointmentSession.id, completion: .discarded(date: date), router: router))
+
+            // Holding on unavailable time starts an unavailable-time edit session, and mismatch clears it.
+            let blockSession = try #require(
+                store.beginHold(
+                    on: .unavailableTime(block),
+                    center: TimeOfDay(15, 0),
+                    date: date,
+                    items: [.unavailableTime(block)],
+                    router: router,
+                    detailsForAppointment: { _ in nil },
+                    onFinished: { _, _ in }
+                ))
+            #expect(blockSession.adjustment.isDragging)
+            #expect(blockSession.preview.id == .unavailableTime(block.id))
+            store.clearIfMismatching(blockSession.id)
+            #expect(store.session === blockSession)
+            store.clearIfMismatching(nil)
+            #expect(store.session == nil)
+        }
+    }
+
     private func finishingSession(
-        request: AppPresentation,
+        request: ScheduleEditorRequest,
         selectedDate: Date,
         appointments: [Appointment] = [],
         router: Router
-    ) throws -> ScheduleEditorSession {
+    ) -> ScheduleEditorSession {
         weak var created: ScheduleEditorSession?
-        let session = try #require(
-            ScheduleEditorSession(
-                request: request,
-                selectedDate: selectedDate,
-                appointments: appointments
-            ) { completion in
-                created?.finish(using: router, completion: completion)
-            })
+        let session = ScheduleEditorSession(
+            request: request,
+            selectedDate: selectedDate,
+            appointments: appointments
+        ) { completion in
+            created?.finish(using: router, completion: completion)
+        }
         created = session
         return session
     }
