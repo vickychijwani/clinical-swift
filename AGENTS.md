@@ -33,14 +33,14 @@ Swift and SwiftUI guides:
 
 App-specific guides:
 
-- Package and widget boundaries, with a link to the policy: `docs/architecture.md`.
+- Package and widget boundaries, dependency checks, and clinic date/locale rules: `docs/architecture.md`
 - Persistence boundaries, shared database access, and future CloudKit sync: `docs/persistence.md`
 - Assisted patient-data recovery procedure and limits: `docs/patient-data-restore.md`
 - Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`
 - Appointment booking validation and scheduling principles: `docs/appointment-booking.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
-- Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
-- Test structure, dependency overrides, and async database access: `docs/testing.md`
+- Unknown-patient rules, Indian phone matching, and contact search: `docs/patients.md`
+- Test boundaries, dependency overrides, Linux setup, and local CI runner: `docs/testing.md`
 - WidgetKit, App Group reads, timeline refresh, and date capacity: `docs/widgets.md`
 - App-level presentation ownership, details navigation, and interruption policy: `docs/routing.md`
 - One-way EventKit appointment and unavailable-time sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
