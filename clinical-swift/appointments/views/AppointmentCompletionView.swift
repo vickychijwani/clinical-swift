@@ -96,7 +96,12 @@ struct AppointmentCompletionView: View {
         .navigationSubtitle("For \(model.patientName)")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.isSaving)
-        .task { amountIsFocused = true }
+        .task {
+            // Let the tray finish its initial layout pass before requesting the keyboard.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            amountIsFocused = true
+        }
         .onChange(of: amountText) {
             model.setAmountText(amountText)
             if amountText != model.amountText { amountText = model.amountText }
