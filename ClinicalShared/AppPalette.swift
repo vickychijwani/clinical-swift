@@ -89,7 +89,7 @@ nonisolated struct AppPalette: Equatable {
         case .tertiaryText: .primary.mixWithCanvas(0.3)
         case .border: self[.text].opacity(0.12)
         case .card, .activeCard: Color("Card")
-        case .cardBorder: .gray.mixWithCanvas(0.15)
+        case .cardBorder: Color("CardBorder")
         case .completedCard: .green.mixWithCanvas(0.05)
         case .completedBorder: .green.mixWithCanvas(0.2)
         case .activeBorder: .accentColor.mixWithCanvas(0.7)
