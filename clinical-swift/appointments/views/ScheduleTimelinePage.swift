@@ -8,6 +8,7 @@ struct ScheduleTimelinePage: View {
     let today: Date
     let items: [TimelineItem]
     let itemInteractionsEnabled: Bool
+    var selectedAppointmentID: Appointment.ID? = nil
     @Binding var scrollPosition: ScrollPosition
     let onSelectItem: (TimelineItem) -> Void
     let onSelectDraft: () -> Void
@@ -41,6 +42,7 @@ struct ScheduleTimelinePage: View {
                     scale: TimelineScale(items: items),
                     showsNowMarker: date.isSameDayAs(today),
                     itemInteractionsEnabled: itemInteractionsEnabled,
+                    selectedAppointmentID: selectedAppointmentID,
                     onSelectItem: { if allowsSelection { onSelectItem($0) } },
                     onSelectDraft: { if allowsSelection { onSelectDraft() } },
                     allowsAdjustment: allowsAdjustment,

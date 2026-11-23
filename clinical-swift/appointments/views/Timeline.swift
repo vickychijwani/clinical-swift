@@ -11,6 +11,7 @@ struct Timeline: View {
     let showsNowMarker: Bool
     var previewNowMarker: Date? = nil
     var itemInteractionsEnabled = true
+    var selectedAppointmentID: Appointment.ID? = nil
     var onSelectItem: (TimelineItem) -> Void = { _ in }
     var onSelectDraft: () -> Void = {}
     var allowsAdjustment = false
@@ -86,6 +87,7 @@ struct Timeline: View {
 
                 ForEach(layouts) { layout in
                     let draft = isDraft(layout.item)
+                    let selected = editorSession == nil && !draft && isSelected(layout.item)
                     TimelineItemView(
                         item: layout.item,
                         size: layout.rect.size,
@@ -93,6 +95,7 @@ struct Timeline: View {
                         isOverlappingFront: layout.isOverlappingFront,
                         presentation: layout.presentation,
                         isDraft: draft,
+                        isSelected: selected,
                         isDeemphasized: editorSession != nil && !draft,
                         interactionsEnabled: !isWorking
                             && (itemInteractionsEnabled || (allowsAdjustment && draft)),
@@ -109,7 +112,7 @@ struct Timeline: View {
                         onDone: onDone,
                         onDelete: onDelete
                     )
-                    .zIndex(draft ? Double(layouts.count + 1) : Double(layout.zIndex))
+                    .zIndex(Self.itemZIndex(for: layout, isDraft: draft, itemCount: layouts.count))
                     .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
 
@@ -124,9 +127,24 @@ struct Timeline: View {
         .padding(.vertical, scale.metrics.verticalPadding)
     }
 
+    static func itemZIndex(
+        for layout: TimelineItemLayoutInfo,
+        isDraft: Bool,
+        itemCount: Int
+    ) -> Double {
+        isDraft ? Double(itemCount + 1) : Double(layout.zIndex)
+    }
+
     private func isDraft(_ item: TimelineItem) -> Bool {
         guard let id = editorSession?.preview.id else { return false }
         return item.id == id
+    }
+
+    private func isSelected(_ item: TimelineItem) -> Bool {
+        guard let selectedAppointmentID, case .appointment(let appointment) = item else {
+            return false
+        }
+        return appointment.id == selectedAppointmentID
     }
 
     private func selectItem(_ item: TimelineItem) {

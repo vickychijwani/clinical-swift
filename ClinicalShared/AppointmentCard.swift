@@ -3,10 +3,17 @@ import SwiftUI
 
 struct AppointmentCard: View {
     @Environment(\.appPalette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.self) private var environment
     let appt: Appointment
+    var isSelected = false
     var isDeemphasized = false
     var contentTrailingInset: CGFloat = 0
     var presentation: ScheduleCardPresentation? = nil
+
+    private static let selectedBorderWidth: CGFloat = 1.5
+    private static let lightSelectedBorderOpacity = 0.62
+    private static let darkSelectedBorderOpacity = 0.55
 
     var body: some View {
         ScheduleCard(
@@ -16,10 +23,14 @@ struct AppointmentCard: View {
             presentation: presentation
         )
         .animation(.easeInOut(duration: 0.2), value: appt.status)
+        .animation(.smooth(duration: 0.2), value: isSelected)
     }
 
     private var appearance: ScheduleCard.Appearance {
         let systemImage = AppointmentStatusPresentation(status: appt.status).systemImage
+        if isSelected, appt.status == .scheduled || appt.status == .completed {
+            return selectedAppearance(systemImage: systemImage)
+        }
         return switch appt.status {
         case .draft:
             ScheduleCard.Appearance(
@@ -56,6 +67,28 @@ struct AppointmentCard: View {
                 contentOpacity: 0
             )
         }
+    }
+
+    private var selectionInk: Color {
+        var resolved = Color.primary.resolve(in: environment)
+        resolved.opacity = 1
+        return Color(resolved)
+    }
+
+    private func selectedAppearance(systemImage: String) -> ScheduleCard.Appearance {
+        let baseSurface = appt.status == .completed ? palette[.completedCard] : palette[.card]
+        let borderOpacity =
+            colorScheme == .dark
+            ? Self.darkSelectedBorderOpacity
+            : Self.lightSelectedBorderOpacity
+        return ScheduleCard.Appearance(
+            systemImage: systemImage,
+            background: .color(baseSurface),
+            border: selectionInk.opacity(borderOpacity),
+            borderStyle: StrokeStyle(lineWidth: Self.selectedBorderWidth),
+            usesInnerBorder: true,
+            contentOpacity: 1
+        )
     }
 }
 

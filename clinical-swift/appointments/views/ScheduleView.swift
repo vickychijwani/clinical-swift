@@ -41,6 +41,7 @@ struct ScheduleView: View {
                     today: clinicToday,
                     items: visibleItems(for: date),
                     itemInteractionsEnabled: !hasEditor,
+                    selectedAppointmentID: selectedAppointmentID,
                     scrollPosition: scrollPositionBinding(for: date),
                     onSelectItem: selectItem,
                     onSelectDraft: { editorSession?.isShowingSheet = true },
@@ -219,6 +220,26 @@ struct ScheduleView: View {
 
     private func timelineScale(for date: Date) -> TimelineScale {
         TimelineScale(items: visibleItems(for: date))
+    }
+
+    private var selectedAppointmentID: Appointment.ID? {
+        Self.selectedAppointmentID(for: router, hasEditor: editorSession != nil)
+    }
+
+    static func selectedAppointmentID(for router: Router, hasEditor: Bool) -> Appointment.ID? {
+        guard router.selectedTab == .schedule,
+            router.schedulePath.isEmpty,
+            !hasEditor,
+            let presentation = router.detailsPresentation
+        else { return nil }
+        switch presentation.currentRoute {
+        case .appointment(let id):
+            return id
+        case .appointmentCompletion(let visitID):
+            return presentation.completionDrafts[visitID]?.appointmentID
+        case .patient:
+            return nil
+        }
     }
 
     private var visibleAppointmentDetailsID: Appointment.ID? {

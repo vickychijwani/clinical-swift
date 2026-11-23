@@ -10,6 +10,7 @@ struct TimelineItemView: View {
     var isOverlappingFront = false
     var presentation: ScheduleCardPresentation? = nil
     let isDraft: Bool
+    var isSelected = false
     let isDeemphasized: Bool
     let interactionsEnabled: Bool
     let showsAdjustmentControls: Bool
@@ -32,6 +33,7 @@ struct TimelineItemView: View {
             ScheduleItemCard(
                 item: item,
                 isDraft: isDraft,
+                isSelected: isSelected,
                 isDeemphasized: isDeemphasized,
                 contentTrailingInset: contentTrailingInset,
                 presentation: presentation
