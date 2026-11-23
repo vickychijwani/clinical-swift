@@ -197,4 +197,22 @@ struct TimelineAdjustmentTests {
         #expect(floating.rect.minX == Timeline.metrics.contentLeadingInset)
         #expect(regular.rect.width == floating.rect.width)
     }
+
+    @Test func dragCooldownBlocksImmediateTapAndAllowsTapAfterWindow() throws {
+        var cooldown = TimelineDragCooldown()
+        let start = ContinuousClock.now
+        #expect(cooldown.allowsSelection(at: start))
+
+        cooldown.record(at: start)
+        #expect(!cooldown.allowsSelection(at: start))
+        #expect(!cooldown.allowsSelection(at: start + .milliseconds(150)))
+        #expect(cooldown.allowsSelection(at: start + .milliseconds(151)))
+
+        let model = TimelineAdjustment()
+        let draft = TimelineItem.appointment(try appointment())
+        #expect(model.allowsSelection)
+        model.begin(draft, edge: .move, items: [draft])
+        model.release()
+        #expect(!model.allowsSelection)
+    }
 }

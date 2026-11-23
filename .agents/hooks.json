@@ -1,4 +1,18 @@
 {
+  "simctl-command-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh ../.codex/hooks/check_simctl.sh --antigravity",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
   "ui-waits-check": {
     "Stop": [
       {

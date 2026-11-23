@@ -1,12 +1,18 @@
 import ClinicalModels
 import SwiftUI
 
+private enum WeekStripMetrics {
+    static let stripHeight: CGFloat = 64
+    static let stripHorizontalPadding: CGFloat = 8
+    static let cellMinHeight: CGFloat = 56
+    static let cellCornerRadius: CGFloat = 16
+}
+
 struct WeekDateStrip: View {
     @Binding var selectedDate: Date
 
     let today: Date
     let calendar: Calendar
-    let displayMode: WeekDateStripDisplayMode
 
     @State private var visibleWeekStart: Date
     @State private var visiblePage: WeekPageOffset? = .current
@@ -16,13 +22,11 @@ struct WeekDateStrip: View {
     init(
         selectedDate: Binding<Date>,
         today: Date,
-        calendar: Calendar = ClinicDate.calendar,
-        displayMode: WeekDateStripDisplayMode = .schedule
+        calendar: Calendar = ClinicDate.calendar
     ) {
         self._selectedDate = selectedDate
         self.today = today.startOfDay(using: calendar)
         self.calendar = calendar
-        self.displayMode = displayMode
         self._visibleWeekStart = State(
             initialValue: selectedDate.wrappedValue.startOfWeek(using: calendar)
         )
@@ -40,7 +44,6 @@ struct WeekDateStrip: View {
                         selectedDate: selectedDate,
                         today: today,
                         calendar: calendar,
-                        displayMode: displayMode,
                         selectDate: selectDate
                     )
                     .containerRelativeFrame(.horizontal)
@@ -54,7 +57,7 @@ struct WeekDateStrip: View {
         .scrollIndicators(.hidden)
         // Let the glass shadow extend below the strip without changing its layout height.
         .scrollClipDisabled()
-        .frame(height: displayMode.stripHeight)
+        .frame(height: WeekStripMetrics.stripHeight)
         .onAppear(perform: normalizeSelection)
         .onChange(of: visiblePage) {
             guard let visiblePage else {
@@ -127,29 +130,6 @@ struct WeekDateStrip: View {
     }
 }
 
-struct WeekDateStripDisplayMode: Equatable, Sendable {
-    static let schedule = WeekDateStripDisplayMode(
-        stripHeight: 64,
-        stripHzPadding: 8,
-        cellMinHeight: 56,
-        cornerRadius: 16,
-        cellSpacing: 0
-    )
-    static let sheet = WeekDateStripDisplayMode(
-        stripHeight: 86,
-        stripHzPadding: 0,
-        cellMinHeight: 80,
-        cornerRadius: 18,
-        cellSpacing: 2
-    )
-
-    let stripHeight: CGFloat
-    let stripHzPadding: CGFloat
-    let cellMinHeight: CGFloat
-    let cornerRadius: CGFloat
-    let cellSpacing: CGFloat
-}
-
 private enum WeekPageOffset: Int, CaseIterable, Identifiable {
     case previous = -1
     case current = 0
@@ -171,7 +151,6 @@ private struct WeekDatePage: View {
     let selectedDate: Date
     let today: Date
     let calendar: Calendar
-    let displayMode: WeekDateStripDisplayMode
     let selectDate: (Date) -> Void
 
     @Namespace private var selectionGlass
@@ -183,7 +162,6 @@ private struct WeekDatePage: View {
                     date: date,
                     isSelected: date.isSameDayAs(selectedDate),
                     isToday: date.isSameDayAs(today),
-                    displayMode: displayMode,
                     selectionGlass: selectionGlass,
                     selectDate: selectDate
                 )
@@ -194,7 +172,7 @@ private struct WeekDatePage: View {
             if selectedDate.startOfWeek(using: calendar).isSameDayAs(weekStart) {
                 // Keep one glass view alive so date changes move it instead of fading separate effects.
                 Color.clear
-                    .frame(width: 44, height: displayMode.cellMinHeight)
+                    .frame(width: 44, height: WeekStripMetrics.cellMinHeight)
                     .glassEffect(
                         .regular.tint(
                             selectedDate.isSameDayAs(today)
@@ -202,14 +180,14 @@ private struct WeekDatePage: View {
                                     .opacity(palette.todaySelection.highlightOpacity) : nil
                         )
                         .interactive(),
-                        in: .rect(cornerRadius: displayMode.cornerRadius, style: .continuous)
+                        in: .rect(cornerRadius: WeekStripMetrics.cellCornerRadius, style: .continuous)
                     )
                     .matchedGeometryEffect(
                         id: selectedDate, in: selectionGlass, properties: .position, isSource: false
                     )
             }
         }
-        .padding(.horizontal, displayMode.stripHzPadding)
+        .padding(.horizontal, WeekStripMetrics.stripHorizontalPadding)
         .animation(.bouncy(duration: 0.35), value: selectedDate)
     }
 }
@@ -220,7 +198,6 @@ private struct DateStripCell: View {
     let date: Date
     let isSelected: Bool
     let isToday: Bool
-    let displayMode: WeekDateStripDisplayMode
     let selectionGlass: Namespace.ID
     let selectDate: (Date) -> Void
 
@@ -228,33 +205,19 @@ private struct DateStripCell: View {
         Button {
             selectDate(date)
         } label: {
-            VStack(spacing: displayMode.cellSpacing) {
-                if displayMode == .schedule {
-                    Text(weekdayText)
-                        .font(.caption)
-                        .bold()
+            VStack(spacing: 0) {
+                Text(weekdayText)
+                    .font(.caption)
+                    .bold()
 
-                    Text(dayText)
-                        .font(.title3)
-                        .bold()
-                } else {
-                    Text(shortWeekdayText)
-                        .font(.caption)
-                        .bold()
-
-                    Text(dayText)
-                        .font(.title3)
-                        .bold()
-
-                    Text(monthText)
-                        .font(.caption)
-                        .bold()
-                }
+                Text(dayText)
+                    .font(.title3)
+                    .bold()
             }
             .foregroundStyle(foregroundStyle)
-            .frame(minWidth: 44, minHeight: displayMode.cellMinHeight)
+            .frame(minWidth: 44, minHeight: WeekStripMetrics.cellMinHeight)
             .contentShape(
-                .rect(cornerRadius: displayMode.cornerRadius, style: .continuous)
+                .rect(cornerRadius: WeekStripMetrics.cellCornerRadius, style: .continuous)
             )
             .matchedGeometryEffect(id: date, in: selectionGlass, properties: .position)
         }
@@ -275,28 +238,12 @@ private struct DateStripCell: View {
         }
     }
 
-    private var sheetBackgroundStyle: AnyShapeStyle {
-        if isSelected {
-            AnyShapeStyle(palette[.accent].opacity(0.2))
-        } else {
-            AnyShapeStyle(.background)
-        }
-    }
-
     private var weekdayText: String {
         date.formatted(ClinicDate.formatStyle.weekday(.narrow))
     }
 
-    private var shortWeekdayText: String {
-        date.formatted(ClinicDate.formatStyle.weekday(.abbreviated)).uppercased()
-    }
-
     private var dayText: String {
         date.formatted(ClinicDate.formatStyle.day())
-    }
-
-    private var monthText: String {
-        date.formatted(ClinicDate.formatStyle.month(.abbreviated)).uppercased()
     }
 
     private var accessibilityLabel: String {
@@ -310,16 +257,9 @@ private struct DateStripCell: View {
     }
 }
 
-#Preview("displayMode: schedule", traits: .sizeThatFitsLayout) {
+#Preview(traits: .sizeThatFitsLayout) {
     @Previewable @State var selectedDate = ClinicDate.today
 
-    WeekDateStrip(selectedDate: $selectedDate, today: ClinicDate.today, displayMode: .schedule)
-        .background(AppColor.canvas)
-}
-
-#Preview("displayMode: sheet", traits: .sizeThatFitsLayout) {
-    @Previewable @State var selectedDate = ClinicDate.today
-
-    WeekDateStrip(selectedDate: $selectedDate, today: ClinicDate.today, displayMode: .sheet)
+    WeekDateStrip(selectedDate: $selectedDate, today: ClinicDate.today)
         .background(AppColor.canvas)
 }

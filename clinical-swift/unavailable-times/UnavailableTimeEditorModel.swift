@@ -159,3 +159,24 @@ nonisolated enum UnavailableTimeError: Error {
         }
     }
 }
+
+enum UnavailableTimeLookup {
+    static func fetch(id: UUID) async throws -> UnavailableTime? {
+        @Dependency(\.defaultDatabase) var database
+        return try await database.read { db in
+            try UnavailableTimeRecord.find(id).fetchOne(db)?.unavailableTime
+        }
+    }
+
+    @MainActor
+    static func resolve(_ request: UnavailableTimeNavigationRequest, using router: Router) async {
+        do {
+            let block = try await fetch(id: request.blockID)
+            router.completeUnavailableTimeNavigation(request, block: block)
+        } catch is CancellationError {
+            return
+        } catch {
+            router.failUnavailableTimeNavigation(request, error: error)
+        }
+    }
+}

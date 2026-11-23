@@ -14,8 +14,7 @@ struct ScheduleView: View {
     /// This value controls the sheet, draft rendering, card interactions, and creation buttons.
     @Environment(ScheduleEditorStore.self) private var editor
     private var editorSession: ScheduleEditorSession? {
-        get { editor.session }
-        nonmutating set { editor.session = newValue }
+        editor.session
     }
 
     @State private var scheduleModel: ScheduleModel
@@ -41,32 +40,25 @@ struct ScheduleView: View {
                     today: clinicToday,
                     items: visibleItems(for: date),
                     itemInteractionsEnabled: !hasEditor,
+                    selectedAppointmentID: selectedAppointmentID,
                     scrollPosition: scrollPositionBinding(for: date),
-                    onSelectItem: selectItem,
-                    onSelectDraft: { editorSession?.isShowingSheet = true },
                     allowsAdjustment: editorSession.map {
                         $0.allowsDateSelection && !$0.isShowingSheet
                     }
                         ?? !hasEditor,
                     editorSession: editorSession,
-                    isWorking: editorSession?.isWorking == true,
-                    onBeginHold: { beginHold(on: $0, center: $1, date: date) },
-                    onHoldRelease: { released in
-                        if editorSession?.allowsTypeSelection == true {
-                            editorSession?.releaseBooking(released)
-                        }
-                    },
-                    onCancel: { editorSession?.adjustment.release() },
-                    onDiscard: {
-                        if let editorSession {
-                            finishEditor(
-                                editorSession.id,
-                                completion: .discarded(date: router.selectedScheduleDate)
-                            )
-                        }
-                    },
-                    onDone: { await editorSession?.save() },
-                    onDelete: editorSession?.canDelete == true ? deleteEditor : nil
+                    onSelectItem: selectItem,
+                    onBeginHold: {
+                        editor.beginHold(
+                            on: $0,
+                            center: $1,
+                            date: date,
+                            items: visibleItems(for: date),
+                            router: router,
+                            detailsForAppointment: { scheduleModel.details(for: $0) },
+                            onFinished: finishEditor
+                        )
+                    }
                 )
             }
             .accessibilityIdentifier("schedule-day-pager")
@@ -107,7 +99,7 @@ struct ScheduleView: View {
         }
         .task(id: scheduleEditorLoadKey) {
             await editor.prepare(
-                request: scheduleEditorRequest,
+                request: router.scheduleEditorRequest,
                 router: router,
                 appointmentsForBooking: { await scheduleModel.appointmentsForBooking(on: $0) },
                 onFinished: finishEditor
@@ -160,12 +152,11 @@ struct ScheduleView: View {
     }
 
     private var showsDesignLabs: Bool {
-        guard router.selectedTab == .schedule, router.schedulePath.isEmpty
-        else { return false }
+        guard router.selectedTab == .schedule else { return false }
         switch router.activePresentation {
         case nil:
             return true
-        case .scheduleCreation, .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
+        case .scheduleEditor:
             return editorSession?.isShowingSheet == false
         default:
             return false
@@ -176,38 +167,19 @@ struct ScheduleView: View {
         // The editor owns its draft date. Outside editing, mutate the router's app-level selection
         // so direct UI changes and external routing cannot diverge.
         Binding(
-            get: { editorSession?.selectedDate ?? router.selectedScheduleDate },
-            set: { selectDate($0) }
+            get: { editor.selectedDate(using: router) },
+            set: { editor.selectDate($0, using: router) }
         )
     }
 
-    private func selectDate(_ date: Date) {
-        guard editorSession?.allowsDateSelection != false,
-            editorSession?.adjustment.isDragging != true
-        else { return }
-        let selectedDate = ClinicDate.day(date)
-        router.selectScheduleDate(selectedDate)
-        editorSession?.selectDate(selectedDate)
-    }
-
-    private var scheduleEditorRequest: AppPresentation? {
-        // All schedule editors use the router's single active presentation and one sheet host.
-        switch router.activePresentation {
-        case .scheduleCreation, .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
-            router.activePresentation
-        default:
-            nil
-        }
-    }
-
     private var scheduleEditorLoadKey: ScheduleEditorLoadKey? {
-        scheduleEditorRequest.map {
+        router.scheduleEditorRequest.map {
             ScheduleEditorLoadKey(requestID: $0.id, date: router.selectedScheduleDate)
         }
     }
 
     private var hasEditor: Bool {
-        scheduleEditorRequest != nil || editorSession != nil
+        editor.hasEditor(for: router)
     }
 
     private func visibleItems(for date: Date) -> [TimelineItem] {
@@ -219,6 +191,25 @@ struct ScheduleView: View {
 
     private func timelineScale(for date: Date) -> TimelineScale {
         TimelineScale(items: visibleItems(for: date))
+    }
+
+    private var selectedAppointmentID: Appointment.ID? {
+        Self.selectedAppointmentID(for: router, hasEditor: editorSession != nil)
+    }
+
+    static func selectedAppointmentID(for router: Router, hasEditor: Bool) -> Appointment.ID? {
+        guard router.selectedTab == .schedule,
+            !hasEditor,
+            let presentation = router.detailsPresentation
+        else { return nil }
+        switch presentation.currentRoute {
+        case .appointment(let id):
+            return id
+        case .appointmentCompletion(let visitID):
+            return presentation.completionDrafts[visitID]?.appointmentID
+        case .patient:
+            return nil
+        }
     }
 
     private var visibleAppointmentDetailsID: Appointment.ID? {
@@ -248,52 +239,8 @@ struct ScheduleView: View {
         }
     }
 
-    private func beginHold(
-        on item: TimelineItem?, center: TimeOfDay, date: Date
-    ) -> ScheduleEditorSession? {
-        guard !hasEditor,
-            date.isSameDayAs(router.selectedScheduleDate)
-        else { return nil }
-        if let item {
-            guard item.allowsAdjustment else { return nil }
-            switch item {
-            case .appointment(let appointment):
-                guard let details = scheduleModel.details(for: appointment),
-                    details.appointment.status == .scheduled
-                else { return nil }
-                router.requestAppointmentEdit(details)
-            case .unavailableTime(let block):
-                router.requestUnavailableTimeEdit(block)
-            }
-            guard let request = scheduleEditorRequest,
-                let session = ScheduleEditorSession(
-                    request: request, selectedDate: date, appointments: [],
-                    onFinished: { finishEditor(request.id, completion: $0) })
-            else { return nil }
-            session.beginAdjustment(item, edge: .move, items: visibleItems(for: date))
-            editorSession = session
-            return session
-        }
-        router.requestScheduleCreation()
-        guard let request = router.scheduleCreationRequest else { return nil }
-        editorSession = ScheduleEditorSession(
-            bookingID: request.id, selectedDate: date, center: center,
-            items: visibleItems(for: date)
-        ) { completion in
-            finishEditor(request.id, completion: completion)
-        }
-        return editorSession
-    }
-
-    private func deleteEditor() async {
-        await editorSession?.delete()
-    }
-
     private func finishEditor(_ requestID: UUID, completion: ScheduleEditorSession.Completion) {
-        guard let editorSession, editorSession.id == requestID,
-            editorSession.finish(using: router, completion: completion)
-        else { return }
-        self.editorSession = nil
+        guard editor.finish(requestID, completion: completion, router: router) else { return }
         Task {
             _ = try? await scheduleModel.loadVisibleDays(
                 centeredOn: completion.date,

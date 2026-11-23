@@ -3,8 +3,6 @@ import ClinicalPersistence
 import Foundation
 
 struct AppointmentBookingDraft: Equatable, Sendable {
-    static let durationOptions = ScheduleDurationSection.options
-
     var selectedPatient: Patient?
     var selectedDate: Date
     var start: Date

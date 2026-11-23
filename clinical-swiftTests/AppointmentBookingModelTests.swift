@@ -32,10 +32,10 @@ struct AppointmentBookingModelTests {
         ]
 
         for example in examples {
-            try withDependencies {
+            withDependencies {
                 $0.date.now = example.now
             } operation: {
-                let session = try bookingSession(date: selectedDate)
+                let session = bookingSession(date: selectedDate)
                 #expect(session.preview.start == example.expectedStart)
             }
         }
@@ -47,11 +47,11 @@ struct AppointmentBookingModelTests {
         let yesterday = try Date("2026-04-20T00:00:00+05:30", strategy: .iso8601)
         let now = try Date("2026-04-21T16:13:00+05:30", strategy: .iso8601)
 
-        try withDependencies {
+        withDependencies {
             $0.date.now = now
         } operation: {
-            let tomorrowSession = try bookingSession(date: tomorrow)
-            let yesterdaySession = try bookingSession(date: yesterday)
+            let tomorrowSession = bookingSession(date: tomorrow)
+            let yesterdaySession = bookingSession(date: yesterday)
             #expect(tomorrowSession.preview.start == tomorrow.setTime(10, 0, using: calendar))
             #expect(yesterdaySession.preview.start == yesterday.setTime(10, 0, using: calendar))
         }
@@ -86,7 +86,7 @@ struct AppointmentBookingModelTests {
         }
 
         var savedDate: Date?
-        let didSave = try await withDependencies {
+        let didSave = await withDependencies {
             $0.date.now = updatedAt
             $0.defaultDatabase = database
         } operation: {
@@ -100,7 +100,7 @@ struct AppointmentBookingModelTests {
                 ),
                 patient: originalPatient
             )
-            let session = try editingSession(details) { savedDate = $0 }
+            let session = editingSession(details) { savedDate = $0 }
             guard case .appointment(let model) = session.editor else { return false }
             model.draft.selectedPatient = newPatient
             model.draft.selectStart(editedStart)
@@ -130,7 +130,7 @@ struct AppointmentBookingModelTests {
         let patient = Patient(name: "Aarav Mehta", createdDate: selectedDate)
         var didCallSave = false
 
-        let result = try await withDependencies {
+        let result = await withDependencies {
             $0.date.now = selectedDate
             $0.defaultDatabase = database
         } operation: {
@@ -143,7 +143,7 @@ struct AppointmentBookingModelTests {
                 ),
                 patient: patient
             )
-            let session = try editingSession(details) { _ in didCallSave = true }
+            let session = editingSession(details) { _ in didCallSave = true }
             return (await session.save(), session.errorMessage)
         }
 
@@ -179,7 +179,7 @@ struct AppointmentBookingModelTests {
                 try saveAccountEntries(AccountEntryBatch(inserts: [charge]), in: db)
             }
             var didSave = false
-            let session = try editingSession(
+            let session = editingSession(
                 AppointmentDetails(appointment: appointment, patient: patient)
             ) { _ in didSave = true }
             guard case .appointment(let model) = session.editor else {
@@ -205,20 +205,18 @@ struct AppointmentBookingModelTests {
         }
     }
 
-    private func bookingSession(date: Date) throws -> ScheduleEditorSession {
-        try #require(
-            ScheduleEditorSession(
-                request: .scheduleCreation(ScheduleCreationRequest()), selectedDate: date,
-                appointments: [], onFinished: { _ in }))
+    private func bookingSession(date: Date) -> ScheduleEditorSession {
+        ScheduleEditorSession(
+            request: .create(), selectedDate: date,
+            appointments: [], onFinished: { _ in })
     }
 
     private func editingSession(
         _ details: AppointmentDetails, onFinished: @escaping (Date) -> Void
-    ) throws -> ScheduleEditorSession {
-        try #require(
-            ScheduleEditorSession(
-                request: .appointmentEdit(AppointmentEditRequest(details: details)),
-                selectedDate: details.appointment.start, appointments: [],
-                onFinished: { onFinished($0.date) }))
+    ) -> ScheduleEditorSession {
+        ScheduleEditorSession(
+            request: .editAppointment(details),
+            selectedDate: details.appointment.start, appointments: [],
+            onFinished: { onFinished($0.date) })
     }
 }

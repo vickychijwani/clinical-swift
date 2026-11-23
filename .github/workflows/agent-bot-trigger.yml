@@ -3,6 +3,10 @@ name: Agent bot trigger
 on:
   issue_comment:
     types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -49,7 +53,16 @@ jobs:
        github.event.issue.pull_request != null &&
        github.event.comment.user.login == github.repository_owner &&
        github.actor == github.repository_owner &&
-       startsWith(github.event.comment.body, '/ask'))
+       startsWith(github.event.comment.body, '/ask')) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       github.event.comment.user.login == github.repository_owner &&
+       github.actor == github.repository_owner &&
+       startsWith(github.event.comment.body, '/ask')) ||
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.user.login == github.repository_owner &&
+       github.actor == github.repository_owner &&
+       github.event.review.body != null &&
+       startsWith(github.event.review.body, '/ask'))
     runs-on: clinical-agents
     timeout-minutes: 5
     outputs:
@@ -64,7 +77,12 @@ jobs:
       dry_run: ${{ steps.resolve.outputs.dry_run }}
       check_run_id: ${{ steps.create-check.outputs.check_run_id }}
       trigger_event: ${{ steps.resolve.outputs.trigger_event }}
+      comment_id: ${{ steps.resolve.outputs.comment_id }}
+      in_reply_to_id: ${{ steps.resolve.outputs.in_reply_to_id }}
       comment_url: ${{ steps.resolve.outputs.comment_url }}
+      file_path: ${{ steps.resolve.outputs.file_path }}
+      diff_line: ${{ steps.resolve.outputs.diff_line }}
+      diff_hunk: ${{ steps.resolve.outputs.diff_hunk }}
     steps:
       - name: Add Homebrew tools to PATH
         run: |
@@ -81,11 +99,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
-          TRIGGER_AUTHOR: ${{ github.event.comment.user.login || github.actor }}
-          PR_NUMBER_EVENT: ${{ github.event.issue.number || '' }}
-          COMMENT_BODY: ${{ github.event.comment.body || '' }}
-          COMMENT_ID: ${{ github.event.comment.id || '' }}
-          COMMENT_URL: ${{ github.event.comment.html_url || '' }}
+          TRIGGER_AUTHOR: ${{ github.event.comment.user.login || github.event.review.user.login || github.actor }}
+          PR_NUMBER_EVENT: ${{ github.event.issue.number || github.event.pull_request.number || '' }}
+          COMMENT_BODY: ${{ github.event.comment.body || github.event.review.body || '' }}
+          COMMENT_ID: ${{ github.event.comment.id || github.event.review.id || '' }}
+          IN_REPLY_TO_ID: ${{ github.event.comment.in_reply_to_id || '' }}
+          COMMENT_URL: ${{ github.event.comment.html_url || github.event.review.html_url || '' }}
+          FILE_PATH: ${{ github.event.comment.path || '' }}
+          DIFF_LINE: ${{ github.event.comment.line || github.event.comment.original_line || '' }}
+          DIFF_HUNK: ${{ github.event.comment.diff_hunk || '' }}
           DISPATCH_MODEL: ${{ inputs.model }}
           DISPATCH_INSTRUCTIONS: ${{ inputs.instructions }}
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
@@ -214,9 +236,13 @@ jobs:
             echo "dry_run=$dry_run"
             echo "trigger_event=$EVENT_NAME"
             echo "comment_id=$COMMENT_ID"
+            echo "in_reply_to_id=$IN_REPLY_TO_ID"
             echo "comment_url=$COMMENT_URL"
+            echo "file_path=$FILE_PATH"
+            echo "diff_line=$DIFF_LINE"
           } >> "$GITHUB_OUTPUT"
           write_multiline_output "instructions" "$instructions"
+          write_multiline_output "diff_hunk" "$DIFF_HUNK"
 
           model_id=$(jq -r '.id // "none"' <<< "$model_json")
           echo "Planned PR #$pr_number ($EVENT_NAME): model=$model_id, worktree=$worktree_path, dry_run=$dry_run"
@@ -538,7 +564,12 @@ jobs:
           MODEL_JSON: ${{ needs.plan.outputs.model_json }}
           DRY_RUN: ${{ needs.plan.outputs.dry_run }}
           TRIGGER_EVENT: ${{ needs.plan.outputs.trigger_event }}
+          COMMENT_ID: ${{ needs.plan.outputs.comment_id }}
+          IN_REPLY_TO_ID: ${{ needs.plan.outputs.in_reply_to_id }}
           COMMENT_URL: ${{ needs.plan.outputs.comment_url }}
+          FILE_PATH: ${{ needs.plan.outputs.file_path }}
+          DIFF_LINE: ${{ needs.plan.outputs.diff_line }}
+          DIFF_HUNK: ${{ needs.plan.outputs.diff_hunk }}
           INSTRUCTIONS: ${{ needs.plan.outputs.instructions }}
         run: |
           set -euo pipefail
@@ -555,7 +586,16 @@ jobs:
           if [[ -n "$COMMENT_URL" ]]; then
             trigger_context="$trigger_context"$'\n'"Trigger URL: $COMMENT_URL"
           fi
-          reply_instruction="Post one concise reply comment on PR #$PR_NUMBER as $bot_login using \`gh pr comment $PR_NUMBER --repo $GITHUB_REPOSITORY --body \"...\"\`, summarizing what you did or answering the question. End your reply with a blank line and the footer \`$footer\`."
+          if [[ "$TRIGGER_EVENT" == "pull_request_review_comment" ]]; then
+            root_comment_id="${IN_REPLY_TO_ID:-$COMMENT_ID}"
+            trigger_context="$trigger_context"$'\n'"Inline review comment context:"$'\n'"- File: $FILE_PATH"$'\n'"- Line: ${DIFF_LINE:-unknown}"$'\n'"- Thread root comment ID (for in_reply_to): $root_comment_id"
+            if [[ -n "$DIFF_HUNK" ]]; then
+              trigger_context="$trigger_context"$'\n'"- Diff hunk:"$'\n'"$DIFF_HUNK"
+            fi
+            reply_instruction="Reply directly in that inline review thread as $bot_login using \`gh api repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/comments -f body=\"...\" -F in_reply_to=$root_comment_id\` (falling back to \`gh pr comment\` only if the thread reply fails), summarizing what you did or answering the question. End your reply with a blank line and the footer \`$footer\`."
+          else
+            reply_instruction="Post one concise reply comment on PR #$PR_NUMBER as $bot_login using \`gh pr comment $PR_NUMBER --repo $GITHUB_REPOSITORY --body \"...\"\`, summarizing what you did or answering the question. End your reply with a blank line and the footer \`$footer\`."
+          fi
 
           prompt="You were asked by $GITHUB_REPOSITORY_OWNER on PR #$PR_NUMBER in $GITHUB_REPOSITORY.
           Your assigned GitHub App identity is $bot_login ($model_display · $model_effort).

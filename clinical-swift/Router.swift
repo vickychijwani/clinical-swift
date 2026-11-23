@@ -1,8 +1,6 @@
 import ClinicalModels
-import ClinicalPersistence
 import Dependencies
 import Foundation
-import SQLiteData
 
 enum AppTab: Hashable {
     case schedule
@@ -37,10 +35,6 @@ final class Router {
             }
         }
     }
-    var schedulePath: [Route] = []
-    var patientsPath: [Route] = []
-    var paymentsPath: [Route] = []
-
     // Schedule selection lives here so every entry point (UI, URL, widget, or App Intent) changes
     // the same date that is visible behind appointment details.
     private(set) var selectedScheduleDate: Date
@@ -69,21 +63,21 @@ final class Router {
         return presentation
     }
 
-    var scheduleCreationRequest: ScheduleCreationRequest? {
-        guard case .scheduleCreation(let request) = activePresentation else { return nil }
+    // All schedule editors use the router's single active presentation and one sheet host.
+    var scheduleEditorRequest: ScheduleEditorRequest? {
+        guard case .scheduleEditor(let request) = activePresentation else { return nil }
         return request
     }
 
     func requestScheduleCreation() {
         selectedTab = .schedule
-        requestPresentation(.scheduleCreation(ScheduleCreationRequest()))
+        requestPresentation(.scheduleEditor(.create()))
     }
 
     func requestUnavailableTimeEdit(_ block: UnavailableTime) {
         selectedTab = .schedule
         selectedScheduleDate = ClinicDate.day(block.start)
-        requestPresentation(
-            .unavailableTimeEditor(UnavailableTimeEditorRequest(block: block)))
+        requestPresentation(.scheduleEditor(.editUnavailableTime(block)))
     }
 
     func finishScheduleEditor(_ presentationID: UUID, date: Date) {
@@ -273,7 +267,7 @@ final class Router {
     func requestAppointmentEdit(_ details: AppointmentDetails) {
         selectedTab = .schedule
         selectedScheduleDate = ClinicDate.day(details.appointment.start)
-        requestPresentation(.appointmentEdit(AppointmentEditRequest(details: details)))
+        requestPresentation(.scheduleEditor(.editAppointment(details)))
     }
 
     func requestAppointmentBooking(for patient: Patient, on date: Date? = nil) {
@@ -281,7 +275,7 @@ final class Router {
         if let date {
             selectedScheduleDate = ClinicDate.day(date)
         }
-        requestPresentation(.appointmentBooking(AppointmentBookingRequest(patient: patient)))
+        requestPresentation(.scheduleEditor(.bookAppointment(patient)))
     }
 
     func requestFollowUpBooking(for patient: Patient) {
@@ -318,7 +312,7 @@ final class Router {
         presentedPresentationID = presentationID
     }
 
-    func presentationDidDismiss(_ presentationID: UUID, retainingScheduleEditor id: UUID? = nil) {
+    func presentationDidDismiss(_ presentationID: UUID) {
         guard
             presentedPresentationID == presentationID
                 || dismissingPresentationID == presentationID
@@ -328,7 +322,9 @@ final class Router {
         // the active sheet. Preserve a queued replacement only in the former case.
         if dismissingPresentationID != nil {
             self.dismissingPresentationID = nil
-        } else if id == nil || activePresentation?.id != id {
+        } else if case .scheduleEditor = activePresentation {
+            // Closing schedule-editor fields keeps the timeline draft active until finished or replaced.
+        } else {
             activePresentation = nil
         }
 
@@ -382,27 +378,20 @@ final class Router {
         unavailableTimeNavigationRequest = UnavailableTimeNavigationRequest(blockID: id)
     }
 
-    func resolveUnavailableTime(_ request: UnavailableTimeNavigationRequest) async {
-        @Dependency(\.defaultDatabase) var database
-        do {
-            let id = request.blockID
-            let block = try await database.read { db in
-                try UnavailableTimeRecord.find(id).fetchOne(db)?.unavailableTime
-            }
-            completeUnavailableTimeNavigation(request, block: block)
-        } catch {
-            telemetry.log(
-                .error,
-                category: .navigation,
-                name: "unavailable_time_navigation_failed",
-                message: "Unavailable time could not be loaded",
-                error: error,
-                recordID: request.blockID.uuidString.lowercased()
-            )
-            guard unavailableTimeNavigationRequest?.id == request.id else { return }
-            unavailableTimeNavigationRequest = nil
-            navigationErrorMessage = "The unavailable time could not be loaded."
-        }
+    func failUnavailableTimeNavigation(
+        _ request: UnavailableTimeNavigationRequest, error: any Error
+    ) {
+        telemetry.log(
+            .error,
+            category: .navigation,
+            name: "unavailable_time_navigation_failed",
+            message: "Unavailable time could not be loaded",
+            error: error,
+            recordID: request.blockID.uuidString.lowercased()
+        )
+        guard unavailableTimeNavigationRequest?.id == request.id else { return }
+        unavailableTimeNavigationRequest = nil
+        navigationErrorMessage = "The unavailable time could not be loaded."
     }
 
     func completeUnavailableTimeNavigation(
@@ -458,26 +447,6 @@ final class Router {
     func consumePatientSearchRequest(_ requestID: PatientSearchRequest.ID) {
         guard patientSearchRequest?.id == requestID else { return }
         patientSearchRequest = nil
-    }
-
-    func openPatient(_ id: UUID, in tab: AppTab?) {
-        self[keyPath: getKeyPath(for: tab)].append(.patient(id))
-    }
-
-    func openAppointment(_ id: UUID, in tab: AppTab?) {
-        self[keyPath: getKeyPath(for: tab)].append(.appointment(id))
-    }
-
-    func pop(in tab: AppTab?) {
-        let keyPath = getKeyPath(for: tab)
-        var path = self[keyPath: keyPath]
-        guard !path.isEmpty else { return }
-        path.removeLast()
-        self[keyPath: keyPath] = path
-    }
-
-    func popToRoot(in tab: AppTab?) {
-        self[keyPath: getKeyPath(for: tab)].removeAll()
     }
 
     private func requestPresentation(_ presentation: AppPresentation) {
@@ -541,17 +510,6 @@ final class Router {
         self.replacementPresentation = nil
         activePresentation = replacementPresentation
     }
-
-    private func getKeyPath(for tab: AppTab?) -> ReferenceWritableKeyPath<Router, [Route]> {
-        switch tab ?? selectedTab {
-        case .schedule:
-            \.schedulePath
-        case .patients:
-            \.patientsPath
-        case .payments:
-            \.paymentsPath
-        }
-    }
 }
 
 /// The mutually exclusive app-root flows. Sheet hosts expose individual cases as computed values,
@@ -559,12 +517,9 @@ final class Router {
 enum AppPresentation {
     case settings(SettingsRequest)
     case details(DetailsPresentation)
-    case scheduleCreation(ScheduleCreationRequest)
-    case appointmentBooking(AppointmentBookingRequest)
-    case appointmentEdit(AppointmentEditRequest)
+    case scheduleEditor(ScheduleEditorRequest)
     case appointmentMessage(AppointmentMessageRequest)
     case patientEdit(PatientEditRequest)
-    case unavailableTimeEditor(UnavailableTimeEditorRequest)
 
     nonisolated var id: UUID {
         switch self {
@@ -572,21 +527,14 @@ enum AppPresentation {
             request.id
         case .details(let presentation):
             presentation.id
-        case .scheduleCreation(let request):
-            request.id
-        case .appointmentBooking(let request):
-            request.id
-        case .appointmentEdit(let request):
+        case .scheduleEditor(let request):
             request.id
         case .appointmentMessage(let request):
             request.id
         case .patientEdit(let request):
             request.id
-        case .unavailableTimeEditor(let request):
-            request.id
         }
     }
-
 }
 
 nonisolated struct SettingsRequest: Identifiable, Sendable {
@@ -646,25 +594,43 @@ final class DetailsPresentation: Identifiable {
     }
 }
 
-nonisolated struct AppointmentEditRequest: Identifiable, Equatable, Sendable {
-    let id = UUID()
-    let details: AppointmentDetails
-
-    var appointmentID: Appointment.ID {
-        details.appointment.id
+nonisolated struct ScheduleEditorRequest: Identifiable, Equatable, Sendable {
+    enum Kind: Sendable {
+        case create
+        case bookAppointment(Patient)
+        case editAppointment(AppointmentDetails)
+        case editUnavailableTime(UnavailableTime)
     }
 
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.id == rhs.id
+    let id: UUID
+    let kind: Kind
+
+    init(id: UUID = UUID(), kind: Kind) {
+        self.id = id
+        self.kind = kind
     }
-}
 
-nonisolated struct AppointmentBookingRequest: Identifiable, Equatable, Sendable {
-    let id = UUID()
-    let patient: Patient
+    static func create() -> Self {
+        Self(kind: .create)
+    }
 
-    var patientID: Patient.ID {
-        patient.id
+    static func bookAppointment(_ patient: Patient) -> Self {
+        Self(kind: .bookAppointment(patient))
+    }
+
+    static func editAppointment(_ details: AppointmentDetails) -> Self {
+        Self(kind: .editAppointment(details))
+    }
+
+    static func editUnavailableTime(_ block: UnavailableTime) -> Self {
+        Self(kind: .editUnavailableTime(block))
+    }
+
+    var needsBookingAvailability: Bool {
+        switch kind {
+        case .create, .bookAppointment: true
+        case .editAppointment, .editUnavailableTime: false
+        }
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -703,15 +669,6 @@ nonisolated struct PatientSearchRequest: Identifiable, Equatable, Sendable {
     }
 }
 
-nonisolated struct UnavailableTimeEditorRequest: Identifiable, Sendable {
-    let id = UUID()
-    let block: UnavailableTime
-}
-
-nonisolated struct ScheduleCreationRequest: Identifiable, Sendable {
-    let id = UUID()
-}
-
 nonisolated struct UnavailableTimeNavigationRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
     let blockID: UUID
@@ -744,29 +701,44 @@ extension Route {
     }
 }
 
+extension ScheduleEditorRequest {
+    fileprivate var telemetryName: String {
+        switch kind {
+        case .create: "schedule_creation"
+        case .bookAppointment: "appointment_booking"
+        case .editAppointment: "appointment_edit"
+        case .editUnavailableTime: "unavailable_time_editor"
+        }
+    }
+
+    fileprivate var telemetryRecordID: String? {
+        switch kind {
+        case .create: nil
+        case .bookAppointment(let patient): patient.id.uuidString.lowercased()
+        case .editAppointment(let details): details.appointment.id.uuidString.lowercased()
+        case .editUnavailableTime(let block): block.id.uuidString.lowercased()
+        }
+    }
+}
+
 extension AppPresentation {
     fileprivate var telemetryName: String {
         switch self {
         case .settings: "settings"
         case .details(let presentation): presentation.root.telemetryName
-        case .scheduleCreation: "schedule_creation"
-        case .appointmentBooking: "appointment_booking"
-        case .appointmentEdit: "appointment_edit"
+        case .scheduleEditor(let request): request.telemetryName
         case .appointmentMessage: "appointment_message"
         case .patientEdit(let request): request.patient == nil ? "patient_create" : "patient_edit"
-        case .unavailableTimeEditor: "unavailable_time_editor"
         }
     }
 
     fileprivate var telemetryRecordID: String? {
         switch self {
-        case .settings, .scheduleCreation: nil
+        case .settings: nil
         case .details(let presentation): presentation.root.telemetryRecordID
-        case .appointmentBooking(let request): request.patientID.uuidString.lowercased()
-        case .appointmentEdit(let request): request.appointmentID.uuidString.lowercased()
+        case .scheduleEditor(let request): request.telemetryRecordID
         case .appointmentMessage(let request): request.appointmentID.uuidString.lowercased()
         case .patientEdit(let request): request.patientID?.uuidString.lowercased()
-        case .unavailableTimeEditor(let request): request.block.id.uuidString.lowercased()
         }
     }
 }

@@ -15,10 +15,10 @@ struct RouterTests {
         let oldID = try #require(router.activePresentation?.id)
         router.presentationDidAppear(oldID)
         router.requestPatientCreation()
-        router.presentationDidDismiss(oldID, retainingScheduleEditor: oldID)
+        router.presentationDidDismiss(oldID)
         let newID = try #require(router.patientEditRequest?.id)
         router.presentationDidAppear(newID)
-        router.presentationDidDismiss(oldID, retainingScheduleEditor: oldID)
+        router.presentationDidDismiss(oldID)
         #expect(router.activePresentation?.id == newID)
     }
 
@@ -27,7 +27,7 @@ struct RouterTests {
         router.presentDetails(.patient(UUID()))
         let oldID = try #require(router.detailsPresentation?.id)
         router.requestScheduleCreation()
-        let newID = try #require(router.scheduleCreationRequest?.id)
+        let newID = try #require(router.scheduleEditorRequest?.id)
         router.presentationDidAppear(newID)
         router.presentationDidAppear(oldID)
         router.presentationDidDismiss(oldID)
@@ -39,10 +39,10 @@ struct RouterTests {
         router.requestScheduleCreation()
         let id = try #require(router.activePresentation?.id)
         router.presentationDidAppear(id)
-        router.presentationDidDismiss(id, retainingScheduleEditor: id)
+        router.presentationDidDismiss(id)
         #expect(router.activePresentation?.id == id)
         router.requestScheduleCreation()
-        let replacementID = try #require(router.scheduleCreationRequest?.id)
+        let replacementID = try #require(router.scheduleEditorRequest?.id)
         #expect(replacementID != id)
         #expect(router.activePresentation?.id == replacementID)
     }
@@ -54,8 +54,8 @@ struct RouterTests {
         router.presentationDidAppear(id)
         router.requestScheduleCreation()
         #expect(router.activePresentation == nil)
-        router.presentationDidDismiss(id, retainingScheduleEditor: id)
-        let replacementID = try #require(router.scheduleCreationRequest?.id)
+        router.presentationDidDismiss(id)
+        let replacementID = try #require(router.scheduleEditorRequest?.id)
         #expect(replacementID != id)
         #expect(router.activePresentation?.id == replacementID)
     }
@@ -365,7 +365,7 @@ struct RouterTests {
         router.requestScheduleCreation()
         router.presentationDidDismiss(presentationID)
 
-        let replacementID = try #require(router.scheduleCreationRequest?.id)
+        let replacementID = try #require(router.scheduleEditorRequest?.id)
         #expect(router.detailsPresentation == nil)
         #expect(router.patientEditRequest == nil)
 
@@ -451,7 +451,7 @@ struct RouterTests {
         router.openAppointment(id: appointmentID)
 
         #expect(router.detailsPresentation?.root == .appointment(appointmentID))
-        #expect(router.scheduleCreationRequest == nil)
+        #expect(router.scheduleEditorRequest == nil)
     }
 
     @Test func externalPatientSearchInterruptsPresentationAndNormalizesPhones() throws {
@@ -507,6 +507,121 @@ struct RouterTests {
         #expect(router.open(scheduleURL))
         #expect(router.detailsPresentation == nil)
         #expect(router.selectedScheduleDate == day.date(using: calendar))
+    }
+
+    @Test func scheduleEditorEntryPointsUseUnifiedPresentationAndKeepTelemetryCompatible() throws {
+        let initialDate = try Date("2026-07-18T00:00:00+05:30", strategy: .iso8601)
+        let bookingDate = try Date("2026-07-20T00:00:00+05:30", strategy: .iso8601)
+        let editDate = try Date("2026-07-22T11:00:00+05:30", strategy: .iso8601)
+        let blockDate = try Date("2026-07-24T15:00:00+05:30", strategy: .iso8601)
+        let patient = Patient(name: "Aarav Mehta", createdDate: initialDate)
+        let details = appointmentDetails(start: editDate)
+        let block = UnavailableTime(label: "Travel", start: blockDate, durationMinutes: 60)
+
+        let events = Mutex<[TelemetryEntry]>([])
+        try withDependencies {
+            $0.telemetry = TelemetryClient(
+                record: { entry in events.withLock { $0.append(entry) } },
+                isVerboseEnabled: { false }
+            )
+        } operation: {
+            let router = makeRouter(selectedScheduleDate: initialDate)
+            router.selectedTab = .patients
+
+            router.requestScheduleCreation()
+            let creation = try #require(router.scheduleEditorRequest)
+            if case .create = creation.kind {
+            } else {
+                Issue.record("Expected schedule creation kind.")
+            }
+            #expect(router.selectedTab == .schedule)
+            #expect(router.selectedScheduleDate == initialDate)
+
+            router.requestAppointmentBooking(for: patient, on: bookingDate)
+            let booking = try #require(router.scheduleEditorRequest)
+            if case .bookAppointment(let bookedPatient) = booking.kind {
+                #expect(bookedPatient.id == patient.id)
+            } else {
+                Issue.record("Expected appointment booking kind.")
+            }
+            #expect(router.selectedScheduleDate == bookingDate)
+
+            router.requestAppointmentEdit(details)
+            let edit = try #require(router.scheduleEditorRequest)
+            if case .editAppointment(let editedDetails) = edit.kind {
+                #expect(editedDetails.id == details.id)
+            } else {
+                Issue.record("Expected appointment edit kind.")
+            }
+            #expect(router.selectedScheduleDate == ClinicDate.day(editDate))
+
+            router.requestUnavailableTimeEdit(block)
+            let unavailable = try #require(router.scheduleEditorRequest)
+            if case .editUnavailableTime(let editedBlock) = unavailable.kind {
+                #expect(editedBlock.id == block.id)
+            } else {
+                Issue.record("Expected unavailable-time edit kind.")
+            }
+            #expect(router.selectedScheduleDate == ClinicDate.day(blockDate))
+        }
+
+        let presentationEvents = events.withLock { entries in
+            entries.filter {
+                $0.name == "presentation_opened" || $0.name == "presentation_replaced"
+            }
+        }
+        #expect(
+            presentationEvents.map(\.route) == [
+                "schedule_creation",
+                "appointment_booking",
+                "appointment_edit",
+                "unavailable_time_editor",
+            ])
+        #expect(
+            presentationEvents.map(\.recordID) == [
+                nil,
+                patient.id.uuidString.lowercased(),
+                details.appointment.id.uuidString.lowercased(),
+                block.id.uuidString.lowercased(),
+            ])
+    }
+
+    @Test func unavailableTimeNavigationFailureLogsAndRespectsActiveRequestIdentity() throws {
+        struct LookupError: Error {}
+        let blockID = UUID()
+        let newerBlockID = UUID()
+        let entries = Mutex<[TelemetryEntry]>([])
+
+        try withDependencies {
+            $0.telemetry = TelemetryClient(
+                record: { entry in entries.withLock { $0.append(entry) } },
+                isVerboseEnabled: { false }
+            )
+        } operation: {
+            let router = makeRouter()
+            router.openUnavailableTime(blockID)
+            let firstRequest = try #require(router.unavailableTimeNavigationRequest)
+            router.openUnavailableTime(newerBlockID)
+            let currentRequest = try #require(router.unavailableTimeNavigationRequest)
+
+            router.failUnavailableTimeNavigation(firstRequest, error: LookupError())
+            #expect(router.unavailableTimeNavigationRequest == currentRequest)
+            #expect(router.navigationErrorMessage == nil)
+
+            router.failUnavailableTimeNavigation(currentRequest, error: LookupError())
+            #expect(router.unavailableTimeNavigationRequest == nil)
+            #expect(router.navigationErrorMessage == "The unavailable time could not be loaded.")
+        }
+
+        let failureLogs = entries.withLock { recorded in
+            recorded.filter { $0.name == "unavailable_time_navigation_failed" }
+        }
+        #expect(failureLogs.count == 2)
+        #expect(
+            failureLogs.map(\.recordID) == [
+                blockID.uuidString.lowercased(),
+                newerBlockID.uuidString.lowercased(),
+            ])
     }
 
     private func assertExternalAppointmentInterrupts(_ router: Router) throws {

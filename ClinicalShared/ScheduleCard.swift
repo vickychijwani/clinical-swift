@@ -39,8 +39,13 @@ struct ScheduleCard: View {
             .opacity(
                 appearance.contentOpacity * (isDeemphasized ? tuning.otherContentOpacity : 1))
 
-            RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                .stroke(appearance.border, style: appearance.borderStyle)
+            if appearance.usesInnerBorder {
+                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                    .strokeBorder(appearance.border, style: appearance.borderStyle)
+            } else {
+                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                    .stroke(appearance.border, style: appearance.borderStyle)
+            }
         }
         .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
     }
@@ -50,6 +55,7 @@ struct ScheduleCard: View {
         let background: Background
         let border: Color
         let borderStyle: StrokeStyle
+        var usesInnerBorder = false
         var contentOpacity: Double = 1
         var timeColor: Color? = nil
         var labelColor: Color? = nil
