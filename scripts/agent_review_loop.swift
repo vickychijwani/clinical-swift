@@ -1849,6 +1849,6 @@ private func runCLI() -> Int32 {
     }
 }
 
-#if !AGENT_REVIEW_LOOP_TESTS
-    exit(runCLI())
+#if !SCRIPT_TESTS
+    let _ = exit(runCLI())
 #endif

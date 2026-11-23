@@ -551,29 +551,28 @@ func checkArchitecture(root: URL, staged: Bool) throws -> [String] {
     return failures
 }
 
-#if !ARCHITECTURE_TESTS
-    @main
-    struct CheckArchitecture {
-        static func main() {
-            do {
-                let arguments = Array(CommandLine.arguments.dropFirst())
-                guard arguments.isEmpty || arguments == ["--staged"] else {
-                    throw ArchitectureError("Usage: check_architecture.sh [--staged]")
-                }
-                let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                let path = String(
-                    decoding: try command(cwd, "git", ["rev-parse", "--show-toplevel"]),
-                    as: UTF8.self
-                ).trimmingCharacters(in: .whitespacesAndNewlines)
-                let failures = try checkArchitecture(
-                    root: URL(fileURLWithPath: path), staged: arguments == ["--staged"])
-                for failure in failures { print(failure) }
-                if !failures.isEmpty { exit(1) }
-                print("Architecture checks passed\(arguments.isEmpty ? "" : " for the Git index").")
-            } catch {
-                FileHandle.standardError.write(Data("Architecture check failed: \(error)\n".utf8))
-                exit(1)
-            }
+private func runCLI() {
+    do {
+        let arguments = Array(CommandLine.arguments.dropFirst())
+        guard arguments.isEmpty || arguments == ["--staged"] else {
+            throw ArchitectureError("Usage: check_architecture.sh [--staged]")
         }
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let path = String(
+            decoding: try command(cwd, "git", ["rev-parse", "--show-toplevel"]),
+            as: UTF8.self
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let failures = try checkArchitecture(
+            root: URL(fileURLWithPath: path), staged: arguments == ["--staged"])
+        for failure in failures { print(failure) }
+        if !failures.isEmpty { exit(1) }
+        print("Architecture checks passed\(arguments.isEmpty ? "" : " for the Git index").")
+    } catch {
+        FileHandle.standardError.write(Data("Architecture check failed: \(error)\n".utf8))
+        exit(1)
     }
+}
+
+#if !SCRIPT_TESTS
+    let _ = runCLI()
 #endif

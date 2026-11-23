@@ -11,5 +11,5 @@ swift scripts/app_store_connect.swift trigger-build WORKFLOW_ID KEY_ID ISSUER_ID
 Keep the P-256 private key at `~/.appstoreconnect/private_keys/AuthKey_KEY_ID.p8`,
 or set `API_PRIVATE_KEYS_DIR` to its directory.
 
-Run `swift scripts/test_app_store_connect.swift` to verify signatures without
-Apple credentials or API requests.
+Run `sh scripts/test_scripts.sh app_store_connect` to verify signatures without
+Apple credentials or API requests, or `sh scripts/test_scripts.sh` to run all script tests.

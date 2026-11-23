@@ -12,7 +12,7 @@ binary="$cache_dir/check-architecture"
 if [ ! -x "$binary" ] || [ "$(cat "$cache_dir/fingerprint" 2>/dev/null || true)" != "$fingerprint" ]; then
     temporary_binary="$binary.$$"
     trap 'rm -f "$temporary_binary"' EXIT HUP INT TERM
-    "$compiler" -parse-as-library "$source_path" -o "$temporary_binary"
+    "$compiler" "$source_path" -o "$temporary_binary"
     mv "$temporary_binary" "$binary"
     printf '%s\n' "$fingerprint" > "$cache_dir/fingerprint"
 fi

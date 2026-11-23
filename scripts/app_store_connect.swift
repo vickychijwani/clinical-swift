@@ -4,7 +4,7 @@ import Foundation
     import FoundationNetworking
 #endif
 
-private struct AppStoreConnectError: Error, CustomStringConvertible {
+struct AppStoreConnectError: Error, CustomStringConvertible {
     let description: String
 }
 
@@ -16,7 +16,7 @@ private func base64URL(_ data: Data) -> String {
 }
 
 // OpenSSL emits DER integers. ES256 JWTs need two unsigned, 32-byte integers.
-private func jwtSignature(from der: Data) throws -> Data {
+func jwtSignature(from der: Data) throws -> Data {
     let bytes = Array(der)
     func invalid() -> AppStoreConnectError {
         AppStoreConnectError(description: "OpenSSL returned an invalid P-256 signature.")
@@ -46,7 +46,7 @@ private func jwtSignature(from der: Data) throws -> Data {
     return raw
 }
 
-private func sign(_ input: String, keyURL: URL) throws -> Data {
+func sign(_ input: String, keyURL: URL) throws -> Data {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = ["openssl", "dgst", "-sha256", "-sign", keyURL.path]
@@ -67,7 +67,7 @@ private func sign(_ input: String, keyURL: URL) throws -> Data {
     return try jwtSignature(from: signature)
 }
 
-private func makeToken(keyID: String, issuerID: String, keyURL: URL) throws -> String {
+func makeToken(keyID: String, issuerID: String, keyURL: URL) throws -> String {
     struct Header: Encodable { let alg = "ES256", kid: String, typ = "JWT" }
     struct Payload: Encodable { let iss: String, iat: Int, exp: Int, aud = "appstoreconnect-v1" }
     let now = Int(Date().timeIntervalSince1970)
@@ -213,7 +213,7 @@ private func startBuild(workflowID: String, token: String) async throws -> (numb
     return (response.data.attributes.number, response.data.id)
 }
 
-#if !APP_STORE_CONNECT_TESTS
+private func runCLI() async {
     do {
         enum Operation: String {
             case nextBuildNumber = "next-build-number"
@@ -257,4 +257,8 @@ private func startBuild(workflowID: String, token: String) async throws -> (numb
         FileHandle.standardError.write(Data("App Store Connect command failed: \(error)\n".utf8))
         exit(1)
     }
+}
+
+#if !SCRIPT_TESTS
+    let _ = await runCLI()
 #endif

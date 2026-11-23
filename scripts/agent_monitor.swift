@@ -181,10 +181,6 @@ private enum JSONValue: Codable {
 
     var stringValue: String? { if case .string(let s) = self { s } else { nil } }
     var objectValue: [String: JSONValue]? { if case .object(let o) = self { o } else { nil } }
-    var stringArrayValue: [String]? {
-        if case .array(let items) = self { return items.compactMap(\.stringValue) }
-        return nil
-    }
     var isNull: Bool { if case .null = self { true } else { false } }
 }
 
@@ -193,11 +189,6 @@ private let streamJSONDecoder: JSONDecoder = {
     decoder.keyDecodingStrategy = .convertFromSnakeCase
     return decoder
 }()
-
-private func decodeJSON<T: Decodable>(_ type: T.Type, from line: String) -> T? {
-    guard let data = line.data(using: .utf8) else { return nil }
-    return try? streamJSONDecoder.decode(type, from: data)
-}
 
 private func decodePossiblyQuotedString(_ raw: String?) -> String? {
     guard let text = raw else { return nil }
@@ -304,32 +295,6 @@ private func extractUserRequestBody(_ raw: String) -> String {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
     return raw.trimmingCharacters(in: .whitespacesAndNewlines)
-}
-
-private func extractPRNumber(from prompt: String) -> Int? {
-    for marker in ["PR #", "on PR #", "pull/"] {
-        if let range = prompt.range(of: marker) {
-            let suffix = prompt[range.upperBound...]
-            let digits = suffix.prefix(while: { $0.isNumber })
-            if let num = Int(digits) {
-                return num
-            }
-        }
-    }
-    return nil
-}
-
-private func classifyPromptPhase(_ prompt: String) -> (kind: String, phase: String)? {
-    if prompt.hasPrefix("Review PR #") {
-        return ("review-loop", "review")
-    }
-    if prompt.hasPrefix("Address review comments on PR #") {
-        return ("review-loop", "address")
-    }
-    if prompt.hasPrefix("You were asked by ") {
-        return ("ask", "ask")
-    }
-    return nil
 }
 
 private func defaultPhaseLabel(_ phase: String) -> String {
@@ -463,7 +428,6 @@ private struct StreamUsage: Decodable {
     let cacheReadTokens: Int?
     let outputTokens: Int?
     let thinkingTokens: Int?
-    let reasoningOutputTokens: Int?
 }
 
 private struct AgyTranscriptStep: Decodable {
@@ -519,10 +483,6 @@ private struct AgyStreamEvent: Decodable {
 
 private struct CodexEvent: Decodable {
     struct FileChange: Decodable { let path: String?, kind: String? }
-    struct TextPart: Decodable { let text: String? }
-    struct Duration: Decodable { let secs: Double?, nanos: Double? }
-    struct ThreadSettings: Decodable { let model: String? }
-    struct TokenInfo: Decodable { let totalTokenUsage: StreamUsage? }
     struct Item: Decodable {
         let id: String?
         let type: String?
@@ -536,23 +496,9 @@ private struct CodexEvent: Decodable {
         let result: JSONValue?
         let error: JSONValue?
         let changes: [FileChange]?
-        let command: JSONValue?
+        let command: String?
         let aggregatedOutput: String?
         let exitCode: Int?
-        let content: [TextPart]?
-        let duration: Duration?
-        let durationMs: Double?
-        let summaryText: [String]?
-    }
-    struct Payload: Decodable {
-        let id: String?
-        let sessionId: String?
-        let cwd: String?
-        let timestamp: String?
-        let type: String?
-        let threadSettings: ThreadSettings?
-        let item: Item?
-        let info: TokenInfo?
     }
     let type: String
     let timestamp: String?
@@ -561,11 +507,10 @@ private struct CodexEvent: Decodable {
     let usage: StreamUsage?
     let error: JSONValue?
     let message: String?
-    let payload: Payload?
 }
 
 /// Parses live NDJSON output from `codex exec --json`, `agy --output-format stream-json`,
-/// Codex `rollout-*.jsonl` files, and `agy` CLI `transcript.jsonl` files.
+/// and `agy` CLI `transcript.jsonl` files.
 func parseAgentStream(text: String) -> ParsedPhaseStream {
     var acc = StreamAccumulator()
     var pendingAgyToolIDs: [String] = []
@@ -849,7 +794,7 @@ private func handleCodexEvent(_ event: CodexEvent, acc: inout StreamAccumulator)
                     text: item.text, timestamp: timestamp))
 
         case "command_execution":
-            let command = item.command?.stringValue ?? "command"
+            let command = item.command ?? "command"
             let exitCode = item.exitCode
             let resolvedStatus =
                 status == "running" ? "running" : ((exitCode ?? 0) == 0 ? "completed" : "failed")
@@ -919,92 +864,6 @@ private func handleCodexEvent(_ event: CodexEvent, acc: inout StreamAccumulator)
                 id: "codex-turn-error-\(acc.events.count)", kind: "error", status: "failed",
                 title: "Error", text: message, timestamp: timestamp))
 
-    // Codex rollout file fallback support (`~/.codex/sessions/.../rollout-*.jsonl`)
-    case "session_meta":
-        if let sessionID = event.payload?.id ?? event.payload?.sessionId {
-            acc.sessionID = sessionID
-        }
-
-    case "event_msg":
-        guard let payload = event.payload, let payloadType = payload.type else { return }
-
-        switch payloadType {
-        case "thread_settings_applied":
-            if let model = payload.threadSettings?.model { acc.model = model }
-
-        case "item_completed":
-            guard let item = payload.item, let itemID = item.id, let itemType = item.type else {
-                return
-            }
-
-            switch itemType {
-            case "UserMessage":
-                let text = (item.content ?? []).compactMap(\.text).joined(separator: "\n")
-                if !text.isEmpty { acc.prompt = text }
-
-            case "AgentMessage":
-                let text = (item.content ?? []).compactMap(\.text).joined(separator: "\n")
-                acc.upsert(
-                    MonitorEvent(
-                        id: itemID, kind: "message", status: "completed", text: text,
-                        timestamp: timestamp))
-
-            case "CommandExecution":
-                let commandParts = item.command?.stringArrayValue ?? []
-                let rawCommand: String
-                if commandParts.count == 3, commandParts[1] == "-lc" {
-                    rawCommand = commandParts[2]
-                } else if !commandParts.isEmpty {
-                    rawCommand = commandParts.joined(separator: " ")
-                } else {
-                    rawCommand = item.command?.stringValue ?? "command"
-                }
-                let exitCode = item.exitCode
-                let duration: Double? =
-                    if let secs = item.duration?.secs {
-                        secs + (item.duration?.nanos ?? 0) / 1_000_000_000.0
-                    } else {
-                        item.durationMs.map { $0 / 1000.0 }
-                    }
-                acc.upsert(
-                    MonitorEvent(
-                        id: itemID, kind: "command",
-                        status: (exitCode ?? 0) == 0 ? "completed" : "failed",
-                        title: "$ \(cleanShellCommandTitle(rawCommand))", text: rawCommand,
-                        output: item.aggregatedOutput, exitCode: exitCode,
-                        durationSeconds: duration, timestamp: timestamp))
-
-            case "Reasoning":
-                let summaryText = (item.summaryText ?? []).joined(separator: "\n")
-                if !summaryText.isEmpty {
-                    acc.upsert(
-                        MonitorEvent(
-                            id: itemID, kind: "reasoning", status: "completed", title: "Reasoning",
-                            text: summaryText, timestamp: timestamp))
-                }
-
-            default:
-                break
-            }
-
-        case "token_count":
-            if let total = payload.info?.totalTokenUsage {
-                acc.hasAuthoritativeUsage = true
-                acc.usage = TokenUsageSummary(
-                    inputTokens: total.inputTokens ?? 0,
-                    cachedInputTokens: total.cachedInputTokens ?? 0,
-                    outputTokens: total.outputTokens ?? 0,
-                    thinkingTokens: total.reasoningOutputTokens ?? 0
-                )
-            }
-
-        case "task_complete":
-            acc.resultStatus = "SUCCESS"
-
-        default:
-            break
-        }
-
     default:
         break
     }
@@ -1012,348 +871,9 @@ private func handleCodexEvent(_ event: CodexEvent, acc: inout StreamAccumulator)
 
 // MARK: - Discovery
 
-private struct LocalPhaseEntry {
-    let prNumber: Int?
-    let kind: String
-    let basePhase: String
-    let sessionID: String
-    let startedAt: String
-    let updatedAt: String
-    let isLive: Bool
-    let phaseView: MonitorPhaseView
-}
-
-private func parseRolloutHeader(firstLines: [String]) -> (
-    sessionID: String, cwd: String, model: String?, prompt: String, startedAt: String
-)? {
-    var sessionID: String?
-    var cwd: String?
-    var startedAt: String?
-    var model: String?
-    var prompt: String?
-
-    for line in firstLines {
-        guard let event = decodeJSON(CodexEvent.self, from: line), let payload = event.payload
-        else {
-            continue
-        }
-        if event.type == "session_meta" {
-            sessionID = payload.id ?? payload.sessionId
-            cwd = payload.cwd
-            startedAt = payload.timestamp ?? event.timestamp
-        } else if event.type == "event_msg" {
-            if payload.type == "thread_settings_applied" {
-                model = payload.threadSettings?.model
-            } else if payload.type == "item_completed", payload.item?.type == "UserMessage" {
-                prompt = (payload.item?.content ?? []).compactMap(\.text).joined(separator: "\n")
-            }
-        }
-    }
-
-    guard let sessionID, let cwd, let prompt, let startedAt else { return nil }
-    return (sessionID, cwd, model, prompt, startedAt)
-}
-
-private func discoverLocalCodexPhases(
-    codexSessionsDir: String,
-    knownSessionIDs: Set<String>,
-    now: Date
-) -> [LocalPhaseEntry] {
-    let fm = FileManager.default
-    let rootURL = URL(fileURLWithPath: codexSessionsDir, isDirectory: true)
-    guard fm.fileExists(atPath: rootURL.path) else { return [] }
-
-    guard
-        let enumerator = fm.enumerator(
-            at: rootURL,
-            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        )
-    else { return [] }
-
-    let cutoff = now.addingTimeInterval(-7 * 24 * 60 * 60)
-    var candidateFiles: [(url: URL, modified: Date)] = []
-
-    while let url = enumerator.nextObject() as? URL {
-        guard url.pathExtension == "jsonl" else { continue }
-        guard
-            let values = try? url.resourceValues(
-                forKeys: [.contentModificationDateKey, .isRegularFileKey]),
-            values.isRegularFile == true,
-            let modified = values.contentModificationDate,
-            modified >= cutoff
-        else { continue }
-        candidateFiles.append((url, modified))
-    }
-
-    candidateFiles.sort { $0.modified > $1.modified }
-    let isoFormatter = ISO8601DateFormatter()
-    var entries: [LocalPhaseEntry] = []
-
-    for candidate in candidateFiles.prefix(30) {
-        guard let content = try? String(contentsOf: candidate.url, encoding: .utf8) else {
-            continue
-        }
-        let lines = content.split(whereSeparator: \.isNewline).map(String.init)
-        guard let meta = parseRolloutHeader(firstLines: Array(lines.prefix(25))),
-            !knownSessionIDs.contains(meta.sessionID)
-        else { continue }
-
-        let classified = classifyPromptPhase(meta.prompt)
-        guard classified != nil || meta.cwd.contains("/clinical-agents/work/") else { continue }
-        let (kind, phase) = classified ?? ("review-loop", "review")
-
-        let parsed = parseAgentStream(text: content)
-        let isCompleted =
-            parsed.resultStatus != nil || now.timeIntervalSince(candidate.modified) > 90
-        let updatedISO = isoFormatter.string(from: candidate.modified)
-        let prNumber = extractPRNumber(from: meta.prompt)
-
-        let phaseView = MonitorPhaseView(
-            phase: phase,
-            label: defaultPhaseLabel(phase),
-            harness: "codex",
-            botLogin: "clinical-codex[bot]",
-            model: meta.model ?? parsed.model,
-            effort: nil,
-            worktreePath: meta.cwd,
-            prompt: meta.prompt,
-            status: isCompleted ? "completed" : "running",
-            conclusion: isCompleted ? (parsed.resultError == nil ? "success" : "failure") : nil,
-            startedAt: meta.startedAt,
-            completedAt: isCompleted ? updatedISO : nil,
-            updatedAt: updatedISO,
-            sessionID: meta.sessionID,
-            usage: parsed.usage,
-            resultStatus: parsed.resultStatus,
-            resultError: parsed.resultError,
-            events: parsed.events
-        )
-
-        entries.append(
-            LocalPhaseEntry(
-                prNumber: prNumber,
-                kind: kind,
-                basePhase: phase,
-                sessionID: meta.sessionID,
-                startedAt: meta.startedAt,
-                updatedAt: updatedISO,
-                isLive: !isCompleted,
-                phaseView: phaseView
-            ))
-    }
-
-    return entries
-}
-
-private func discoverLocalAgyPhases(
-    agyBrainDir: String,
-    knownSessionIDs: Set<String>,
-    now: Date
-) -> [LocalPhaseEntry] {
-    let fm = FileManager.default
-    let rootURL = URL(fileURLWithPath: agyBrainDir, isDirectory: true)
-    guard fm.fileExists(atPath: rootURL.path) else { return [] }
-    guard
-        let convDirs = try? fm.contentsOfDirectory(
-            at: rootURL,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        )
-    else { return [] }
-
-    let cutoff = now.addingTimeInterval(-7 * 24 * 60 * 60)
-    var candidates: [(id: String, url: URL, modified: Date)] = []
-
-    for convDir in convDirs {
-        let convID = convDir.lastPathComponent
-        guard !knownSessionIDs.contains(convID) else { continue }
-        let transcriptURL =
-            convDir
-            .appending(path: ".system_generated", directoryHint: .isDirectory)
-            .appending(path: "logs", directoryHint: .isDirectory)
-            .appending(path: "transcript.jsonl")
-        guard
-            let values = try? transcriptURL.resourceValues(
-                forKeys: [.contentModificationDateKey, .isRegularFileKey]),
-            values.isRegularFile == true,
-            let modified = values.contentModificationDate,
-            modified >= cutoff
-        else { continue }
-        candidates.append((convID, transcriptURL, modified))
-    }
-
-    candidates.sort { $0.modified > $1.modified }
-    let isoFormatter = ISO8601DateFormatter()
-    var entries: [LocalPhaseEntry] = []
-
-    for candidate in candidates.prefix(40) {
-        guard let content = try? String(contentsOf: candidate.url, encoding: .utf8) else {
-            continue
-        }
-        let lines = content.split(whereSeparator: \.isNewline).map(String.init)
-        guard let firstLine = lines.first,
-            let firstStep = decodeJSON(AgyTranscriptStep.self, from: firstLine),
-            firstStep.type == "USER_INPUT",
-            let rawContent = firstStep.content
-        else { continue }
-
-        let prompt = extractUserRequestBody(rawContent)
-        guard let (kind, phase) = classifyPromptPhase(prompt) else { continue }
-
-        let parsed = parseAgentStream(text: content)
-        let startedAt = firstStep.createdAt ?? isoFormatter.string(from: candidate.modified)
-        let updatedISO = isoFormatter.string(from: candidate.modified)
-
-        // An agy CLI transcript is still live if updated recently and has not ended on a final assistant reply.
-        let lastStep = lines.last.flatMap { decodeJSON(AgyTranscriptStep.self, from: $0) }
-        let lastType = lastStep?.type ?? ""
-        let lastHasTools = !(lastStep?.toolCalls ?? []).isEmpty
-        let lastHasContent =
-            !(lastStep?.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-        let endedCleanly =
-            lastType == "PLANNER_RESPONSE" && !lastHasTools && lastHasContent
-            && lastStep?.status == "DONE"
-        let isLive = !endedCleanly && now.timeIntervalSince(candidate.modified) < 120
-        let hasTrailingError = lastType == "ERROR_MESSAGE" && !isLive
-
-        let phaseView = MonitorPhaseView(
-            phase: phase,
-            label: defaultPhaseLabel(phase),
-            harness: "antigravity",
-            botLogin: "clinical-antigravity[bot]",
-            model: parsed.model,
-            effort: nil,
-            worktreePath: nil,
-            prompt: prompt,
-            status: isLive ? "running" : "completed",
-            conclusion: isLive ? nil : (hasTrailingError ? "failure" : "success"),
-            startedAt: startedAt,
-            completedAt: isLive ? nil : updatedISO,
-            updatedAt: updatedISO,
-            sessionID: candidate.id,
-            usage: parsed.usage,
-            resultStatus: endedCleanly ? "SUCCESS" : nil,
-            resultError: hasTrailingError
-                ? parsed.events.last(where: { $0.kind == "error" })?.text : nil,
-            events: parsed.events
-        )
-
-        entries.append(
-            LocalPhaseEntry(
-                prNumber: extractPRNumber(from: prompt),
-                kind: kind,
-                basePhase: phase,
-                sessionID: candidate.id,
-                startedAt: startedAt,
-                updatedAt: updatedISO,
-                isLive: isLive,
-                phaseView: phaseView
-            ))
-    }
-
-    return entries
-}
-
-/// Groups local Codex and Antigravity sessions for the same PR into tabbed loop runs.
-private func groupLocalPhasesIntoRuns(_ entries: [LocalPhaseEntry]) -> [MonitorRunView] {
-    var byPR: [Int: [LocalPhaseEntry]] = [:]
-    var ungrouped: [LocalPhaseEntry] = []
-
-    for entry in entries {
-        if let pr = entry.prNumber {
-            byPR[pr, default: []].append(entry)
-        } else {
-            ungrouped.append(entry)
-        }
-    }
-
-    var runs: [MonitorRunView] = []
-
-    for (prNumber, group) in byPR {
-        let sorted = group.sorted { $0.startedAt < $1.startedAt }
-        var phaseCounts: [String: Int] = [:]
-        var phases: [MonitorPhaseView] = []
-
-        for entry in sorted {
-            let count = (phaseCounts[entry.basePhase] ?? 0) + 1
-            phaseCounts[entry.basePhase] = count
-            let key = count == 1 ? entry.basePhase : "\(entry.basePhase)-\(count)"
-            let label =
-                count == 1
-                ? defaultPhaseLabel(entry.basePhase)
-                : "\(defaultPhaseLabel(entry.basePhase)) #\(count)"
-            let p = entry.phaseView
-            phases.append(
-                MonitorPhaseView(
-                    phase: key,
-                    label: label,
-                    harness: p.harness,
-                    botLogin: p.botLogin,
-                    model: p.model,
-                    effort: p.effort,
-                    worktreePath: p.worktreePath,
-                    prompt: p.prompt,
-                    status: p.status,
-                    conclusion: p.conclusion,
-                    startedAt: p.startedAt,
-                    completedAt: p.completedAt,
-                    updatedAt: p.updatedAt,
-                    sessionID: p.sessionID,
-                    usage: p.usage,
-                    resultStatus: p.resultStatus,
-                    resultError: p.resultError,
-                    events: p.events
-                ))
-        }
-
-        let createdAt = sorted.first?.startedAt ?? ""
-        let updatedAt = sorted.map(\.updatedAt).max() ?? createdAt
-        let isLive = sorted.contains { $0.isLive }
-        let kind = sorted.contains { $0.kind == "review-loop" } ? "review-loop" : "ask"
-
-        runs.append(
-            MonitorRunView(
-                runID: "local-pr-\(prNumber)",
-                kind: kind,
-                source: "local-sessions",
-                prNumber: prNumber,
-                prBranch: nil,
-                prHeadSHA: nil,
-                repository: "vickychijwani/clinical-swift",
-                runURL: nil,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                isLive: isLive,
-                phases: phases
-            ))
-    }
-
-    for entry in ungrouped {
-        runs.append(
-            MonitorRunView(
-                runID: "local-\(entry.sessionID)",
-                kind: entry.kind,
-                source: "local-sessions",
-                prNumber: nil,
-                prBranch: nil,
-                prHeadSHA: nil,
-                repository: "vickychijwani/clinical-swift",
-                runURL: nil,
-                createdAt: entry.startedAt,
-                updatedAt: entry.updatedAt,
-                isLive: entry.isLive,
-                phases: [entry.phaseView]
-            ))
-    }
-
-    return runs
-}
-
-/// Loads all recorded workflow runs plus local Codex and Antigravity CLI sessions.
+/// Loads all recorded workflow runs.
 func loadMonitorSnapshot(
     monitorDirectory: String,
-    codexSessionsDirectory: String? = nil,
     agyBrainDirectory: String? = nil,
     now: Date = Date()
 ) -> MonitorSnapshot {
@@ -1363,7 +883,6 @@ func loadMonitorSnapshot(
     let isoFormatter = ISO8601DateFormatter()
 
     var runs: [MonitorRunView] = []
-    var knownSessionIDs = Set<String>()
 
     if let entries = try? fm.contentsOfDirectory(
         at: runsDir,
@@ -1409,33 +928,31 @@ func loadMonitorSnapshot(
                 }
 
                 var parsed = parseAgentStream(text: streamText)
-                if let sessionID = parsed.sessionID {
-                    knownSessionIDs.insert(sessionID)
-                    // Enrich agy stream-json runs with full thinking text from agy CLI's live transcript when available.
-                    if phaseRecord.harness == "antigravity", let agyBrainDirectory {
-                        let transcriptPath = URL(fileURLWithPath: agyBrainDirectory)
-                            .appending(path: sessionID)
-                            .appending(path: ".system_generated/logs/transcript.jsonl").path
-                        if let transcriptContent = try? String(
-                            contentsOfFile: transcriptPath, encoding: .utf8)
-                        {
-                            let enriched = parseAgentStream(text: transcriptContent)
-                            if !enriched.events.isEmpty {
-                                let streamErrors = parsed.events.filter { $0.kind == "error" }
-                                var mergedEvents = enriched.events
-                                for err in streamErrors {
-                                    if !mergedEvents.contains(where: {
-                                        $0.kind == "error" && $0.text == err.text
-                                    }) {
-                                        mergedEvents.append(err)
-                                    }
+                // Enrich agy stream-json runs with full thinking text from agy CLI's live transcript when available.
+                if let sessionID = parsed.sessionID,
+                    phaseRecord.harness == "antigravity",
+                    let agyBrainDirectory
+                {
+                    let transcriptPath = URL(fileURLWithPath: agyBrainDirectory)
+                        .appending(path: sessionID)
+                        .appending(path: ".system_generated/logs/transcript.jsonl").path
+                    if let transcriptContent = try? String(
+                        contentsOfFile: transcriptPath, encoding: .utf8)
+                    {
+                        let enriched = parseAgentStream(text: transcriptContent)
+                        if !enriched.events.isEmpty {
+                            let streamErrors = parsed.events.filter { $0.kind == "error" }
+                            var mergedEvents = enriched.events
+                            for err in streamErrors {
+                                if !mergedEvents.contains(where: {
+                                    $0.kind == "error" && $0.text == err.text
+                                }) {
+                                    mergedEvents.append(err)
                                 }
-                                parsed.events = mergedEvents
-                                if !parsed.usage.totalTokens.description.isEmpty,
-                                    parsed.usage.totalTokens == 0
-                                {
-                                    parsed.usage = enriched.usage
-                                }
+                            }
+                            parsed.events = mergedEvents
+                            if parsed.usage.totalTokens == 0 {
+                                parsed.usage = enriched.usage
                             }
                         }
                     }
@@ -1487,25 +1004,6 @@ func loadMonitorSnapshot(
         }
     }
 
-    var localPhases: [LocalPhaseEntry] = []
-    if let codexSessionsDirectory {
-        localPhases.append(
-            contentsOf: discoverLocalCodexPhases(
-                codexSessionsDir: codexSessionsDirectory,
-                knownSessionIDs: knownSessionIDs,
-                now: now
-            ))
-    }
-    if let agyBrainDirectory {
-        localPhases.append(
-            contentsOf: discoverLocalAgyPhases(
-                agyBrainDir: agyBrainDirectory,
-                knownSessionIDs: knownSessionIDs,
-                now: now
-            ))
-    }
-    runs.append(contentsOf: groupLocalPhasesIntoRuns(localPhases))
-
     runs.sort { lhs, rhs in
         if lhs.isLive != rhs.isLive {
             return lhs.isLive && !rhs.isLive
@@ -1521,7 +1019,6 @@ func loadMonitorSnapshot(
 
 private func computeMonitorFingerprint(
     monitorDirectory: String,
-    codexSessionsDirectory: String?,
     agyBrainDirectory: String?
 ) -> String {
     let fm = FileManager.default
@@ -1540,21 +1037,6 @@ private func computeMonitorFingerprint(
             let size = values?.fileSize ?? 0
             let mtime = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
             parts.append("r:\(url.path):\(size):\(Int(mtime * 1000))")
-        }
-    }
-
-    if let codexSessionsDirectory {
-        let codexURL = URL(fileURLWithPath: codexSessionsDirectory, isDirectory: true)
-        if let enumerator = fm.enumerator(
-            at: codexURL, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
-        {
-            while let url = enumerator.nextObject() as? URL {
-                guard url.pathExtension == "jsonl" else { continue }
-                let values = try? url.resourceValues(forKeys: Set(keys))
-                let size = values?.fileSize ?? 0
-                let mtime = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
-                parts.append("c:\(url.lastPathComponent):\(size):\(Int(mtime))")
-            }
         }
     }
 
@@ -1585,7 +1067,6 @@ private func computeMonitorFingerprint(
 private final class MonitorServer: @unchecked Sendable {
     private let port: UInt16
     private let monitorDirectory: String
-    private let codexSessionsDirectory: String
     private let agyBrainDirectory: String
     private let queue = DispatchQueue(label: "in.bitehaus.clinical.agent-monitor")
     private var listener: NWListener?
@@ -1598,12 +1079,10 @@ private final class MonitorServer: @unchecked Sendable {
     init(
         port: UInt16,
         monitorDirectory: String,
-        codexSessionsDirectory: String,
         agyBrainDirectory: String
     ) {
         self.port = port
         self.monitorDirectory = monitorDirectory
-        self.codexSessionsDirectory = codexSessionsDirectory
         self.agyBrainDirectory = agyBrainDirectory
     }
 
@@ -1627,9 +1106,7 @@ private final class MonitorServer: @unchecked Sendable {
             case .ready:
                 let url = "http://127.0.0.1:\(self.port)"
                 print("Clinical Agent Monitor listening on \(url)")
-                print(
-                    "Watching \(self.monitorDirectory)/runs, \(self.codexSessionsDirectory), and \(self.agyBrainDirectory)"
-                )
+                print("Watching \(self.monitorDirectory)/runs and \(self.agyBrainDirectory)")
                 fflush(stdout)
                 if openBrowser {
                     let process = Process()
@@ -1677,14 +1154,12 @@ private final class MonitorServer: @unchecked Sendable {
     private func refreshSnapshotIfNeeded(force: Bool) -> Bool {
         let fingerprint = computeMonitorFingerprint(
             monitorDirectory: monitorDirectory,
-            codexSessionsDirectory: codexSessionsDirectory,
             agyBrainDirectory: agyBrainDirectory
         )
         guard force || fingerprint != lastFingerprint else { return false }
         lastFingerprint = fingerprint
         let snapshot = loadMonitorSnapshot(
             monitorDirectory: monitorDirectory,
-            codexSessionsDirectory: codexSessionsDirectory,
             agyBrainDirectory: agyBrainDirectory
         )
         let encoder = JSONEncoder()
@@ -3161,12 +2636,10 @@ private func runMonitorCLI() -> Int32 {
         }
     }
 
-    let codexSessionsDir = "\(home)/.codex/sessions"
     let agyBrainDir = "\(home)/.gemini/antigravity-cli/brain"
     let server = MonitorServer(
         port: port,
         monitorDirectory: monitorDir,
-        codexSessionsDirectory: codexSessionsDir,
         agyBrainDirectory: agyBrainDir
     )
     do {
@@ -3178,6 +2651,6 @@ private func runMonitorCLI() -> Int32 {
     }
 }
 
-#if !AGENT_MONITOR_TESTS
-    _ = runMonitorCLI()
+#if !SCRIPT_TESTS
+    let _ = runMonitorCLI()
 #endif
