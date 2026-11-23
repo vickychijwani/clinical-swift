@@ -58,7 +58,6 @@ permissions:
 
 env:
   CANONICAL_REPO_PATH: /Users/vicky/code/clinical-swift
-  SUPER_ENGINEERING_DB: /Users/vicky/.super.engineering/db/super.engineering.db
   AGENT_MONITOR_DIR: /Users/vicky/.clinical-agent-monitor
 
 jobs:
@@ -188,7 +187,6 @@ jobs:
             --branch "$pr_branch"
             --head-sha "$pr_head_sha"
             --action "$action"
-            --super-db "$SUPER_ENGINEERING_DB"
             --require-clean
           )
           if [[ -n "$reviewer_override" ]]; then
@@ -547,7 +545,6 @@ jobs:
               --branch "$PR_BRANCH"
               --head-sha "$live_head_sha"
               --action review
-              --super-db "$SUPER_ENGINEERING_DB"
               --require-clean
             )
             if [[ -n "$REVIEWER_OVERRIDE" ]]; then
@@ -1085,7 +1082,6 @@ jobs:
             --branch "$PR_BRANCH"
             --head-sha "$PR_HEAD_SHA"
             --action address
-            --super-db "$SUPER_ENGINEERING_DB"
             --require-clean
           )
           if [[ -n "$AUTHOR_OVERRIDE" ]]; then

@@ -33,54 +33,6 @@ private func runGit(_ repo: String, _ args: [String]) throws -> String {
     return String(decoding: outData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-private func createSuperDB(
-    at path: String, rows: [(provider: String, worktree: String, updatedAt: Int)]
-) throws {
-    var db: OpaquePointer?
-    guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
-        let db
-    else {
-        if let db { sqlite3_close(db) }
-        throw TestFailure(description: "Could not create test SQLite DB at \(path)")
-    }
-    defer { sqlite3_close(db) }
-
-    let createSQL = """
-        CREATE TABLE conversations (
-            conversation_id TEXT PRIMARY KEY,
-            provider_key TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            metadata TEXT
-        );
-        """
-    guard sqlite3_exec(db, createSQL, nil, nil, nil) == SQLITE_OK else {
-        throw TestFailure(description: "Failed creating conversations table")
-    }
-
-    let insertSQL = "INSERT INTO conversations VALUES (?, ?, ?, ?, ?);"
-    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-    for (index, row) in rows.enumerated() {
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, insertSQL, -1, &stmt, nil) == SQLITE_OK, let stmt else {
-            throw TestFailure(description: "Failed preparing insert")
-        }
-        defer { sqlite3_finalize(stmt) }
-        let metadataData = try JSONSerialization.data(withJSONObject: [
-            "worktree_path": row.worktree
-        ])
-        let metadata = String(decoding: metadataData, as: UTF8.self)
-        sqlite3_bind_text(stmt, 1, "conv-\(index)", -1, transient)
-        sqlite3_bind_text(stmt, 2, row.provider, -1, transient)
-        sqlite3_bind_int64(stmt, 3, Int64(row.updatedAt))
-        sqlite3_bind_int64(stmt, 4, Int64(row.updatedAt))
-        sqlite3_bind_text(stmt, 5, metadata, -1, transient)
-        guard sqlite3_step(stmt) == SQLITE_DONE else {
-            throw TestFailure(description: "Failed inserting row \(index)")
-        }
-    }
-}
-
 private func createAgyConversationDB(
     at agyDir: URL,
     rows: [(convID: String, worktree: String, modifiedTime: String, model: String?)]
@@ -90,7 +42,8 @@ private func createAgyConversationDB(
     let dbPath = agyDir.appending(path: "conversation_summaries.db").path
 
     var db: OpaquePointer?
-    guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+    guard
+        sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
         let db
     else {
         if let db { sqlite3_close(db) }
@@ -376,13 +329,6 @@ private func createAgyConversationDB(
             "Other Antigravity repo path should classify as unknown"
         )
         try expect(
-            classifyWorktreePath(
-                "/Users/tester/.super.engineering/worktrees/clinical-swift/sc-vortex",
-                homeDirectory: home)
-                == .superEngineering,
-            "super.engineering path should classify"
-        )
-        try expect(
             classifyWorktreePath("/Users/tester/code/clinical-swift", homeDirectory: home)
                 == .unknown,
             "Main repo path should classify as unknown"
@@ -447,26 +393,6 @@ private func createAgyConversationDB(
         _ = try runGit(agyWT.path, ["commit", "-m", "Agy change"])
         let agySHA = try runGit(agyWT.path, ["rev-parse", "HEAD"])
 
-        let superWT = home.appending(path: ".super.engineering/worktrees/clinical-swift/sc-1")
-        try fm.createDirectory(
-            at: superWT.deletingLastPathComponent(), withIntermediateDirectories: true)
-        _ = try runGit(
-            canonical.path, ["worktree", "add", "-b", "codex/super-branch", superWT.path, baseSHA])
-        try Data("super\n".utf8).write(to: superWT.appending(path: "super.txt"))
-        _ = try runGit(superWT.path, ["add", "super.txt"])
-        _ = try runGit(superWT.path, ["commit", "-m", "Super change"])
-        let superSHA = try runGit(superWT.path, ["rev-parse", "HEAD"])
-
-        let dbPath = root.appending(path: "super.db").path
-        let resolvedSuperWT = superWT.standardizedFileURL.resolvingSymlinksInPath().path
-        try createSuperDB(
-            at: dbPath,
-            rows: [
-                (provider: "claude", worktree: resolvedSuperWT, updatedAt: 100),
-                (provider: "codex", worktree: resolvedSuperWT, updatedAt: 200),
-            ]
-        )
-
         let resolvedAgyWT = agyWT.standardizedFileURL.resolvingSymlinksInPath().path
         let opusAgyDir = root.appending(path: "agy-opus", directoryHint: .isDirectory)
         try createAgyConversationDB(
@@ -502,7 +428,6 @@ private func createAgyConversationDB(
             branch: "codex/detached-pr",
             headSHA: baseSHA,
             action: .review,
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -520,7 +445,6 @@ private func createAgyConversationDB(
             headSHA: baseSHA,
             action: .review,
             reviewAll: true,
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -537,7 +461,6 @@ private func createAgyConversationDB(
             branch: "feature_one",
             headSHA: agySHA,
             action: .review,
-            superDBPath: dbPath,
             agyDirectory: opusAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -554,7 +477,6 @@ private func createAgyConversationDB(
             headSHA: agySHA,
             action: .review,
             reviewAll: true,
-            superDBPath: dbPath,
             agyDirectory: opusAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -570,14 +492,15 @@ private func createAgyConversationDB(
             headSHA: agySHA,
             action: .review,
             reviewAll: true,
-            superDBPath: dbPath,
             agyDirectory: hydrogenAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
         try expect(
             agyHydrogenAllRes.author == AgentModel.hydrogen.profile
-                && agyHydrogenAllRes.reviewers == [AgentModel.sol.profile, AgentModel.opus.profile],
+                && agyHydrogenAllRes.reviewers == [
+                    AgentModel.sol.profile, AgentModel.opus.profile,
+                ],
             "Expected /review all on hydrogen PR to run [sol, opus]"
         )
 
@@ -586,7 +509,6 @@ private func createAgyConversationDB(
             branch: "feature_one",
             headSHA: agySHA,
             action: .review,
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -603,7 +525,6 @@ private func createAgyConversationDB(
             headSHA: agySHA,
             action: .address,
             authorOverride: .opus,
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -614,67 +535,30 @@ private func createAgyConversationDB(
             "/address opus should override detected author"
         )
 
-        // 4. super.engineering with multiple providers picks latest (codex -> sol) and adds note.
-        let superRes = discoverLoopContext(
-            canonicalRepoPath: canonical.path,
-            branch: "codex/super-branch",
-            headSHA: superSHA,
-            action: .review,
-            superDBPath: dbPath,
-            agyDirectory: emptyAgyDir.path,
-            homeDirectory: home.path,
-            requireClean: true
-        )
-        try expect(superRes.status == "ok", "super.engineering codex worktree should succeed")
-        try expect(superRes.author == AgentModel.sol.profile, "Expected sol author from super DB")
-        try expect(
-            superRes.notes.contains(where: { $0.contains("Multiple super.engineering providers") }),
-            "Expected multiple-provider log note"
-        )
-
-        // 5. Non-codex super.engineering provider stops when no override.
-        let claudeDBPath = root.appending(path: "super-claude.db").path
-        try createSuperDB(
-            at: claudeDBPath,
-            rows: [(provider: "claude", worktree: resolvedSuperWT, updatedAt: 300)]
-        )
-        let claudeRes = discoverLoopContext(
-            canonicalRepoPath: canonical.path,
-            branch: "codex/super-branch",
-            headSHA: superSHA,
-            action: .review,
-            superDBPath: claudeDBPath,
-            agyDirectory: emptyAgyDir.path,
-            homeDirectory: home.path,
-            requireClean: false
-        )
-        try expect(claudeRes.status == "error", "Non-codex super.engineering provider must stop")
-
-        // 6. /review <reviewer> override falls back to default reviewer for unknown path.
+        // 4. /review <reviewer> override falls back to default reviewer for unknown path.
         let overrideRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
             branch: "main",
             headSHA: baseSHA,
             action: .review,
             reviewerOverride: [.sol],
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
         try expect(overrideRes.status == "ok", "Override should allow unknown path")
-        try expect(overrideRes.reviewers == [AgentModel.sol.profile], "Override reviewer should be sol")
+        try expect(
+            overrideRes.reviewers == [AgentModel.sol.profile], "Override reviewer should be sol")
         try expect(
             overrideRes.author == AgentModel.neon.profile,
             "Override fallback author should be neon")
 
-        // 7. --require-clean catches stale HEAD and dirty working tree.
+        // 5. --require-clean catches stale HEAD and dirty working tree.
         let staleRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
             branch: "feature_one",
             headSHA: baseSHA,
             action: .address,
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -689,7 +573,6 @@ private func createAgyConversationDB(
             branch: "feature_one",
             headSHA: agySHA,
             action: .address,
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -699,14 +582,13 @@ private func createAgyConversationDB(
             "Dirty worktree must fail"
         )
 
-        // 8. /ask discovery supports both auto-detected author and explicit cross-model override.
+        // 6. /ask discovery supports both auto-detected author and explicit cross-model override.
         let askAutoRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
             branch: "feature_one",
             headSHA: agySHA,
             action: .ask,
             targetModel: nil,
-            superDBPath: dbPath,
             agyDirectory: opusAgyDir.path,
             homeDirectory: home.path,
             requireClean: false
@@ -722,7 +604,6 @@ private func createAgyConversationDB(
             headSHA: baseSHA,
             action: .ask,
             targetModel: .opus,
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
@@ -734,20 +615,19 @@ private func createAgyConversationDB(
             "/ask opus should run in a Codex worktree"
         )
 
-        let askSuperRes = discoverLoopContext(
+        let askUnknownPathRes = discoverLoopContext(
             canonicalRepoPath: canonical.path,
-            branch: "codex/super-branch",
-            headSHA: superSHA,
+            branch: "main",
+            headSHA: baseSHA,
             action: .ask,
             targetModel: .sol,
-            superDBPath: claudeDBPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: true
         )
         try expect(
-            askSuperRes.status == "ok" && askSuperRes.author == AgentModel.sol.profile,
-            "/ask with explicit model should work on super.engineering worktree regardless of DB provider"
+            askUnknownPathRes.status == "ok" && askUnknownPathRes.author == AgentModel.sol.profile,
+            "/ask with explicit model should work on unknown worktree path"
         )
 
         let askMissingRes = discoverLoopContext(
@@ -756,7 +636,6 @@ private func createAgyConversationDB(
             headSHA: "deadbeef",
             action: .ask,
             targetModel: .sol,
-            superDBPath: dbPath,
             agyDirectory: emptyAgyDir.path,
             homeDirectory: home.path,
             requireClean: false
@@ -951,7 +830,8 @@ private func createAgyConversationDB(
         let phaseRecord = try JSONDecoder().decode(MonitorPhaseRecord.self, from: phaseData)
         try expect(phaseRecord.phase == "review-sol", "Expected phase review-sol")
         try expect(phaseRecord.harness == .codex, "Expected harness preserved across updates")
-        try expect(phaseRecord.prompt == "Review PR #33", "Expected prompt preserved across updates")
+        try expect(
+            phaseRecord.prompt == "Review PR #33", "Expected prompt preserved across updates")
         try expect(phaseRecord.startedAt == "2026-11-19T08:01:00Z", "Expected startedAt preserved")
         try expect(phaseRecord.completedAt == "2026-11-19T08:03:00Z", "Expected completedAt set")
         try expect(phaseRecord.conclusion == "success", "Expected conclusion recorded")
@@ -1114,7 +994,8 @@ private func createAgyConversationDB(
             repo: "vickychijwani/clinical-swift",
             prNumber: 42,
             fetchPage: { owner, name, prNumber, after in
-                try expect(owner == "vickychijwani" && name == "clinical-swift", "Repo split mismatch")
+                try expect(
+                    owner == "vickychijwani" && name == "clinical-swift", "Repo split mismatch")
                 try expect(prNumber == 42, "PR number mismatch")
                 requestedCursors.append(after)
                 return after == nil ? page1 : page2

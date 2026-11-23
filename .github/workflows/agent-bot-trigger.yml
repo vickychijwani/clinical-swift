@@ -38,7 +38,6 @@ permissions:
 
 env:
   CANONICAL_REPO_PATH: /Users/vicky/code/clinical-swift
-  SUPER_ENGINEERING_DB: /Users/vicky/.super.engineering/db/super.engineering.db
   AGENT_MONITOR_DIR: /Users/vicky/.clinical-agent-monitor
 
 jobs:
@@ -167,7 +166,6 @@ jobs:
             --branch "$pr_branch"
             --head-sha "$pr_head_sha"
             --action ask
-            --super-db "$SUPER_ENGINEERING_DB"
           )
           if [[ -n "$model_override" ]]; then
             discover_args+=(--model "$model_override")
@@ -464,7 +462,6 @@ jobs:
             --head-sha "$pr_head_sha" \
             --action ask \
             --model "$model_id" \
-            --super-db "$SUPER_ENGINEERING_DB" \
             --require-clean)
           status=$?
           set -e

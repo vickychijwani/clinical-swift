@@ -138,7 +138,6 @@ struct WorktreeEntry: Equatable {
 enum WorktreeKind: Equatable {
     case codex
     case antigravity
-    case superEngineering
     case unknown
 }
 
@@ -496,7 +495,7 @@ func parseWorktreeList(_ output: String) -> [WorktreeEntry] {
     return entries
 }
 
-/// Classifies a worktree path against the three supported agent worktree layouts.
+/// Classifies a worktree path against the two supported agent worktree layouts.
 func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind {
     let normalizedHome = normalizePath(homeDirectory, resolveSymlinks: false)
     let normalizedPath = normalizePath(path, resolveSymlinks: false)
@@ -509,7 +508,6 @@ func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind
     // - .codex/worktrees/<id>/clinical-swift
     // - .gemini/antigravity/worktrees/clinical-swift/<name>
     // - .gemini/antigravity/worktrees/<conversation-id>/<name>
-    // - .super.engineering/worktrees/clinical-swift/<name>
     if components.count == 4 && components[0] == ".codex" && components[1] == "worktrees"
         && components[3] == "clinical-swift"
     {
@@ -520,11 +518,6 @@ func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind
         && (components[3] == "clinical-swift" || UUID(uuidString: components[3]) != nil)
     {
         return .antigravity
-    }
-    if components.count == 4 && components[0] == ".super.engineering"
-        && components[1] == "worktrees" && components[2] == "clinical-swift"
-    {
-        return .superEngineering
     }
     return .unknown
 }
@@ -556,63 +549,6 @@ func locateWorktree(
     return detachedMatches.first
 }
 
-/// Reads the provider_key history for a super.engineering worktree, read-only.
-func querySuperEngineeringProviders(databasePath: String, worktreePaths: [String]) throws
-    -> [String]
-{
-    guard FileManager.default.fileExists(atPath: databasePath) else {
-        throw ReviewLoopError(
-            description: "super.engineering database not found at \(databasePath).")
-    }
-
-    var db: OpaquePointer?
-    guard sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-        let detail = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "open failed"
-        if let db { sqlite3_close(db) }
-        throw ReviewLoopError(description: "Cannot open super.engineering database: \(detail)")
-    }
-    defer { sqlite3_close(db) }
-
-    let uniquePaths = Array(Set(worktreePaths))
-    let placeholders = uniquePaths.map { _ in "?" }.joined(separator: ", ")
-    let sql = """
-        SELECT provider_key
-        FROM conversations
-        WHERE json_extract(metadata, '$.worktree_path') IN (\(placeholders))
-        ORDER BY updated_at DESC, created_at DESC;
-        """
-
-    var statement: OpaquePointer?
-    guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
-        let detail = String(cString: sqlite3_errmsg(db))
-        throw ReviewLoopError(
-            description: "Cannot query super.engineering conversations: \(detail)")
-    }
-    defer { sqlite3_finalize(statement) }
-
-    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-    for (index, path) in uniquePaths.enumerated() {
-        sqlite3_bind_text(statement, Int32(index + 1), path, -1, transient)
-    }
-
-    var providers: [String] = []
-    while true {
-        let step = sqlite3_step(statement)
-        if step == SQLITE_ROW {
-            if let cString = sqlite3_column_text(statement, 0) {
-                providers.append(String(cString: cString))
-            }
-        } else if step == SQLITE_DONE {
-            break
-        } else {
-            let detail = String(cString: sqlite3_errmsg(db))
-            throw ReviewLoopError(
-                description: "Failed reading super.engineering conversations: \(detail)")
-        }
-    }
-    return providers
-}
-
 /// Reads matching Antigravity conversation IDs for a worktree path, newest first.
 func queryAntigravityConversations(databasePath: String, worktreePaths: [String]) throws -> [String]
 {
@@ -631,7 +567,9 @@ func queryAntigravityConversations(databasePath: String, worktreePaths: [String]
     sqlite3_busy_timeout(db, 2000)
 
     let targetPaths = Set(
-        worktreePaths.flatMap { [normalizePath($0, resolveSymlinks: false), normalizePath($0, resolveSymlinks: true)] }
+        worktreePaths.flatMap {
+            [normalizePath($0, resolveSymlinks: false), normalizePath($0, resolveSymlinks: true)]
+        }
     )
     let sql = """
         SELECT conversation_id, workspace_uris
@@ -681,14 +619,18 @@ func queryAntigravityConversations(databasePath: String, worktreePaths: [String]
 
 /// Reads the latest recognized Antigravity model from a conversation transcript.
 func readLatestAntigravityModel(transcriptPath: String) -> AgentModel? {
+    struct TranscriptStep: Decodable {
+        let type: String?
+        let model: String?
+    }
     guard let content = try? String(contentsOfFile: transcriptPath, encoding: .utf8) else {
         return nil
     }
+    let decoder = JSONDecoder()
     for rawLine in content.split(whereSeparator: \.isNewline).reversed() {
-        guard let data = String(rawLine).data(using: .utf8),
-            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            (obj["type"] as? String) == "PLANNER_RESPONSE",
-            let modelText = obj["model"] as? String,
+        guard let step = try? decoder.decode(TranscriptStep.self, from: Data(rawLine.utf8)),
+            step.type == "PLANNER_RESPONSE",
+            let modelText = step.model,
             let model = AgentModel.fromTranscriptModel(modelText),
             model.harness == .antigravity
         else { continue }
@@ -736,7 +678,6 @@ func detectAntigravityAuthorModel(
 private func resolveAuthorModel(
     worktreePath: String,
     homeDirectory: String,
-    superDBPath: String,
     agyDirectory: String
 ) -> (model: AgentModel?, notes: [String], reason: String?) {
     switch classifyWorktreePath(worktreePath, homeDirectory: homeDirectory) {
@@ -746,42 +687,11 @@ private func resolveAuthorModel(
         let detected = detectAntigravityAuthorModel(
             worktreePath: worktreePath, agyDirectory: agyDirectory)
         return (detected.model, detected.notes, nil)
-    case .superEngineering:
-        let candidates = [
-            normalizePath(worktreePath, resolveSymlinks: false),
-            normalizePath(worktreePath, resolveSymlinks: true),
-        ]
-        do {
-            let providers = try querySuperEngineeringProviders(
-                databasePath: superDBPath, worktreePaths: candidates)
-            guard let latest = providers.first else {
-                return (
-                    nil, [], "No super.engineering conversation found for worktree \(worktreePath)."
-                )
-            }
-            var notes: [String] = []
-            let distinct = Array(Set(providers)).sorted()
-            if distinct.count > 1 {
-                notes.append(
-                    "Multiple super.engineering providers found for \(worktreePath) (\(distinct.joined(separator: ", "))); using most recent: \(latest)."
-                )
-            }
-            guard latest == "codex" else {
-                return (
-                    nil,
-                    notes,
-                    "Unsupported super.engineering provider '\(latest)' for worktree \(worktreePath). Only Codex and Antigravity are supported."
-                )
-            }
-            return (.sol, notes, nil)
-        } catch {
-            return (nil, [], "\(error)")
-        }
     case .unknown:
         return (
             nil,
             [],
-            "Worktree path \(worktreePath) is outside Codex, Antigravity, and super.engineering roots."
+            "Worktree path \(worktreePath) is outside Codex and Antigravity roots."
         )
     }
 }
@@ -796,7 +706,6 @@ func discoverLoopContext(
     reviewAll: Bool = false,
     authorOverride: AgentModel? = nil,
     targetModel: AgentModel? = nil,
-    superDBPath: String,
     agyDirectory: String? = nil,
     homeDirectory: String,
     requireClean: Bool
@@ -838,7 +747,6 @@ func discoverLoopContext(
                 let result = resolveAuthorModel(
                     worktreePath: worktree.path,
                     homeDirectory: resolvedHome,
-                    superDBPath: superDBPath,
                     agyDirectory: resolvedAgyDir
                 )
                 detectedAuthor = result.model
@@ -1256,7 +1164,9 @@ private func addCommentReaction(
     guard supportedReactions.contains(content) else {
         throw ReviewLoopError(description: "Unsupported reaction content: \(content)")
     }
-    guard let endpoint = commentReactionEndpoint(repo: repo, eventName: eventName, commentID: commentID)
+    guard
+        let endpoint = commentReactionEndpoint(
+            repo: repo, eventName: eventName, commentID: commentID)
     else {
         return
     }
@@ -1704,7 +1614,8 @@ private func parseOptionalModel(_ values: [String: String], flag: String) throws
     return model
 }
 
-private func parseOptionalModelList(_ values: [String: String], flag: String) throws -> [AgentModel]?
+private func parseOptionalModelList(_ values: [String: String], flag: String) throws
+    -> [AgentModel]?
 {
     guard let raw = values[flag], !raw.isEmpty else { return nil }
     let tokens =
@@ -1786,9 +1697,6 @@ private func runCLI() -> Int32 {
             let reviewerOverride = try parseOptionalModelList(parsed.values, flag: "reviewers")
             let authorOverride = try parseOptionalModel(parsed.values, flag: "author")
             let targetModel = try parseOptionalModel(parsed.values, flag: "model")
-            let superDB =
-                parsed.values["super-db"]
-                ?? "\(home)/.super.engineering/db/super.engineering.db"
             let agyDir = parsed.values["agy-dir"] ?? "\(home)/.gemini/antigravity"
             let result = discoverLoopContext(
                 canonicalRepoPath: repo,
@@ -1799,7 +1707,6 @@ private func runCLI() -> Int32 {
                 reviewAll: parsed.flags.contains("review-all"),
                 authorOverride: authorOverride,
                 targetModel: targetModel,
-                superDBPath: superDB,
                 agyDirectory: agyDir,
                 homeDirectory: home,
                 requireClean: parsed.flags.contains("require-clean")

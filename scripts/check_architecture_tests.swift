@@ -82,20 +82,19 @@ struct ArchitectureTests {
         let graph = try packageGraph(root)
         try expect(try checkPackage(graph).isEmpty, "current package graph")
         var brokenGraph = graph
-        var targets = graph["targets"] as! [[String: Any]]
-        targets[0]["dependencies"] = [["byName": ["ClinicalPersistence", NSNull()]]]
-        brokenGraph["targets"] = targets
+        brokenGraph.targets[0].dependencies = [.name("ClinicalPersistence")]
         try expect(
             try checkPackage(brokenGraph).contains {
                 $0.contains("ClinicalModels dependency ClinicalPersistence")
             }, "forbidden graph dependency without an import")
-        targets[0]["path"] = "clinical-swift"
-        brokenGraph["targets"] = targets
+        brokenGraph.targets[0].path = "clinical-swift"
         try expect(
             try checkPackage(brokenGraph).contains { $0.contains("standard layout") },
             "custom source path")
         var productGraph = graph
-        productGraph["products"] = [["name": "ClinicalModels", "targets": ["ClinicalPersistence"]]]
+        productGraph.products = [
+            PackageGraph.Product(name: "ClinicalModels", targets: ["ClinicalPersistence"])
+        ]
         try expect(
             try checkPackage(productGraph).contains { $0.contains("only its own target") },
             "product cannot expose another layer")
@@ -157,21 +156,17 @@ struct ArchitectureTests {
         try FileManager.default.removeItem(
             at: fixture.appending(path: "ClinicalShared/Extra.swift"))
         #if os(macOS)
-            let project = try jsonObject(
-                command(root, "plutil", ["-convert", "json", "-o", "-", projectPath]))
-            var objects = project["objects"] as! [String: [String: Any]]
-            let widget = objects.first {
-                $0.value["name"] as? String == "ClinicalWidgetExtension"
-                    && $0.value["isa"] as? String == "PBXNativeTarget"
+            let project = try JSONDecoder().decode(
+                XcodeProject.self,
+                from: command(root, "plutil", ["-convert", "json", "-o", "-", projectPath]))
+            let widget = project.objects.first {
+                $0.value.name == "ClinicalWidgetExtension" && $0.value.isa == "PBXNativeTarget"
             }!.key
-            let persistence = objects.first {
-                $0.value["productName"] as? String == "ClinicalPersistence"
+            let persistence = project.objects.first {
+                $0.value.productName == "ClinicalPersistence"
             }!.key
-            var dependencies = objects[widget]!["packageProductDependencies"] as! [String]
-            dependencies.append(persistence)
-            objects[widget]!["packageProductDependencies"] = dependencies
             var brokenProject = project
-            brokenProject["objects"] = objects
+            brokenProject.objects[widget]?.packageProductDependencies?.append(persistence)
             try expect(
                 try checkProject(brokenProject, paths: ["ClinicalShared/New.swift"]).failures
                     .contains { $0.contains("model-only") }, "reject widget persistence product")
@@ -179,7 +174,7 @@ struct ArchitectureTests {
                 try checkProject(project, paths: ["ClinicalShared/New.swift"]).widgetSources
                     .contains("ClinicalShared/New.swift"), "synchronized shared membership")
             let originalProject = try Data(contentsOf: fixture.appending(path: projectPath))
-            try JSONSerialization.data(withJSONObject: brokenProject).write(
+            try JSONEncoder().encode(brokenProject).write(
                 to: fixture.appending(path: projectPath))
             try stage()
             try originalProject.write(to: fixture.appending(path: projectPath))

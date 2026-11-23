@@ -68,66 +68,85 @@ private func sign(_ input: String, keyURL: URL) throws -> Data {
 }
 
 private func makeToken(keyID: String, issuerID: String, keyURL: URL) throws -> String {
+    struct Header: Encodable { let alg = "ES256", kid: String, typ = "JWT" }
+    struct Payload: Encodable { let iss: String, iat: Int, exp: Int, aud = "appstoreconnect-v1" }
     let now = Int(Date().timeIntervalSince1970)
-    let header = try JSONSerialization.data(withJSONObject: [
-        "alg": "ES256",
-        "kid": keyID,
-        "typ": "JWT",
-    ])
-    let payload = try JSONSerialization.data(withJSONObject: [
-        "iss": issuerID,
-        "iat": now,
-        "exp": now + 10 * 60,
-        "aud": "appstoreconnect-v1",
-    ])
+    let encoder = JSONEncoder()
+    let header = try encoder.encode(Header(kid: keyID))
+    let payload = try encoder.encode(Payload(iss: issuerID, iat: now, exp: now + 10 * 60))
     let signingInput = "\(base64URL(header)).\(base64URL(payload))"
     let signature = try sign(signingInput, keyURL: keyURL)
     return "\(signingInput).\(base64URL(signature))"
 }
 
-private func requestJSON(from url: URL, token: String) async throws -> [String: Any] {
-    var request = URLRequest(url: url)
-    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+private struct APIErrorResponse: Decodable {
+    struct Item: Decodable { let detail: String? }
+    let errors: [Item]?
+}
 
+private struct ListResponse<Item: Decodable>: Decodable {
+    struct Links: Decodable { let next: String? }
+    let data: [Item]?
+    let links: Links?
+}
+
+private func request<Response: Decodable>(
+    _ url: URL,
+    method: String = "GET",
+    token: String,
+    body: Data? = nil,
+    expectedStatus: Range<Int> = 200..<300,
+    invalidDataMessage: String = "App Store Connect returned invalid JSON."
+) async throws -> Response {
+    var request = URLRequest(url: url)
+    request.httpMethod = method
+    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    if let body {
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    }
     let (data, response) = try await URLSession.shared.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse else {
         throw AppStoreConnectError(description: "App Store Connect returned an invalid response.")
     }
-    guard 200..<300 ~= httpResponse.statusCode else {
-        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let errors = json?["errors"] as? [[String: Any]]
-        let detail = errors?.compactMap { $0["detail"] as? String }.joined(separator: " ")
+    guard expectedStatus ~= httpResponse.statusCode else {
+        let detail = (try? JSONDecoder().decode(APIErrorResponse.self, from: data))?
+            .errors?.compactMap(\.detail).joined(separator: " ")
         throw AppStoreConnectError(
             description:
                 "App Store Connect returned HTTP \(httpResponse.statusCode). \(detail ?? "")"
-                .trimmingCharacters(in: .whitespaces)
-        )
+                .trimmingCharacters(in: .whitespaces))
     }
-    guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-        throw AppStoreConnectError(description: "App Store Connect returned invalid JSON.")
+    do {
+        return try JSONDecoder().decode(Response.self, from: data)
+    } catch {
+        throw AppStoreConnectError(description: invalidDataMessage)
     }
-    return json
 }
 
 private func appID(bundleID: String, token: String) async throws -> String {
+    struct App: Decodable { let id: String }
     var components = URLComponents(string: "https://api.appstoreconnect.apple.com/v1/apps")!
     components.queryItems = [
         URLQueryItem(name: "filter[bundleId]", value: bundleID),
         URLQueryItem(name: "fields[apps]", value: "bundleId"),
         URLQueryItem(name: "limit", value: "2"),
     ]
-    let json = try await requestJSON(from: components.url!, token: token)
-    let apps = json["data"] as? [[String: Any]] ?? []
-    guard apps.count == 1, let id = apps[0]["id"] as? String else {
+    let apps = (try await request(components.url!, token: token) as ListResponse<App>).data ?? []
+    guard apps.count == 1 else {
         throw AppStoreConnectError(
             description:
                 "Expected one App Store Connect app for bundle ID \(bundleID), found \(apps.count)."
         )
     }
-    return id
+    return apps[0].id
 }
 
 private func highestBuildComponent(appID: String, token: String) async throws -> Int {
+    struct Upload: Decodable {
+        struct Attributes: Decodable { let cfBundleVersion: String? }
+        let attributes: Attributes?
+    }
     var components = URLComponents(
         string: "https://api.appstoreconnect.apple.com/v1/apps/\(appID)/buildUploads"
     )!
@@ -141,30 +160,22 @@ private func highestBuildComponent(appID: String, token: String) async throws ->
     var highest = 0
 
     while let url = nextURL {
-        let json = try await requestJSON(from: url, token: token)
-        let uploads = json["data"] as? [[String: Any]] ?? []
-
-        for upload in uploads {
-            guard
-                let attributes = upload["attributes"] as? [String: Any],
-                let version = attributes["cfBundleVersion"] as? String
-            else {
+        let response: ListResponse<Upload> = try await request(url, token: token)
+        for upload in response.data ?? [] {
+            guard let version = upload.attributes?.cfBundleVersion else {
                 throw AppStoreConnectError(description: "A build upload has no CFBundleVersion.")
             }
-            let components = version.split(separator: ".", omittingEmptySubsequences: false)
-            guard
-                1...3 ~= components.count,
-                components.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
-                let first = components.first.flatMap({ Int($0) })
+            let parts = version.split(separator: ".", omittingEmptySubsequences: false)
+            guard 1...3 ~= parts.count,
+                parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
+                let first = parts.first.flatMap({ Int($0) })
             else {
                 throw AppStoreConnectError(
                     description: "Unsupported App Store build number: \(version)")
             }
             highest = max(highest, first)
         }
-
-        let links = json["links"] as? [String: Any]
-        nextURL = (links?["next"] as? String).flatMap(URL.init(string:))
+        nextURL = response.links?.next.flatMap(URL.init(string:))
     }
 
     guard highest < Int.max else {
@@ -175,52 +186,31 @@ private func highestBuildComponent(appID: String, token: String) async throws ->
 
 private func startBuild(workflowID: String, token: String) async throws -> (number: Int, id: String)
 {
+    struct Ref: Encodable { let type = "ciWorkflows", id: String }
+    struct Workflow: Encodable { let data: Ref }
+    struct Relationships: Encodable { let workflow: Workflow }
+    struct Payload: Encodable {
+        let type = "ciBuildRuns", attributes: [String: String] = [:], relationships: Relationships
+    }
+    struct RequestBody: Encodable { let data: Payload }
+    struct Response: Decodable {
+        struct BuildRun: Decodable {
+            struct Attributes: Decodable { let number: Int }
+            let id: String
+            let attributes: Attributes
+        }
+        let data: BuildRun
+    }
+
     let url = URL(string: "https://api.appstoreconnect.apple.com/v1/ciBuildRuns")!
-    let body: [String: Any] = [
-        "data": [
-            "type": "ciBuildRuns",
-            "attributes": [:],
-            "relationships": [
-                "workflow": [
-                    "data": [
-                        "type": "ciWorkflows",
-                        "id": workflowID,
-                    ]
-                ]
-            ],
-        ]
-    ]
-
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.httpBody = try JSONSerialization.data(withJSONObject: body)
-    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-        throw AppStoreConnectError(description: "App Store Connect returned an invalid response.")
-    }
-    guard httpResponse.statusCode == 201 else {
-        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let errors = json?["errors"] as? [[String: Any]]
-        let detail = errors?.compactMap { $0["detail"] as? String }.joined(separator: " ")
-        throw AppStoreConnectError(
-            description:
-                "App Store Connect returned HTTP \(httpResponse.statusCode). \(detail ?? "")"
-                .trimmingCharacters(in: .whitespaces)
-        )
-    }
-    guard
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let buildRun = json["data"] as? [String: Any],
-        let id = buildRun["id"] as? String,
-        let attributes = buildRun["attributes"] as? [String: Any],
-        let number = attributes["number"] as? Int
-    else {
-        throw AppStoreConnectError(description: "App Store Connect returned invalid build data.")
-    }
-    return (number, id)
+    let body = try JSONEncoder().encode(
+        RequestBody(
+            data: Payload(
+                relationships: Relationships(workflow: Workflow(data: Ref(id: workflowID))))))
+    let response: Response = try await request(
+        url, method: "POST", token: token, body: body, expectedStatus: 201..<202,
+        invalidDataMessage: "App Store Connect returned invalid build data.")
+    return (response.data.attributes.number, response.data.id)
 }
 
 #if !APP_STORE_CONNECT_TESTS

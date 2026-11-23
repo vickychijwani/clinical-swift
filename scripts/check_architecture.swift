@@ -269,14 +269,44 @@ func command(_ root: URL, _ executable: String, _ arguments: [String]) throws ->
     return data
 }
 
-func jsonObject(_ data: Data) throws -> [String: Any] {
-    guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-        throw ArchitectureError("Expected a JSON object")
+struct PackageGraph: Decodable {
+    struct Target: Decodable {
+        let name: String
+        var path: String?
+        let sources: [String]?
+        let exclude: [String]?
+        var dependencies: [Dependency]
     }
-    return value
+    struct Product: Decodable {
+        let name: String
+        let targets: [String]
+    }
+    enum Dependency: Decodable {
+        case product(name: String, package: String, hasModuleAliases: Bool)
+        case name(String)
+
+        enum CodingKeys: String, CodingKey { case product, byName, target }
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            if var array = try? container.nestedUnkeyedContainer(forKey: .product) {
+                let name = try array.decode(String.self)
+                let package = try array.decode(String.self)
+                let hasAliases = try !array.isAtEnd && !array.decodeNil()
+                self = .product(name: name, package: package, hasModuleAliases: hasAliases)
+            } else if var array = try? container.nestedUnkeyedContainer(forKey: .byName) {
+                self = .name(try array.decode(String.self))
+            } else if var array = try? container.nestedUnkeyedContainer(forKey: .target) {
+                self = .name(try array.decode(String.self))
+            } else {
+                throw ArchitectureError("Package.swift:1: Cannot read target dependency")
+            }
+        }
+    }
+    var targets: [Target]
+    var products: [Product]
 }
 
-func packageGraph(_ root: URL) throws -> [String: Any] {
+func packageGraph(_ root: URL) throws -> PackageGraph {
     let snapshot = FileManager.default.temporaryDirectory.appending(
         path: "clinical-package-\(UUID())")
     try FileManager.default.createDirectory(at: snapshot, withIntermediateDirectories: true)
@@ -284,89 +314,97 @@ func packageGraph(_ root: URL) throws -> [String: Any] {
     // SwiftPM can rewrite platform-specific pins even when only reading the manifest.
     try FileManager.default.copyItem(
         at: root.appending(path: "Package.swift"), to: snapshot.appending(path: "Package.swift"))
-    return try jsonObject(command(snapshot, "swift", ["package", "dump-package"]))
+    return try JSONDecoder().decode(
+        PackageGraph.self, from: command(snapshot, "swift", ["package", "dump-package"]))
 }
 
-func checkPackage(_ graph: [String: Any]) throws -> [String] {
-    guard let targets = graph["targets"] as? [[String: Any]],
-        let products = graph["products"] as? [[String: Any]]
-    else {
-        throw ArchitectureError("Package.swift:1: Cannot read package targets and products")
-    }
+func checkPackage(_ graph: PackageGraph) throws -> [String] {
     var failures: [String] = []
-    let names = Set(targets.compactMap { $0["name"] as? String })
+    let names = Set(graph.targets.map(\.name))
     if names != Set(ArchitecturePolicy.layers.keys) {
         failures.append(
             "Package.swift:1: target set \(names.sorted()) violates the three-target package boundary"
         )
     }
-    for target in targets {
-        guard let name = target["name"] as? String, let policy = ArchitecturePolicy.layers[name],
-            let dependencies = target["dependencies"] as? [[String: Any]]
-        else {
-            failures.append(
-                "Package.swift:1: unknown or invalid target \(target["name"] ?? "missing name")")
+    for target in graph.targets {
+        guard let policy = ArchitecturePolicy.layers[target.name] else {
+            failures.append("Package.swift:1: unknown target \(target.name)")
             continue
         }
-        let expectedPath = (name == "ClinicalDataTests" ? "Tests/" : "Sources/") + name
-        if let path = target["path"] as? String, path != expectedPath {
+        let expectedPath =
+            (target.name == "ClinicalDataTests" ? "Tests/" : "Sources/") + target.name
+        if let path = target.path, path != expectedPath {
             failures.append(
-                "Package.swift:1: \(name) path \(path) violates standard layout \(expectedPath)")
+                "Package.swift:1: \(target.name) path \(path) violates standard layout \(expectedPath)"
+            )
         }
-        if target["sources"] != nil || !(target["exclude"] as? [String] ?? []).isEmpty {
-            failures.append("Package.swift:1: \(name) must compile the full standard source folder")
+        if target.sources != nil || !(target.exclude ?? []).isEmpty {
+            failures.append(
+                "Package.swift:1: \(target.name) must compile the full standard source folder")
         }
-        for dependency in dependencies {
+        for dependency in target.dependencies {
             let key: String
-            if let product = dependency["product"] as? [Any], product.count >= 2,
-                let name = product[0] as? String, let package = product[1] as? String
-            {
+            switch dependency {
+            case .product(let name, let package, let hasModuleAliases):
                 key = package.lowercased() + "/" + name
-                if product.count > 2 && !(product[2] is NSNull) {
+                if hasModuleAliases {
                     failures.append(
                         "Package.swift:1: module aliases violate the explicit dependency policy")
                 }
-            } else if let values = (dependency["byName"] ?? dependency["target"]) as? [Any],
-                let name = values.first as? String
-            {
+            case .name(let name):
                 key = name
-            } else {
-                throw ArchitectureError(
-                    "Package.swift:1: Cannot read \(name) dependency \(dependency)")
             }
             if !policy.dependencies.contains(key) {
                 failures.append(
-                    "Package.swift:1: \(name) dependency \(key) violates allowed dependencies \(policy.dependencies.sorted())"
+                    "Package.swift:1: \(target.name) dependency \(key) violates allowed dependencies \(policy.dependencies.sorted())"
                 )
             }
         }
     }
-    if Set(products.compactMap { $0["name"] as? String }) != [
-        "ClinicalModels", "ClinicalPersistence",
-    ] {
+    if Set(graph.products.map(\.name)) != ["ClinicalModels", "ClinicalPersistence"] {
         failures.append(
             "Package.swift:1: products must expose only ClinicalModels and ClinicalPersistence")
     }
-    for product in products {
-        if let name = product["name"] as? String, product["targets"] as? [String] != [name] {
-            failures.append("Package.swift:1: product \(name) must expose only its own target")
-        }
+    for product in graph.products where product.targets != [product.name] {
+        failures.append("Package.swift:1: product \(product.name) must expose only its own target")
     }
     return failures
 }
 
 let projectPath = "clinical-swift.xcodeproj/project.pbxproj"
 
+struct XcodeProject: Codable {
+    struct Object: Codable {
+        var isa: String?
+        var mainGroup: String?
+        var sourceTree: String?
+        var path: String?
+        var children: [String]?
+        var name: String?
+        var packageProductDependencies: [String]?
+        var buildPhases: [String]?
+        var files: [String]?
+        var productRef: String?
+        var fileRef: String?
+        var fileSystemSynchronizedGroups: [String]?
+        var exceptions: [String]?
+        var target: String?
+        var membershipExceptions: [String]?
+        var dependencies: [String]?
+        var productName: String?
+    }
+    var rootObject: String
+    var objects: [String: Object]
+}
+
 struct ProjectMembership {
     var widgetSources: Set<String> = []
     var failures: [String] = []
 }
 
-func checkProject(_ project: [String: Any], paths: [String]) throws -> ProjectMembership {
-    guard let objects = project["objects"] as? [String: [String: Any]],
-        let rootID = project["rootObject"] as? String,
-        let mainGroup = objects[rootID]?["mainGroup"] as? String
-    else {
+func checkProject(_ project: XcodeProject, paths: [String]) throws -> ProjectMembership {
+    let objects = project.objects
+    guard let mainGroup = objects[project.rootObject]?.mainGroup else {
         throw ArchitectureError(
             "\(projectPath):1: Cannot read Xcode project objects and main group")
     }
@@ -377,40 +415,38 @@ func checkProject(_ project: [String: Any], paths: [String]) throws -> ProjectMe
         guard let object = objects[id], !ancestors.contains(id) else {
             throw ArchitectureError("\(projectPath):1: Missing or cyclic file/group \(id)")
         }
-        let tree = object["sourceTree"] as? String ?? "<group>"
-        let path = object["path"] as? String ?? ""
+        let tree = object.sourceTree ?? "<group>"
+        let path = object.path ?? ""
         let value =
             tree == "SOURCE_ROOT"
             ? path : [parent, path].filter { !$0.isEmpty }.joined(separator: "/")
         resolvedPaths[id] = value
-        for child in object["children"] as? [String] ?? [] {
+        for child in object.children ?? [] {
             try visit(child, parent: value, ancestors: ancestors.union([id]))
         }
     }
     try visit(mainGroup, parent: "", ancestors: [])
-    let targets = objects.filter { $0.value["isa"] as? String == "PBXNativeTarget" }
-    if Set(targets.values.compactMap { $0["name"] as? String })
-        != Set(ArchitecturePolicy.targetRoots.keys)
-    {
+    let targets = objects.filter { $0.value.isa == "PBXNativeTarget" }
+    if Set(targets.values.compactMap(\.name)) != Set(ArchitecturePolicy.targetRoots.keys) {
         fail("target set violates the app/widget/test boundary")
     }
     for (id, target) in targets {
-        guard let name = target["name"] as? String,
-            let allowedRoots = ArchitecturePolicy.targetRoots[name]
-        else { continue }
+        guard let name = target.name, let allowedRoots = ArchitecturePolicy.targetRoots[name] else {
+            continue
+        }
         var members: Set<String> = []
-        var products = Set(target["packageProductDependencies"] as? [String] ?? [])
-        for phaseID in target["buildPhases"] as? [String] ?? [] {
+        var products = Set(target.packageProductDependencies ?? [])
+        for phaseID in target.buildPhases ?? [] {
             guard let phase = objects[phaseID] else {
                 throw ArchitectureError("Missing build phase \(phaseID)")
             }
-            for fileID in phase["files"] as? [String] ?? [] {
+            for fileID in phase.files ?? [] {
                 guard let file = objects[fileID] else {
                     throw ArchitectureError("Missing build file \(fileID)")
                 }
-                if let product = file["productRef"] as? String { products.insert(product) }
-                if phase["isa"] as? String == "PBXSourcesBuildPhase" {
-                    guard let ref = file["fileRef"] as? String, let path = resolvedPaths[ref] else {
+                if let product = file.productRef { products.insert(product) }
+                if phase.isa == "PBXSourcesBuildPhase" {
+                    guard let ref = file.fileRef, let path = resolvedPaths[ref] else {
                         throw ArchitectureError(
                             "\(projectPath):1: Cannot resolve source membership in \(name)")
                     }
@@ -419,19 +455,19 @@ func checkProject(_ project: [String: Any], paths: [String]) throws -> ProjectMe
             }
         }
         var roots: Set<String> = []
-        for groupID in target["fileSystemSynchronizedGroups"] as? [String] ?? [] {
+        for groupID in target.fileSystemSynchronizedGroups ?? [] {
             guard let group = objects[groupID], let path = resolvedPaths[groupID] else {
                 throw ArchitectureError(
                     "\(projectPath):1: Cannot resolve synchronized group in \(name)")
             }
             roots.insert(path)
             var excluded: Set<String> = []
-            for exceptionID in group["exceptions"] as? [String] ?? [] {
+            for exceptionID in group.exceptions ?? [] {
                 guard let exception = objects[exceptionID] else {
                     throw ArchitectureError("Missing membership exception \(exceptionID)")
                 }
-                if exception["target"] as? String == id {
-                    excluded.formUnion(exception["membershipExceptions"] as? [String] ?? [])
+                if exception.target == id {
+                    excluded.formUnion(exception.membershipExceptions ?? [])
                 }
             }
             members.formUnion(
@@ -445,20 +481,16 @@ func checkProject(_ project: [String: Any], paths: [String]) throws -> ProjectMe
                 "\(name) source folders \(roots.sorted()) violate required folders \(allowedRoots.sorted())"
             )
         }
-        for path in members {
-            if !allowedRoots.contains(where: { path.hasPrefix($0 + "/") }) {
-                fail("\(name) source \(path) violates source ownership")
-            }
+        for path in members where !allowedRoots.contains(where: { path.hasPrefix($0 + "/") }) {
+            fail("\(name) source \(path) violates source ownership")
         }
         if name == "ClinicalWidgetExtension" { result.widgetSources = members }
-        if name == "ClinicalWidgetExtension", !(target["dependencies"] as? [String] ?? []).isEmpty {
+        if name == "ClinicalWidgetExtension", !(target.dependencies ?? []).isEmpty {
             fail("\(name) must not depend on app targets")
         }
         var productNames: Set<String> = []
         for productID in products {
-            guard let product = objects[productID],
-                let productName = product["productName"] as? String
-            else {
+            guard let productName = objects[productID]?.productName else {
                 throw ArchitectureError(
                     "\(projectPath):1: Cannot resolve \(name) package product \(productID)")
             }
@@ -506,7 +538,8 @@ func checkArchitecture(root: URL, staged: Bool) throws -> [String] {
     var widgetSources: Set<String> = []
     #if os(macOS)
         let data = try command(root, "plutil", ["-convert", "json", "-o", "-", projectPath])
-        let membership = try checkProject(jsonObject(data), paths: paths)
+        let membership = try checkProject(
+            JSONDecoder().decode(XcodeProject.self, from: data), paths: paths)
         failures += membership.failures
         widgetSources = membership.widgetSources
     #endif
