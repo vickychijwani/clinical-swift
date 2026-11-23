@@ -183,7 +183,7 @@ private struct AppTrayHost: ViewModifier {
             case .appointmentMessage(let request):
                 AppointmentMessageView(id: request.appointmentID)
             case .settings:
-                BackupSettingsView()
+                SettingsView()
             }
         }
     }
