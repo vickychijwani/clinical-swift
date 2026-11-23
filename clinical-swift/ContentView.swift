@@ -34,8 +34,14 @@ struct ContentView: View {
     }
 
     var body: some View {
+        let hasOpenTray =
+            AppTrayItem.resolve(presentation: router.activePresentation, editor: editor) != nil
+        let toastPlacement: ToastPlacement =
+            hasOpenTray ? .top() : .bottom(clearance: editor.session == nil ? 64 : 16)
+
         AppTabs(router: router)
             .modifier(AppTrayHost())
+            .toastOverlay(router.toast, placement: toastPlacement)
             .environment(router)
             .environment(editor)
             .environment(router.toast)
@@ -71,8 +77,6 @@ struct ContentView: View {
 
 private struct AppTabs: View {
     @Bindable var router: Router
-    @Environment(ScheduleEditorStore.self) private var editor
-    @Environment(ToastStore.self) private var toast
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
@@ -94,7 +98,6 @@ private struct AppTabs: View {
                 }
             }
         }
-        .toastOverlay(toast, bottomClearance: editor.session == nil ? 64 : 16)
     }
 }
 
@@ -109,7 +112,8 @@ private struct AppTabs: View {
             BackupCoordinator(
                 database: database,
                 store: BackupStateStore(
-                    directory: .temporaryDirectory.appending(path: UUID().uuidString))))
+                    directory: .temporaryDirectory.appending(path: UUID().uuidString)))
+        )
         .environment(TelemetryCoordinator.disabled())
 }
 
@@ -131,7 +135,8 @@ private struct AppTabs: View {
         BackupCoordinator(
             database: database,
             store: BackupStateStore(
-                directory: .temporaryDirectory.appending(path: UUID().uuidString))))
+                directory: .temporaryDirectory.appending(path: UUID().uuidString)))
+    )
     .environment(TelemetryCoordinator.disabled())
 }
 
@@ -149,6 +154,27 @@ private enum AppTrayItem: Identifiable {
         case .appointmentMessage(let request): request.id
         case .settings(let request): request.id
         case .scheduleEditor(let session): session.id
+        }
+    }
+
+    static func resolve(
+        presentation: AppPresentation?,
+        editor: ScheduleEditorStore
+    ) -> AppTrayItem? {
+        guard let presentation else { return nil }
+        switch presentation {
+        case .scheduleEditor(let request):
+            guard let session = editor.activeSession(for: request), session.isShowingSheet
+            else { return nil }
+            return .scheduleEditor(session)
+        case .details(let details):
+            return .details(details)
+        case .patientEdit(let request):
+            return .patientEdit(request)
+        case .appointmentMessage(let request):
+            return .appointmentMessage(request)
+        case .settings(let request):
+            return .settings(request)
         }
     }
 }
@@ -190,21 +216,7 @@ private struct AppTrayHost: ViewModifier {
     }
 
     private var trayItem: AppTrayItem? {
-        guard let presentation = router.activePresentation else { return nil }
-        switch presentation {
-        case .scheduleEditor(let request):
-            guard let session = editor.activeSession(for: request), session.isShowingSheet
-            else { return nil }
-            return .scheduleEditor(session)
-        case .details(let details):
-            return .details(details)
-        case .patientEdit(let request):
-            return .patientEdit(request)
-        case .appointmentMessage(let request):
-            return .appointmentMessage(request)
-        case .settings(let request):
-            return .settings(request)
-        }
+        AppTrayItem.resolve(presentation: router.activePresentation, editor: editor)
     }
 }
 

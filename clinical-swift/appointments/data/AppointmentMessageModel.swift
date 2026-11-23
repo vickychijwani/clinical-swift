@@ -21,12 +21,11 @@ final class AppointmentMessageModel {
     }
     var message = ""
     var errorMessage: String?
-    private(set) var patientSaveErrorMessage: String?
     var smsDraft: AppointmentSMSDraft?
     private(set) var recipientPhone: String?
     private(set) var recipientName: String?
-    private var savedPatientPhone: String?
-    @ObservationIgnored internal var recipientPhoneSaveTask: Task<Void, Never>?
+    private(set) var isSavingRecipient = false
+    private var patient: Patient
 
     var hasValidRecipientPhone: Bool {
         PhoneNumber.normalizedE164(recipientPhone) != nil
@@ -42,19 +41,11 @@ final class AppointmentMessageModel {
         recipientName == nil && hasValidRecipientPhone ? "phone" : "person"
     }
 
-    var willSaveRecipientPhone: Bool {
-        guard let recipientPhone = PhoneNumber.normalizedE164(recipientPhone) else {
-            return false
-        }
-        return recipientPhone != savedPatientPhone
-    }
-
     init(details: AppointmentDetails, includesLocation: Bool) {
         self.details = details
         self.includesLocation = includesLocation
-        let patientPhone = PhoneNumber.normalizedE164(details.patient.phone)
-        recipientPhone = patientPhone
-        savedPatientPhone = patientPhone
+        self.patient = details.patient
+        recipientPhone = PhoneNumber.normalizedE164(details.patient.phone)
         regenerateMessage()
     }
 
@@ -63,11 +54,29 @@ final class AppointmentMessageModel {
         recipientName = await contactClient.nameForPhone(recipientPhone)
     }
 
-    func selectRecipient(phone: String, name: String?) {
-        guard let normalizedPhone = PhoneNumber.normalizedE164(phone) else { return }
-        recipientPhone = normalizedPhone
-        recipientName = name?.nilIfBlank
-        errorMessage = nil
+    @discardableResult
+    func selectRecipient(phone: String, name: String?) async -> PatientPhoneSaveResult {
+        guard !isSavingRecipient else { return .unchanged }
+        isSavingRecipient = true
+        defer { isSavingRecipient = false }
+
+        let result = await PatientEditorModel.savePhone(phone, for: patient)
+        switch result {
+        case .saved(let savedPatient):
+            patient = savedPatient
+            recipientPhone = savedPatient.phone
+            recipientName = name?.nilIfBlank
+            errorMessage = nil
+        case .unchanged:
+            if let normalizedPhone = PhoneNumber.normalizedE164(phone) {
+                recipientPhone = normalizedPhone
+            }
+            recipientName = name?.nilIfBlank
+            errorMessage = nil
+        case .invalidPhone, .failed:
+            break
+        }
+        return result
     }
 
     func regenerateMessage() {
@@ -83,11 +92,6 @@ final class AppointmentMessageModel {
 
     func startSend() {
         errorMessage = nil
-        patientSaveErrorMessage = nil
-
-        if willSaveRecipientPhone {
-            startRecipientPhoneSave()
-        }
 
         messagingClient.copy(message)
 
@@ -133,31 +137,6 @@ final class AppointmentMessageModel {
             phoneDigits: phoneDigits,
             body: message
         )
-    }
-
-    private func startRecipientPhoneSave() {
-        guard recipientPhoneSaveTask == nil else { return }
-
-        recipientPhoneSaveTask = Task { @MainActor in
-            defer { recipientPhoneSaveTask = nil }
-            await saveRecipientPhone()
-        }
-    }
-
-    private func saveRecipientPhone() async {
-        let editorModel = PatientEditorModel(patient: details.patient)
-        editorModel.draft.phone = recipientPhone
-
-        guard let patient = await editorModel.save() else {
-            patientSaveErrorMessage = editorModel.saveErrorMessage
-            return
-        }
-
-        savedPatientPhone = patient.phone
-    }
-
-    func dismissPatientSaveError() {
-        patientSaveErrorMessage = nil
     }
 
     func finishSMS(with result: MessageComposeResult) -> AppointmentWhatsAppRequest? {

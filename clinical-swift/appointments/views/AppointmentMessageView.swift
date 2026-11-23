@@ -57,6 +57,7 @@ struct AppointmentMessageView: View {
 }
 
 private struct AppointmentMessageComposeView: View {
+    @Environment(ToastStore.self) private var toast: ToastStore?
     @Bindable var model: AppointmentMessageModel
     @State private var isPickingRecipient = false
     @State private var pendingWhatsAppRequest: AppointmentWhatsAppRequest?
@@ -86,24 +87,19 @@ private struct AppointmentMessageComposeView: View {
                     .foregroundStyle(AppColor.destructive)
             }
 
-            VStack(spacing: 4) {
-                HStack(spacing: 4) {
-                    Text("Sending to")
+            HStack(spacing: 4) {
+                Text("Sending to")
 
-                    Button {
-                        isPickingRecipient = true
-                    } label: {
-                        Label(model.recipientLabel, systemImage: model.recipientSystemImage)
-                            .labelIconToTitleSpacing(4)
-                            .dottedUnderline()
-                            .foregroundStyle(AppColor.accent)
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    isPickingRecipient = true
+                } label: {
+                    Label(model.recipientLabel, systemImage: model.recipientSystemImage)
+                        .labelIconToTitleSpacing(4)
+                        .dottedUnderline()
+                        .foregroundStyle(AppColor.accent)
                 }
-
-                if model.willSaveRecipientPhone {
-                    Text("This will be saved as the patient's contact number")
-                }
+                .buttonStyle(.plain)
+                .disabled(model.isSavingRecipient)
             }
             .foregroundStyle(AppColor.secondaryText)
             .font(.subheadline)
@@ -117,7 +113,7 @@ private struct AppointmentMessageComposeView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.appGlassProminent)
-            .disabled(!model.hasValidRecipientPhone)
+            .disabled(!model.hasValidRecipientPhone || model.isSavingRecipient)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -127,7 +123,18 @@ private struct AppointmentMessageComposeView: View {
         }
         .sheet(isPresented: $isPickingRecipient) {
             ContactPhonePicker { phone, contactName in
-                model.selectRecipient(phone: phone, name: contactName)
+                Task {
+                    switch await model.selectRecipient(phone: phone, name: contactName) {
+                    case .saved:
+                        toast?.show(message: "Patient contact number saved")
+                    case .unchanged:
+                        break
+                    case .invalidPhone:
+                        toast?.show(message: "Invalid phone number")
+                    case .failed:
+                        toast?.show(message: "Save failed")
+                    }
+                }
                 // No need to set isPickingRecipient to false, dismissal is automatic
             }
             .ignoresSafeArea()
@@ -146,19 +153,6 @@ private struct AppointmentMessageComposeView: View {
             MessageComposeView(draft: draft) { result in
                 pendingWhatsAppRequest = model.finishSMS(with: result)
             }
-        }
-        .alert(
-            "Unable to save patient",
-            isPresented: Binding(
-                get: { model.patientSaveErrorMessage != nil },
-                set: { if !$0 { model.dismissPatientSaveError() } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                model.dismissPatientSaveError()
-            }
-        } message: {
-            Text(model.patientSaveErrorMessage ?? "")
         }
     }
 }

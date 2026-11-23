@@ -55,10 +55,31 @@ private struct ToastActionButton: View {
     }
 }
 
-/// Floats the active toast above the TabView without changing tab content safe areas.
+enum ToastPlacement {
+    case top(clearance: CGFloat = 8)
+    case bottom(clearance: CGFloat = 64)
+
+    struct Layout {
+        let alignment: Alignment
+        let edge: Edge
+        let edgeSet: Edge.Set
+        let clearance: CGFloat
+    }
+
+    var layout: Layout {
+        switch self {
+        case .top(let clearance):
+            Layout(alignment: .top, edge: .top, edgeSet: .top, clearance: clearance)
+        case .bottom(let clearance):
+            Layout(alignment: .bottom, edge: .bottom, edgeSet: .bottom, clearance: clearance)
+        }
+    }
+}
+
+/// Floats the active toast above the TabView or active tray without changing content safe areas.
 struct ToastOverlayModifier: ViewModifier {
     let store: ToastStore
-    var bottomClearance: CGFloat = 64
+    var placement: ToastPlacement = .bottom()
 
     private var animates: Bool {
         #if DEBUG
@@ -69,8 +90,9 @@ struct ToastOverlayModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
+        let layout = placement.layout
         content
-            .overlay(alignment: .bottom) {
+            .overlay(alignment: layout.alignment) {
                 if let toast = store.current {
                     ToastView(
                         toast: toast,
@@ -79,8 +101,8 @@ struct ToastOverlayModifier: ViewModifier {
                     )
                     .id(toast.id)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, bottomClearance)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(layout.edgeSet, layout.clearance)
+                    .transition(.move(edge: layout.edge).combined(with: .opacity))
                 }
             }
             .animation(animates ? .snappy : nil, value: store.current?.id)
@@ -88,8 +110,8 @@ struct ToastOverlayModifier: ViewModifier {
 }
 
 extension View {
-    func toastOverlay(_ store: ToastStore, bottomClearance: CGFloat = 64) -> some View {
-        modifier(ToastOverlayModifier(store: store, bottomClearance: bottomClearance))
+    func toastOverlay(_ store: ToastStore, placement: ToastPlacement = .bottom()) -> some View {
+        modifier(ToastOverlayModifier(store: store, placement: placement))
     }
 }
 

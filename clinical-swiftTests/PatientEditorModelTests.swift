@@ -112,7 +112,103 @@ struct PatientEditorModelTests {
         }
 
         #expect(result.0 == nil)
-        #expect(result.1 == "This patient can no longer be edited.")
+        #expect(result.1 == "Save failed")
+    }
+
+    @Test(arguments: [false, true])
+    func invalidNonBlankPhoneDoesNotWriteAndMarksUnsavedChanges(editing: Bool) async throws {
+        let database = try testDatabase()
+        let now = try Date("2026-10-29T09:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Aarav Mehta", createdDate: now)
+        if editing {
+            try await database.write { db in
+                try PatientRecord.insert { PatientRecord(patient, now: now) }.execute(db)
+            }
+        }
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+            $0.date.now = now.addingTimeInterval(60)
+        } operation: {
+            let before = try await database.read { try PatientRecord.fetchAll($0) }
+            let model = PatientEditorModel(patient: editing ? patient : nil)
+            model.draft.name = "Aarav Mehta"
+            model.draft.phone = "not-a-number"
+
+            #expect(model.hasUnsavedChanges)
+            #expect(await model.save() == nil)
+            #expect(model.saveErrorMessage == "Invalid phone number")
+            let after = try await database.read { try PatientRecord.fetchAll($0) }
+            #expect(after.map { Patient($0) } == before.map { Patient($0) })
+        }
+    }
+
+    @Test func clearingPhoneDuringEditSavesPatientWithoutPhone() async throws {
+        let database = try testDatabase()
+        let createdAt = Date(timeIntervalSinceReferenceDate: 1_000)
+        let updatedAt = Date(timeIntervalSinceReferenceDate: 2_000)
+        let patient = Patient(
+            name: "Aarav Mehta",
+            phone: "+919820144532",
+            createdDate: createdAt
+        )
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: createdAt) }.execute(db)
+        }
+
+        let savedPatient = await withDependencies {
+            $0.defaultDatabase = database
+            $0.date.now = updatedAt
+        } operation: {
+            let model = PatientEditorModel(patient: patient)
+            model.draft.phone = "   "
+            return await model.save()
+        }
+
+        let record = try await database.read { db in
+            try PatientRecord.find(patient.id).fetchOne(db)
+        }
+        #expect(savedPatient?.name == "Aarav Mehta")
+        #expect(savedPatient?.phone == nil)
+        #expect(record?.phone == nil)
+    }
+
+    @Test func savePhoneAttachesValidNumberAndRejectsInvalidOrMissingPatient() async throws {
+        let database = try testDatabase()
+        let createdAt = Date(timeIntervalSinceReferenceDate: 1_000)
+        let updatedAt = Date(timeIntervalSinceReferenceDate: 2_000)
+        let patient = Patient(name: "Aarav Mehta", phone: nil, createdDate: createdAt)
+        try await database.write { db in
+            try PatientRecord.insert { PatientRecord(patient, now: createdAt) }.execute(db)
+        }
+
+        await withDependencies {
+            $0.defaultDatabase = database
+            $0.date.now = updatedAt
+        } operation: {
+            let invalid = await PatientEditorModel.savePhone("abc", for: patient)
+            #expect(invalid == .invalidPhone)
+
+            let savedResult = await PatientEditorModel.savePhone("98201 44532", for: patient)
+            guard case .saved(let saved) = savedResult else {
+                Issue.record("Expected .saved result, got \(savedResult)")
+                return
+            }
+            #expect(saved.name == "Aarav Mehta")
+            #expect(saved.phone == "+919820144532")
+
+            let unchanged = await PatientEditorModel.savePhone("+91 98201 44532", for: saved)
+            #expect(unchanged == .unchanged)
+
+            let missing = Patient(name: "Missing Patient", phone: nil, createdDate: createdAt)
+            let failed = await PatientEditorModel.savePhone("98201 44533", for: missing)
+            #expect(failed == .failed)
+        }
+
+        let storedPhone = try await database.read { db in
+            try PatientRecord.find(patient.id).fetchOne(db)?.phone
+        }
+        #expect(storedPhone == "+919820144532")
     }
 
     @Test func creationStillNormalizesAndPersistsPatient() async throws {
