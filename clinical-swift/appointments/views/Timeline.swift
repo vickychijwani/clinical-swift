@@ -12,21 +12,15 @@ struct Timeline: View {
     var previewNowMarker: Date? = nil
     var itemInteractionsEnabled = true
     var selectedAppointmentID: Appointment.ID? = nil
+    var canSelect: () -> Bool = { true }
     var onSelectItem: (TimelineItem) -> Void = { _ in }
-    var onSelectDraft: () -> Void = {}
     var allowsAdjustment = false
     var onDraggingChanged: (Bool) -> Void = { _ in }
     var onScaleChange: (CGFloat) -> Void = { _ in }
-    var onCancel: () -> Void = {}
-    var onDiscard: () -> Void = {}
-    var onDone: @MainActor () async -> Void = {}
-    var onDelete: (@MainActor () async -> Void)? = nil
 
     let date: Date
     // The parent supplies the session. View state would keep the previous editor's draft.
     var editorSession: ScheduleEditorSession?
-    var isWorking = false
-    @State private var lastDragEnd: ContinuousClock.Instant?
 
     static let metrics = TimelineMetrics.standard
 
@@ -88,6 +82,7 @@ struct Timeline: View {
                 ForEach(layouts) { layout in
                     let draft = isDraft(layout.item)
                     let selected = editorSession == nil && !draft && isSelected(layout.item)
+                    let isWorking = editorSession?.isWorking == true
                     TimelineItemView(
                         item: layout.item,
                         size: layout.rect.size,
@@ -99,18 +94,8 @@ struct Timeline: View {
                         isDeemphasized: editorSession != nil && !draft,
                         interactionsEnabled: !isWorking
                             && (itemInteractionsEnabled || (allowsAdjustment && draft)),
-                        showsAdjustmentControls: draft && allowsAdjustment,
-                        isDragging: editorSession?.adjustment.isDragging == true,
-                        isWorking: isWorking,
-                        onSelect: { selectItem(layout.item) },
-                        onMoveChanged: { move(layout.item, value: $0) },
-                        onMoveEnded: { endMove(layout.item, value: $0) },
-                        onResizeChanged: { drag(layout.item, edge: .duration, value: $0) },
-                        onResizeEnded: releaseAdjustment,
-                        onCancel: onCancel,
-                        onDiscard: onDiscard,
-                        onDone: onDone,
-                        onDelete: onDelete
+                        adjustmentControls: adjustmentControls(for: layout.item, isDraft: draft),
+                        onSelect: { selectItem(layout.item) }
                     )
                     .zIndex(Self.itemZIndex(for: layout, isDraft: draft, itemCount: layouts.count))
                     .position(x: layout.rect.midX, y: layout.rect.midY)
@@ -135,6 +120,26 @@ struct Timeline: View {
         isDraft ? Double(itemCount + 1) : Double(layout.zIndex)
     }
 
+    private func adjustmentControls(
+        for item: TimelineItem, isDraft: Bool
+    ) -> TimelineItemView.AdjustmentControls? {
+        guard isDraft, allowsAdjustment, let editorSession else { return nil }
+        @MainActor func saveDraft() async { _ = await editorSession.save() }
+        @MainActor func deleteDraft() async { _ = await editorSession.delete() }
+        return TimelineItemView.AdjustmentControls(
+            isDragging: editorSession.adjustment.isDragging,
+            isWorking: editorSession.isWorking,
+            onMoveChanged: { move(item, value: $0) },
+            onMoveEnded: { endMove(item, value: $0) },
+            onResizeChanged: { drag(item, edge: .duration, value: $0) },
+            onResizeEnded: releaseAdjustment,
+            onCancel: { editorSession.adjustment.release() },
+            onDiscard: { editorSession.discard() },
+            onDone: saveDraft,
+            onDelete: editorSession.canDelete ? deleteDraft : nil
+        )
+    }
+
     private func isDraft(_ item: TimelineItem) -> Bool {
         guard let id = editorSession?.preview.id else { return false }
         return item.id == id
@@ -149,10 +154,9 @@ struct Timeline: View {
 
     private func selectItem(_ item: TimelineItem) {
         // A move can finish in the same event as the button release.
-        guard lastDragEnd.map({ $0.duration(to: .now) > .milliseconds(150) }) ?? true
-        else { return }
+        guard canSelect(), editorSession?.adjustment.allowsSelection != false else { return }
         if isDraft(item) {
-            onSelectDraft()
+            editorSession?.isShowingSheet = true
             return
         }
         guard editorSession == nil else { return }
@@ -160,8 +164,7 @@ struct Timeline: View {
     }
 
     private func move(_ item: TimelineItem, value: DragGesture.Value) {
-        lastDragEnd = .now
-        guard let editorSession, !isWorking, isDraft(item) else { return }
+        guard let editorSession, !editorSession.isWorking, isDraft(item) else { return }
         let adjustment = editorSession.adjustment
         if !adjustment.isDragging {
             editorSession.beginAdjustment(item, edge: .move, items: items)
@@ -175,7 +178,6 @@ struct Timeline: View {
     private func endMove(_ item: TimelineItem, value: DragGesture.Value) {
         guard let editorSession else { return }
         let adjustment = editorSession.adjustment
-        lastDragEnd = .now
         guard isDraft(item), adjustment.isDragging, adjustment.edge == .move else { return }
         onScaleChange(
             editorSession.updateAdjustment(translation: value.translation.height, items: items))
@@ -185,7 +187,7 @@ struct Timeline: View {
     private func drag(
         _ item: TimelineItem, edge: TimelineAdjustment.Edge, value: DragGesture.Value
     ) {
-        guard let editorSession, !isWorking else { return }
+        guard let editorSession, !editorSession.isWorking else { return }
         if !editorSession.adjustment.isDragging {
             editorSession.beginAdjustment(item, edge: edge, items: items)
         }
@@ -195,7 +197,6 @@ struct Timeline: View {
 
     private func releaseAdjustment() {
         guard let adjustment = editorSession?.adjustment, adjustment.isDragging else { return }
-        lastDragEnd = .now
         adjustment.release()
     }
 

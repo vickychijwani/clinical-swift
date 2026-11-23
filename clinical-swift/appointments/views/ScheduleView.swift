@@ -43,31 +43,13 @@ struct ScheduleView: View {
                     itemInteractionsEnabled: !hasEditor,
                     selectedAppointmentID: selectedAppointmentID,
                     scrollPosition: scrollPositionBinding(for: date),
-                    onSelectItem: selectItem,
-                    onSelectDraft: { editorSession?.isShowingSheet = true },
                     allowsAdjustment: editorSession.map {
                         $0.allowsDateSelection && !$0.isShowingSheet
                     }
                         ?? !hasEditor,
                     editorSession: editorSession,
-                    isWorking: editorSession?.isWorking == true,
-                    onBeginHold: { beginHold(on: $0, center: $1, date: date) },
-                    onHoldRelease: { released in
-                        if editorSession?.allowsTypeSelection == true {
-                            editorSession?.releaseBooking(released)
-                        }
-                    },
-                    onCancel: { editorSession?.adjustment.release() },
-                    onDiscard: {
-                        if let editorSession {
-                            finishEditor(
-                                editorSession.id,
-                                completion: .discarded(date: router.selectedScheduleDate)
-                            )
-                        }
-                    },
-                    onDone: { await editorSession?.save() },
-                    onDelete: editorSession?.canDelete == true ? deleteEditor : nil
+                    onSelectItem: selectItem,
+                    onBeginHold: { beginHold(on: $0, center: $1, date: date) }
                 )
             }
             .accessibilityIdentifier("schedule-day-pager")
@@ -304,10 +286,6 @@ struct ScheduleView: View {
             finishEditor(request.id, completion: completion)
         }
         return editorSession
-    }
-
-    private func deleteEditor() async {
-        await editorSession?.delete()
     }
 
     private func finishEditor(_ requestID: UUID, completion: ScheduleEditorSession.Completion) {
