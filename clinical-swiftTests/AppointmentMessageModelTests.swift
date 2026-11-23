@@ -51,7 +51,7 @@ struct AppointmentMessageModelTests {
         }
     }
 
-    @Test func selectedContactStartsMessageAndSavesPatientConcurrently() async throws {
+    @Test func selectedContactSavesImmediatelyAndUpdatesRecipient() async throws {
         let recorder = MessagingRecorder(canSendText: true)
         let database = try testDatabase()
         let details = appointmentDetails(phone: "+91 98201 44532")
@@ -66,16 +66,19 @@ struct AppointmentMessageModelTests {
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
-            model.selectRecipient(phone: "98765 43210", name: "Nisha Shah")
-            #expect(model.willSaveRecipientPhone)
-            model.startSend()
+            let result = await model.selectRecipient(phone: "98765 43210", name: "Nisha Shah")
+            guard case .saved(let savedPatient) = result else {
+                Issue.record("Expected .saved result, got \(result)")
+                return
+            }
 
+            #expect(savedPatient.phone == "+919876543210")
             #expect(model.recipientName == "Nisha Shah")
+            #expect(model.recipientPhone == "+919876543210")
+
+            model.startSend()
             #expect(model.smsDraft?.recipient == "+919876543210")
             #expect(model.smsDraft?.phoneDigits == "919876543210")
-
-            await model.waitForRecipientPhoneSave()
-            #expect(!model.willSaveRecipientPhone)
         }
 
         let savedPhone = try await database.read { db in
@@ -84,39 +87,50 @@ struct AppointmentMessageModelTests {
         #expect(savedPhone == "+919876543210")
     }
 
-    @Test func equivalentSelectedPhoneIsNotMarkedForSaving() {
+    @Test func equivalentSelectedPhoneReturnsUnchangedWithoutSaving() async {
         let details = appointmentDetails(phone: "+91 98201 44532")
 
-        withDependencies {
+        await withDependencies {
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
-            model.selectRecipient(phone: "98201 44532", name: "Aarav Mobile")
+            let result = await model.selectRecipient(phone: "98201 44532", name: "Aarav Mobile")
 
-            #expect(!model.willSaveRecipientPhone)
+            #expect(result == .unchanged)
+            #expect(model.recipientName == "Aarav Mobile")
+            #expect(model.recipientPhone == "+919820144532")
         }
     }
 
-    @Test func failedPatientSaveStillStartsMessageWorkflow() async throws {
-        let recorder = MessagingRecorder(canSendText: true)
+    @Test func invalidSelectedPhoneReturnsInvalidAndKeepsPreviousRecipient() async {
+        let details = appointmentDetails(phone: "+91 98201 44532")
+
+        await withDependencies {
+            $0.date.now = fixedNow
+        } operation: {
+            let model = AppointmentMessageModel(details: details, includesLocation: false)
+            let result = await model.selectRecipient(phone: "abc", name: "Invalid Contact")
+
+            #expect(result == .invalidPhone)
+            #expect(model.recipientPhone == "+919820144532")
+            #expect(model.recipientName == nil)
+        }
+    }
+
+    @Test func failedRecipientSaveReturnsFailedAndKeepsPreviousRecipient() async throws {
         let database = try testDatabase()
         let details = appointmentDetails(phone: "+91 98201 44532")
 
         await withDependencies {
-            $0.appointmentMessagingClient = recorder.client
             $0.defaultDatabase = database
             $0.date.now = fixedNow
         } operation: {
             let model = AppointmentMessageModel(details: details, includesLocation: false)
-            model.selectRecipient(phone: "98765 43210", name: "Nisha Shah")
-            model.startSend()
+            let result = await model.selectRecipient(phone: "98765 43210", name: "Nisha Shah")
 
-            #expect(recorder.copiedMessages == [model.message])
-            #expect(model.smsDraft?.recipient == "+919876543210")
-            #expect(model.smsDraft?.phoneDigits == "919876543210")
-
-            await model.waitForRecipientPhoneSave()
-            #expect(model.patientSaveErrorMessage == "This patient can no longer be edited.")
+            #expect(result == .failed)
+            #expect(model.recipientPhone == "+919820144532")
+            #expect(model.recipientName == nil)
         }
     }
 
@@ -219,12 +233,6 @@ struct AppointmentMessageModelTests {
 
     private var fixedNow: Date {
         Date(timeIntervalSinceReferenceDate: 0)
-    }
-}
-
-extension AppointmentMessageModel {
-    internal func waitForRecipientPhoneSave() async {
-        await recipientPhoneSaveTask?.value
     }
 }
 

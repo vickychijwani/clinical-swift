@@ -34,7 +34,10 @@ final class PatientEditorModel {
     }
 
     var hasUnsavedChanges: Bool {
-        draft.normalized != originalDraft
+        if draft.phone?.nilIfBlank != nil, draft.normalized.phone == nil {
+            return true
+        }
+        return draft.normalized != originalDraft
     }
 
     func save() async -> Patient? {
@@ -43,6 +46,11 @@ final class PatientEditorModel {
         defer { isSaving = false }
         saveErrorMessage = nil
         let normalizedDraft = draft.normalized
+
+        if draft.phone?.nilIfBlank != nil, normalizedDraft.phone == nil {
+            saveErrorMessage = "Invalid phone number"
+            return nil
+        }
 
         let patient = Patient(
             id: editedPatient?.id ?? UUID(),
@@ -103,24 +111,24 @@ final class PatientEditorModel {
             )
             return patient
         } catch is PatientEditingError {
-            saveErrorMessage = "This patient can no longer be edited."
+            saveErrorMessage = "Save failed"
             telemetry.log(
                 .error,
                 category: .patient,
                 name: "patient_save_failed",
-                message: saveErrorMessage,
+                message: "This patient can no longer be edited.",
                 error: PatientEditingError.unavailable,
                 recordID: patient.id.uuidString.lowercased(),
                 action: editedPatient == nil ? "create" : "edit"
             )
             return nil
         } catch {
-            saveErrorMessage = "The patient could not be saved."
+            saveErrorMessage = "Save failed"
             telemetry.log(
                 .error,
                 category: .patient,
                 name: "patient_save_failed",
-                message: saveErrorMessage,
+                message: "The patient could not be saved.",
                 error: error,
                 recordID: patient.id.uuidString.lowercased(),
                 action: editedPatient == nil ? "create" : "edit"
@@ -129,9 +137,33 @@ final class PatientEditorModel {
         }
     }
 
+    static func savePhone(_ rawPhone: String, for patient: Patient) async -> PatientPhoneSaveResult
+    {
+        guard let normalizedPhone = PhoneNumber.normalizedE164(rawPhone) else {
+            return .invalidPhone
+        }
+        if normalizedPhone == PhoneNumber.normalizedE164(patient.phone) {
+            return .unchanged
+        }
+
+        let editorModel = PatientEditorModel(patient: patient)
+        editorModel.draft.phone = normalizedPhone
+        guard let saved = await editorModel.save() else {
+            return .failed
+        }
+        return .saved(saved)
+    }
+
     func dismissSaveError() {
         saveErrorMessage = nil
     }
+}
+
+nonisolated enum PatientPhoneSaveResult: Equatable, Sendable {
+    case saved(Patient)
+    case unchanged
+    case invalidPhone
+    case failed
 }
 
 nonisolated enum PatientEditingError: Error {

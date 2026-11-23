@@ -41,7 +41,7 @@ struct PhoneField: View {
         }
         .sheet(isPresented: $showingContacts) {
             ContactPhonePicker { selectedPhone, contactName in
-                phone = PhoneNumber.normalizedE164(selectedPhone) ?? ""
+                phone = PhoneNumber.normalizedE164(selectedPhone) ?? selectedPhone
                 onPickContact(contactName)
                 // No need to set showingContacts to false, dismissal is automatic
             }

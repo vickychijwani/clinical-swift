@@ -5,6 +5,7 @@ import SwiftUI
 
 struct EditPatientView: View {
     @Environment(\.trayDismiss) private var dismiss
+    @Environment(ToastStore.self) private var toast: ToastStore?
 
     @State private var model: PatientEditorModel
     @State private var dobRequest: DOBRequest?
@@ -49,25 +50,15 @@ struct EditPatientView: View {
         .trayStep(item: $dobRequest) { _ in
             PatientDOBPicker(dob: $model.draft.dob, draftDOB: $draftDOB)
         }
-        .alert(
-            "Unable to save patient",
-            isPresented: Binding(
-                get: { model.saveErrorMessage != nil },
-                set: { if !$0 { model.dismissSaveError() } }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                model.dismissSaveError()
-            }
-        } message: {
-            Text(model.saveErrorMessage ?? "")
-        }
     }
 
     private func savePatient() async {
         if let patient = await model.save() {
             onSave(patient)
             dismiss()
+        } else if let message = model.saveErrorMessage {
+            toast?.show(message: message)
+            model.dismissSaveError()
         }
     }
 }
@@ -103,18 +94,18 @@ private struct EditPatientForm: View {
         Form {
             Group {
                 Section {
+                    TextField("Name", text: $draft.name.replacingNil())
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                }
+
+                Section {
                     PhoneField("Phone number", phone: $draft.phone.replacingNil()) { contactName in
                         draft.prefillName(fromContactName: contactName)
                     } onContactPickerOpened: {
                         await requestContactsAccessIfNeeded()
                     }
-                }
-
-                Section {
-                    TextField("Name", text: $draft.name.replacingNil())
-                        .textContentType(.name)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
                 }
 
                 Section {
