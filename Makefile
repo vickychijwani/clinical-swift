@@ -26,6 +26,10 @@ CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
 SIMULATOR_OS ?= 27.0
 SIMULATOR_NAME ?=
+LAUNCH_ARGS ?=
+APPEARANCE ?=
+OUT ?= $(BUILD_DIR)/screenshot.png
+SCREENSHOT_DELAY ?= 2
 SIMULATOR_SCRIPT := $(CURDIR)/scripts/simulator.swift
 EXPLICIT_SIMULATOR_ID := $(if $(filter-out undefined,$(origin SIMULATOR_ID)),$(strip $(SIMULATOR_ID)),)
 EXPLICIT_DESTINATION := $(if $(filter-out undefined,$(origin DESTINATION)),$(strip $(DESTINATION)),)
@@ -84,13 +88,14 @@ BACKUP_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
-.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install run build-and-run uninstall clean
+.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install validate-appearance require-appearance appearance run build-and-run screenshot uninstall clean
 
 help:
 	@printf "%s\n" \
 		"Targets:" \
 		"  make                  Build, install, and run on the selected non-CI iOS simulator" \
 		"                        Pass SIMULATOR_NAME='<unique name>' (creates if missing) or SIMULATOR_ID='<udid>'" \
+		"                        Accepts LAUNCH_ARGS='...' and APPEARANCE=light|dark" \
 		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when no simulator is booted" \
 		"  make sim-id           Print the target simulator UDID (creates SIMULATOR_NAME if missing)" \
 		"  make build            Build the app" \
@@ -121,7 +126,9 @@ help:
 		"" \
 		"Device Hub and maintenance:" \
 		"  make install          Build and install on the selected iOS simulator" \
-		"  make run              Launch the installed app" \
+		"  make run              Relaunch the installed app (accepts LAUNCH_ARGS='...' and APPEARANCE=light|dark)" \
+		"  make appearance       Set simulator appearance (requires APPEARANCE=light|dark)" \
+		"  make screenshot       Relaunch the installed app and capture a PNG (OUT=$(OUT), APPEARANCE, LAUNCH_ARGS, SCREENSHOT_DELAY=$(SCREENSHOT_DELAY))" \
 		"  make resolve-packages Resolve Swift package dependencies" \
 		"  make diagnose         Print tool and project settings" \
 		"  make agent-monitor    Open the live PR review and address loop monitor UI" \
@@ -342,10 +349,34 @@ install: build boot
 	@test -d "$(APP_PATH)" || { echo "Missing built app at $(APP_PATH)"; exit 1; }
 	@xcrun simctl install "$(SIMULATOR_ID)" "$(APP_PATH)"
 
-run: check-tools check-simulator boot
-	@xcrun simctl launch "$(SIMULATOR_ID)" "$(BUNDLE_ID)"
+validate-appearance:
+	@if [[ -n "$(APPEARANCE)" ]]; then \
+		case "$(APPEARANCE)" in \
+			light|dark) ;; \
+			*) echo "APPEARANCE must be light or dark, got: $(APPEARANCE)" >&2; exit 2 ;; \
+		esac; \
+	fi
 
-build-and-run: install run
+require-appearance:
+	@case "$(APPEARANCE)" in \
+		light|dark) ;; \
+		*) echo "APPEARANCE=light or APPEARANCE=dark is required." >&2; exit 2 ;; \
+	esac
+
+appearance: require-appearance check-tools check-simulator boot
+	@xcrun simctl ui "$(SIMULATOR_ID)" appearance "$(APPEARANCE)"
+
+run: validate-appearance check-tools check-simulator boot
+	@if [[ -n "$(APPEARANCE)" ]]; then xcrun simctl ui "$(SIMULATOR_ID)" appearance "$(APPEARANCE)"; fi
+	@xcrun simctl launch --terminate-running-process "$(SIMULATOR_ID)" "$(BUNDLE_ID)" $(LAUNCH_ARGS)
+
+build-and-run: validate-appearance install run
+
+screenshot: run
+	@if [[ -n "$(SCREENSHOT_DELAY)" && "$(SCREENSHOT_DELAY)" != "0" ]]; then sleep "$(SCREENSHOT_DELAY)"; fi
+	@mkdir -p "$$(dirname "$(OUT)")"
+	@xcrun simctl io "$(SIMULATOR_ID)" screenshot "$(OUT)"
+	@printf "Saved screenshot: %s\n" "$(OUT)"
 
 uninstall: check-tools check-simulator boot
 	@xcrun simctl uninstall "$(SIMULATOR_ID)" "$(BUNDLE_ID)" || true

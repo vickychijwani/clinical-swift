@@ -9,6 +9,12 @@
             "command": "/bin/sh \"$(git rev-parse --show-toplevel)/.codex/hooks/check_xcodebuild.sh\"",
             "timeout": 10,
             "statusMessage": "Checking build command"
+          },
+          {
+            "type": "command",
+            "command": "/bin/sh \"$(git rev-parse --show-toplevel)/.codex/hooks/check_simctl.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking simulator command"
           }
         ]
       }

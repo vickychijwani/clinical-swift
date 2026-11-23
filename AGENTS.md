@@ -86,6 +86,7 @@ Plans, implemented specs, and validation reports are historical context, not cur
 
 - Use Makefile targets for local builds and test runs. Do not invoke `xcodebuild` directly. Use documented Makefile options; if a needed option is missing, add it first. Direct `xcodebuild` builds or test runs require an explicit user request.
 - For simulator runs, pass a unique `SIMULATOR_NAME` per task to `make` (creates or reuses that simulator) and use `make sim-id SIMULATOR_NAME="..."` to get its UDID for `simctl` and `xcodebuildmcp` so parallel agents do not collide.
+- Do not run `xcrun simctl openurl`, `xcrun simctl launch`, or `xcrun simctl ui` directly (a repository PreToolUse hook blocks them). Use `make run`, `make build-and-run`, `make appearance`, or `make screenshot` with `LAUNCH_ARGS`, `APPEARANCE`, and `OUT` instead.
 - Use relevant test filters during development.
 - Broaden validation after focused tests pass only when the change can affect other areas, or when release rules require it. A small review fix does not automatically require a full suite.
 - Keep full test output and result bundles locally. Read concise results and relevant failure diagnostics first. Expand log context only when needed to diagnose a failure.
