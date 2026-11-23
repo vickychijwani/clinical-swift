@@ -3,10 +3,10 @@ name: skill-creator-concise
 description: Create token-minimal skills. Use when invoked via /skill-creator-concise or asked to author a concise skill.
 ---
 
-Author a skill at `~/.gemini/config/skills/<name>/SKILL.md` (global) or `.agents/skills/<name>/SKILL.md` (workspace).
+Write a skill at `~/.gemini/config/skills/<name>/SKILL.md` (global) or `.agents/skills/<name>/SKILL.md` (workspace).
 
-- Frontmatter: `name` (kebab-case) and `description` (what + when to trigger).
-- Keep the skill super concise, using the minimum tokens necessary — assume execution by a smart model.
-- Include only non-obvious steps, constraints, and paths; omit generic advice. Offload bulk to `references/` only if needed.
-- Encapsulate and enforce deterministic steps and workflows in tested scripts under `scripts/` rather than prose commands.
-- Show the user a draft and target path, and wait for approval before writing files.
+- Frontmatter: `name` (kebab-case) and `description` (what the skill does and when to use it).
+- Express the user's intent and hard constraints. Do not overfit to one case or invent rigid rules the user did not ask for.
+- Use the minimum tokens needed for a capable model. Include only non-obvious steps, rules, and paths; move large reference material to `references/` only when needed.
+- Put repeatable mechanical work and hard rules in small, tested scripts under `scripts/` when code is more reliable than prose commands. Leave judgment calls to the model unless the user wants a fixed rule.
+- Show the draft and target path, and wait for user approval before writing files.
