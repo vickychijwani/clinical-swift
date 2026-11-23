@@ -197,8 +197,7 @@ struct TimelineLayoutTests {
         #expect(textFront.isOverlappingFront)
         #expect(textBack.contentTrailingInset > 0)
         // Content fence must stop strictly before the front card.
-        let fencedContentMaxX =
-            textBack.rect.maxX - ScheduleCardStyle.horizontalPadding - textBack.contentTrailingInset
+        let fencedContentMaxX = textBack.rect.maxX - textBack.contentTrailingInset
         #expect(fencedContentMaxX < textFront.rect.minX)
     }
 

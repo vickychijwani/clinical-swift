@@ -453,17 +453,14 @@ struct TimelineLayoutEngine {
 
             let contentTrailingInset: CGFloat
             if nearestFrontLeft < current.rect.maxX - Self.epsilon {
-                // Leave 4 pt breathing room before the front card while accounting for
-                // ScheduleCard's built-in trailing horizontalPadding.
-                let desiredTrailingFromCardEdge =
-                    current.rect.maxX - (nearestFrontLeft - Self.contentFenceGap)
+                // Leave 4 pt breathing room before the front card.
                 contentTrailingInset = max(
-                    0, desiredTrailingFromCardEdge - ScheduleCardStyle.horizontalPadding)
+                    0, current.rect.maxX - (nearestFrontLeft - Self.contentFenceGap))
             } else {
                 contentTrailingInset = 0
             }
 
-            let availableContentWidth = max(current.rect.width - contentTrailingInset, 0)
+            let availableContentWidth = max(nearestFrontLeft - current.rect.minX, 0)
             let presentation = contentMetrics.resolvePresentation(
                 start: current.item.start,
                 label: current.item.displayLabel,

@@ -32,9 +32,10 @@ struct ScheduleCard: View {
                 presentation: presentation
             )
             .padding(.leading, ScheduleCardStyle.horizontalPadding)
-            .padding(.trailing, ScheduleCardStyle.horizontalPadding + contentTrailingInset)
+            // Let overflowing text reach the card border unless a front card fences the trailing edge.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .clipped()
+            .padding(.trailing, contentTrailingInset)
             .opacity(
                 appearance.contentOpacity * (isDeemphasized ? tuning.otherContentOpacity : 1))
 
