@@ -4,37 +4,6 @@ import Dependencies
 import Foundation
 import SQLiteData
 
-/// Parsing is strict so invalid pasted text cannot become a different payment or No Dues.
-nonisolated enum CompletionAmount {
-    static func parse(_ text: String) -> Int? {
-        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.hasPrefix("₹") {
-            value.removeFirst()
-            value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty else { return nil }
-        }
-        if value.isEmpty { return 0 }
-        let groups = value.split(separator: ",", omittingEmptySubsequences: false)
-        guard groups.allSatisfy({ !$0.isEmpty && $0.allSatisfy(isDigit) }) else { return nil }
-        if groups.count > 1 {
-            guard groups.last?.count == 3,
-                (1...2).contains(groups[0].count),
-                groups.dropFirst().dropLast().allSatisfy({ $0.count == 2 })
-            else { return nil }
-        }
-        return Int(groups.joined())
-    }
-
-    static func formatted(_ amount: Int) -> String {
-        amount.formatted(.number.locale(ClinicDate.locale).grouping(.automatic))
-    }
-
-    static func isDigit(_ character: Character) -> Bool {
-        character >= "0" && character <= "9"
-    }
-
-}
-
 @MainActor @Observable
 final class AppointmentCompletionModel: Identifiable {
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
@@ -59,12 +28,12 @@ final class AppointmentCompletionModel: Identifiable {
         self.originPath = originPath
     }
 
-    var amount: Int? { CompletionAmount.parse(amountText) }
+    var amount: Int? { RupeeAmount.parse(amountText, emptyAsZero: true) }
     var hasUnsavedChanges: Bool { !amountText.isEmpty || paymentMethod != nil }
     var canSave: Bool { amount != nil && !isSaving && !didSave }
     var buttonTitle: String {
         guard let amount else { return "Complete Appointment" }
-        let prefix = amount == 0 ? "No Dues" : "₹\(CompletionAmount.formatted(amount)) Paid"
+        let prefix = amount == 0 ? "No Dues" : "₹\(RupeeAmount.formatted(amount)) Paid"
         return "\(prefix) · Complete Appointment"
     }
     var buttonSymbol: String {
@@ -72,7 +41,7 @@ final class AppointmentCompletionModel: Identifiable {
     }
 
     func setAmountText(_ text: String) {
-        guard !isSaving && !didSave, text.filter(CompletionAmount.isDigit).count <= 6 else {
+        guard !isSaving && !didSave, text.filter(RupeeAmount.isDigit).count <= 6 else {
             return
         }
         amountText = text

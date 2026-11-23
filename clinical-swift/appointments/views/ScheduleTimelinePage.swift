@@ -10,17 +10,10 @@ struct ScheduleTimelinePage: View {
     let itemInteractionsEnabled: Bool
     var selectedAppointmentID: Appointment.ID? = nil
     @Binding var scrollPosition: ScrollPosition
-    let onSelectItem: (TimelineItem) -> Void
-    let onSelectDraft: () -> Void
     let allowsAdjustment: Bool
     let editorSession: ScheduleEditorSession?
-    let isWorking: Bool
+    let onSelectItem: (TimelineItem) -> Void
     let onBeginHold: (TimelineItem?, TimeOfDay) -> ScheduleEditorSession?
-    let onHoldRelease: (TimelineAdjustment) -> Void
-    let onCancel: () -> Void
-    let onDiscard: () -> Void
-    let onDone: @MainActor () async -> Void
-    let onDelete: (@MainActor () async -> Void)?
     @State private var isDragging = false
     @State private var scrollY: CGFloat = 0
     @State private var needsAdjustmentClearance = false
@@ -29,7 +22,7 @@ struct ScheduleTimelinePage: View {
     @State private var touchStart: CGPoint?
     @State private var holdRecognized = false
     @GestureState private var touchActive = false
-    @State private var lastDragEnd: ContinuousClock.Instant?
+    @State private var swipeCooldown = TimelineDragCooldown()
     // Keep the first touch attached while Schedule installs the editor session.
     @State private var holdSession: ScheduleEditorSession?
 
@@ -43,8 +36,8 @@ struct ScheduleTimelinePage: View {
                     showsNowMarker: date.isSameDayAs(today),
                     itemInteractionsEnabled: itemInteractionsEnabled,
                     selectedAppointmentID: selectedAppointmentID,
-                    onSelectItem: { if allowsSelection { onSelectItem($0) } },
-                    onSelectDraft: { if allowsSelection { onSelectDraft() } },
+                    canSelect: { swipeCooldown.allowsSelection },
+                    onSelectItem: onSelectItem,
                     allowsAdjustment: allowsAdjustment,
                     onDraggingChanged: {
                         isDragging = $0
@@ -56,13 +49,8 @@ struct ScheduleTimelinePage: View {
                         }
                     },
                     onScaleChange: correctScrollPosition,
-                    onCancel: onCancel,
-                    onDiscard: onDiscard,
-                    onDone: onDone,
-                    onDelete: onDelete,
                     date: date,
-                    editorSession: editorSession,
-                    isWorking: isWorking
+                    editorSession: editorSession
                 )
                 .onGeometryChange(for: CGRect.self) {
                     $0.frame(in: .global).insetBy(dx: 0, dy: timelinePadding)
@@ -110,7 +98,7 @@ struct ScheduleTimelinePage: View {
                     touchStart = value.startLocation
                     // A swipe must cancel selection even when the day is too short to scroll.
                     if abs(value.translation.height) > 5 || abs(value.translation.width) > 5 {
-                        lastDragEnd = .now
+                        swipeCooldown.record()
                     }
                     beginHoldIfReady()
                     if let holdSession {
@@ -120,7 +108,7 @@ struct ScheduleTimelinePage: View {
                     }
                 }
                 .onEnded { value in
-                    if holdRecognized || holdSession != nil { lastDragEnd = .now }
+                    if holdRecognized || holdSession != nil { swipeCooldown.record() }
                     touchStart = nil
                     holdRecognized = false
                     guard let holdSession else { return }
@@ -131,7 +119,9 @@ struct ScheduleTimelinePage: View {
                         holdSession.updateAdjustment(
                             translation: value.translation.height, items: items))
                     holdSession.adjustment.release()
-                    onHoldRelease(holdSession.adjustment)
+                    if holdSession.allowsTypeSelection {
+                        holdSession.releaseBooking(holdSession.adjustment)
+                    }
                 }
                 // Clear a completed hold when this touch ends or is cancelled.
                 .updating($touchActive) { _, active, _ in active = true },
@@ -156,16 +146,11 @@ struct ScheduleTimelinePage: View {
         .modifier(TimelineScrollModifier(scrollPosition: $scrollPosition))
     }
 
-    private var allowsSelection: Bool {
-        // A hold can finish in the same event as the button release.
-        lastDragEnd.map { $0.duration(to: .now) > .milliseconds(150) } ?? true
-    }
-
     private func beginHoldIfReady() {
         guard holdRecognized, let touchStart, allowsAdjustment, itemInteractionsEnabled,
             editorSession == nil, holdSession == nil
         else { return }
-        lastDragEnd = .now
+        swipeCooldown.record()
         let point = CGPoint(
             x: touchStart.x - timelineFrame.minX, y: touchStart.y - timelineFrame.minY)
         // Use the displayed scale, including a compact break, for touch mapping.

@@ -2,6 +2,19 @@ import ClinicalModels
 import SwiftUI
 
 struct TimelineItemView: View {
+    struct AdjustmentControls {
+        let isDragging: Bool
+        let isWorking: Bool
+        let onMoveChanged: (DragGesture.Value) -> Void
+        let onMoveEnded: (DragGesture.Value) -> Void
+        let onResizeChanged: (DragGesture.Value) -> Void
+        let onResizeEnded: () -> Void
+        let onCancel: () -> Void
+        let onDiscard: () -> Void
+        let onDone: @MainActor () async -> Void
+        let onDelete: (@MainActor () async -> Void)?
+    }
+
     static let cardShape = RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
 
     let item: TimelineItem
@@ -13,21 +26,12 @@ struct TimelineItemView: View {
     var isSelected = false
     let isDeemphasized: Bool
     let interactionsEnabled: Bool
-    let showsAdjustmentControls: Bool
-    let isDragging: Bool
-    let isWorking: Bool
+    var adjustmentControls: AdjustmentControls? = nil
     let onSelect: () -> Void
-    let onMoveChanged: (DragGesture.Value) -> Void
-    let onMoveEnded: (DragGesture.Value) -> Void
-    let onResizeChanged: (DragGesture.Value) -> Void
-    let onResizeEnded: () -> Void
-    let onCancel: () -> Void
-    let onDiscard: () -> Void
-    let onDone: @MainActor () async -> Void
-    let onDelete: (@MainActor () async -> Void)?
 
     var body: some View {
         let tooltipBelow = item.start.timeOfDay.minutes(since: Bitehaus.opening) <= 30
+        let isDragging = adjustmentControls?.isDragging == true
 
         Button(action: onSelect) {
             ScheduleItemCard(
@@ -47,10 +51,10 @@ struct TimelineItemView: View {
             // Taps use the button action. A zero-distance drag can also consume Done or Cancel.
             .simultaneousGesture(
                 DragGesture(minimumDistance: 5, coordinateSpace: .global)
-                    .onChanged(onMoveChanged)
-                    .onEnded(onMoveEnded),
+                    .onChanged { adjustmentControls?.onMoveChanged($0) }
+                    .onEnded { adjustmentControls?.onMoveEnded($0) },
                 // Saved cards must let the scroll view handle a swipe.
-                isEnabled: showsAdjustmentControls
+                isEnabled: adjustmentControls != nil
             )
         }
         .buttonStyle(TimelineCardButtonStyle())
@@ -60,11 +64,11 @@ struct TimelineItemView: View {
         .accessibilityValue("\(item.durationMinutes) min")
         .overlay {
             // Handles sit outside the body gesture so a resize cannot start a move.
-            if showsAdjustmentControls, item.allowsAdjustment {
+            if let adjustmentControls, item.allowsAdjustment {
                 TimelineAdjustmentHandles(
                     item: item,
-                    onDrag: onResizeChanged,
-                    onEnd: onResizeEnded
+                    onDrag: adjustmentControls.onResizeChanged,
+                    onEnd: adjustmentControls.onResizeEnded
                 )
             }
         }
@@ -75,7 +79,7 @@ struct TimelineItemView: View {
         )
         .modifier(ScheduleCardLift(isPressed: isDraft && isDragging))
         .overlay(alignment: .topLeading) {
-            if showsAdjustmentControls, isDragging, !tooltipBelow {
+            if adjustmentControls != nil, isDragging, !tooltipBelow {
                 TimelineAdjustmentTooltip(item: item)
                     .visualEffect { content, geometry in
                         content.offset(y: -geometry.size.height - 4)
@@ -83,7 +87,7 @@ struct TimelineItemView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if showsAdjustmentControls {
+            if let adjustmentControls {
                 HStack {
                     if isDragging, tooltipBelow {
                         // Keep the tooltip clear of the duration grip and card actions.
@@ -92,9 +96,7 @@ struct TimelineItemView: View {
                     Spacer(minLength: 0)
                     TimelineAdjustmentActions(
                         item: item,
-                        isSaving: isWorking,
-                        onCancel: onCancel, onDiscard: onDiscard, onDone: onDone,
-                        onDelete: onDelete
+                        controls: adjustmentControls
                     )
                     .fixedSize()
                 }
@@ -149,21 +151,17 @@ struct TimelineCardOverlapSeparation: ViewModifier {
 
 private struct TimelineAdjustmentActions: View {
     let item: TimelineItem
-    let isSaving: Bool
-    let onCancel: () -> Void
-    let onDiscard: () -> Void
-    let onDone: @MainActor () async -> Void
-    let onDelete: (@MainActor () async -> Void)?
+    let controls: TimelineItemView.AdjustmentControls
     @State private var confirmsDiscard = false
 
     var body: some View {
         GlassEffectContainer {
             HStack {
-                if let onDelete {
+                if let onDelete = controls.onDelete {
                     ConfirmingAsyncButton(
                         "Delete Unavailable Time", role: .destructive,
                         message: Text("Delete this unavailable time?"),
-                        onConfirmation: onCancel
+                        onConfirmation: controls.onCancel
                     ) {
                         await onDelete()
                     } label: {
@@ -172,21 +170,21 @@ private struct TimelineAdjustmentActions: View {
                     .buttonStyle(.glass)
                 }
                 Button("Cancel", systemImage: "xmark") {
-                    onCancel()
+                    controls.onCancel()
                     confirmsDiscard = true
                 }
                 .buttonStyle(.glass)
                 .confirmationDialog(discardTitle, isPresented: $confirmsDiscard) {
-                    Button("Discard Changes", role: .destructive, action: onDiscard)
+                    Button("Discard Changes", role: .destructive, action: controls.onDiscard)
                 } message: {
                     Text(discardMessage)
                 }
-                AsyncButton("Done", systemImage: "checkmark", action: onDone)
+                AsyncButton("Done", systemImage: "checkmark", action: controls.onDone)
                     .buttonStyle(.appGlassProminent)
             }
             .labelStyle(.iconOnly)
             .controlSize(.mini)
-            .disabled(isSaving)
+            .disabled(controls.isWorking)
         }
     }
 
