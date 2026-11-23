@@ -534,10 +534,72 @@ private func testDiscoveryIntegration(in root: URL) throws {
         "/address opus should override detected author"
     )
 
-    // 4. /review <reviewer> override falls back to default reviewer for unknown path.
-    let overrideRes = discoverLoopContext(
+    // 4a. Canonical repo root worktree detects Antigravity model (or falls back to neon).
+    let resolvedCanonical = canonical.standardizedFileURL.resolvingSymlinksInPath().path
+    let canonicalAgyDir = root.appending(path: "agy-canonical", directoryHint: .isDirectory)
+    try createAgyConversationDB(
+        at: canonicalAgyDir,
+        rows: [
+            (
+                convID: "conv-canonical", worktree: resolvedCanonical,
+                modifiedTime: "2026-11-20T04:00:00Z", model: "claude-opus-5-5-high"
+            )
+        ]
+    )
+    let canonicalOpusRes = discoverLoopContext(
         canonicalRepoPath: canonical.path,
         branch: "main",
+        headSHA: baseSHA,
+        action: .review,
+        agyDirectory: canonicalAgyDir.path,
+        homeDirectory: home.path,
+        requireClean: true
+    )
+    try expect(
+        canonicalOpusRes.status == "ok" && canonicalOpusRes.author == AgentModel.opus.profile
+            && canonicalOpusRes.reviewers == [AgentModel.sol.profile],
+        "Canonical repo worktree should detect Antigravity author model"
+    )
+
+    let canonicalFallbackRes = discoverLoopContext(
+        canonicalRepoPath: canonical.path,
+        branch: "main",
+        headSHA: baseSHA,
+        action: .review,
+        agyDirectory: emptyAgyDir.path,
+        homeDirectory: home.path,
+        requireClean: true
+    )
+    try expect(
+        canonicalFallbackRes.status == "ok"
+            && canonicalFallbackRes.author == AgentModel.neon.profile
+            && canonicalFallbackRes.reviewers == [AgentModel.sol.profile],
+        "Canonical repo worktree without Antigravity DB should fall back cleanly to neon"
+    )
+
+    // 4. /review <reviewer> override falls back to default reviewer for unknown path.
+    let outsideWT = root.appending(path: "outside-wt")
+    _ = try runGit(
+        canonical.path, ["worktree", "add", "-b", "outside_branch", outsideWT.path, baseSHA])
+
+    let outsideFailRes = discoverLoopContext(
+        canonicalRepoPath: canonical.path,
+        branch: "outside_branch",
+        headSHA: baseSHA,
+        action: .review,
+        agyDirectory: emptyAgyDir.path,
+        homeDirectory: home.path,
+        requireClean: true
+    )
+    try expect(
+        outsideFailRes.status == "error"
+            && (outsideFailRes.error ?? "").contains("outside Codex, Antigravity, and canonical"),
+        "Outside worktree without override should fail"
+    )
+
+    let overrideRes = discoverLoopContext(
+        canonicalRepoPath: canonical.path,
+        branch: "outside_branch",
         headSHA: baseSHA,
         action: .review,
         reviewerOverride: [.sol],

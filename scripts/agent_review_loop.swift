@@ -677,6 +677,7 @@ func detectAntigravityAuthorModel(
 
 private func resolveAuthorModel(
     worktreePath: String,
+    canonicalRepoPath: String,
     homeDirectory: String,
     agyDirectory: String
 ) -> (model: AgentModel?, notes: [String], reason: String?) {
@@ -688,10 +689,17 @@ private func resolveAuthorModel(
             worktreePath: worktreePath, agyDirectory: agyDirectory)
         return (detected.model, detected.notes, nil)
     case .unknown:
+        let resolvedCanonical = normalizePath(canonicalRepoPath, resolveSymlinks: true)
+        let resolvedWorktree = normalizePath(worktreePath, resolveSymlinks: true)
+        if resolvedWorktree == resolvedCanonical {
+            let detected = detectAntigravityAuthorModel(
+                worktreePath: worktreePath, agyDirectory: agyDirectory)
+            return (detected.model, detected.notes, nil)
+        }
         return (
             nil,
             [],
-            "Worktree path \(worktreePath) is outside Codex and Antigravity roots."
+            "Worktree path \(worktreePath) is outside Codex, Antigravity, and canonical repo roots."
         )
     }
 }
@@ -746,6 +754,7 @@ func discoverLoopContext(
             if needsDetection {
                 let result = resolveAuthorModel(
                     worktreePath: worktree.path,
+                    canonicalRepoPath: canonicalRepoPath,
                     homeDirectory: resolvedHome,
                     agyDirectory: resolvedAgyDir
                 )
