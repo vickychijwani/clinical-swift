@@ -2,6 +2,24 @@ import ClinicalModels
 import Foundation
 import Observation
 
+/// Cooldown that keeps a drag or hold release from firing a card tap in the same touch event.
+struct TimelineDragCooldown {
+    private var lastInteraction: ContinuousClock.Instant?
+
+    var allowsSelection: Bool {
+        allowsSelection(at: .now)
+    }
+
+    func allowsSelection(at now: ContinuousClock.Instant) -> Bool {
+        // A hold can finish in the same event as the button release.
+        lastInteraction.map { $0.duration(to: now) > .milliseconds(150) } ?? true
+    }
+
+    mutating func record(at now: ContinuousClock.Instant = .now) {
+        lastInteraction = now
+    }
+}
+
 /// Gestures change only the editor's draft in memory.
 /// The editor owns saving and errors.
 @MainActor @Observable
@@ -12,9 +30,14 @@ final class TimelineAdjustment {
     private(set) var edge: Edge = .move
     private(set) var isDragging = false
     private(set) var hoverRequest: UUID?
+    private var dragCooldown = TimelineDragCooldown()
     private var expanded = false
     private var anchorY: CGFloat = 0
     private var translation: CGFloat = 0
+
+    var allowsSelection: Bool {
+        dragCooldown.allowsSelection
+    }
 
     func items(_ items: [TimelineItem], draft: TimelineItem, on date: Date? = nil) -> [TimelineItem]
     {
@@ -42,6 +65,7 @@ final class TimelineAdjustment {
 
     func begin(_ item: TimelineItem, edge: Edge, items: [TimelineItem]) {
         guard !isDragging, item.allowsAdjustment else { return }
+        dragCooldown.record()
         original = item
         self.edge = edge
         expanded = TimelineScale(items: items).isBreakExpanded
@@ -62,6 +86,7 @@ final class TimelineAdjustment {
         guard isDragging, original?.id == draft.id,
             translation != 0 || self.translation != 0
         else { return 0 }
+        dragCooldown.record()
         self.translation = translation
         let oldScale = scale(items, draft: draft)
         updateDraft(&draft, scale: oldScale)
@@ -91,6 +116,9 @@ final class TimelineAdjustment {
     }
 
     func release() {
+        if isDragging {
+            dragCooldown.record()
+        }
         isDragging = false
         hoverRequest = nil
         original = nil

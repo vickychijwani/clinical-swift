@@ -132,6 +132,7 @@ private struct WidgetScheduleRowView: View {
 }
 
 private struct WidgetItemCard: View {
+    @Environment(\.appPalette) private var palette
     let item: TimelineItem
 
     var body: some View {
@@ -145,7 +146,7 @@ private struct WidgetItemCard: View {
     private var stripeColor: Color {
         switch item {
         case .appointment: .accentColor
-        case .unavailableTime: Color("UnavailableTimeBorder")
+        case .unavailableTime: palette[.unavailableBorder]
         }
     }
 }

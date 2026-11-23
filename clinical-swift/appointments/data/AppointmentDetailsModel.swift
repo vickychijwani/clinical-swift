@@ -6,23 +6,18 @@ import SQLiteData
 
 @MainActor @Observable
 final class AppointmentDetailsModel {
-    @ObservationIgnored @Dependency(\.defaultDatabase) private var database
+    @ObservationIgnored @Dependency(\.appointmentStatusClient) private var statusClient
     @ObservationIgnored @Dependency(\.date.now) private var now
     @ObservationIgnored @Dependency(\.telemetry) private var telemetry
     @ObservationIgnored @FetchOne private var row: AppointmentPatientSelection?
 
     let appointmentID: Appointment.ID
-    private let statusUpdater: StatusUpdater?
 
     private(set) var errorMessage: String?
     private(set) var isUpdatingStatus = false
 
-    init(
-        appointmentID: Appointment.ID,
-        statusUpdater: StatusUpdater? = nil
-    ) {
+    init(appointmentID: Appointment.ID) {
         self.appointmentID = appointmentID
-        self.statusUpdater = statusUpdater
         _row = FetchOne(appointmentDetailsQuery(id: appointmentID))
     }
 
@@ -54,15 +49,7 @@ final class AppointmentDetailsModel {
         defer { isUpdatingStatus = false }
 
         do {
-            if let statusUpdater {
-                _ = try await statusUpdater(appointmentID, requestedStatus, now)
-            } else {
-                _ = try await database.updateAppointmentStatus(
-                    id: appointmentID,
-                    to: requestedStatus,
-                    at: now
-                )
-            }
+            _ = try await statusClient.updateStatus(appointmentID, requestedStatus, now)
             telemetry.event(
                 category: .appointment,
                 name: "appointment_status_updated",
@@ -118,11 +105,31 @@ final class AppointmentDetailsModel {
             errorMessage = "The appointment could not be updated."
         }
     }
+}
 
-    typealias StatusUpdater =
-        @MainActor @Sendable (
-            Appointment.ID,
-            Appointment.Status,
-            Date
+nonisolated struct AppointmentStatusClient: DependencyKey, Sendable {
+    var updateStatus:
+        @Sendable (
+            _ id: Appointment.ID,
+            _ requestedStatus: Appointment.Status,
+            _ updatedAt: Date
         ) async throws -> AppointmentStatusUpdateResult
+
+    static let liveValue = Self { id, requestedStatus, updatedAt in
+        @Dependency(\.defaultDatabase) var database
+        return try await database.updateAppointmentStatus(
+            id: id,
+            to: requestedStatus,
+            at: updatedAt
+        )
+    }
+
+    static let testValue = liveValue
+}
+
+extension DependencyValues {
+    nonisolated var appointmentStatusClient: AppointmentStatusClient {
+        get { self[AppointmentStatusClient.self] }
+        set { self[AppointmentStatusClient.self] = newValue }
+    }
 }

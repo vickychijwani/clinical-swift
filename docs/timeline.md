@@ -15,7 +15,7 @@ During a drag, scale changes and scrolling must keep the card under the finger.
 Breaks are display preferences. See [booking rules](appointment-booking.md) for
 overlaps and unavailable time.
 
-In narrow overlap columns, keep start times readable before patient names.
+In narrow overlap layouts, keep start times readable before patient names.
 
 ## Direct editing
 

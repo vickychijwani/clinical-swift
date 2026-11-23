@@ -5,16 +5,9 @@ struct ReviewLoopError: Error, CustomStringConvertible {
     let description: String
 }
 
-enum Harness: String, Codable, Equatable {
+enum Harness: String, Codable, Equatable, CaseIterable {
     case codex
     case antigravity
-
-    var other: Harness {
-        switch self {
-        case .codex: .antigravity
-        case .antigravity: .codex
-        }
-    }
 
     var botLogin: String {
         switch self {
@@ -24,22 +17,112 @@ enum Harness: String, Codable, Equatable {
     }
 }
 
+enum AgentModel: String, Codable, Equatable, Hashable, CaseIterable {
+    case sol
+    case neon
+    case hydrogen
+    case opus
+
+    var harness: Harness {
+        switch self {
+        case .sol: .codex
+        case .neon, .hydrogen, .opus: .antigravity
+        }
+    }
+
+    var cliModel: String {
+        switch self {
+        case .sol: "gpt-6.1-sol"
+        case .neon: "gemini-4-neon"
+        case .hydrogen: "gemini-4-hydrogen"
+        case .opus: "claude-opus-5-5"
+        }
+    }
+
+    var effort: String { "high" }
+
+    var displayName: String {
+        switch self {
+        case .sol: "GPT-6.1 Sol"
+        case .neon: "Gemini 4 Neon"
+        case .hydrogen: "Gemini 4 Hydrogen"
+        case .opus: "Claude Opus 5.5"
+        }
+    }
+
+    var botLogin: String { harness.botLogin }
+
+    var defaultReviewer: AgentModel {
+        switch self {
+        case .sol: .neon
+        case .neon, .hydrogen, .opus: .sol
+        }
+    }
+
+    var allReviewers: [AgentModel] {
+        switch self {
+        case .sol: [.neon, .opus]
+        case .neon, .hydrogen: [.sol, .opus]
+        case .opus: [.sol, .neon]
+        }
+    }
+
+    var profile: AgentProfile {
+        AgentProfile(
+            id: rawValue,
+            harness: harness,
+            botLogin: botLogin,
+            cliModel: cliModel,
+            effort: effort,
+            displayName: displayName
+        )
+    }
+
+    static func fromTranscriptModel(_ raw: String) -> AgentModel? {
+        let lower = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lower.hasPrefix("claude-opus") {
+            return .opus
+        }
+        if lower.hasPrefix("gemini-4-hydrogen") {
+            return .hydrogen
+        }
+        if lower.hasPrefix("gemini-4-neon") {
+            return .neon
+        }
+        if lower.hasPrefix("gpt-6.1-sol") {
+            return .sol
+        }
+        return nil
+    }
+}
+
+struct AgentProfile: Codable, Equatable {
+    let id: String
+    let harness: Harness
+    let botLogin: String
+    let cliModel: String
+    let effort: String
+    let displayName: String
+}
+
 enum LoopAction: String, Codable, Equatable {
     case review
     case address
-    case mention
+    case ask
 }
 
 struct TriggerPlan: Codable, Equatable {
     let action: LoopAction
     let prNumber: Int?
-    let reviewerOverride: Harness?
+    let reviewerOverride: [AgentModel]?
+    let reviewAll: Bool
+    let authorOverride: AgentModel?
     let dryRun: Bool
 }
 
-struct MentionPlan: Codable, Equatable {
+struct AskPlan: Codable, Equatable {
     let matched: Bool
-    let harness: Harness?
+    let modelOverride: AgentModel?
     let prNumber: Int?
     let instructions: String?
     let dryRun: Bool
@@ -55,15 +138,14 @@ struct WorktreeEntry: Equatable {
 enum WorktreeKind: Equatable {
     case codex
     case antigravity
-    case superEngineering
     case unknown
 }
 
 struct DiscoveryOutput: Codable, Equatable {
     let status: String
     let worktreePath: String?
-    let authorHarness: Harness?
-    let reviewerHarness: Harness?
+    let author: AgentProfile?
+    let reviewers: [AgentProfile]
     let notes: [String]
     let error: String?
 }
@@ -129,12 +211,38 @@ private func git(_ repoPath: String, _ arguments: [String]) throws -> String {
     return result.stdout
 }
 
-/// Parses `/review [codex|antigravity]` or `/address` PR comments and workflow_dispatch inputs.
+private func parseReviewerList(_ tokens: [String]) throws -> (
+    models: [AgentModel]?, reviewAll: Bool
+) {
+    if tokens.isEmpty {
+        return (nil, false)
+    }
+    if tokens.count == 1 && tokens[0] == "all" {
+        return (nil, true)
+    }
+    var seen = Set<AgentModel>()
+    var models: [AgentModel] = []
+    for token in tokens {
+        guard let model = AgentModel(rawValue: token) else {
+            throw ReviewLoopError(
+                description:
+                    "Invalid /review command. Use `/review`, `/review all`, or `/review <sol|neon|hydrogen|opus> [...]`."
+            )
+        }
+        if seen.insert(model).inserted {
+            models.append(model)
+        }
+    }
+    return (models, false)
+}
+
+/// Parses `/review [all | sol|neon|hydrogen|opus ...]` or `/address [sol|neon|hydrogen|opus]` PR comments and workflow_dispatch inputs.
 func parseTrigger(
     eventName: String,
     commentBody: String? = nil,
     dispatchAction: String? = nil,
     dispatchReviewer: String? = nil,
+    dispatchAuthor: String? = nil,
     dispatchPRNumber: String? = nil,
     dispatchDryRun: String? = nil
 ) throws -> TriggerPlan {
@@ -147,25 +255,41 @@ func parseTrigger(
         }
         switch command {
         case "/review":
+            let args = Array(tokens.dropFirst()).map { $0.lowercased() }
+            let (models, reviewAll) = try parseReviewerList(args)
+            return TriggerPlan(
+                action: .review,
+                prNumber: nil,
+                reviewerOverride: models,
+                reviewAll: reviewAll,
+                authorOverride: nil,
+                dryRun: false
+            )
+        case "/address":
             if tokens.count == 1 {
                 return TriggerPlan(
-                    action: .review, prNumber: nil, reviewerOverride: nil, dryRun: false)
+                    action: .address,
+                    prNumber: nil,
+                    reviewerOverride: nil,
+                    reviewAll: false,
+                    authorOverride: nil,
+                    dryRun: false
+                )
             }
-            guard tokens.count == 2, let harness = Harness(rawValue: tokens[1]) else {
+            guard tokens.count == 2, let model = AgentModel(rawValue: tokens[1].lowercased()) else {
                 throw ReviewLoopError(
                     description:
-                        "Invalid /review command. Use `/review`, `/review codex`, or `/review antigravity`."
+                        "Invalid /address command. Use `/address` or `/address <sol|neon|hydrogen|opus>`."
                 )
             }
             return TriggerPlan(
-                action: .review, prNumber: nil, reviewerOverride: harness, dryRun: false)
-        case "/address":
-            guard tokens.count == 1 else {
-                throw ReviewLoopError(
-                    description: "Invalid /address command. Use `/address` with no arguments.")
-            }
-            return TriggerPlan(
-                action: .address, prNumber: nil, reviewerOverride: nil, dryRun: false)
+                action: .address,
+                prNumber: nil,
+                reviewerOverride: nil,
+                reviewAll: false,
+                authorOverride: model,
+                dryRun: false
+            )
         default:
             throw ReviewLoopError(description: "Unsupported trigger command: \(command)")
         }
@@ -177,29 +301,61 @@ func parseTrigger(
             throw ReviewLoopError(description: "Invalid workflow_dispatch pr_number.")
         }
         guard let actionText = dispatchAction?.trimmingCharacters(in: .whitespacesAndNewlines),
-            let action = LoopAction(rawValue: actionText)
+            let action = LoopAction(rawValue: actionText),
+            action == .review || action == .address
         else {
             throw ReviewLoopError(
                 description: "Invalid workflow_dispatch action. Use `review` or `address`.")
         }
         let reviewerText = (dispatchReviewer ?? "auto").trimmingCharacters(
             in: .whitespacesAndNewlines)
-        let reviewerOverride: Harness?
+        let reviewerOverride: [AgentModel]?
+        let reviewAll: Bool
         if reviewerText.isEmpty || reviewerText == "auto" {
             reviewerOverride = nil
-        } else if let parsed = Harness(rawValue: reviewerText), action == .review {
-            reviewerOverride = parsed
+            reviewAll = false
+        } else if action == .review {
+            let tokens =
+                reviewerText
+                .split(whereSeparator: { $0.isWhitespace || $0 == "," })
+                .map { String($0).lowercased() }
+            do {
+                let parsed = try parseReviewerList(tokens)
+                reviewerOverride = parsed.models
+                reviewAll = parsed.reviewAll
+            } catch {
+                throw ReviewLoopError(
+                    description:
+                        "Invalid reviewer option '\(reviewerText)' for action '\(action.rawValue)'."
+                )
+            }
         } else {
             throw ReviewLoopError(
                 description:
                     "Invalid reviewer option '\(reviewerText)' for action '\(action.rawValue)'.")
         }
+
+        let authorText = (dispatchAuthor ?? "auto").trimmingCharacters(in: .whitespacesAndNewlines)
+        let authorOverride: AgentModel?
+        if authorText.isEmpty || authorText == "auto" {
+            authorOverride = nil
+        } else if let parsed = AgentModel(rawValue: authorText.lowercased()) {
+            authorOverride = parsed
+        } else {
+            throw ReviewLoopError(
+                description:
+                    "Invalid author option '\(authorText)'. Use `auto`, `sol`, `neon`, `hydrogen`, or `opus`."
+            )
+        }
+
         let dryRun =
             (dispatchDryRun ?? "false").trimmingCharacters(in: .whitespacesAndNewlines) == "true"
         return TriggerPlan(
             action: action,
             prNumber: prNumber,
             reviewerOverride: reviewerOverride,
+            reviewAll: reviewAll,
+            authorOverride: authorOverride,
             dryRun: dryRun
         )
 
@@ -208,234 +364,58 @@ func parseTrigger(
     }
 }
 
-private func isASCIIAlnum(_ ch: Character) -> Bool {
-    guard let scalar = ch.unicodeScalars.first, ch.unicodeScalars.count == 1 else { return false }
-    return (scalar.value >= 48 && scalar.value <= 57)
-        || (scalar.value >= 65 && scalar.value <= 90)
-        || (scalar.value >= 97 && scalar.value <= 122)
-}
-
-private func isMentionPrefixInvalid(_ ch: Character?) -> Bool {
-    guard let ch else { return false }
-    return isASCIIAlnum(ch) || ch == "." || ch == "_" || ch == "-" || ch == "+"
-}
-
-private func isMentionSuffixInvalid(_ ch: Character?) -> Bool {
-    guard let ch else { return false }
-    return isASCIIAlnum(ch) || ch == "_" || ch == "-" || ch == "["
-}
-
-private func scanBotMentions(in text: String) -> [(harness: Harness, range: Range<String.Index>)] {
-    let targets: [(handle: String, harness: Harness)] = [
-        ("@clinical-codex", .codex),
-        ("@clinical-antigravity", .antigravity),
-    ]
-    var matches: [(harness: Harness, range: Range<String.Index>)] = []
-    var index = text.startIndex
-
-    while index < text.endIndex {
-        if text[index] == "@" {
-            let beforeChar = index > text.startIndex ? text[text.index(before: index)] : nil
-            if !isMentionPrefixInvalid(beforeChar) {
-                var matched = false
-                for target in targets {
-                    guard
-                        let handleEnd = text.index(
-                            index, offsetBy: target.handle.count, limitedBy: text.endIndex)
-                    else { continue }
-                    if text[index..<handleEnd].lowercased() == target.handle {
-                        var tokenEnd = handleEnd
-                        if let botEnd = text.index(
-                            handleEnd, offsetBy: 5, limitedBy: text.endIndex),
-                            text[handleEnd..<botEnd].lowercased() == "[bot]"
-                        {
-                            tokenEnd = botEnd
-                        }
-                        let afterChar = tokenEnd < text.endIndex ? text[tokenEnd] : nil
-                        if !isMentionSuffixInvalid(afterChar) {
-                            matches.append((target.harness, index..<tokenEnd))
-                            index = tokenEnd
-                            matched = true
-                            break
-                        }
-                    }
-                }
-                if matched { continue }
-            }
-        }
-        index = text.index(after: index)
-    }
-    return matches
-}
-
-private func stripBlockquoteLines(from text: String) -> String {
-    text
-        .components(separatedBy: "\n")
-        .filter { line in
-            let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
-            return !trimmed.hasPrefix(">")
-        }
-        .joined(separator: "\n")
-}
-
-private func fencePrefix(in line: String) -> (char: Character, length: Int)? {
-    var spaces = 0
-    var idx = line.startIndex
-    while idx < line.endIndex && line[idx] == " " && spaces < 3 {
-        spaces += 1
-        idx = line.index(after: idx)
-    }
-    guard idx < line.endIndex else { return nil }
-    let ch = line[idx]
-    guard ch == "`" || ch == "~" else { return nil }
-    var length = 0
-    while idx < line.endIndex && line[idx] == ch {
-        length += 1
-        idx = line.index(after: idx)
-    }
-    guard length >= 3 else { return nil }
-    if ch == "`" && line[idx...].contains("`") {
-        return nil
-    }
-    return (ch, length)
-}
-
-private func isClosingFence(_ line: String, char: Character, minLength: Int) -> Bool {
-    var spaces = 0
-    var idx = line.startIndex
-    while idx < line.endIndex && line[idx] == " " && spaces < 3 {
-        spaces += 1
-        idx = line.index(after: idx)
-    }
-    var length = 0
-    while idx < line.endIndex && line[idx] == char {
-        length += 1
-        idx = line.index(after: idx)
-    }
-    guard length >= minLength else { return false }
-    return line[idx...].allSatisfy { $0 == " " || $0 == "\t" || $0 == "\r" }
-}
-
-private func stripInlineCodeSpans(from line: String) -> String {
-    var result = ""
-    var index = line.startIndex
-    while index < line.endIndex {
-        if line[index] == "`" {
-            var tickEnd = index
-            while tickEnd < line.endIndex && line[tickEnd] == "`" {
-                tickEnd = line.index(after: tickEnd)
-            }
-            let tickCount = line.distance(from: index, to: tickEnd)
-            var search = tickEnd
-            var foundCloseEnd: String.Index?
-            while search < line.endIndex {
-                if line[search] == "`" {
-                    var closeEnd = search
-                    while closeEnd < line.endIndex && line[closeEnd] == "`" {
-                        closeEnd = line.index(after: closeEnd)
-                    }
-                    if line.distance(from: search, to: closeEnd) == tickCount {
-                        foundCloseEnd = closeEnd
-                        break
-                    }
-                    search = closeEnd
-                } else {
-                    search = line.index(after: search)
-                }
-            }
-            if let closeEnd = foundCloseEnd {
-                index = closeEnd
-                continue
-            }
-            result.append(contentsOf: line[index..<tickEnd])
-            index = tickEnd
-            continue
-        }
-        result.append(line[index])
-        index = line.index(after: index)
-    }
-    return result
-}
-
-private func stripCodeAndQuotes(from text: String) -> String {
-    let lines = stripBlockquoteLines(from: text).components(separatedBy: "\n")
-    var output: [String] = []
-    var lineIndex = 0
-    while lineIndex < lines.count {
-        let line = lines[lineIndex]
-        if let fence = fencePrefix(in: line) {
-            var closeIndex = lineIndex + 1
-            var foundClose = false
-            while closeIndex < lines.count {
-                if isClosingFence(lines[closeIndex], char: fence.char, minLength: fence.length) {
-                    foundClose = true
-                    break
-                }
-                closeIndex += 1
-            }
-            if foundClose {
-                lineIndex = closeIndex + 1
-                continue
-            }
-        }
-        output.append(stripInlineCodeSpans(from: line))
-        lineIndex += 1
-    }
-    return output.joined(separator: "\n")
-}
-
-private func removeRanges(_ ranges: [Range<String.Index>], from text: String) -> String {
-    var result = text
-    for range in ranges.reversed() {
-        result.removeSubrange(range)
-    }
-    return result
-}
-
-/// Parses `@clinical-codex` or `@clinical-antigravity` PR comment mentions and workflow_dispatch inputs.
-func parseMention(
+/// Parses `/ask [sol|neon|hydrogen|opus] <instructions>` PR comments and workflow_dispatch inputs.
+func parseAsk(
     eventName: String,
     commentBody: String? = nil,
-    dispatchBot: String? = nil,
+    dispatchModel: String? = nil,
     dispatchInstructions: String? = nil,
     dispatchPRNumber: String? = nil,
     dispatchDryRun: String? = nil
-) throws -> MentionPlan {
+) throws -> AskPlan {
     switch eventName {
     case "issue_comment", "pull_request_review_comment", "pull_request_review":
         let raw = (commentBody ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else {
-            return MentionPlan(
-                matched: false, harness: nil, prNumber: nil, instructions: nil, dryRun: false)
+            return AskPlan(
+                matched: false, modelOverride: nil, prNumber: nil, instructions: nil, dryRun: false)
         }
 
-        let scanText = stripCodeAndQuotes(from: raw)
-        let matches = scanBotMentions(in: scanText)
-        let distinctHarnesses = Set(matches.map(\.harness))
-
-        guard !distinctHarnesses.isEmpty else {
-            return MentionPlan(
-                matched: false, harness: nil, prNumber: nil, instructions: nil, dryRun: false)
+        let firstTokenEnd = raw.firstIndex(where: \.isWhitespace) ?? raw.endIndex
+        guard raw[..<firstTokenEnd] == "/ask" else {
+            return AskPlan(
+                matched: false, modelOverride: nil, prNumber: nil, instructions: nil, dryRun: false)
         }
-        guard distinctHarnesses.count == 1, let harness = distinctHarnesses.first else {
-            throw ReviewLoopError(
-                description:
-                    "Both @clinical-codex and @clinical-antigravity were tagged in the same comment. Tag only one bot per comment."
+
+        let afterCommand = raw[firstTokenEnd...].drop(while: \.isWhitespace)
+        guard !afterCommand.isEmpty else {
+            throw ReviewLoopError(description: "Please include instructions after /ask.")
+        }
+
+        let nextTokenEnd = afterCommand.firstIndex(where: \.isWhitespace) ?? afterCommand.endIndex
+        let candidate = String(afterCommand[..<nextTokenEnd]).lowercased()
+        if let model = AgentModel(rawValue: candidate) {
+            let instructions = String(afterCommand[nextTokenEnd...].drop(while: \.isWhitespace))
+            guard !instructions.isEmpty else {
+                throw ReviewLoopError(
+                    description: "Please include instructions after /ask \(model.rawValue).")
+            }
+            return AskPlan(
+                matched: true,
+                modelOverride: model,
+                prNumber: nil,
+                instructions: instructions,
+                dryRun: false
             )
         }
 
-        let unquoted = stripBlockquoteLines(from: raw)
-        let unquotedMatches = scanBotMentions(in: unquoted)
-        let remaining = removeRanges(unquotedMatches.map(\.range), from: unquoted)
-            .trimmingCharacters(
-                in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ":,")))
-        guard !remaining.isEmpty else {
-            let tag = harness == .codex ? "@clinical-codex" : "@clinical-antigravity"
-            throw ReviewLoopError(description: "Please include instructions when tagging \(tag).")
-        }
-
-        return MentionPlan(
-            matched: true, harness: harness, prNumber: nil, instructions: raw, dryRun: false)
+        return AskPlan(
+            matched: true,
+            modelOverride: nil,
+            prNumber: nil,
+            instructions: String(afterCommand),
+            dryRun: false
+        )
 
     case "workflow_dispatch":
         guard let prText = dispatchPRNumber?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -443,11 +423,17 @@ func parseMention(
         else {
             throw ReviewLoopError(description: "Invalid workflow_dispatch pr_number.")
         }
-        guard let botText = dispatchBot?.trimmingCharacters(in: .whitespacesAndNewlines),
-            let harness = Harness(rawValue: botText)
-        else {
+        let modelText = (dispatchModel ?? "auto").trimmingCharacters(in: .whitespacesAndNewlines)
+        let modelOverride: AgentModel?
+        if modelText.isEmpty || modelText == "auto" {
+            modelOverride = nil
+        } else if let parsed = AgentModel(rawValue: modelText.lowercased()) {
+            modelOverride = parsed
+        } else {
             throw ReviewLoopError(
-                description: "Invalid workflow_dispatch bot. Use `codex` or `antigravity`.")
+                description:
+                    "Invalid workflow_dispatch model. Use `auto`, `sol`, `neon`, `hydrogen`, or `opus`."
+            )
         }
         let instructions = (dispatchInstructions ?? "").trimmingCharacters(
             in: .whitespacesAndNewlines)
@@ -457,9 +443,9 @@ func parseMention(
         }
         let dryRun =
             (dispatchDryRun ?? "false").trimmingCharacters(in: .whitespacesAndNewlines) == "true"
-        return MentionPlan(
+        return AskPlan(
             matched: true,
-            harness: harness,
+            modelOverride: modelOverride,
             prNumber: prNumber,
             instructions: instructions,
             dryRun: dryRun
@@ -509,7 +495,7 @@ func parseWorktreeList(_ output: String) -> [WorktreeEntry] {
     return entries
 }
 
-/// Classifies a worktree path against the three supported agent worktree layouts.
+/// Classifies a worktree path against the two supported agent worktree layouts.
 func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind {
     let normalizedHome = normalizePath(homeDirectory, resolveSymlinks: false)
     let normalizedPath = normalizePath(path, resolveSymlinks: false)
@@ -521,21 +507,17 @@ func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind
     // Expected layouts:
     // - .codex/worktrees/<id>/clinical-swift
     // - .gemini/antigravity/worktrees/clinical-swift/<name>
-    // - .super.engineering/worktrees/clinical-swift/<name>
+    // - .gemini/antigravity/worktrees/<conversation-id>/<name>
     if components.count == 4 && components[0] == ".codex" && components[1] == "worktrees"
         && components[3] == "clinical-swift"
     {
         return .codex
     }
     if components.count == 5 && components[0] == ".gemini" && components[1] == "antigravity"
-        && components[2] == "worktrees" && components[3] == "clinical-swift"
+        && components[2] == "worktrees"
+        && (components[3] == "clinical-swift" || UUID(uuidString: components[3]) != nil)
     {
         return .antigravity
-    }
-    if components.count == 4 && components[0] == ".super.engineering"
-        && components[1] == "worktrees" && components[2] == "clinical-swift"
-    {
-        return .superEngineering
     }
     return .unknown
 }
@@ -567,122 +549,164 @@ func locateWorktree(
     return detachedMatches.first
 }
 
-/// Reads the provider_key history for a super.engineering worktree, read-only.
-func querySuperEngineeringProviders(databasePath: String, worktreePaths: [String]) throws
-    -> [String]
+/// Reads matching Antigravity conversation IDs for a worktree path, newest first.
+func queryAntigravityConversations(databasePath: String, worktreePaths: [String]) throws -> [String]
 {
     guard FileManager.default.fileExists(atPath: databasePath) else {
-        throw ReviewLoopError(
-            description: "super.engineering database not found at \(databasePath).")
+        return []
     }
 
     var db: OpaquePointer?
     guard sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
         let detail = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "open failed"
         if let db { sqlite3_close(db) }
-        throw ReviewLoopError(description: "Cannot open super.engineering database: \(detail)")
+        throw ReviewLoopError(
+            description: "Cannot open Antigravity conversation database: \(detail)")
     }
     defer { sqlite3_close(db) }
+    sqlite3_busy_timeout(db, 2000)
 
-    let uniquePaths = Array(Set(worktreePaths))
-    let placeholders = uniquePaths.map { _ in "?" }.joined(separator: ", ")
+    let targetPaths = Set(
+        worktreePaths.flatMap {
+            [normalizePath($0, resolveSymlinks: false), normalizePath($0, resolveSymlinks: true)]
+        }
+    )
     let sql = """
-        SELECT provider_key
-        FROM conversations
-        WHERE json_extract(metadata, '$.worktree_path') IN (\(placeholders))
-        ORDER BY updated_at DESC, created_at DESC;
+        SELECT conversation_id, workspace_uris
+        FROM conversation_summaries
+        ORDER BY last_modified_time DESC;
         """
 
     var statement: OpaquePointer?
     guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
         let detail = String(cString: sqlite3_errmsg(db))
         throw ReviewLoopError(
-            description: "Cannot query super.engineering conversations: \(detail)")
+            description: "Cannot query Antigravity conversations: \(detail)")
     }
     defer { sqlite3_finalize(statement) }
 
-    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-    for (index, path) in uniquePaths.enumerated() {
-        sqlite3_bind_text(statement, Int32(index + 1), path, -1, transient)
-    }
-
-    var providers: [String] = []
+    var matches: [String] = []
     while true {
         let step = sqlite3_step(statement)
         if step == SQLITE_ROW {
-            if let cString = sqlite3_column_text(statement, 0) {
-                providers.append(String(cString: cString))
+            guard let idCString = sqlite3_column_text(statement, 0),
+                let urisCString = sqlite3_column_text(statement, 1)
+            else { continue }
+            let convID = String(cString: idCString)
+            let urisRaw = String(cString: urisCString)
+            guard let data = urisRaw.data(using: .utf8),
+                let uris = try? JSONDecoder().decode([String].self, from: data)
+            else { continue }
+            let matched = uris.contains { uri in
+                guard let url = URL(string: uri), url.isFileURL else { return false }
+                let rawPath = normalizePath(url.path, resolveSymlinks: false)
+                let resolvedPath = normalizePath(url.path, resolveSymlinks: true)
+                return targetPaths.contains(rawPath) || targetPaths.contains(resolvedPath)
+            }
+            if matched {
+                matches.append(convID)
             }
         } else if step == SQLITE_DONE {
             break
         } else {
             let detail = String(cString: sqlite3_errmsg(db))
             throw ReviewLoopError(
-                description: "Failed reading super.engineering conversations: \(detail)")
+                description: "Failed reading Antigravity conversations: \(detail)")
         }
     }
-    return providers
+    return matches
 }
 
-private func resolveAuthorHarness(
+/// Reads the latest recognized Antigravity model from a conversation transcript.
+func readLatestAntigravityModel(transcriptPath: String) -> AgentModel? {
+    struct TranscriptStep: Decodable {
+        let type: String?
+        let model: String?
+    }
+    guard let content = try? String(contentsOfFile: transcriptPath, encoding: .utf8) else {
+        return nil
+    }
+    let decoder = JSONDecoder()
+    for rawLine in content.split(whereSeparator: \.isNewline).reversed() {
+        guard let step = try? decoder.decode(TranscriptStep.self, from: Data(rawLine.utf8)),
+            step.type == "PLANNER_RESPONSE",
+            let modelText = step.model,
+            let model = AgentModel.fromTranscriptModel(modelText),
+            model.harness == .antigravity
+        else { continue }
+        return model
+    }
+    return nil
+}
+
+/// Detects whether an Antigravity worktree was authored by neon, hydrogen, or opus, falling back to neon.
+func detectAntigravityAuthorModel(
     worktreePath: String,
-    homeDirectory: String,
-    superDBPath: String
-) -> (harness: Harness?, notes: [String], reason: String?) {
-    switch classifyWorktreePath(worktreePath, homeDirectory: homeDirectory) {
-    case .codex:
-        return (.codex, [], nil)
-    case .antigravity:
-        return (.antigravity, [], nil)
-    case .superEngineering:
-        let candidates = [
-            normalizePath(worktreePath, resolveSymlinks: false),
-            normalizePath(worktreePath, resolveSymlinks: true),
-        ]
-        do {
-            let providers = try querySuperEngineeringProviders(
-                databasePath: superDBPath, worktreePaths: candidates)
-            guard let latest = providers.first else {
-                return (
-                    nil, [], "No super.engineering conversation found for worktree \(worktreePath)."
-                )
+    agyDirectory: String
+) -> (model: AgentModel, notes: [String]) {
+    let dbPath = normalizePath("\(agyDirectory)/conversation_summaries.db", resolveSymlinks: false)
+    let candidates = [
+        normalizePath(worktreePath, resolveSymlinks: false),
+        normalizePath(worktreePath, resolveSymlinks: true),
+    ]
+    do {
+        let conversationIDs = try queryAntigravityConversations(
+            databasePath: dbPath, worktreePaths: candidates)
+        for convID in conversationIDs.prefix(5) {
+            let transcriptPath =
+                "\(agyDirectory)/brain/\(convID)/.system_generated/logs/transcript.jsonl"
+            if let model = readLatestAntigravityModel(transcriptPath: transcriptPath) {
+                return (model, [])
             }
-            var notes: [String] = []
-            let distinct = Array(Set(providers)).sorted()
-            if distinct.count > 1 {
-                notes.append(
-                    "Multiple super.engineering providers found for \(worktreePath) (\(distinct.joined(separator: ", "))); using most recent: \(latest)."
-                )
-            }
-            guard latest == "codex" else {
-                return (
-                    nil,
-                    notes,
-                    "Unsupported super.engineering provider '\(latest)' for worktree \(worktreePath). Only Codex and Antigravity are supported."
-                )
-            }
-            return (.codex, notes, nil)
-        } catch {
-            return (nil, [], "\(error)")
         }
-    case .unknown:
         return (
-            nil,
-            [],
-            "Worktree path \(worktreePath) is outside Codex, Antigravity, and super.engineering roots."
+            .neon,
+            [
+                "No recognized Antigravity model found in local transcripts for \(worktreePath); defaulting to neon."
+            ]
+        )
+    } catch {
+        return (
+            .neon,
+            [
+                "Could not read Antigravity conversation history (\(error)); defaulting to neon."
+            ]
         )
     }
 }
 
-/// Discovers the original PR worktree and resolves reviewer and author harnesses.
+private func resolveAuthorModel(
+    worktreePath: String,
+    homeDirectory: String,
+    agyDirectory: String
+) -> (model: AgentModel?, notes: [String], reason: String?) {
+    switch classifyWorktreePath(worktreePath, homeDirectory: homeDirectory) {
+    case .codex:
+        return (.sol, [], nil)
+    case .antigravity:
+        let detected = detectAntigravityAuthorModel(
+            worktreePath: worktreePath, agyDirectory: agyDirectory)
+        return (detected.model, detected.notes, nil)
+    case .unknown:
+        return (
+            nil,
+            [],
+            "Worktree path \(worktreePath) is outside Codex and Antigravity roots."
+        )
+    }
+}
+
+/// Discovers the original PR worktree and resolves reviewer and author models.
 func discoverLoopContext(
     canonicalRepoPath: String,
     branch: String,
     headSHA: String,
     action: LoopAction,
-    reviewerOverride: Harness?,
-    targetHarness: Harness? = nil,
-    superDBPath: String,
+    reviewerOverride: [AgentModel]? = nil,
+    reviewAll: Bool = false,
+    authorOverride: AgentModel? = nil,
+    targetModel: AgentModel? = nil,
+    agyDirectory: String? = nil,
     homeDirectory: String,
     requireClean: Bool
 ) -> DiscoveryOutput {
@@ -691,6 +715,7 @@ func discoverLoopContext(
         let entries = parseWorktreeList(porcelain)
         // Resolve symlinks on homeDirectory if it exists so /var vs /private/var never mismatches git.
         let resolvedHome = normalizePath(homeDirectory, resolveSymlinks: true)
+        let resolvedAgyDir = agyDirectory ?? "\(resolvedHome)/.gemini/antigravity"
         let normalizedEntries = entries.map {
             WorktreeEntry(
                 path: normalizePath($0.path, resolveSymlinks: true),
@@ -708,19 +733,23 @@ func discoverLoopContext(
         )
 
         var notes: [String] = []
-        var detectedAuthor: Harness?
+        var detectedAuthor: AgentModel?
         var detectionFailure: String?
 
         if let worktree {
-            if action == .mention {
-                detectedAuthor = targetHarness
-            } else {
-                let result = resolveAuthorHarness(
+            let needsDetection =
+                switch action {
+                case .ask: targetModel == nil
+                case .address: authorOverride == nil
+                case .review: authorOverride == nil
+                }
+            if needsDetection {
+                let result = resolveAuthorModel(
                     worktreePath: worktree.path,
                     homeDirectory: resolvedHome,
-                    superDBPath: superDBPath
+                    agyDirectory: resolvedAgyDir
                 )
-                detectedAuthor = result.harness
+                detectedAuthor = result.model
                 notes.append(contentsOf: result.notes)
                 detectionFailure = result.reason
             }
@@ -729,54 +758,75 @@ func discoverLoopContext(
                 "No local worktree found for branch '\(branch)' or detached commit \(headSHA)."
         }
 
-        let reviewerHarness: Harness?
-        let authorHarness: Harness?
-        if action == .mention {
-            guard let targetHarness else {
-                return DiscoveryOutput(
-                    status: "error",
-                    worktreePath: worktree?.path,
-                    authorHarness: nil,
-                    reviewerHarness: nil,
-                    notes: notes,
-                    error: "Missing --harness for mention discovery."
-                )
-            }
+        let resolvedAuthor: AgentModel
+        let resolvedReviewers: [AgentModel]
+
+        switch action {
+        case .ask:
             guard worktree != nil else {
                 return DiscoveryOutput(
                     status: "error",
                     worktreePath: nil,
-                    authorHarness: targetHarness,
-                    reviewerHarness: nil,
+                    author: targetModel?.profile,
+                    reviewers: [],
                     notes: notes,
                     error: detectionFailure
                 )
             }
-            authorHarness = targetHarness
-            reviewerHarness = nil
-        } else if let reviewerOverride {
-            reviewerHarness = (action == .review) ? reviewerOverride : nil
-            if let detectedAuthor {
-                authorHarness = detectedAuthor
-            } else {
-                authorHarness = reviewerOverride.other
-                notes.append(
-                    "Author harness fallback '\(reviewerOverride.other.rawValue)' used from /review \(reviewerOverride.rawValue) override."
-                )
-            }
-        } else {
-            guard let detectedAuthor else {
+            guard let model = targetModel ?? detectedAuthor else {
                 return DiscoveryOutput(
                     status: "error",
                     worktreePath: worktree?.path,
-                    authorHarness: nil,
-                    reviewerHarness: nil,
+                    author: nil,
+                    reviewers: [],
                     notes: notes,
-                    error: detectionFailure ?? "Could not determine author harness."
+                    error: detectionFailure ?? "Could not determine model for /ask."
                 )
             }
-            authorHarness = detectedAuthor
-            reviewerHarness = (action == .review) ? detectedAuthor.other : nil
+            resolvedAuthor = model
+            resolvedReviewers = []
+
+        case .address:
+            guard let author = authorOverride ?? detectedAuthor else {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: worktree?.path,
+                    author: nil,
+                    reviewers: [],
+                    notes: notes,
+                    error: detectionFailure ?? "Could not determine author model."
+                )
+            }
+            resolvedAuthor = author
+            resolvedReviewers = []
+
+        case .review:
+            if let explicitAuthor = authorOverride ?? detectedAuthor {
+                resolvedAuthor = explicitAuthor
+            } else if let firstReviewer = reviewerOverride?.first, !reviewAll {
+                let fallback = firstReviewer.defaultReviewer
+                resolvedAuthor = fallback
+                notes.append(
+                    "Author model fallback '\(fallback.rawValue)' used from /review \(firstReviewer.rawValue) override."
+                )
+            } else {
+                return DiscoveryOutput(
+                    status: "error",
+                    worktreePath: worktree?.path,
+                    author: nil,
+                    reviewers: (reviewerOverride ?? []).map(\.profile),
+                    notes: notes,
+                    error: detectionFailure ?? "Could not determine author model."
+                )
+            }
+
+            if reviewAll {
+                resolvedReviewers = resolvedAuthor.allReviewers
+            } else if let reviewerOverride, !reviewerOverride.isEmpty {
+                resolvedReviewers = reviewerOverride
+            } else {
+                resolvedReviewers = [resolvedAuthor.defaultReviewer]
+            }
         }
 
         if requireClean {
@@ -784,8 +834,8 @@ func discoverLoopContext(
                 return DiscoveryOutput(
                     status: "error",
                     worktreePath: nil,
-                    authorHarness: authorHarness,
-                    reviewerHarness: reviewerHarness,
+                    author: resolvedAuthor.profile,
+                    reviewers: resolvedReviewers.map(\.profile),
                     notes: notes,
                     error:
                         "No local worktree found for branch '\(branch)' or detached commit \(headSHA)."
@@ -795,8 +845,8 @@ func discoverLoopContext(
                 return DiscoveryOutput(
                     status: "error",
                     worktreePath: worktree.path,
-                    authorHarness: authorHarness,
-                    reviewerHarness: reviewerHarness,
+                    author: resolvedAuthor.profile,
+                    reviewers: resolvedReviewers.map(\.profile),
                     notes: notes,
                     error: "Worktree directory does not exist: \(worktree.path)."
                 )
@@ -805,8 +855,8 @@ func discoverLoopContext(
                 return DiscoveryOutput(
                     status: "error",
                     worktreePath: worktree.path,
-                    authorHarness: authorHarness,
-                    reviewerHarness: reviewerHarness,
+                    author: resolvedAuthor.profile,
+                    reviewers: resolvedReviewers.map(\.profile),
                     notes: notes,
                     error:
                         "Worktree \(worktree.path) HEAD (\(worktree.head)) does not match PR head (\(headSHA))."
@@ -817,8 +867,8 @@ func discoverLoopContext(
                 return DiscoveryOutput(
                     status: "error",
                     worktreePath: worktree.path,
-                    authorHarness: authorHarness,
-                    reviewerHarness: reviewerHarness,
+                    author: resolvedAuthor.profile,
+                    reviewers: resolvedReviewers.map(\.profile),
                     notes: notes,
                     error: "Worktree \(worktree.path) has uncommitted changes."
                 )
@@ -828,8 +878,8 @@ func discoverLoopContext(
         return DiscoveryOutput(
             status: "ok",
             worktreePath: worktree?.path,
-            authorHarness: authorHarness,
-            reviewerHarness: reviewerHarness,
+            author: resolvedAuthor.profile,
+            reviewers: resolvedReviewers.map(\.profile),
             notes: notes,
             error: nil
         )
@@ -837,8 +887,8 @@ func discoverLoopContext(
         return DiscoveryOutput(
             status: "error",
             worktreePath: nil,
-            authorHarness: nil,
-            reviewerHarness: nil,
+            author: nil,
+            reviewers: [],
             notes: [],
             error: "\(error)"
         )
@@ -1114,7 +1164,9 @@ private func addCommentReaction(
     guard supportedReactions.contains(content) else {
         throw ReviewLoopError(description: "Unsupported reaction content: \(content)")
     }
-    guard let endpoint = commentReactionEndpoint(repo: repo, eventName: eventName, commentID: commentID)
+    guard
+        let endpoint = commentReactionEndpoint(
+            repo: repo, eventName: eventName, commentID: commentID)
     else {
         return
     }
@@ -1133,10 +1185,229 @@ private func addCommentReaction(
     }
 }
 
-enum MonitorPhaseKind: String, Codable, Equatable {
-    case review
-    case address
-    case bot
+struct GraphQLReviewActor: Codable, Equatable {
+    let typeName: String?
+    let login: String
+
+    enum CodingKeys: String, CodingKey {
+        case typeName = "__typename"
+        case login
+    }
+
+    /// Normalizes GraphQL Bot logins (which omit `[bot]`) to match REST bot logins.
+    var normalizedLogin: String {
+        let trimmed = login.trimmingCharacters(in: .whitespacesAndNewlines)
+        if typeName == "Bot", !trimmed.hasSuffix("[bot]") {
+            return "\(trimmed)[bot]"
+        }
+        return trimmed
+    }
+}
+
+struct GraphQLReviewComment: Codable, Equatable {
+    let author: GraphQLReviewActor?
+}
+
+struct GraphQLReviewThread: Equatable {
+    let isResolved: Bool
+    let comments: [GraphQLReviewComment]
+}
+
+struct GraphQLReviewThreadPage: Equatable {
+    let threads: [GraphQLReviewThread]
+    let hasNextPage: Bool
+    let endCursor: String?
+}
+
+private struct GraphQLReviewThreadsResponse: Decodable {
+    struct GraphQLErrorItem: Decodable {
+        let message: String
+    }
+
+    struct DataPayload: Decodable {
+        let repository: Repository?
+    }
+
+    struct Repository: Decodable {
+        let pullRequest: PullRequest?
+    }
+
+    struct PullRequest: Decodable {
+        let reviewThreads: ReviewThreadConnection
+    }
+
+    struct ReviewThreadConnection: Decodable {
+        let pageInfo: PageInfo
+        let nodes: [ReviewThreadNode?]?
+    }
+
+    struct PageInfo: Decodable {
+        let hasNextPage: Bool
+        let endCursor: String?
+    }
+
+    struct ReviewThreadNode: Decodable {
+        let isResolved: Bool
+        let comments: CommentConnection
+    }
+
+    struct CommentConnection: Decodable {
+        let nodes: [GraphQLReviewComment?]?
+    }
+
+    let data: DataPayload?
+    let errors: [GraphQLErrorItem]?
+}
+
+/// Decodes one page of GitHub GraphQL pullRequest.reviewThreads JSON.
+func parseReviewThreadPage(_ json: String) throws -> GraphQLReviewThreadPage {
+    let response: GraphQLReviewThreadsResponse
+    do {
+        response = try JSONDecoder().decode(
+            GraphQLReviewThreadsResponse.self, from: Data(json.utf8))
+    } catch {
+        throw ReviewLoopError(
+            description: "Failed decoding GitHub GraphQL reviewThreads response: \(error)")
+    }
+    if let errors = response.errors, !errors.isEmpty {
+        let messages = errors.map(\.message).joined(separator: "; ")
+        throw ReviewLoopError(description: "GitHub GraphQL error: \(messages)")
+    }
+    guard let connection = response.data?.repository?.pullRequest?.reviewThreads else {
+        throw ReviewLoopError(
+            description: "Pull request reviewThreads missing from GitHub GraphQL response.")
+    }
+    let threads = (connection.nodes ?? []).compactMap { node -> GraphQLReviewThread? in
+        guard let node else { return nil }
+        return GraphQLReviewThread(
+            isResolved: node.isResolved,
+            comments: (node.comments.nodes ?? []).compactMap { $0 }
+        )
+    }
+    return GraphQLReviewThreadPage(
+        threads: threads,
+        hasNextPage: connection.pageInfo.hasNextPage,
+        endCursor: connection.pageInfo.endCursor
+    )
+}
+
+/// Counts unresolved PR review threads with at least one comment from a trusted author.
+func countTrustedUnresolvedReviewThreads(
+    _ threads: [GraphQLReviewThread],
+    repositoryOwner: String
+) -> Int {
+    let trustedLogins = Set(
+        ([repositoryOwner] + Harness.allCases.map(\.botLogin)).map { $0.lowercased() }
+    )
+    return threads.filter { thread in
+        guard !thread.isResolved else { return false }
+        return thread.comments.contains { comment in
+            guard let actor = comment.author else { return false }
+            return trustedLogins.contains(actor.normalizedLogin.lowercased())
+        }
+    }.count
+}
+
+/// Paginates all PR review threads and counts trusted unresolved threads.
+func countUnresolvedReviewThreads(
+    repo: String,
+    prNumber: Int,
+    fetchPage: (_ owner: String, _ name: String, _ prNumber: Int, _ after: String?) throws -> String
+) throws -> Int {
+    guard prNumber > 0 else {
+        throw ReviewLoopError(description: "Invalid --pr-number value: \(prNumber)")
+    }
+    let parts = repo.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+    guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
+        throw ReviewLoopError(description: "Invalid --repo value '\(repo)'. Expected owner/name.")
+    }
+    let owner = parts[0]
+    let name = parts[1]
+
+    var allThreads: [GraphQLReviewThread] = []
+    var cursor: String?
+    var seenCursors = Set<String>()
+
+    while true {
+        let json = try fetchPage(owner, name, prNumber, cursor)
+        let page = try parseReviewThreadPage(json)
+        allThreads.append(contentsOf: page.threads)
+        guard page.hasNextPage else { break }
+        guard let nextCursor = page.endCursor, !nextCursor.isEmpty else {
+            throw ReviewLoopError(description: "Missing endCursor for next reviewThreads page.")
+        }
+        guard seenCursors.insert(nextCursor).inserted else {
+            throw ReviewLoopError(
+                description: "Repeated reviewThreads pagination cursor: \(nextCursor).")
+        }
+        cursor = nextCursor
+    }
+
+    return countTrustedUnresolvedReviewThreads(allThreads, repositoryOwner: owner)
+}
+
+private func fetchReviewThreadsPage(
+    owner: String,
+    name: String,
+    prNumber: Int,
+    after: String?
+) throws -> String {
+    let query = """
+        query($owner: String!, $name: String!, $number: Int!, $after: String) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              reviewThreads(first: 100, after: $after) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  isResolved
+                  comments(first: 100) {
+                    nodes {
+                      author {
+                        __typename
+                        login
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+    var arguments = [
+        "gh", "api", "graphql",
+        "-f", "query=\(query)",
+        "-f", "owner=\(owner)",
+        "-f", "name=\(name)",
+        "-F", "number=\(prNumber)",
+    ]
+    if let after {
+        arguments.append(contentsOf: ["-f", "after=\(after)"])
+    }
+    let result = try runProcess(arguments: arguments)
+    guard result.exitCode == 0 else {
+        let details = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw ReviewLoopError(
+            description:
+                "gh api graphql reviewThreads failed for \(owner)/\(name)#\(prNumber): \(details)"
+        )
+    }
+    return result.stdout
+}
+
+/// Validates monitor phase identifiers (`review-<model>`, `address`, or `ask`).
+func isValidMonitorPhase(_ raw: String) -> Bool {
+    if raw == "address" || raw == "ask" {
+        return true
+    }
+    if raw.hasPrefix("review-") {
+        let modelName = String(raw.dropFirst("review-".count))
+        return AgentModel(rawValue: modelName) != nil
+    }
+    return false
 }
 
 enum MonitorPhaseStatus: String, Codable, Equatable {
@@ -1158,7 +1429,7 @@ struct MonitorRunRecord: Codable, Equatable {
 }
 
 struct MonitorPhaseRecord: Codable, Equatable {
-    let phase: MonitorPhaseKind
+    let phase: String
     let harness: Harness?
     let botLogin: String?
     let model: String?
@@ -1197,7 +1468,7 @@ func recordMonitorState(
     monitorDirectory: String,
     runID: String,
     kind: String? = nil,
-    phase: MonitorPhaseKind? = nil,
+    phase: String? = nil,
     prNumber: Int? = nil,
     prBranch: String? = nil,
     prHeadSHA: String? = nil,
@@ -1245,7 +1516,10 @@ func recordMonitorState(
     try writeJSONAtomically(mergedRun, to: runURLFile)
 
     guard let phase else { return }
-    let phaseURLFile = runDir.appending(path: "\(phase.rawValue).json")
+    guard isValidMonitorPhase(phase) else {
+        throw ReviewLoopError(description: "Invalid --phase value: \(phase)")
+    }
+    let phaseURLFile = runDir.appending(path: "\(phase).json")
     let existingPhase: MonitorPhaseRecord?
     if let data = try? Data(contentsOf: phaseURLFile) {
         existingPhase = try? JSONDecoder().decode(MonitorPhaseRecord.self, from: data)
@@ -1303,7 +1577,7 @@ private func parseOptions(_ arguments: [String]) throws -> (
             throw ReviewLoopError(description: "Unexpected argument: \(arg)")
         }
         let key = String(arg.dropFirst(2))
-        if key == "require-clean" || key == "recreate-if-completed" {
+        if key == "require-clean" || key == "recreate-if-completed" || key == "review-all" {
             flags.insert(key)
             index += 1
         } else {
@@ -1332,12 +1606,43 @@ private func parseOptionalHarness(_ values: [String: String], flag: String) thro
     return harness
 }
 
+private func parseOptionalModel(_ values: [String: String], flag: String) throws -> AgentModel? {
+    guard let raw = values[flag], !raw.isEmpty else { return nil }
+    guard let model = AgentModel(rawValue: raw.lowercased()) else {
+        throw ReviewLoopError(description: "Invalid --\(flag) value: \(raw)")
+    }
+    return model
+}
+
+private func parseOptionalModelList(_ values: [String: String], flag: String) throws
+    -> [AgentModel]?
+{
+    guard let raw = values[flag], !raw.isEmpty else { return nil }
+    let tokens =
+        raw
+        .split(whereSeparator: { $0 == "," || $0.isWhitespace })
+        .map { String($0).lowercased() }
+        .filter { !$0.isEmpty }
+    guard !tokens.isEmpty else { return nil }
+    var seen = Set<AgentModel>()
+    var result: [AgentModel] = []
+    for token in tokens {
+        guard let model = AgentModel(rawValue: token) else {
+            throw ReviewLoopError(description: "Invalid --\(flag) value: \(token)")
+        }
+        if seen.insert(model).inserted {
+            result.append(model)
+        }
+    }
+    return result
+}
+
 private func runCLI() -> Int32 {
     let args = Array(CommandLine.arguments.dropFirst())
     guard let subcommand = args.first else {
         FileHandle.standardError.write(
             Data(
-                "Usage: agent_review_loop.swift <parse-trigger|parse-mention|discover|codex-skills-config|check-run|react|monitor-record> [options]\n"
+                "Usage: agent_review_loop.swift <parse-trigger|parse-ask|discover|codex-skills-config|check-run|react|unresolved-review-threads|monitor-record> [options]\n"
                     .utf8))
         return 2
     }
@@ -1356,20 +1661,21 @@ private func runCLI() -> Int32 {
                 commentBody: parsed.values["body"],
                 dispatchAction: parsed.values["action"],
                 dispatchReviewer: parsed.values["reviewer"],
+                dispatchAuthor: parsed.values["author"],
                 dispatchPRNumber: parsed.values["pr-number"],
                 dispatchDryRun: parsed.values["dry-run"]
             )
             print(try encodeJSON(plan))
             return 0
 
-        case "parse-mention":
+        case "parse-ask":
             guard let event = parsed.values["event"] else {
                 throw ReviewLoopError(description: "Missing --event")
             }
-            let plan = try parseMention(
+            let plan = try parseAsk(
                 eventName: event,
                 commentBody: parsed.values["body"],
-                dispatchBot: parsed.values["bot"],
+                dispatchModel: parsed.values["model"],
                 dispatchInstructions: parsed.values["instructions"],
                 dispatchPRNumber: parsed.values["pr-number"],
                 dispatchDryRun: parsed.values["dry-run"]
@@ -1388,19 +1694,20 @@ private func runCLI() -> Int32 {
                     description: "Missing required flags: --repo, --branch, --head-sha, --action"
                 )
             }
-            let reviewerOverride = try parseOptionalHarness(parsed.values, flag: "reviewer")
-            let targetHarness = try parseOptionalHarness(parsed.values, flag: "harness")
-            let superDB =
-                parsed.values["super-db"]
-                ?? "\(home)/.super.engineering/db/super.engineering.db"
+            let reviewerOverride = try parseOptionalModelList(parsed.values, flag: "reviewers")
+            let authorOverride = try parseOptionalModel(parsed.values, flag: "author")
+            let targetModel = try parseOptionalModel(parsed.values, flag: "model")
+            let agyDir = parsed.values["agy-dir"] ?? "\(home)/.gemini/antigravity"
             let result = discoverLoopContext(
                 canonicalRepoPath: repo,
                 branch: branch,
                 headSHA: headSHA,
                 action: action,
                 reviewerOverride: reviewerOverride,
-                targetHarness: targetHarness,
-                superDBPath: superDB,
+                reviewAll: parsed.flags.contains("review-all"),
+                authorOverride: authorOverride,
+                targetModel: targetModel,
+                agyDirectory: agyDir,
                 homeDirectory: home,
                 requireClean: parsed.flags.contains("require-clean")
             )
@@ -1461,6 +1768,23 @@ private func runCLI() -> Int32 {
             )
             return 0
 
+        case "unresolved-review-threads":
+            guard let repo = parsed.values["repo"], !repo.isEmpty,
+                let prText = parsed.values["pr-number"],
+                let prNumber = Int(prText), prNumber > 0
+            else {
+                throw ReviewLoopError(
+                    description: "Missing or invalid flags: --repo, --pr-number"
+                )
+            }
+            let count = try countUnresolvedReviewThreads(
+                repo: repo,
+                prNumber: prNumber,
+                fetchPage: fetchReviewThreadsPage
+            )
+            print(count)
+            return 0
+
         case "monitor-record":
             guard let runID = parsed.values["run-id"], !runID.isEmpty else {
                 throw ReviewLoopError(description: "Missing --run-id")
@@ -1469,12 +1793,12 @@ private func runCLI() -> Int32 {
                 parsed.values["monitor-dir"]
                 ?? ProcessInfo.processInfo.environment["AGENT_MONITOR_DIR"]
                 ?? "\(home)/.clinical-agent-monitor"
-            let phase: MonitorPhaseKind?
+            let phase: String?
             if let raw = parsed.values["phase"], !raw.isEmpty {
-                guard let parsedPhase = MonitorPhaseKind(rawValue: raw) else {
+                guard isValidMonitorPhase(raw) else {
                     throw ReviewLoopError(description: "Invalid --phase value: \(raw)")
                 }
-                phase = parsedPhase
+                phase = raw
             } else {
                 phase = nil
             }
@@ -1525,6 +1849,6 @@ private func runCLI() -> Int32 {
     }
 }
 
-#if !AGENT_REVIEW_LOOP_TESTS
-    exit(runCLI())
+#if !SCRIPT_TESTS
+    let _ = exit(runCLI())
 #endif

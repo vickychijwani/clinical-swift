@@ -68,10 +68,98 @@ struct TimelineOverlapRenderingTests {
         let inactive = try renderOverlapSeparation(isActive: false, tuning: shadowTuning)
 
         let centerPixel = (50 * 200 + 100) * 4
-        #expect(Array(shadowed[centerPixel..<centerPixel + 4]) == Array(flat[centerPixel..<centerPixel + 4]))
+        #expect(
+            Array(shadowed[centerPixel..<centerPixel + 4])
+                == Array(flat[centerPixel..<centerPixel + 4]))
         let outsideBelowPixel = (78 * 200 + 100) * 4
         #expect(shadowed[outsideBelowPixel] < flat[outsideBelowPixel])
         #expect(inactive == flat)
+    }
+
+    @Test func overflowingTextClipsAtCardBorderInsteadOfTrailingPadding() throws {
+        let cases: [(CGSize, ScheduleCardPresentation)] = [
+            (CGSize(width: 100, height: 45), ScheduleCardPresentation(layout: .stacked)),
+            (
+                CGSize(width: 100, height: 18),
+                ScheduleCardPresentation(layout: .horizontal, usesCompactTime: true)
+            ),
+        ]
+
+        for (size, presentation) in cases {
+            let overflowing = try renderCard(
+                item: appointment(
+                    id: UUID(), name: "Anjali Subramanian", startHour: 12, startMinute: 15,
+                    duration: 45),
+                size: size,
+                contentTrailingInset: 0,
+                presentation: presentation
+            )
+            let baseline = try renderCard(
+                item: appointment(
+                    id: UUID(), name: "A", startHour: 12, startMinute: 15, duration: 45),
+                size: size,
+                contentTrailingInset: 0,
+                presentation: presentation
+            )
+
+            // Inspect the trailing margin inside the 1 pt border that used to clip text 8 pt early.
+            let hasInkNearBorder = pixelsDiffer(
+                overflowing,
+                baseline,
+                pixelWidth: Int(ceil(size.width)) * 2,
+                xRange: (Int(size.width) - 6) * 2..<(Int(size.width) - 2) * 2,
+                yRange: 2 * 2..<(Int(size.height) - 2) * 2
+            )
+            #expect(hasInkNearBorder)
+        }
+    }
+
+    @Test func contentTrailingInsetFencesOverflowingTextBeforeFrontCard() throws {
+        let size = CGSize(width: 160, height: 45)
+        let trailingInset: CGFloat = 40
+        let presentation = ScheduleCardPresentation(layout: .stacked)
+
+        let fenced = try renderCard(
+            item: appointment(
+                id: UUID(), name: "Anjali Subramanian", startHour: 9, startMinute: 0, duration: 60),
+            size: size,
+            contentTrailingInset: trailingInset,
+            presentation: presentation
+        )
+        let baseline = try renderCard(
+            item: appointment(
+                id: UUID(), name: "A", startHour: 9, startMinute: 0, duration: 60),
+            size: size,
+            contentTrailingInset: trailingInset,
+            presentation: presentation
+        )
+
+        let leakedPastFence = pixelsDiffer(
+            fenced,
+            baseline,
+            pixelWidth: Int(ceil(size.width)) * 2,
+            xRange: Int(size.width - trailingInset + 1) * 2..<(Int(size.width) - 2) * 2,
+            yRange: 2 * 2..<(Int(size.height) - 2) * 2
+        )
+        #expect(!leakedPastFence)
+    }
+
+    private func pixelsDiffer(
+        _ lhs: [UInt8],
+        _ rhs: [UInt8],
+        pixelWidth: Int,
+        xRange: Range<Int>,
+        yRange: Range<Int>
+    ) -> Bool {
+        for y in yRange {
+            for x in xRange {
+                let index = (y * pixelWidth + x) * 4
+                if lhs[index..<index + 4] != rhs[index..<index + 4] {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private func renderOverlapSeparation(

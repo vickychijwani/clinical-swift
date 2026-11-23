@@ -41,7 +41,7 @@ struct ClippedTimeline<Content: View>: View {
             scale.yOffset(for: Bitehaus.closing)
             // Move Timeline up by 2x padding to align *bottom edge* of Timeline
             // to top of clipped timeline
-            + Timeline.metrics.verticalPadding * 2
+            + scale.metrics.verticalPadding * 2
             // Move it down by clipped height to align to bottom edge of clipped timeline
             - clippedHeight
     }

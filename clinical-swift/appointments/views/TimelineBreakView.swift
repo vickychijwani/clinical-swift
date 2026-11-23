@@ -24,7 +24,7 @@ struct TimelineBreakView: View {
         // Clip flush with the break bounds so stripes meet the 1 PM and 4 PM grid lines cleanly.
         .clipped()
         .position(
-            x: Timeline.metrics.contentLeadingInset + width / 2,
+            x: scale.metrics.contentLeadingInset + width / 2,
             y: scale.yOffset(for: Bitehaus.break.start) + scale.breakHeight / 2
         )
         .allowsHitTesting(false)
@@ -33,7 +33,7 @@ struct TimelineBreakView: View {
     }
 
     private var width: CGFloat {
-        Timeline.metrics.contentWidth(availableWidth: availableWidth)
+        scale.metrics.contentWidth(availableWidth: availableWidth)
     }
 
     private var timeRange: String {

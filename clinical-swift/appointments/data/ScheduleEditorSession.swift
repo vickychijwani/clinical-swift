@@ -276,6 +276,13 @@ final class ScheduleEditorSession: Identifiable {
         }
     }
 
+    func discard() {
+        guard !isWorking, !didFinish else { return }
+        adjustment.release()
+        didFinish = true
+        onFinished(.discarded(date: selectedDate))
+    }
+
     private func perform(
         deleting: Bool = false, operation: () async throws -> Completion
     ) async -> Bool {

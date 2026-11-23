@@ -3,26 +3,25 @@ name: Agent bot trigger
 on:
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
-  pull_request_review:
-    types: [submitted]
   workflow_dispatch:
     inputs:
       pr_number:
         description: Pull request number
         required: true
         type: string
-      bot:
-        description: Bot to run
+      model:
+        description: Model to run (auto uses the PR author model)
         required: true
-        default: codex
+        default: auto
         type: choice
         options:
-          - codex
-          - antigravity
+          - auto
+          - sol
+          - neon
+          - hydrogen
+          - opus
       instructions:
-        description: Instructions for the bot
+        description: Instructions for the agent
         required: true
         type: string
       dry_run:
@@ -38,36 +37,19 @@ permissions:
   checks: write
 
 env:
-  CODEX_AUTHOR_MODEL: gpt-6.1-sol
-  CODEX_AUTHOR_EFFORT: high
-  AGY_AUTHOR_MODEL: gemini-4-hydrogen
-  AGY_AUTHOR_EFFORT: high
   CANONICAL_REPO_PATH: /Users/vicky/code/clinical-swift
-  SUPER_ENGINEERING_DB: /Users/vicky/.super.engineering/db/super.engineering.db
   AGENT_MONITOR_DIR: /Users/vicky/.clinical-agent-monitor
 
 jobs:
   plan:
-    name: Plan bot run
+    name: Plan /ask run
     if: >-
       (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        github.event.comment.user.login == github.repository_owner &&
        github.actor == github.repository_owner &&
-       (contains(github.event.comment.body, '@clinical-codex') ||
-        contains(github.event.comment.body, '@clinical-antigravity'))) ||
-      (github.event_name == 'pull_request_review_comment' &&
-       github.event.comment.user.login == github.repository_owner &&
-       github.actor == github.repository_owner &&
-       (contains(github.event.comment.body, '@clinical-codex') ||
-        contains(github.event.comment.body, '@clinical-antigravity'))) ||
-      (github.event_name == 'pull_request_review' &&
-       github.event.review.user.login == github.repository_owner &&
-       github.actor == github.repository_owner &&
-       github.event.review.body != null &&
-       (contains(github.event.review.body, '@clinical-codex') ||
-        contains(github.event.review.body, '@clinical-antigravity')))
+       startsWith(github.event.comment.body, '/ask'))
     runs-on: clinical-agents
     timeout-minutes: 5
     outputs:
@@ -75,18 +57,14 @@ jobs:
       pr_number: ${{ steps.resolve.outputs.pr_number }}
       pr_branch: ${{ steps.resolve.outputs.pr_branch }}
       pr_head_sha: ${{ steps.resolve.outputs.pr_head_sha }}
-      bot_harness: ${{ steps.resolve.outputs.bot_harness }}
+      model_json: ${{ steps.resolve.outputs.model_json }}
+      model_harness: ${{ steps.resolve.outputs.model_harness }}
       instructions: ${{ steps.resolve.outputs.instructions }}
       worktree_path: ${{ steps.resolve.outputs.worktree_path }}
       dry_run: ${{ steps.resolve.outputs.dry_run }}
       check_run_id: ${{ steps.create-check.outputs.check_run_id }}
       trigger_event: ${{ steps.resolve.outputs.trigger_event }}
-      comment_id: ${{ steps.resolve.outputs.comment_id }}
-      in_reply_to_id: ${{ steps.resolve.outputs.in_reply_to_id }}
       comment_url: ${{ steps.resolve.outputs.comment_url }}
-      file_path: ${{ steps.resolve.outputs.file_path }}
-      diff_line: ${{ steps.resolve.outputs.diff_line }}
-      diff_hunk: ${{ steps.resolve.outputs.diff_hunk }}
     steps:
       - name: Add Homebrew tools to PATH
         run: |
@@ -98,21 +76,17 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Resolve bot mention, PR metadata, and worktree
+      - name: Resolve /ask command, PR metadata, and worktree
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
-          TRIGGER_AUTHOR: ${{ github.event.comment.user.login || github.event.review.user.login || github.actor }}
-          PR_NUMBER_EVENT: ${{ github.event.issue.number || github.event.pull_request.number || '' }}
-          COMMENT_BODY: ${{ github.event.comment.body || github.event.review.body || '' }}
-          COMMENT_ID: ${{ github.event.comment.id || github.event.review.id || '' }}
-          IN_REPLY_TO_ID: ${{ github.event.comment.in_reply_to_id || '' }}
-          COMMENT_URL: ${{ github.event.comment.html_url || github.event.review.html_url || '' }}
-          FILE_PATH: ${{ github.event.comment.path || '' }}
-          DIFF_LINE: ${{ github.event.comment.line || github.event.comment.original_line || '' }}
-          DIFF_HUNK: ${{ github.event.comment.diff_hunk || '' }}
-          DISPATCH_BOT: ${{ inputs.bot }}
+          TRIGGER_AUTHOR: ${{ github.event.comment.user.login || github.actor }}
+          PR_NUMBER_EVENT: ${{ github.event.issue.number || '' }}
+          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          COMMENT_ID: ${{ github.event.comment.id || '' }}
+          COMMENT_URL: ${{ github.event.comment.html_url || '' }}
+          DISPATCH_MODEL: ${{ inputs.model }}
           DISPATCH_INSTRUCTIONS: ${{ inputs.instructions }}
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
           DISPATCH_DRY_RUN: ${{ inputs.dry_run }}
@@ -138,33 +112,33 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           }
 
-          if ! mention_json=$(swift scripts/agent_review_loop.swift parse-mention \
+          if ! ask_json=$(swift scripts/agent_review_loop.swift parse-ask \
             --event "$EVENT_NAME" \
             --body "$COMMENT_BODY" \
-            --bot "$DISPATCH_BOT" \
+            --model "$DISPATCH_MODEL" \
             --instructions "$DISPATCH_INSTRUCTIONS" \
             --pr-number "$DISPATCH_PR_NUMBER" \
             --dry-run "$DISPATCH_DRY_RUN" 2>&1); then
-            echo "Mention parse failed: $mention_json" >&2
+            echo "/ask parse failed: $ask_json" >&2
             if [[ -n "$PR_NUMBER_EVENT" && "$DISPATCH_DRY_RUN" != "true" ]]; then
               gh pr comment "$PR_NUMBER_EVENT" --repo "$GITHUB_REPOSITORY" \
-                --body "Agent bot trigger stopped: $mention_json" || true
+                --body "Agent /ask stopped: $ask_json" || true
             fi
             exit 1
           fi
 
-          matched=$(jq -r '.matched' <<< "$mention_json")
+          matched=$(jq -r '.matched' <<< "$ask_json")
           if [[ "$matched" != "true" ]]; then
-            echo "No actionable bot tag found; ignoring comment."
+            echo "No actionable /ask command found; ignoring comment."
             echo "should_run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          bot_harness=$(jq -r '.harness' <<< "$mention_json")
-          instructions=$(jq -r '.instructions' <<< "$mention_json")
-          dry_run=$(jq -r '.dryRun' <<< "$mention_json")
+          model_override=$(jq -r '.modelOverride // ""' <<< "$ask_json")
+          instructions=$(jq -r '.instructions' <<< "$ask_json")
+          dry_run=$(jq -r '.dryRun' <<< "$ask_json")
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            pr_number=$(jq -r '.prNumber' <<< "$mention_json")
+            pr_number=$(jq -r '.prNumber' <<< "$ask_json")
           else
             pr_number="$PR_NUMBER_EVENT"
           fi
@@ -180,22 +154,34 @@ jobs:
             echo "$reason" >&2
             if [[ "$dry_run" != "true" ]]; then
               gh pr comment "$pr_number" --repo "$GITHUB_REPOSITORY" \
-                --body "Agent bot trigger stopped: $reason" || true
+                --body "Agent /ask stopped: $reason" || true
             fi
             exit 1
           fi
 
           # Check worktree existence early; --require-clean runs in the serialized `run` job.
+          discover_args=(
+            discover
+            --repo "$CANONICAL_REPO_PATH"
+            --branch "$pr_branch"
+            --head-sha "$pr_head_sha"
+            --action ask
+          )
+          if [[ -n "$model_override" ]]; then
+            discover_args+=(--model "$model_override")
+          fi
+
           set +e
-          discovery_json=$(swift scripts/agent_review_loop.swift discover \
-            --repo "$CANONICAL_REPO_PATH" \
-            --branch "$pr_branch" \
-            --head-sha "$pr_head_sha" \
-            --action mention \
-            --harness "$bot_harness" \
-            --super-db "$SUPER_ENGINEERING_DB")
+          discovery_json=$(swift scripts/agent_review_loop.swift "${discover_args[@]}")
           discover_status=$?
           set -e
+
+          jq -r '.notes[]?' <<< "$discovery_json" | while IFS= read -r note; do
+            echo "Note: $note"
+          done
+
+          model_json=$(jq -c '.author // {}' <<< "$discovery_json")
+          model_harness=$(jq -r '.author.harness // ""' <<< "$discovery_json")
 
           if [[ $discover_status -ne 0 ]]; then
             reason=$(jq -r '.error // "Worktree discovery failed."' <<< "$discovery_json")
@@ -205,7 +191,8 @@ jobs:
               echo "pr_number=$pr_number"
               echo "pr_branch=$pr_branch"
               echo "pr_head_sha=$pr_head_sha"
-              echo "bot_harness=$bot_harness"
+              echo "model_json=$model_json"
+              echo "model_harness=$model_harness"
               echo "dry_run=$dry_run"
               echo "trigger_event=$EVENT_NAME"
               echo "comment_id=$COMMENT_ID"
@@ -221,24 +208,22 @@ jobs:
             echo "pr_number=$pr_number"
             echo "pr_branch=$pr_branch"
             echo "pr_head_sha=$pr_head_sha"
-            echo "bot_harness=$bot_harness"
+            echo "model_json=$model_json"
+            echo "model_harness=$model_harness"
             echo "worktree_path=$worktree_path"
             echo "dry_run=$dry_run"
             echo "trigger_event=$EVENT_NAME"
             echo "comment_id=$COMMENT_ID"
-            echo "in_reply_to_id=$IN_REPLY_TO_ID"
             echo "comment_url=$COMMENT_URL"
-            echo "file_path=$FILE_PATH"
-            echo "diff_line=$DIFF_LINE"
           } >> "$GITHUB_OUTPUT"
           write_multiline_output "instructions" "$instructions"
-          write_multiline_output "diff_hunk" "$DIFF_HUNK"
 
-          echo "Planned PR #$pr_number ($EVENT_NAME): bot=$bot_harness, worktree=$worktree_path, dry_run=$dry_run"
+          model_id=$(jq -r '.id // "none"' <<< "$model_json")
+          echo "Planned PR #$pr_number ($EVENT_NAME): model=$model_id, worktree=$worktree_path, dry_run=$dry_run"
 
       - name: Create Codex bot App token
         id: codex-token
-        if: (steps.resolve.outputs.should_run == 'true' || steps.resolve.outputs.discover_failed == 'true') && steps.resolve.outputs.dry_run != 'true' && steps.resolve.outputs.bot_harness == 'codex'
+        if: (steps.resolve.outputs.should_run == 'true' || steps.resolve.outputs.discover_failed == 'true') && steps.resolve.outputs.dry_run != 'true' && steps.resolve.outputs.model_harness == 'codex'
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.CLINICAL_CODEX_APP_ID || secrets.CLINICAL_CODEX_APP_ID }}
@@ -246,13 +231,13 @@ jobs:
 
       - name: Create Antigravity bot App token
         id: agy-token
-        if: (steps.resolve.outputs.should_run == 'true' || steps.resolve.outputs.discover_failed == 'true') && steps.resolve.outputs.dry_run != 'true' && steps.resolve.outputs.bot_harness == 'antigravity'
+        if: (steps.resolve.outputs.should_run == 'true' || steps.resolve.outputs.discover_failed == 'true') && steps.resolve.outputs.dry_run != 'true' && steps.resolve.outputs.model_harness == 'antigravity'
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.CLINICAL_ANTIGRAVITY_APP_ID || secrets.CLINICAL_ANTIGRAVITY_APP_ID }}
           private-key: ${{ secrets.CLINICAL_ANTIGRAVITY_PRIVATE_KEY }}
 
-      - name: Create queued bot check and monitor record
+      - name: Create queued check and monitor record
         id: create-check
         if: steps.resolve.outputs.should_run == 'true' || steps.resolve.outputs.discover_failed == 'true'
         env:
@@ -263,16 +248,26 @@ jobs:
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
           PR_BRANCH: ${{ steps.resolve.outputs.pr_branch }}
           PR_HEAD_SHA: ${{ steps.resolve.outputs.pr_head_sha }}
-          BOT_HARNESS: ${{ steps.resolve.outputs.bot_harness }}
+          MODEL_JSON: ${{ steps.resolve.outputs.model_json }}
           DRY_RUN: ${{ steps.resolve.outputs.dry_run }}
           TRIGGER_EVENT: ${{ steps.resolve.outputs.trigger_event }}
           COMMENT_ID: ${{ steps.resolve.outputs.comment_id }}
         run: |
           set -euo pipefail
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          model_id=$(jq -r '.id // ""' <<< "$MODEL_JSON")
+          model_harness=$(jq -r '.harness // ""' <<< "$MODEL_JSON")
+          model_bot=$(jq -r '.botLogin // ""' <<< "$MODEL_JSON")
+          model_cli=$(jq -r '.cliModel // ""' <<< "$MODEL_JSON")
+          model_effort=$(jq -r '.effort // ""' <<< "$MODEL_JSON")
+          model_display=$(jq -r '.displayName // ""' <<< "$MODEL_JSON")
+          check_name="${model_id:+ask ($model_id)}"
+          check_name="${check_name:-ask}"
+          effective_token="${BOT_TOKEN:-$GH_TOKEN}"
+
           if [[ "$DRY_RUN" != "true" ]]; then
             # Prefer reacting as the bot App; fall back to github.token if the App lacks Issues write.
-            if ! GH_TOKEN="$BOT_TOKEN" swift scripts/agent_review_loop.swift react \
+            if ! GH_TOKEN="$effective_token" swift scripts/agent_review_loop.swift react \
               --repo "$GITHUB_REPOSITORY" \
               --event "$TRIGGER_EVENT" \
               --comment-id "$COMMENT_ID" \
@@ -284,6 +279,7 @@ jobs:
                 --content eyes >/dev/null || true
             fi
           fi
+
           create_check_run() {
             local name="$1" status="$2" title="$3" summary="$4" conclusion="${5:-}"
             local args=(
@@ -301,15 +297,15 @@ jobs:
               args+=(--conclusion "$conclusion")
             fi
             # Use the bot App token so GitHub creates a dedicated check suite for the bot.
-            GH_TOKEN="$BOT_TOKEN" "${args[@]}" || true
+            GH_TOKEN="$effective_token" "${args[@]}" || true
           }
 
           if [[ "$DISCOVER_FAILED" == "true" ]]; then
             echo "Discovery failed: $DISCOVER_ERROR" >&2
             if [[ "$DRY_RUN" != "true" ]]; then
-              create_check_run "bot ($BOT_HARNESS)" "completed" "Stopped" "$DISCOVER_ERROR" "failure" >/dev/null
+              create_check_run "$check_name" "completed" "Stopped" "$DISCOVER_ERROR" "failure" >/dev/null
               gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-                --body "Agent bot trigger stopped: $DISCOVER_ERROR" || true
+                --body "Agent /ask stopped: $DISCOVER_ERROR" || true
             fi
             exit 1
           fi
@@ -317,26 +313,29 @@ jobs:
           check_run_id=""
           if [[ "$DRY_RUN" != "true" ]]; then
             check_run_id=$(create_check_run \
-              "bot ($BOT_HARNESS)" \
+              "$check_name" \
               "queued" \
-              "Queued ($BOT_HARNESS)" \
-              "Waiting for clinical-agents runner to run $BOT_HARNESS on PR #$PR_NUMBER.")
+              "Queued ($model_display)" \
+              "Waiting for clinical-agents runner to run $model_display ($model_effort) on PR #$PR_NUMBER.")
             swift scripts/agent_review_loop.swift monitor-record \
               --run-id "$GITHUB_RUN_ID" \
-              --kind "bot-trigger" \
-              --phase bot \
+              --kind "ask" \
+              --phase ask \
               --pr-number "$PR_NUMBER" \
               --pr-branch "$PR_BRANCH" \
               --head-sha "$PR_HEAD_SHA" \
               --repo "$GITHUB_REPOSITORY" \
               --run-url "$run_url" \
-              --harness "$BOT_HARNESS" \
+              --harness "$model_harness" \
+              --bot-login "$model_bot" \
+              --model "$model_cli" \
+              --effort "$model_effort" \
               --status queued >/dev/null || true
           fi
           echo "check_run_id=$check_run_id" >> "$GITHUB_OUTPUT"
 
   run:
-    name: Run bot
+    name: Run /ask agent
     needs: plan
     if: needs.plan.outputs.should_run == 'true'
     # Serialize per PR with agent-review-loop so two agents never edit the same worktree together.
@@ -358,7 +357,7 @@ jobs:
 
       - name: Create Codex bot App token
         id: codex-token
-        if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.bot_harness == 'codex'
+        if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.model_harness == 'codex'
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.CLINICAL_CODEX_APP_ID || secrets.CLINICAL_CODEX_APP_ID }}
@@ -366,7 +365,7 @@ jobs:
 
       - name: Create Antigravity bot App token
         id: agy-token
-        if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.bot_harness == 'antigravity'
+        if: needs.plan.outputs.dry_run != 'true' && needs.plan.outputs.model_harness == 'antigravity'
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.CLINICAL_ANTIGRAVITY_APP_ID || secrets.CLINICAL_ANTIGRAVITY_APP_ID }}
@@ -380,7 +379,7 @@ jobs:
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
           PR_BRANCH: ${{ needs.plan.outputs.pr_branch }}
           PLANNED_HEAD_SHA: ${{ needs.plan.outputs.pr_head_sha }}
-          BOT_HARNESS: ${{ needs.plan.outputs.bot_harness }}
+          MODEL_JSON: ${{ needs.plan.outputs.model_json }}
           CHECK_RUN_ID: ${{ needs.plan.outputs.check_run_id }}
           DRY_RUN: ${{ needs.plan.outputs.dry_run }}
         run: |
@@ -389,6 +388,9 @@ jobs:
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           check_run_id="$CHECK_RUN_ID"
           pr_head_sha="$PLANNED_HEAD_SHA"
+          model_id=$(jq -r '.id' <<< "$MODEL_JSON")
+          model_display=$(jq -r '.displayName' <<< "$MODEL_JSON")
+          model_effort=$(jq -r '.effort' <<< "$MODEL_JSON")
 
           pr_json=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --json state,headRefName,headRefOid)
@@ -397,7 +399,7 @@ jobs:
           live_head_sha=$(jq -r '.headRefOid' <<< "$pr_json")
 
           if [[ "$pr_state" != "OPEN" ]]; then
-            reason="PR #$PR_NUMBER is $pr_state (expected OPEN); skipping bot run."
+            reason="PR #$PR_NUMBER is $pr_state (expected OPEN); skipping /ask run."
             echo "$reason"
             if [[ "$DRY_RUN" != "true" && -n "$check_run_id" ]]; then
               GH_TOKEN="$BOT_TOKEN" swift "$script" check-run \
@@ -405,14 +407,14 @@ jobs:
                 --check-run-id "$check_run_id" \
                 --status completed \
                 --conclusion skipped \
-                --title "Skipped ($BOT_HARNESS)" \
+                --title "Skipped ($model_display)" \
                 --summary "$reason" \
                 --details-url "$run_url" >/dev/null || true
             fi
             if [[ "$DRY_RUN" != "true" ]]; then
               swift "$script" monitor-record \
                 --run-id "$GITHUB_RUN_ID" \
-                --phase bot \
+                --phase ask \
                 --status completed \
                 --conclusion skipped >/dev/null || true
             fi
@@ -437,19 +439,19 @@ jobs:
                   --check-run-id "$check_run_id" \
                   --status completed \
                   --conclusion skipped \
-                  --title "Superseded ($BOT_HARNESS)" \
+                  --title "Superseded ($model_display)" \
                   --summary "Superseded by newer commit $live_head_sha before run started." \
                   --details-url "$run_url" >/dev/null || true
               fi
               check_run_id=$(GH_TOKEN="$BOT_TOKEN" swift "$script" check-run \
                 --repo "$GITHUB_REPOSITORY" \
-                --name "bot ($BOT_HARNESS)" \
+                --name "ask ($model_id)" \
                 --head-sha "$live_head_sha" \
                 --status queued \
-                --title "Queued ($BOT_HARNESS)" \
-                --summary "Waiting for clinical-agents runner to run $BOT_HARNESS on PR #$PR_NUMBER." \
+                --title "Queued ($model_display)" \
+                --summary "Waiting for clinical-agents runner to run $model_display ($model_effort) on PR #$PR_NUMBER." \
                 --details-url "$run_url" \
-                --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-bot-$BOT_HARNESS" || true)
+                --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ask-$model_id" || true)
             fi
           fi
 
@@ -458,9 +460,8 @@ jobs:
             --repo "$CANONICAL_REPO_PATH" \
             --branch "$pr_branch" \
             --head-sha "$pr_head_sha" \
-            --action mention \
-            --harness "$BOT_HARNESS" \
-            --super-db "$SUPER_ENGINEERING_DB" \
+            --action ask \
+            --model "$model_id" \
             --require-clean)
           status=$?
           set -e
@@ -475,15 +476,15 @@ jobs:
                   --check-run-id "$check_run_id" \
                   --status completed \
                   --conclusion failure \
-                  --title "Stopped ($BOT_HARNESS)" \
+                  --title "Stopped ($model_display)" \
                   --summary "$reason" \
                   --details-url "$run_url" >/dev/null || true
               fi
               gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-                --body "Agent bot trigger stopped: $reason" || true
+                --body "Agent /ask stopped: $reason" || true
               swift "$script" monitor-record \
                 --run-id "$GITHUB_RUN_ID" \
-                --phase bot \
+                --phase ask \
                 --status completed \
                 --conclusion failure >/dev/null || true
             fi
@@ -501,7 +502,7 @@ jobs:
             echo "check_run_id=$check_run_id"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Mark bot check in progress
+      - name: Mark check in progress
         id: mark-in-progress
         if: steps.verify.outputs.skipped != 'true' && needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.check_run_id != ''
         env:
@@ -509,64 +510,55 @@ jobs:
           CHECK_RUN_ID: ${{ steps.verify.outputs.check_run_id }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
           PR_HEAD_SHA: ${{ steps.verify.outputs.pr_head_sha || needs.plan.outputs.pr_head_sha }}
-          BOT_HARNESS: ${{ needs.plan.outputs.bot_harness }}
+          MODEL_JSON: ${{ needs.plan.outputs.model_json }}
         run: |
+          model_id=$(jq -r '.id' <<< "$MODEL_JSON")
+          model_display=$(jq -r '.displayName' <<< "$MODEL_JSON")
+          model_effort=$(jq -r '.effort' <<< "$MODEL_JSON")
           effective_id=$(swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
             --repo "$GITHUB_REPOSITORY" \
             --check-run-id "$CHECK_RUN_ID" \
-            --name "bot ($BOT_HARNESS)" \
+            --name "ask ($model_id)" \
             --head-sha "$PR_HEAD_SHA" \
             --status in_progress \
             --recreate-if-completed \
-            --title "Running ($BOT_HARNESS)" \
-            --summary "Running $BOT_HARNESS on PR #$PR_NUMBER." \
+            --title "Running ($model_display)" \
+            --summary "Running $model_display ($model_effort) on PR #$PR_NUMBER." \
             --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-bot-$BOT_HARNESS" || true)
+            --external-id "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ask-$model_id" || true)
           echo "check_run_id=${effective_id:-$CHECK_RUN_ID}" >> "$GITHUB_OUTPUT"
 
-      - name: Run bot agent
+      - name: Run agent
         if: steps.verify.outputs.skipped != 'true'
         env:
           GH_TOKEN: ${{ steps.codex-token.outputs.token || steps.agy-token.outputs.token }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
           PR_BRANCH: ${{ steps.verify.outputs.pr_branch }}
           WORKTREE_PATH: ${{ steps.verify.outputs.worktree_path }}
-          BOT_HARNESS: ${{ needs.plan.outputs.bot_harness }}
+          MODEL_JSON: ${{ needs.plan.outputs.model_json }}
           DRY_RUN: ${{ needs.plan.outputs.dry_run }}
           TRIGGER_EVENT: ${{ needs.plan.outputs.trigger_event }}
-          COMMENT_ID: ${{ needs.plan.outputs.comment_id }}
-          IN_REPLY_TO_ID: ${{ needs.plan.outputs.in_reply_to_id }}
           COMMENT_URL: ${{ needs.plan.outputs.comment_url }}
-          FILE_PATH: ${{ needs.plan.outputs.file_path }}
-          DIFF_LINE: ${{ needs.plan.outputs.diff_line }}
-          DIFF_HUNK: ${{ needs.plan.outputs.diff_hunk }}
           INSTRUCTIONS: ${{ needs.plan.outputs.instructions }}
         run: |
           set -euo pipefail
           worktree_dir=$(cd "$WORKTREE_PATH" && pwd -P)
-          if [[ "$BOT_HARNESS" == "codex" ]]; then
-            bot_login="clinical-codex[bot]"
-          else
-            bot_login="clinical-antigravity[bot]"
-          fi
+          model_id=$(jq -r '.id' <<< "$MODEL_JSON")
+          model_harness=$(jq -r '.harness' <<< "$MODEL_JSON")
+          bot_login=$(jq -r '.botLogin' <<< "$MODEL_JSON")
+          model_cli=$(jq -r '.cliModel' <<< "$MODEL_JSON")
+          model_effort=$(jq -r '.effort' <<< "$MODEL_JSON")
+          model_display=$(jq -r '.displayName' <<< "$MODEL_JSON")
+          footer="<sub>$model_display · $model_effort</sub>"
 
           trigger_context="Trigger event: $TRIGGER_EVENT"
           if [[ -n "$COMMENT_URL" ]]; then
             trigger_context="$trigger_context"$'\n'"Trigger URL: $COMMENT_URL"
           fi
-          if [[ "$TRIGGER_EVENT" == "pull_request_review_comment" ]]; then
-            root_comment_id="${IN_REPLY_TO_ID:-$COMMENT_ID}"
-            trigger_context="$trigger_context"$'\n'"Inline review comment context:"$'\n'"- File: $FILE_PATH"$'\n'"- Line: ${DIFF_LINE:-unknown}"$'\n'"- Thread root comment ID (for in_reply_to): $root_comment_id"
-            if [[ -n "$DIFF_HUNK" ]]; then
-              trigger_context="$trigger_context"$'\n'"- Diff hunk:"$'\n'"$DIFF_HUNK"
-            fi
-            reply_instruction="Reply directly in that inline review thread as $bot_login using \`gh api repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/comments -f body=\"...\" -F in_reply_to=$root_comment_id\` (falling back to \`gh pr comment\` only if the thread reply fails), summarizing what you did or answering the question."
-          else
-            reply_instruction="Post one concise reply comment on PR #$PR_NUMBER as $bot_login using \`gh pr comment $PR_NUMBER --repo $GITHUB_REPOSITORY --body \"...\"\`, summarizing what you did or answering the question."
-          fi
+          reply_instruction="Post one concise reply comment on PR #$PR_NUMBER as $bot_login using \`gh pr comment $PR_NUMBER --repo $GITHUB_REPOSITORY --body \"...\"\`, summarizing what you did or answering the question. End your reply with a blank line and the footer \`$footer\`."
 
-          prompt="You were tagged by $GITHUB_REPOSITORY_OWNER on PR #$PR_NUMBER in $GITHUB_REPOSITORY.
-          Your assigned GitHub App identity is $bot_login.
+          prompt="You were asked by $GITHUB_REPOSITORY_OWNER on PR #$PR_NUMBER in $GITHUB_REPOSITORY.
+          Your assigned GitHub App identity is $bot_login ($model_display · $model_effort).
 
           ## Environment and safety
           - You are running as a new session in the PR's existing local worktree on branch $PR_BRANCH.
@@ -586,13 +578,13 @@ jobs:
           3. Commit and push to PR branch $PR_BRANCH if you made any changes.
           4. $reply_instruction"
 
-          if [[ "$BOT_HARNESS" == "codex" ]]; then
+          if [[ "$model_harness" == "codex" ]]; then
             cmd=(
               codex exec --ignore-user-config --dangerously-bypass-hook-trust --json
               -C "$worktree_dir"
               -c "projects={\"$worktree_dir\"={trust_level=\"trusted\"}}"
-              -m "$CODEX_AUTHOR_MODEL"
-              -c "model_reasoning_effort=$CODEX_AUTHOR_EFFORT"
+              -m "$model_cli"
+              -c "model_reasoning_effort=$model_effort"
               -c 'sandbox_mode="danger-full-access"'
               -c 'web_search="live"'
               --disable apps
@@ -603,14 +595,15 @@ jobs:
             )
           else
             cmd=(
-              agy --model "$AGY_AUTHOR_MODEL" --effort "$AGY_AUTHOR_EFFORT"
+              agy --model "$model_cli" --effort "$model_effort"
               --output-format stream-json -p "$prompt"
             )
           fi
 
           if [[ "$DRY_RUN" == "true" ]]; then
-            echo "=== DRY RUN: bot trigger ==="
-            echo "Harness:  $BOT_HARNESS ($bot_login)"
+            echo "=== DRY RUN: /ask ==="
+            echo "Model:    $model_id ($model_display · $model_effort)"
+            echo "Harness:  $model_harness ($bot_login)"
             echo "Worktree: $worktree_dir"
             echo "Prompt:"
             printf '%s\n' "$prompt"
@@ -620,22 +613,15 @@ jobs:
             exit 0
           fi
 
-          if [[ "$BOT_HARNESS" == "codex" ]]; then
-            bot_model="$CODEX_AUTHOR_MODEL"
-            bot_effort="$CODEX_AUTHOR_EFFORT"
-          else
-            bot_model="$AGY_AUTHOR_MODEL"
-            bot_effort="$AGY_AUTHOR_EFFORT"
-          fi
-          stream_file="$AGENT_MONITOR_DIR/runs/$GITHUB_RUN_ID/bot.jsonl"
+          stream_file="$AGENT_MONITOR_DIR/runs/$GITHUB_RUN_ID/ask.jsonl"
           mkdir -p "$(dirname "$stream_file")"
           swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" monitor-record \
             --run-id "$GITHUB_RUN_ID" \
-            --phase bot \
-            --harness "$BOT_HARNESS" \
+            --phase ask \
+            --harness "$model_harness" \
             --bot-login "$bot_login" \
-            --model "$bot_model" \
-            --effort "$bot_effort" \
+            --model "$model_cli" \
+            --effort "$model_effort" \
             --worktree "$worktree_dir" \
             --prompt "$prompt" \
             --stream-file "$stream_file" \
@@ -644,7 +630,7 @@ jobs:
           cd "$worktree_dir"
           "${cmd[@]}" 2>&1 | tee "$stream_file"
 
-      - name: Complete bot check
+      - name: Complete check
         if: always() && needs.plan.outputs.dry_run != 'true' && steps.verify.outputs.check_run_completed != 'true' && (steps.mark-in-progress.outputs.check_run_id || steps.verify.outputs.check_run_id || needs.plan.outputs.check_run_id) != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -652,13 +638,14 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
           CHECK_RUN_ID: ${{ steps.mark-in-progress.outputs.check_run_id || steps.verify.outputs.check_run_id || needs.plan.outputs.check_run_id }}
-          BOT_HARNESS: ${{ needs.plan.outputs.bot_harness }}
+          MODEL_JSON: ${{ needs.plan.outputs.model_json }}
         run: |
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          model_display=$(jq -r '.displayName' <<< "$MODEL_JSON")
           case "$JOB_STATUS" in
-            success) conclusion="success"; title="Completed ($BOT_HARNESS)" ;;
-            cancelled) conclusion="cancelled"; title="Cancelled ($BOT_HARNESS)" ;;
-            *) conclusion="failure"; title="Failed ($BOT_HARNESS)" ;;
+            success) conclusion="success"; title="Completed ($model_display)" ;;
+            cancelled) conclusion="cancelled"; title="Cancelled ($model_display)" ;;
+            *) conclusion="failure"; title="Failed ($model_display)" ;;
           esac
 
           GH_TOKEN="$BOT_TOKEN" swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
@@ -667,16 +654,16 @@ jobs:
             --status completed \
             --conclusion "$conclusion" \
             --title "$title" \
-            --summary "Bot $BOT_HARNESS finished with status $JOB_STATUS on PR #$PR_NUMBER." \
+            --summary "Agent $model_display finished with status $JOB_STATUS on PR #$PR_NUMBER." \
             --details-url "$run_url" >/dev/null || true
 
           swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" monitor-record \
             --run-id "$GITHUB_RUN_ID" \
-            --phase bot \
+            --phase ask \
             --status completed \
             --conclusion "$conclusion" >/dev/null || true
 
           if [[ "$JOB_STATUS" == "failure" ]]; then
             gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-              --body "Agent bot trigger failed ($BOT_HARNESS): see $run_url" || true
+              --body "Agent /ask failed ($model_display): see $run_url" || true
           fi

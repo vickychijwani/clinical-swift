@@ -40,15 +40,14 @@ struct ScheduleView: View {
                     today: clinicToday,
                     items: visibleItems(for: date),
                     itemInteractionsEnabled: !hasEditor,
+                    selectedAppointmentID: selectedAppointmentID,
                     scrollPosition: scrollPositionBinding(for: date),
-                    onSelectItem: selectItem,
-                    onSelectDraft: { editorSession?.isShowingSheet = true },
                     allowsAdjustment: editorSession.map {
                         $0.allowsDateSelection && !$0.isShowingSheet
                     }
                         ?? !hasEditor,
                     editorSession: editorSession,
-                    isWorking: editorSession?.isWorking == true,
+                    onSelectItem: selectItem,
                     onBeginHold: {
                         editor.beginHold(
                             on: $0,
@@ -59,23 +58,7 @@ struct ScheduleView: View {
                             detailsForAppointment: { scheduleModel.details(for: $0) },
                             onFinished: finishEditor
                         )
-                    },
-                    onHoldRelease: { released in
-                        if editorSession?.allowsTypeSelection == true {
-                            editorSession?.releaseBooking(released)
-                        }
-                    },
-                    onCancel: { editorSession?.adjustment.release() },
-                    onDiscard: {
-                        if let editorSession {
-                            finishEditor(
-                                editorSession.id,
-                                completion: .discarded(date: router.selectedScheduleDate)
-                            )
-                        }
-                    },
-                    onDone: { await editorSession?.save() },
-                    onDelete: editorSession?.canDelete == true ? deleteEditor : nil
+                    }
                 )
             }
             .accessibilityIdentifier("schedule-day-pager")
@@ -210,6 +193,25 @@ struct ScheduleView: View {
         TimelineScale(items: visibleItems(for: date))
     }
 
+    private var selectedAppointmentID: Appointment.ID? {
+        Self.selectedAppointmentID(for: router, hasEditor: editorSession != nil)
+    }
+
+    static func selectedAppointmentID(for router: Router, hasEditor: Bool) -> Appointment.ID? {
+        guard router.selectedTab == .schedule,
+            !hasEditor,
+            let presentation = router.detailsPresentation
+        else { return nil }
+        switch presentation.currentRoute {
+        case .appointment(let id):
+            return id
+        case .appointmentCompletion(let visitID):
+            return presentation.completionDrafts[visitID]?.appointmentID
+        case .patient:
+            return nil
+        }
+    }
+
     private var visibleAppointmentDetailsID: Appointment.ID? {
         guard
             let presentation = router.detailsPresentation,
@@ -235,10 +237,6 @@ struct ScheduleView: View {
         case .unavailableTime(let block):
             router.requestUnavailableTimeEdit(block)
         }
-    }
-
-    private func deleteEditor() async {
-        await editorSession?.delete()
     }
 
     private func finishEditor(_ requestID: UUID, completion: ScheduleEditorSession.Completion) {

@@ -213,27 +213,28 @@ func stopResult(_ root: URL) throws -> [String: String] {
     ]
 }
 
+private struct HookEvent: Decodable {
+    let cwd: String?
+    enum CodingKeys: String, CodingKey { case cwd }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        cwd = container.contains(.cwd) ? try container.decode(String.self, forKey: .cwd) : nil
+    }
+}
+
 func runHook() -> Int32 {
     let args = Array(CommandLine.arguments.dropFirst())
     let isReview = args.first == "--review"
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = .sortedKeys
     do {
         if isReview && (args.count != 2 || normalized(args[1]).isEmpty) {
             throw CheckError(description: "Supply a non-blank review reason after --review.")
         }
         let input = isReview ? Data() : FileHandle.standardInput.readDataToEndOfFile()
-        let event: [String: Any]
-        if input.isEmpty {
-            event = [:]
-        } else if let object = try JSONSerialization.jsonObject(with: input) as? [String: Any] {
-            event = object
-        } else {
-            throw CheckError(description: "The hook event must be a JSON object.")
-        }
-        if let cwd = event["cwd"], !(cwd is String) {
-            throw CheckError(description: "The hook working directory must be a string.")
-        }
-        let cwd = URL(
-            fileURLWithPath: event["cwd"] as? String ?? FileManager.default.currentDirectoryPath)
+        let eventCWD =
+            input.isEmpty ? nil : try JSONDecoder().decode(HookEvent.self, from: input).cwd
+        let cwd = URL(fileURLWithPath: eventCWD ?? FileManager.default.currentDirectoryPath)
         let rootPath = try git(cwd, ["rev-parse", "--show-toplevel"]).text.trimmingCharacters(
             in: .whitespacesAndNewlines)
         let root = URL(fileURLWithPath: rootPath)
@@ -244,11 +245,7 @@ func runHook() -> Int32 {
             try JSONEncoder().encode(record).write(to: reviewPath(root), options: .atomic)
             print("Recorded review for \(result.missing.count) comment(s).")
         } else {
-            let result = try stopResult(root)
-            print(
-                String(
-                    decoding: try JSONSerialization.data(
-                        withJSONObject: result, options: .sortedKeys), as: UTF8.self))
+            print(String(decoding: try encoder.encode(try stopResult(root)), as: UTF8.self))
         }
         return 0
     } catch {
@@ -259,7 +256,7 @@ func runHook() -> Int32 {
         let output = [
             "decision": "block", "reason": "Comment check failed. Fix and rerun it: \(error)",
         ]
-        if let data = try? JSONSerialization.data(withJSONObject: output) {
+        if let data = try? encoder.encode(output) {
             print(String(decoding: data, as: UTF8.self))
         }
         return 0

@@ -9,6 +9,6 @@ cross-process rules.
 
 All dates, times, and formatted text in the app and widget use the Gregorian
 calendar in `Asia/Kolkata` with the `en_IN` locale (`ClinicDate`), regardless of
-device settings. Storage and backup timestamps remain UTC ISO-8601. The
-[ClinicDate checker](../scripts/check_clinic_date.swift) rejects device calendar,
-locale, and time-zone defaults in production sources.
+device settings. Storage, backup, and telemetry timestamps remain UTC ISO-8601.
+The [ClinicDate checker](../scripts/check_clinic_date.swift) rejects device
+calendar, locale, and time-zone defaults in production sources.

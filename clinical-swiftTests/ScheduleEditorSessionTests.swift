@@ -1211,10 +1211,16 @@ struct ScheduleEditorSessionTests {
             #expect(router.toast.current == nil)
 
             // Discard edits.
-            #expect(
-                failedSession.finish(
-                    using: router, completion: .discarded(date: date)))
+            failedSession.discard()
+            #expect(failedSession.didFinish)
+            #expect(router.activePresentation == nil)
             #expect(router.toast.current == nil)
+            // A second discard must be ignored once finished.
+            router.requestScheduleCreation()
+            let nextID = try #require(router.activePresentation?.id)
+            failedSession.discard()
+            #expect(router.activePresentation?.id == nextID)
+            router.finishScheduleEditor(nextID, date: date)
 
             // Stale/superseded session finish.
             router.requestScheduleCreation()

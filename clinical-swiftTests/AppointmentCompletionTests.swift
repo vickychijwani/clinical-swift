@@ -9,29 +9,16 @@ import Testing
 
 @MainActor
 struct AppointmentCompletionTests {
-    @Test func parsesExactWholeRupeeValues() {
-        for (text, expected) in [
-            ("", 0), ("0", 0), ("000", 0), ("500", 500), ("1,000", 1000),
-            ("10,000", 10000), ("1,00,000", 100000), (" ₹ 1,00,000 \n", 100000),
-            (String(Int.max), Int.max),
-        ] {
-            #expect(CompletionAmount.parse(text) == expected)
-        }
-    }
     @Test(arguments: [
         "-500", "500.50", "+500", "abc", "₹", "1,0000", "100,000", "1,,000", "1,00",
     ])
     func rejectsInvalidAmounts(_ text: String) {
-        #expect(CompletionAmount.parse(text) == nil)
         let model = makeModel()
         model.setAmountText(text)
+        #expect(model.amount == nil)
         #expect(!model.canSave)
         #expect(model.buttonTitle == "Complete Appointment")
         #expect(model.buttonSymbol == "checkmark.circle")
-    }
-
-    @Test func overflowingAmountsDoNotParse() {
-        #expect(CompletionAmount.parse(String(Int.max) + "0") == nil)
     }
 
     @Test func sixDigitLimitIgnoresExtraDigitsWithoutAnError() {

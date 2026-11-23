@@ -65,7 +65,7 @@ final class PaymentEntryModel {
 
     var canAdd: Bool {
         guard !isSaving else { return false }
-        guard let amount = CompletionAmount.parse(amountText), amount > 0 else { return false }
+        guard let amount = RupeeAmount.parse(amountText), amount > 0 else { return false }
         return kind == .patient ? patient != nil : note.nilIfBlank != nil
     }
 
@@ -108,7 +108,7 @@ final class PaymentEntryModel {
     func dismissError() { errorMessage = nil }
 
     func save() async -> Bool {
-        guard canAdd, let amount = CompletionAmount.parse(amountText) else { return false }
+        guard canAdd, let amount = RupeeAmount.parse(amountText) else { return false }
         finishNote()
         let details: AccountEntry.Details
         switch kind {

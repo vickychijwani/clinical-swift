@@ -33,14 +33,14 @@ Swift and SwiftUI guides:
 
 App-specific guides:
 
-- Package and widget boundaries, with a link to the policy: `docs/architecture.md`.
+- Package and widget boundaries, dependency checks, and clinic date/locale rules: `docs/architecture.md`
 - Persistence boundaries, shared database access, and future CloudKit sync: `docs/persistence.md`
 - Assisted patient-data recovery procedure and limits: `docs/patient-data-restore.md`
 - Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`
 - Appointment booking validation and scheduling principles: `docs/appointment-booking.md`
 - Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
-- Patients list grouping, search, and unknown-patient principles: `docs/patients.md`
-- Test structure, dependency overrides, and async database access: `docs/testing.md`
+- Unknown-patient rules, Indian phone matching, and contact search: `docs/patients.md`
+- Test boundaries, dependency overrides, Linux setup, and local CI runner: `docs/testing.md`
 - WidgetKit, App Group reads, timeline refresh, and date capacity: `docs/widgets.md`
 - App-level presentation ownership, details navigation, and interruption policy: `docs/routing.md`
 - One-way EventKit appointment and unavailable-time sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
@@ -80,12 +80,13 @@ Plans, implemented specs, and validation reports are historical context, not cur
 - Add code comments and documentation comments as needed. Use short, direct sentences and familiar words. Explain the concrete reason or result, not actions already clear from the code.
 - When changing or moving code, preserve existing comments that still apply and move them with the code. Update comments when behavior, names, or test references change. Remove a comment only when its purpose no longer applies or an equivalent comment replaces it. Before finishing, check deleted comments in the diff so that design decisions and regression explanations are not lost.
 - The repository Stop hook checks for missing or rewritten Swift comments. Resolve each finding before recording a review; do not record a review only to pass the hook. See `.codex/hooks/README.md` for the check and review commands.
-- Use Swift for scripts, not Python (except one-liners / tiny scripts in Makefile).
+- Use Swift for scripts, not Python (except one-liners / tiny scripts in Makefile). Keep scripts short and direct: decode known JSON shapes with `Codable`, avoid pass-through models and trivial wrappers, and use top-level `async`/`await` with `URLSession` for HTTP requests instead of semaphore callbacks or `curl`.
 
 ## Test execution
 
 - Use Makefile targets for local builds and test runs. Do not invoke `xcodebuild` directly. Use documented Makefile options; if a needed option is missing, add it first. Direct `xcodebuild` builds or test runs require an explicit user request.
 - For simulator runs, pass a unique `SIMULATOR_NAME` per task to `make` (creates or reuses that simulator) and use `make sim-id SIMULATOR_NAME="..."` to get its UDID for `simctl` and `xcodebuildmcp` so parallel agents do not collide.
+- Do not run `xcrun simctl openurl`, `xcrun simctl launch`, or `xcrun simctl ui` directly (a repository PreToolUse hook blocks them). Use `make run`, `make build-and-run`, `make appearance`, or `make screenshot` with `LAUNCH_ARGS`, `APPEARANCE`, and `OUT` instead.
 - Use relevant test filters during development.
 - Broaden validation after focused tests pass only when the change can affect other areas, or when release rules require it. A small review fix does not automatically require a full suite.
 - Keep full test output and result bundles locally. Read concise results and relevant failure diagnostics first. Expand log context only when needed to diagnose a failure.

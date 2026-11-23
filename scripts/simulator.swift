@@ -1,14 +1,14 @@
 import Foundation
 
-private struct SimulatorScriptError: Error, CustomStringConvertible {
+struct SimulatorScriptError: Error, CustomStringConvertible {
     let description: String
 }
 
-private struct DeviceList: Decodable {
+struct DeviceList: Decodable {
     let devices: [String: [SimDevice]]
 }
 
-private struct SimDevice: Decodable, Equatable {
+struct SimDevice: Decodable, Equatable {
     let udid: String
     let name: String
     let state: String?
@@ -18,11 +18,11 @@ private struct SimDevice: Decodable, Equatable {
     var isBooted: Bool { state == "Booted" }
 }
 
-private struct RuntimeList: Decodable {
+struct RuntimeList: Decodable {
     let runtimes: [SimRuntime]
 }
 
-private struct SimRuntime: Decodable, Equatable {
+struct SimRuntime: Decodable, Equatable {
     let identifier: String
     let version: String
     let isAvailable: Bool?
@@ -31,12 +31,12 @@ private struct SimRuntime: Decodable, Equatable {
     var available: Bool { isAvailable ?? true }
 }
 
-private struct SimDeviceType: Decodable, Equatable {
+struct SimDeviceType: Decodable, Equatable {
     let name: String
     let identifier: String
 }
 
-private struct SimulatorRequest {
+struct SimulatorRequest {
     let simulator: String
     let osVersion: String
     let name: String
@@ -44,7 +44,7 @@ private struct SimulatorRequest {
     let destination: String
 }
 
-private enum SimulatorMode: String {
+enum SimulatorMode: String {
     case resolve
     case ensure
 }
@@ -64,7 +64,8 @@ private func destinationFields(_ destination: String) -> [String: String] {
     for part in destination.split(separator: ",") {
         guard let separator = part.firstIndex(of: "=") else { continue }
         let key = part[..<separator].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let value = part[part.index(after: separator)...].trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = part[part.index(after: separator)...].trimmingCharacters(
+            in: .whitespacesAndNewlines)
         result[key] = value
     }
     return result
@@ -74,7 +75,7 @@ private func runtimeSuffix(for osVersion: String) -> String {
     ".iOS-" + osVersion.replacing(".", with: "-")
 }
 
-private func resolveSimulator(
+func resolveSimulator(
     request: SimulatorRequest,
     mode: SimulatorMode,
     deviceList: DeviceList,
@@ -88,28 +89,34 @@ private func resolveSimulator(
     let destination = request.destination.trimmingCharacters(in: .whitespacesAndNewlines)
 
     if !explicitID.isEmpty && !name.isEmpty {
-        throw SimulatorScriptError(description: "Pass either SIMULATOR_ID or SIMULATOR_NAME, not both.")
+        throw SimulatorScriptError(
+            description: "Pass either SIMULATOR_ID or SIMULATOR_NAME, not both.")
     }
 
     // Reject CI simulators before lookup or creation so local runs never touch CI data.
     if isCISimulatorName(simulator) {
         throw SimulatorScriptError(
-            description: "Refusing to use simulator \"\(simulator)\": CI simulators are reserved for CI.")
+            description:
+                "Refusing to use simulator \"\(simulator)\": CI simulators are reserved for CI.")
     }
     if isCISimulatorName(name) {
         throw SimulatorScriptError(
-            description: "Refusing to use simulator \"\(name)\": CI simulators are reserved for CI.")
+            description: "Refusing to use simulator \"\(name)\": CI simulators are reserved for CI."
+        )
     }
     if isCISimulatorName(explicitID) {
         throw SimulatorScriptError(
-            description: "Refusing to use simulator \"\(explicitID)\": CI simulators are reserved for CI.")
+            description:
+                "Refusing to use simulator \"\(explicitID)\": CI simulators are reserved for CI.")
     }
 
     let fields = destinationFields(destination)
     for key in ["name", "id"] {
         if let value = fields[key], isCISimulatorName(value) {
             throw SimulatorScriptError(
-                description: "Refusing to use destination \"\(destination)\": CI simulators are reserved for CI.")
+                description:
+                    "Refusing to use destination \"\(destination)\": CI simulators are reserved for CI."
+            )
         }
     }
 
@@ -149,7 +156,8 @@ private func resolveSimulator(
             return targetMatches[0].device.udid
         }
         if targetMatches.count > 1 {
-            let listing = targetMatches.map { "  - \($0.device.name) (\($0.device.udid))" }.joined(separator: "\n")
+            let listing = targetMatches.map { "  - \($0.device.name) (\($0.device.udid))" }.joined(
+                separator: "\n")
             throw SimulatorScriptError(
                 description:
                     "Multiple simulators are named \"\(name)\" on iOS \(osVersion):\n\(listing)\nPass SIMULATOR_ID=\"<udid>\"."
@@ -161,7 +169,8 @@ private func resolveSimulator(
             return anyMatches[0].device.udid
         }
         if anyMatches.count > 1 {
-            let listing = anyMatches.map { "  - \($0.device.name) (\($0.device.udid))" }.joined(separator: "\n")
+            let listing = anyMatches.map { "  - \($0.device.name) (\($0.device.udid))" }.joined(
+                separator: "\n")
             throw SimulatorScriptError(
                 description:
                     "Multiple simulators are named \"\(name)\":\n\(listing)\nPass SIMULATOR_ID=\"<udid>\"."
@@ -181,11 +190,14 @@ private func resolveSimulator(
             })
         else {
             throw SimulatorScriptError(
-                description: "iOS \(osVersion) runtime is unavailable. Pass SIMULATOR_OS=<version>.")
+                description: "iOS \(osVersion) runtime is unavailable. Pass SIMULATOR_OS=<version>."
+            )
         }
 
         guard
-            let deviceType = (runtime.supportedDeviceTypes ?? []).first(where: { $0.name == simulator })
+            let deviceType = (runtime.supportedDeviceTypes ?? []).first(where: {
+                $0.name == simulator
+            })
         else {
             throw SimulatorScriptError(
                 description:
@@ -196,14 +208,16 @@ private func resolveSimulator(
         let createdID = try createDevice(name, deviceType.identifier, runtime.identifier)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !createdID.isEmpty else {
-            throw SimulatorScriptError(description: "xcrun simctl create did not return a simulator UDID.")
+            throw SimulatorScriptError(
+                description: "xcrun simctl create did not return a simulator UDID.")
         }
         return createdID
     }
 
     let running = iosDevices.filter { $0.device.isBooted }
     if running.count > 1 {
-        let listing = running
+        let listing =
+            running
             .sorted { ($0.device.name, $0.device.udid) < ($1.device.name, $1.device.udid) }
             .map { "  - \($0.device.name) (\($0.device.udid))" }
             .joined(separator: "\n")
@@ -250,9 +264,11 @@ private func runSimctl(_ arguments: [String]) throws -> Data {
     stderrGroup.wait()
     process.waitUntilExit()
     guard process.terminationStatus == 0 else {
-        let message = String(decoding: errorData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = String(decoding: errorData, as: UTF8.self).trimmingCharacters(
+            in: .whitespacesAndNewlines)
         throw SimulatorScriptError(
-            description: message.isEmpty ? "xcrun simctl \(arguments.joined(separator: " ")) failed." : message)
+            description: message.isEmpty
+                ? "xcrun simctl \(arguments.joined(separator: " ")) failed." : message)
     }
     return outputData
 }
@@ -299,7 +315,7 @@ private func parseArguments(_ arguments: [String]) throws -> (SimulatorMode, Sim
     )
 }
 
-#if !SIMULATOR_SCRIPT_TESTS
+private func runCLI() {
     do {
         let (mode, request) = try parseArguments(CommandLine.arguments)
         let devicesData = try runSimctl(["list", "devices", "--json"])
@@ -324,4 +340,8 @@ private func parseArguments(_ arguments: [String]) throws -> (SimulatorMode, Sim
         FileHandle.standardError.write(Data("\(error)\n".utf8))
         exit(1)
     }
+}
+
+#if !SCRIPT_TESTS
+    let _ = runCLI()
 #endif

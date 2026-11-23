@@ -195,6 +195,101 @@ struct TelemetryTests {
         #expect(remaining.contains(where: { $0.isDebug }))
     }
 
+    @Test func spoolDoesNotTagMixedInfoOrUnknownLevelSegmentsAsDebugOnly() throws {
+        let dir = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let spool = TelemetrySpool(
+            directory: dir,
+            maxActiveSegmentBytes: 10_000,
+            maxTotalBytes: 100_000,
+            mirrorsToOSLog: false
+        )
+        let base = try Date("2026-10-01T10:00:00Z", strategy: .iso8601)
+
+        // A segment mixing .info and .debug records must not be tagged as debug-only.
+        spool.append(makeRecord(seq: 1, level: .info, name: "appointment_saved"), now: base)
+        spool.append(
+            makeRecord(seq: 2, level: .debug, name: "sql_query", sql: "SELECT 1"),
+            now: base.addingTimeInterval(1)
+        )
+        let mixedURL = try #require(spool.sealActiveSegment(now: base.addingTimeInterval(2)))
+        #expect(!mixedURL.lastPathComponent.contains("-app-debug-"))
+        let mixedInfo = try #require(spool.listSealedSegments().first(where: { $0.url == mixedURL }))
+        #expect(!mixedInfo.isDebug)
+
+        // Missing or unknown levels are also treated conservatively as non-debug.
+        let debugLine = try JSONEncoder().encode(makeRecord(seq: 3, level: .debug, name: "sql_query"))
+        let missingLevelLine = Data("{\"_time\":\"2026-10-01T10:00:03Z\",\"name\":\"legacy\"}".utf8)
+        var rawPayload = Data()
+        rawPayload.append(debugLine)
+        rawPayload.append(0x0A)
+        rawPayload.append(missingLevelLine)
+        rawPayload.append(0x0A)
+        try rawPayload.write(to: spool.activeFileURL, options: [.atomic])
+        let missingLevelURL = try #require(spool.sealActiveSegment(now: base.addingTimeInterval(3)))
+        #expect(!missingLevelURL.lastPathComponent.contains("-app-debug-"))
+
+        // A segment containing only .debug records still gets the -app-debug- tag.
+        spool.append(
+            makeRecord(seq: 4, level: .debug, name: "sql_query", sql: "SELECT 2"),
+            now: base.addingTimeInterval(4)
+        )
+        let pureDebugURL = try #require(spool.sealActiveSegment(now: base.addingTimeInterval(5)))
+        #expect(pureDebugURL.lastPathComponent.contains("-app-debug-"))
+        let pureDebugInfo = try #require(
+            spool.listSealedSegments().first(where: { $0.url == pureDebugURL })
+        )
+        #expect(pureDebugInfo.isDebug)
+    }
+
+    @Test func spoolEvictsPureDebugSegmentsBeforeMixedInfoAndDebugSegment() throws {
+        let dir = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let spool = TelemetrySpool(
+            directory: dir,
+            maxActiveSegmentBytes: 10_000,
+            maxTotalBytes: 1800,
+            mirrorsToOSLog: false
+        )
+        let base = try Date("2026-10-01T10:00:00Z", strategy: .iso8601)
+
+        // Seal the oldest segment with both an .info business event and a .debug log.
+        spool.append(makeRecord(seq: 1, level: .info, name: "payment_recorded"), now: base)
+        spool.append(
+            makeRecord(seq: 2, level: .debug, name: "sql_query", sql: "SELECT 1"),
+            now: base
+        )
+        let mixedURL = try #require(spool.sealActiveSegment(now: base))
+        #expect(!mixedURL.lastPathComponent.contains("-app-debug-"))
+
+        // Newer pure .debug segments push total spool size past the cap and must evict first.
+        var debugURLs: [URL] = []
+        for index in 1...6 {
+            let timestamp = base.addingTimeInterval(Double(index))
+            spool.append(
+                makeRecord(
+                    seq: index + 2,
+                    level: .debug,
+                    name: "sql_query",
+                    sql: String(repeating: "S", count: 220)
+                ),
+                now: timestamp
+            )
+            let debugURL = try #require(spool.sealActiveSegment(now: timestamp))
+            #expect(debugURL.lastPathComponent.contains("-app-debug-"))
+            debugURLs.append(debugURL)
+        }
+
+        let remaining = spool.listSealedSegments()
+        let totalSize = remaining.reduce(0) { $0 + $1.byteSize }
+        #expect(totalSize <= 1800)
+        #expect(remaining.contains(where: { $0.url == mixedURL }))
+        #expect(remaining.contains(where: { $0.isDebug }))
+        #expect(!remaining.contains(where: { $0.url == debugURLs[0] }))
+    }
+
     @Test func spoolIsolatesEnvironmentsAndWritesAtomicWidgetSegmentsWithoutMintingDeviceID() throws
     {
         let root = makeTempDirectory()

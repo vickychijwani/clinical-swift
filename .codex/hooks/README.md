@@ -15,6 +15,25 @@ This is a text guard for accidental direct runs. It covers command paths, common
 wrappers, shell chains, and command substitution. It does not inspect arbitrary
 scripts or stop deliberate shell obfuscation.
 
+# Simulator command guard
+
+The `PreToolUse` hook runs `check_simctl.sh` for Codex (`Bash`) and Antigravity
+(`run_command`, with `--antigravity`). It denies direct `xcrun simctl openurl`,
+`xcrun simctl launch`, and `xcrun simctl ui` commands before execution and points
+the agent to `make run`, `make build-and-run`, `make appearance`, and
+`make screenshot`. Make can still run `simctl` internally. The Swift checker is
+compiled once and cached in the worktree's Git metadata.
+
+Run its command-matching and JSON contract tests with:
+
+```sh
+/bin/sh .codex/hooks/check_simctl.sh --test
+```
+
+This is a text guard for accidental direct runs. It covers command paths, common
+wrappers, shell chains, and command substitution. It does not inspect arbitrary
+scripts or stop deliberate shell obfuscation.
+
 # UI test wait check
 
 The Stop hook runs `check_ui_waits.sh` as a separate command with a one-second

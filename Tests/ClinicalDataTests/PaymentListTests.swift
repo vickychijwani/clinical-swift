@@ -68,10 +68,34 @@ struct PaymentListTests {
     }
 
     @Test func amountFormattingKeepsExactWholeRupeesAndIndianGroups() {
+        #expect(RupeeAmount.formatted(3200) == "3,200")
+        #expect(RupeeAmount.formatted(100000) == "1,00,000")
         #expect(PaymentItem.amount(3200, isReceipt: true) == "+₹3,200")
         #expect(PaymentItem.amount(4800, isReceipt: false) == "−₹4,800")
         #expect(PaymentItem.amount(100000, isReceipt: true) == "+₹1,00,000")
         #expect(PaymentItem.amount(Int.max, isReceipt: true) == "+₹92,23,37,20,36,85,47,75,807")
+    }
+
+    @Test func rupeeParsingAcceptsExactWholeRupeesAndRejectsInvalidValues() {
+        #expect(RupeeAmount.parse("") == nil)
+        #expect(RupeeAmount.parse(" \n ") == nil)
+        #expect(RupeeAmount.parse("", emptyAsZero: true) == 0)
+        #expect(RupeeAmount.parse(" \n ", emptyAsZero: true) == 0)
+        for (text, expected) in [
+            ("0", 0), ("000", 0), ("500", 500), ("1,000", 1000),
+            ("10,000", 10000), ("1,00,000", 100000), (" ₹ 1,00,000 \n", 100000),
+            (String(Int.max), Int.max),
+        ] {
+            #expect(RupeeAmount.parse(text) == expected)
+            #expect(RupeeAmount.parse(text, emptyAsZero: true) == expected)
+        }
+        for invalid in [
+            "-500", "500.50", "+500", "abc", "₹", "1,0000", "100,000", "1,,000", "1,00",
+            String(Int.max) + "0",
+        ] {
+            #expect(RupeeAmount.parse(invalid) == nil)
+            #expect(RupeeAmount.parse(invalid, emptyAsZero: true) == nil)
+        }
     }
 
     @Test func relativeDatesUseClinicMidnightAndClinicYear() throws {

@@ -33,7 +33,7 @@ public nonisolated struct PaymentItem: Identifiable, Equatable, Sendable {
     public var amount: String { Self.amount(entry.amount, isReceipt: isReceipt) }
 
     public static func amount(_ value: Int, isReceipt: Bool) -> String {
-        (isReceipt ? "+₹" : "−₹") + value.formatted(.number.locale(ClinicDate.locale))
+        (isReceipt ? "+₹" : "−₹") + RupeeAmount.formatted(value)
     }
 }
 
