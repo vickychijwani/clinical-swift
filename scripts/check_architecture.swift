@@ -88,8 +88,9 @@ enum ArchitecturePolicy {
     static func isDisplay(_ path: String) -> Bool {
         path.contains("/views/") || path.hasPrefix("clinical-swift/widgets/")
             || path.hasPrefix("ClinicalShared/") && !sharedInfrastructure.contains(path)
-            || path == "clinical-swift/backups/BackupSettingsView.swift"
-            || path == "clinical-swift/unavailable-times/UnavailableTimeEditorView.swift"
+            || path == "clinical-swift/backups/BackupSettingsSections.swift"
+            || path == "clinical-swift/backups/BackupWarningToolbar.swift"
+            || path == "clinical-swift/telemetry/DiagnosticsSettingsSection.swift"
     }
 }
 
