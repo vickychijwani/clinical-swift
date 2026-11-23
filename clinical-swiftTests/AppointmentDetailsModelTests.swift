@@ -79,13 +79,11 @@ struct AppointmentDetailsModelTests {
         let result = await withDependencies {
             $0.defaultDatabase = database
             $0.date.now = updatedAt
+            $0.appointmentStatusClient.updateStatus = { _, _, _ in
+                throw TestError.failed
+            }
         } operation: {
-            let model = AppointmentDetailsModel(
-                appointmentID: UUID(),
-                statusUpdater: { _, _, _ in
-                    throw TestError.failed
-                }
-            )
+            let model = AppointmentDetailsModel(appointmentID: UUID())
             return (await model.updateStatus(to: .completed), model.errorMessage)
         }
 
@@ -101,14 +99,12 @@ struct AppointmentDetailsModelTests {
         let results = try await withDependencies {
             $0.defaultDatabase = database
             $0.date.now = updatedAt
+            $0.appointmentStatusClient.updateStatus = { _, _, _ in
+                await gate.wait()
+                return .updated
+            }
         } operation: {
-            let model = AppointmentDetailsModel(
-                appointmentID: UUID(),
-                statusUpdater: { _, _, _ in
-                    await gate.wait()
-                    return .updated
-                }
-            )
+            let model = AppointmentDetailsModel(appointmentID: UUID())
 
             let firstUpdate = Task {
                 await model.updateStatus(to: .completed)
