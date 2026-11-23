@@ -19,12 +19,13 @@
             _router = State(initialValue: router)
             if CommandLine.arguments.contains("--ui-testing-selected-draft") {
                 router.requestScheduleCreation()
-                guard let request = router.activePresentation,
-                    let session = ScheduleEditorSession(
-                        request: request, selectedDate: router.selectedScheduleDate,
-                        appointments: [],
-                        onFinished: { router.finishScheduleEditor(request.id, date: $0.date) })
-                else { preconditionFailure("The fixture must create a schedule editor.") }
+                guard let request = router.scheduleEditorRequest else {
+                    preconditionFailure("The fixture must create a schedule editor.")
+                }
+                let session = ScheduleEditorSession(
+                    request: request, selectedDate: router.selectedScheduleDate,
+                    appointments: [],
+                    onFinished: { router.finishScheduleEditor(request.id, date: $0.date) })
                 session.selectPatient(Self.patient)
                 guard case .appointment(let model) = session.editor else {
                     preconditionFailure("The fixture must create an appointment draft.")

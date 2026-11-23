@@ -20,7 +20,14 @@ enum AppointmentCompletionUITestSupport {
         XCTAssertTrue(app.navigationBars["Complete Appointment"].existsOrWait(timeout: 5))
         // Wait for the initial amount-field keyboard so an immediate Back tap does not interrupt
         // keyboard presentation and leave XCUITest's animation-idle tracker stuck.
-        XCTAssertTrue(app.keyboards.firstMatch.existsOrWait(timeout: 3))
+        if !app.keyboards.firstMatch.existsOrWait(timeout: 5) {
+            // On a cold CI simulator clone, InputUI can drop its first remote keyboard connection
+            // before startup finishes; tapping the amount field once reconnects it.
+            let field = app.textFields["completion-amount"]
+            XCTAssertTrue(field.hittableOrWait(timeout: 5))
+            field.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.existsOrWait(timeout: 5))
+        }
         return app
     }
 

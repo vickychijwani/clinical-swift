@@ -21,7 +21,7 @@ nonisolated final class AppointmentCompletionFormUITests: XCTestCase {
         let singleLineHeight = title.frame.height
         XCTAssertTrue(action.isHittable)
         XCTAssertGreaterThan(action.frame.width, app.frame.width * 0.8)
-        XCTAssertTrue(app.keyboards.firstMatch.existsOrWait(timeout: 3))
+        XCTAssertTrue(app.keyboards.firstMatch.existsOrWait(timeout: 5))
         XCTAssertFalse(app.keyboards.buttons["."].exists)
         XCTAssertLessThan(action.frame.maxY, app.keyboards.firstMatch.frame.minY)
         XCTAssertLessThan(

@@ -117,7 +117,7 @@ struct AppointmentCompletionInterruptionTests {
             case .sheet:
                 #expect(router.detailsPresentation == nil)
                 router.presentationDidDismiss(presentation.id)
-                #expect(router.scheduleCreationRequest != nil)
+                #expect(router.scheduleEditorRequest != nil)
             case .sameRoot:
                 #expect(router.detailsPresentation === presentation)
                 #expect(presentation.currentRoute == .appointmentCompletion(visit))

@@ -39,9 +39,12 @@ struct ContentView: View {
             .environment(router)
             .environment(editor)
             .environment(router.toast)
+            .onChange(of: router.scheduleEditorRequest?.id) { _, requestID in
+                editor.clearIfMismatching(requestID)
+            }
             .task(id: router.unavailableTimeNavigationRequest?.id) {
                 guard let request = router.unavailableTimeNavigationRequest else { return }
-                await router.resolveUnavailableTime(request)
+                await UnavailableTimeLookup.resolve(request, using: router)
             }
             .alert(
                 "Unavailable Time",
@@ -74,19 +77,19 @@ private struct AppTabs: View {
     var body: some View {
         TabView(selection: $router.selectedTab) {
             Tab("Schedule", systemImage: "calendar", value: AppTab.schedule) {
-                NavigationStack(path: $router.schedulePath) {
+                NavigationStack {
                     ScheduleView()
                 }
             }
 
             Tab("Patients", systemImage: "person.2", value: AppTab.patients) {
-                NavigationStack(path: $router.patientsPath) {
+                NavigationStack {
                     PatientsView()
                 }
             }
 
             Tab("Payments", systemImage: "indianrupeesign", value: AppTab.payments) {
-                NavigationStack(path: $router.paymentsPath) {
+                NavigationStack {
                     PaymentsView()
                 }
             }
@@ -168,9 +171,7 @@ private struct AppTrayHost: ViewModifier {
                     }
                 }),
             didAppear: router.presentationDidAppear,
-            didDismiss: { id in
-                router.presentationDidDismiss(id, retainingScheduleEditor: editor.session?.id)
-            }
+            didDismiss: router.presentationDidDismiss
         ) { item in
             switch item {
             case .scheduleEditor(let session):
@@ -191,9 +192,8 @@ private struct AppTrayHost: ViewModifier {
     private var trayItem: AppTrayItem? {
         guard let presentation = router.activePresentation else { return nil }
         switch presentation {
-        case .scheduleCreation, .appointmentBooking, .appointmentEdit, .unavailableTimeEditor:
-            guard let session = editor.session, session.id == presentation.id,
-                session.isShowingSheet
+        case .scheduleEditor(let request):
+            guard let session = editor.activeSession(for: request), session.isShowingSheet
             else { return nil }
             return .scheduleEditor(session)
         case .details(let details):

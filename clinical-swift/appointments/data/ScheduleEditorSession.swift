@@ -67,17 +67,17 @@ final class ScheduleEditorSession: Identifiable {
         adjustment.begin(preview, edge: .move, items: items)
     }
 
-    init?(
-        request: AppPresentation, selectedDate: Date, appointments: [Appointment],
+    init(
+        request: ScheduleEditorRequest, selectedDate: Date, appointments: [Appointment],
         onFinished: @escaping (Completion) -> Void
     ) {
         id = request.id
         self.onFinished = onFinished
-        switch request {
-        case .scheduleCreation, .appointmentBooking:
+        switch request.kind {
+        case .create, .bookAppointment:
             let patient: Patient?
-            if case .appointmentBooking(let request) = request {
-                patient = request.patient
+            if case .bookAppointment(let requestedPatient) = request.kind {
+                patient = requestedPatient
                 allowsTypeSelection = false
             } else {
                 patient = nil
@@ -108,20 +108,18 @@ final class ScheduleEditorSession: Identifiable {
             // Install the model after prefilling slot - to ensure the sheet starts out displaying the
             // pre-selected slot rather than briefly showing the clinic opening time.
             editor = .appointment(model)
-        case .appointmentEdit(let request):
+        case .editAppointment(let details):
             allowsTypeSelection = false
             // Use the details that were already visible so the editor can start without another read.
             // Saving still validates the current stored appointment before writing.
             let model = AppointmentBookingModel(
-                editing: request.details)
+                editing: details)
             editor = .appointment(model)
-        case .unavailableTimeEditor(let request):
+        case .editUnavailableTime(let block):
             allowsTypeSelection = false
             editor = .unavailableTime(
                 UnavailableTimeEditorModel(
-                    editing: request.block))
-        default:
-            return nil
+                    editing: block))
         }
     }
 
@@ -392,16 +390,95 @@ nonisolated struct ScheduleEditorScrollRequest: Equatable {
 /// The timeline owns this session. The app root reads it to present fields on the shared surface.
 @MainActor @Observable
 final class ScheduleEditorStore {
-    var session: ScheduleEditorSession?
+    private(set) var session: ScheduleEditorSession?
 
     init(session: ScheduleEditorSession? = nil) {
         self.session = session
     }
 
+    func hasEditor(for router: Router) -> Bool {
+        router.scheduleEditorRequest != nil || session != nil
+    }
+
+    func activeSession(for request: ScheduleEditorRequest) -> ScheduleEditorSession? {
+        guard let session, session.id == request.id else { return nil }
+        return session
+    }
+
+    func selectedDate(using router: Router) -> Date {
+        session?.selectedDate ?? router.selectedScheduleDate
+    }
+
+    func selectDate(_ date: Date, using router: Router) {
+        guard session?.allowsDateSelection != false,
+            session?.adjustment.isDragging != true
+        else { return }
+        let selectedDate = ClinicDate.day(date)
+        router.selectScheduleDate(selectedDate)
+        session?.selectDate(selectedDate)
+    }
+
+    func clearIfMismatching(_ requestID: UUID?) {
+        if session?.id != requestID {
+            session = nil
+        }
+    }
+
+    func beginHold(
+        on item: TimelineItem?,
+        center: TimeOfDay,
+        date: Date,
+        items: [TimelineItem],
+        router: Router,
+        detailsForAppointment: (Appointment) -> AppointmentDetails?,
+        onFinished: @escaping (UUID, ScheduleEditorSession.Completion) -> Void
+    ) -> ScheduleEditorSession? {
+        guard !hasEditor(for: router),
+            date.isSameDayAs(router.selectedScheduleDate)
+        else { return nil }
+        if let item {
+            guard item.allowsAdjustment else { return nil }
+            switch item {
+            case .appointment(let appointment):
+                guard let details = detailsForAppointment(appointment),
+                    details.appointment.status == .scheduled
+                else { return nil }
+                router.requestAppointmentEdit(details)
+            case .unavailableTime(let block):
+                router.requestUnavailableTimeEdit(block)
+            }
+            guard let request = router.scheduleEditorRequest else { return nil }
+            let session = ScheduleEditorSession(
+                request: request,
+                selectedDate: date,
+                appointments: []
+            ) { completion in
+                onFinished(request.id, completion)
+            }
+            session.beginAdjustment(item, edge: .move, items: items)
+            self.session = session
+            return session
+        }
+        router.requestScheduleCreation()
+        guard let request = router.scheduleEditorRequest, case .create = request.kind else {
+            return nil
+        }
+        let session = ScheduleEditorSession(
+            bookingID: request.id,
+            selectedDate: date,
+            center: center,
+            items: items
+        ) { completion in
+            onFinished(request.id, completion)
+        }
+        self.session = session
+        return session
+    }
+
     /// Creates a session for the active request and discards stale async reads if the request
     /// or selected schedule date changes before initialization finishes.
     func prepare(
-        request: AppPresentation?,
+        request: ScheduleEditorRequest?,
         router: Router,
         appointmentsForBooking: (Date) async -> [Appointment],
         onFinished: @escaping (UUID, ScheduleEditorSession.Completion) -> Void
@@ -412,16 +489,16 @@ final class ScheduleEditorStore {
         }
         // A timeline hold installs its session before the first drag update.
         guard session?.id != request.id else { return }
+        session = nil
         let selectedDate = router.selectedScheduleDate
         let appointments: [Appointment]
-        switch request {
-        case .scheduleCreation, .appointmentBooking:
+        if request.needsBookingAvailability {
             appointments = await appointmentsForBooking(selectedDate)
             guard !Task.isCancelled,
-                router.activePresentation?.id == request.id,
+                router.scheduleEditorRequest?.id == request.id,
                 selectedDate.isSameDayAs(router.selectedScheduleDate)
             else { return }
-        default:
+        } else {
             appointments = []
         }
         guard session?.id != request.id else { return }
@@ -432,5 +509,18 @@ final class ScheduleEditorStore {
         ) { completion in
             onFinished(request.id, completion)
         }
+    }
+
+    @discardableResult
+    func finish(
+        _ requestID: UUID,
+        completion: ScheduleEditorSession.Completion,
+        router: Router
+    ) -> Bool {
+        guard let session, session.id == requestID,
+            session.finish(using: router, completion: completion)
+        else { return false }
+        self.session = nil
+        return true
     }
 }
