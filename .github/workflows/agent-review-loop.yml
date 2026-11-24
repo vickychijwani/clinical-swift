@@ -87,7 +87,6 @@ jobs:
       author_harness: ${{ steps.resolve.outputs.author_harness }}
       needs_codex_token: ${{ steps.resolve.outputs.needs_codex_token }}
       needs_agy_token: ${{ steps.resolve.outputs.needs_agy_token }}
-      worktree_path: ${{ steps.resolve.outputs.worktree_path }}
       dry_run: ${{ steps.resolve.outputs.dry_run }}
       review_check_runs_json: ${{ steps.create-checks.outputs.review_check_runs_json }}
       address_check_run_id: ${{ steps.create-checks.outputs.address_check_run_id }}
@@ -100,10 +99,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          path: main
           persist-credentials: false
 
-      - name: Resolve trigger, PR metadata, and worktree models
-        id: resolve
+      - name: Parse trigger and fetch PR metadata
+        id: parse
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
@@ -117,29 +117,18 @@ jobs:
           DISPATCH_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          write_multiline_output() {
-            local key="$1" value="$2"
-            local delim
-            delim="EOF_$(openssl rand -hex 16)"
-            {
-              echo "$key<<$delim"
-              printf '%s\n' "$value"
-              echo "$delim"
-            } >> "$GITHUB_OUTPUT"
-          }
 
           if [[ "$EVENT_NAME" == "issue_comment" ]]; then
             # Ignore normal prose that happens to start with /reviewing or /addressing.
             first_token=$(printf '%s' "$COMMENT_BODY" | awk 'NR==1 { print $1 }')
             if [[ "$first_token" != "/review" && "$first_token" != "/address" ]]; then
               echo "Ignoring non-command comment."
-              echo "run_review=false" >> "$GITHUB_OUTPUT"
-              echo "run_address=false" >> "$GITHUB_OUTPUT"
+              echo "should_continue=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           fi
 
-          if ! trigger_json=$(swift scripts/agent_review_loop.swift parse-trigger \
+          if ! trigger_json=$(swift main/scripts/agent_review_loop.swift parse-trigger \
             --event "$EVENT_NAME" \
             --body "$COMMENT_BODY" \
             --action "$DISPATCH_ACTION" \
@@ -182,26 +171,75 @@ jobs:
             exit 1
           fi
 
+          {
+            echo "should_continue=true"
+            echo "action=$action"
+            echo "pr_number=$pr_number"
+            echo "pr_branch=$pr_branch"
+            echo "pr_head_sha=$pr_head_sha"
+            echo "reviewer_override=$reviewer_override"
+            echo "review_all=$review_all"
+            echo "author_override=$author_override"
+            echo "dry_run=$dry_run"
+            echo "trigger_event=$EVENT_NAME"
+            echo "comment_id=$COMMENT_ID"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.parse.outputs.should_continue == 'true'
+        with:
+          ref: ${{ steps.parse.outputs.pr_head_sha }}
+          path: pr-base
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve worktree models
+        id: resolve
+        if: steps.parse.outputs.should_continue == 'true'
+        env:
+          ACTION: ${{ steps.parse.outputs.action }}
+          PR_NUMBER: ${{ steps.parse.outputs.pr_number }}
+          PR_BRANCH: ${{ steps.parse.outputs.pr_branch }}
+          PR_HEAD_SHA: ${{ steps.parse.outputs.pr_head_sha }}
+          REVIEWER_OVERRIDE: ${{ steps.parse.outputs.reviewer_override }}
+          REVIEW_ALL: ${{ steps.parse.outputs.review_all }}
+          AUTHOR_OVERRIDE: ${{ steps.parse.outputs.author_override }}
+          DRY_RUN: ${{ steps.parse.outputs.dry_run }}
+          TRIGGER_EVENT: ${{ steps.parse.outputs.trigger_event }}
+          COMMENT_ID: ${{ steps.parse.outputs.comment_id }}
+        run: |
+          set -euo pipefail
+          write_multiline_output() {
+            local key="$1" value="$2"
+            local delim
+            delim="EOF_$(openssl rand -hex 16)"
+            {
+              echo "$key<<$delim"
+              printf '%s\n' "$value"
+              echo "$delim"
+            } >> "$GITHUB_OUTPUT"
+          }
+
           discover_args=(
             discover
             --repo "$CANONICAL_REPO_PATH"
-            --branch "$pr_branch"
-            --head-sha "$pr_head_sha"
-            --action "$action"
-            --require-clean
+            --pr-repo "$GITHUB_WORKSPACE/pr-base"
+            --branch "$PR_BRANCH"
+            --head-sha "$PR_HEAD_SHA"
+            --action "$ACTION"
           )
-          if [[ -n "$reviewer_override" ]]; then
-            discover_args+=(--reviewers "$reviewer_override")
+          if [[ -n "$REVIEWER_OVERRIDE" ]]; then
+            discover_args+=(--reviewers "$REVIEWER_OVERRIDE")
           fi
-          if [[ "$review_all" == "true" ]]; then
+          if [[ "$REVIEW_ALL" == "true" ]]; then
             discover_args+=(--review-all)
           fi
-          if [[ -n "$author_override" ]]; then
-            discover_args+=(--author "$author_override")
+          if [[ -n "$AUTHOR_OVERRIDE" ]]; then
+            discover_args+=(--author "$AUTHOR_OVERRIDE")
           fi
 
           set +e
-          discovery_json=$(swift scripts/agent_review_loop.swift "${discover_args[@]}")
+          discovery_json=$(swift main/scripts/agent_review_loop.swift "${discover_args[@]}")
           discover_status=$?
           set -e
 
@@ -219,50 +257,48 @@ jobs:
             reason=$(jq -r '.error // "Worktree discovery failed."' <<< "$discovery_json")
             {
               echo "discover_failed=true"
-              echo "action=$action"
-              echo "pr_number=$pr_number"
-              echo "pr_branch=$pr_branch"
-              echo "pr_head_sha=$pr_head_sha"
+              echo "action=$ACTION"
+              echo "pr_number=$PR_NUMBER"
+              echo "pr_branch=$PR_BRANCH"
+              echo "pr_head_sha=$PR_HEAD_SHA"
               echo "run_review=false"
               echo "run_address=false"
               echo "reviewers_json=$reviewers_json"
               echo "author_json=$author_json"
               echo "needs_codex_token=$needs_codex_token"
               echo "needs_agy_token=$needs_agy_token"
-              echo "dry_run=$dry_run"
-              echo "trigger_event=$EVENT_NAME"
+              echo "dry_run=$DRY_RUN"
+              echo "trigger_event=$TRIGGER_EVENT"
               echo "comment_id=$COMMENT_ID"
             } >> "$GITHUB_OUTPUT"
             write_multiline_output "discover_error" "$reason"
             exit 0
           fi
 
-          worktree_path=$(jq -r '.worktreePath // ""' <<< "$discovery_json")
           {
             echo "discover_failed=false"
-            echo "action=$action"
-            echo "pr_number=$pr_number"
-            echo "pr_branch=$pr_branch"
-            echo "pr_head_sha=$pr_head_sha"
-            echo "run_review=$([[ "$action" == "review" ]] && echo true || echo false)"
+            echo "action=$ACTION"
+            echo "pr_number=$PR_NUMBER"
+            echo "pr_branch=$PR_BRANCH"
+            echo "pr_head_sha=$PR_HEAD_SHA"
+            echo "run_review=$([[ "$ACTION" == "review" ]] && echo true || echo false)"
             echo "run_address=true"
-            echo "reviewer_override=$reviewer_override"
-            echo "review_all=$review_all"
-            echo "author_override=$author_override"
+            echo "reviewer_override=$REVIEWER_OVERRIDE"
+            echo "review_all=$REVIEW_ALL"
+            echo "author_override=$AUTHOR_OVERRIDE"
             echo "reviewers_json=$reviewers_json"
             echo "author_json=$author_json"
             echo "author_harness=$author_harness"
             echo "needs_codex_token=$needs_codex_token"
             echo "needs_agy_token=$needs_agy_token"
-            echo "worktree_path=$worktree_path"
-            echo "dry_run=$dry_run"
-            echo "trigger_event=$EVENT_NAME"
+            echo "dry_run=$DRY_RUN"
+            echo "trigger_event=$TRIGGER_EVENT"
             echo "comment_id=$COMMENT_ID"
           } >> "$GITHUB_OUTPUT"
 
           reviewer_ids=$(jq -r 'map(.id) | join(",")' <<< "$reviewers_json")
           author_id=$(jq -r '.id // "none"' <<< "$author_json")
-          echo "Planned PR #$pr_number ($action): reviewers=${reviewer_ids:-none}, author=$author_id, worktree=$worktree_path, dry_run=$dry_run"
+          echo "Planned PR #$PR_NUMBER ($ACTION): reviewers=${reviewer_ids:-none}, author=$author_id, checkout=$GITHUB_WORKSPACE/pr-base, dry_run=$DRY_RUN"
 
       - name: Create Codex App token
         id: codex-token
@@ -325,12 +361,12 @@ jobs:
             fi
             react_token=$(token_for_harness "$react_harness")
             # Prefer reacting as the starting bot App; fall back to github.token if the App lacks Issues write.
-            if ! GH_TOKEN="$react_token" swift scripts/agent_review_loop.swift react \
+            if ! GH_TOKEN="$react_token" swift main/scripts/agent_review_loop.swift react \
               --repo "$GITHUB_REPOSITORY" \
               --event "$TRIGGER_EVENT" \
               --comment-id "$COMMENT_ID" \
               --content eyes >/dev/null 2>&1; then
-              swift scripts/agent_review_loop.swift react \
+              swift main/scripts/agent_review_loop.swift react \
                 --repo "$GITHUB_REPOSITORY" \
                 --event "$TRIGGER_EVENT" \
                 --comment-id "$COMMENT_ID" \
@@ -343,7 +379,7 @@ jobs:
             local token
             token=$(token_for_harness "$harness")
             local args=(
-              swift scripts/agent_review_loop.swift check-run
+              swift main/scripts/agent_review_loop.swift check-run
               --repo "$GITHUB_REPOSITORY"
               --name "$name"
               --head-sha "$PR_HEAD_SHA"
@@ -401,7 +437,7 @@ jobs:
                   "Waiting for clinical-agents runner to review PR #$PR_NUMBER with $rev_display ($rev_effort).")
                 review_check_runs_json=$(jq -c --arg k "$rev_id" --arg v "$cid" '.[$k] = $v' <<< "$review_check_runs_json")
 
-                swift scripts/agent_review_loop.swift monitor-record \
+                swift main/scripts/agent_review_loop.swift monitor-record \
                   --run-id "$GITHUB_RUN_ID" \
                   --kind "review-loop" \
                   --phase "review-$rev_id" \
@@ -423,7 +459,7 @@ jobs:
                 "queued" \
                 "Waiting for review ($author_display)" \
                 "Will address review comments with $author_display ($author_effort) after review completes.")
-              swift scripts/agent_review_loop.swift monitor-record \
+              swift main/scripts/agent_review_loop.swift monitor-record \
                 --run-id "$GITHUB_RUN_ID" \
                 --kind "review-loop" \
                 --phase address \
@@ -444,7 +480,7 @@ jobs:
                 "queued" \
                 "Queued ($author_display)" \
                 "Waiting for clinical-agents runner to address PR #$PR_NUMBER with $author_display ($author_effort).")
-              swift scripts/agent_review_loop.swift monitor-record \
+              swift main/scripts/agent_review_loop.swift monitor-record \
                 --run-id "$GITHUB_RUN_ID" \
                 --kind "review-loop" \
                 --phase address \
@@ -540,22 +576,29 @@ jobs:
 
           if [[ -n "$live_head_sha" && "$live_head_sha" != "$pr_head_sha" ]]; then
             script="$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift"
+            author_id=$(jq -r '.id // ""' <<< "$AUTHOR_JSON")
+            effective_author="${AUTHOR_OVERRIDE:-$author_id}"
+            if [[ -d "$GITHUB_WORKSPACE/pr-base/.git" ]]; then
+              git -C "$GITHUB_WORKSPACE/pr-base" fetch origin "$PR_BRANCH" >/dev/null 2>&1 || true
+            fi
             discover_args=(
               discover
               --repo "$CANONICAL_REPO_PATH"
               --branch "$PR_BRANCH"
               --head-sha "$live_head_sha"
               --action review
-              --require-clean
             )
+            if [[ -d "$GITHUB_WORKSPACE/pr-base/.git" ]]; then
+              discover_args+=(--pr-repo "$GITHUB_WORKSPACE/pr-base")
+            fi
             if [[ -n "$REVIEWER_OVERRIDE" ]]; then
               discover_args+=(--reviewers "$REVIEWER_OVERRIDE")
             fi
             if [[ "$REVIEW_ALL" == "true" ]]; then
               discover_args+=(--review-all)
             fi
-            if [[ -n "$AUTHOR_OVERRIDE" ]]; then
-              discover_args+=(--author "$AUTHOR_OVERRIDE")
+            if [[ -n "$effective_author" ]]; then
+              discover_args+=(--author "$effective_author")
             fi
 
             set +e
@@ -966,6 +1009,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          path: main
           persist-credentials: false
 
       - name: Create Codex author App token
@@ -984,22 +1028,20 @@ jobs:
           app-id: ${{ vars.CLINICAL_ANTIGRAVITY_APP_ID || secrets.CLINICAL_ANTIGRAVITY_APP_ID }}
           private-key: ${{ secrets.CLINICAL_ANTIGRAVITY_PRIVATE_KEY }}
 
-      - name: Verify PR comments and worktree
+      - name: Verify PR comments and head
         id: verify
         env:
           GH_TOKEN: ${{ github.token }}
           AUTHOR_TOKEN: ${{ steps.codex-token.outputs.token || steps.agy-token.outputs.token }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
-          PR_BRANCH: ${{ needs.plan.outputs.pr_branch }}
           PR_HEAD_SHA: ${{ needs.review.outputs.pr_head_sha || needs.plan.outputs.pr_head_sha }}
           RUN_REVIEW: ${{ needs.plan.outputs.run_review }}
-          AUTHOR_OVERRIDE: ${{ needs.plan.outputs.author_override }}
           AUTHOR_JSON: ${{ needs.plan.outputs.author_json }}
           CHECK_RUN_ID: ${{ needs.review.outputs.address_check_run_id || needs.plan.outputs.address_check_run_id }}
           DRY_RUN: ${{ needs.plan.outputs.dry_run }}
         run: |
           set -euo pipefail
-          script="$GITHUB_WORKSPACE/scripts/agent_review_loop.swift"
+          script="$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift"
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           author_id=$(jq -r '.id' <<< "$AUTHOR_JSON")
           author_display=$(jq -r '.displayName' <<< "$AUTHOR_JSON")
@@ -1077,41 +1119,18 @@ jobs:
             echo "Found $unresolved_count unresolved review thread(s) on PR #$PR_NUMBER."
           fi
 
-          discover_args=(
-            discover
-            --repo "$CANONICAL_REPO_PATH"
-            --branch "$PR_BRANCH"
-            --head-sha "$PR_HEAD_SHA"
-            --action address
-            --require-clean
-          )
-          if [[ -n "$AUTHOR_OVERRIDE" ]]; then
-            discover_args+=(--author "$AUTHOR_OVERRIDE")
-          else
-            discover_args+=(--author "$author_id")
-          fi
-
-          set +e
-          discovery_json=$(swift scripts/agent_review_loop.swift "${discover_args[@]}")
-          status=$?
-          set -e
-
-          if [[ $status -ne 0 ]]; then
-            reason=$(jq -r '.error // "Worktree safety check failed."' <<< "$discovery_json")
-            echo "Worktree safety check failed: $reason" >&2
-            if [[ "$DRY_RUN" != "true" ]]; then
-              gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-                --body "Agent address job stopped: $reason"
-            fi
-            exit 1
-          fi
-
-          worktree_path=$(jq -r '.worktreePath' <<< "$discovery_json")
           {
             echo "skipped=false"
-            echo "worktree_path=$worktree_path"
             echo "address_check_run_id=$CHECK_RUN_ID"
           } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.verify.outputs.skipped != 'true'
+        with:
+          ref: ${{ needs.plan.outputs.pr_branch }}
+          path: pr-base
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Mark address check in progress
         id: mark-in-progress
@@ -1126,7 +1145,7 @@ jobs:
           author_id=$(jq -r '.id' <<< "$AUTHOR_JSON")
           author_display=$(jq -r '.displayName' <<< "$AUTHOR_JSON")
           author_effort=$(jq -r '.effort' <<< "$AUTHOR_JSON")
-          effective_id=$(swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
+          effective_id=$(swift "$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift" check-run \
             --repo "$GITHUB_REPOSITORY" \
             --check-run-id "$CHECK_RUN_ID" \
             --name "address ($author_id)" \
@@ -1144,13 +1163,19 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.codex-token.outputs.token || steps.agy-token.outputs.token }}
           PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
-          WORKTREE_PATH: ${{ steps.verify.outputs.worktree_path }}
+          PR_HEAD_SHA: ${{ needs.review.outputs.pr_head_sha || needs.plan.outputs.pr_head_sha }}
           AUTHOR_JSON: ${{ needs.plan.outputs.author_json }}
           DRY_RUN: ${{ needs.plan.outputs.dry_run }}
         run: |
           set -euo pipefail
-          main_dir="$GITHUB_WORKSPACE"
-          worktree_dir=$(cd "$WORKTREE_PATH" && pwd -P)
+          main_dir="$GITHUB_WORKSPACE/main"
+          worktree_dir=$(cd "$GITHUB_WORKSPACE/pr-base" && pwd -P)
+          checked_out_sha=$(git -C "$worktree_dir" rev-parse HEAD)
+          if [[ "$DRY_RUN" != "true" && "$checked_out_sha" != "$PR_HEAD_SHA" ]]; then
+            echo "PR head moved from $PR_HEAD_SHA to $checked_out_sha before address started." >&2
+            exit 1
+          fi
+
           author_id=$(jq -r '.id' <<< "$AUTHOR_JSON")
           author_harness=$(jq -r '.harness' <<< "$AUTHOR_JSON")
           bot_login=$(jq -r '.botLogin' <<< "$AUTHOR_JSON")
@@ -1189,13 +1214,16 @@ jobs:
             echo "=== DRY RUN: address ==="
             echo "Model:    $author_id ($author_display · $author_effort)"
             echo "Harness:  $author_harness ($bot_login)"
-            echo "Worktree: $worktree_dir"
+            echo "Checkout: $worktree_dir"
             echo "Prompt:   $prompt"
             printf 'Command:  '
             printf '%q ' "${cmd[@]}"
             echo
             exit 0
           fi
+
+          git -C "$worktree_dir" worktree prune >/dev/null 2>&1 || true
+          git -C "$worktree_dir" remote set-url --push origin "git@github.com:$GITHUB_REPOSITORY.git"
 
           stream_file="$AGENT_MONITOR_DIR/runs/$GITHUB_RUN_ID/address.jsonl"
           mkdir -p "$(dirname "$stream_file")"
@@ -1230,7 +1258,7 @@ jobs:
             *) conclusion="failure"; title="Address failed ($author_display)" ;;
           esac
 
-          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" check-run \
+          swift "$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift" check-run \
             --repo "$GITHUB_REPOSITORY" \
             --check-run-id "$CHECK_RUN_ID" \
             --status completed \
@@ -1239,7 +1267,7 @@ jobs:
             --summary "Author $author_display finished with status $JOB_STATUS on PR #$PR_NUMBER." \
             --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null || true
 
-          swift "$GITHUB_WORKSPACE/scripts/agent_review_loop.swift" monitor-record \
+          swift "$GITHUB_WORKSPACE/main/scripts/agent_review_loop.swift" monitor-record \
             --run-id "$GITHUB_RUN_ID" \
             --phase address \
             --status completed \

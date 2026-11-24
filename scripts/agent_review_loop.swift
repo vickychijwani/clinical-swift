@@ -522,12 +522,13 @@ func classifyWorktreePath(_ path: String, homeDirectory: String) -> WorktreeKind
     return .unknown
 }
 
-/// Locates the unique PR worktree by branch first, then detached HEAD in known author roots.
+/// Locates the unique PR worktree by branch first, then detached HEAD in known author roots, then PR ancestors.
 func locateWorktree(
     entries: [WorktreeEntry],
     branch: String,
     headSHA: String,
-    homeDirectory: String
+    homeDirectory: String,
+    prExclusiveCommits: [String] = []
 ) throws -> WorktreeEntry? {
     let targetRef = "refs/heads/\(branch)"
     let branchMatches = entries.filter { $0.branch == targetRef }
@@ -535,18 +536,68 @@ func locateWorktree(
         return match
     }
 
-    let detachedMatches = entries.filter { entry in
-        guard entry.isDetached && entry.head == headSHA else { return false }
-        let kind = classifyWorktreePath(entry.path, homeDirectory: homeDirectory)
-        return kind != .unknown
+    let detachedAuthorEntries = entries.filter { entry in
+        guard entry.isDetached else { return false }
+        return classifyWorktreePath(entry.path, homeDirectory: homeDirectory) != .unknown
     }
-    if detachedMatches.count > 1 {
-        let paths = detachedMatches.map(\.path).joined(separator: ", ")
+
+    let exactDetachedMatches = detachedAuthorEntries.filter { $0.head == headSHA }
+    if exactDetachedMatches.count > 1 {
+        let paths = exactDetachedMatches.map(\.path).joined(separator: ", ")
         throw ReviewLoopError(
             description: "Multiple detached author worktrees match PR head \(headSHA): \(paths)."
         )
     }
-    return detachedMatches.first
+    if let exactMatch = exactDetachedMatches.first {
+        return exactMatch
+    }
+
+    for commit in prExclusiveCommits where commit != headSHA {
+        let ancestorMatches = detachedAuthorEntries.filter { $0.head == commit }
+        if ancestorMatches.count > 1 {
+            let paths = ancestorMatches.map(\.path).joined(separator: ", ")
+            throw ReviewLoopError(
+                description:
+                    "Multiple detached author worktrees match PR ancestor \(commit): \(paths)."
+            )
+        }
+        if let ancestorMatch = ancestorMatches.first {
+            return ancestorMatch
+        }
+    }
+
+    return nil
+}
+
+/// Returns PR commits ahead of main (newest first) so detached author worktrees survive CI pushes.
+func resolvePRExclusiveCommits(
+    prRepoPath: String,
+    canonicalRepoPath: String,
+    headSHA: String
+) -> [String] {
+    let mainRefs = ["refs/remotes/origin/main", "refs/heads/main"]
+    var mainSHA: String?
+    for ref in mainRefs {
+        if let resolved = try? git(prRepoPath, ["rev-parse", "--verify", ref]) {
+            mainSHA = resolved.trimmingCharacters(in: .whitespacesAndNewlines)
+            break
+        }
+    }
+    if mainSHA == nil {
+        for ref in mainRefs {
+            if let resolved = try? git(canonicalRepoPath, ["rev-parse", "--verify", ref]) {
+                mainSHA = resolved.trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+    }
+    guard let mainSHA, !mainSHA.isEmpty else { return [] }
+    guard let output = try? git(prRepoPath, ["rev-list", "\(mainSHA)..\(headSHA)"]) else {
+        return []
+    }
+    return output.split(whereSeparator: \.isNewline).map {
+        $0.trimmingCharacters(in: .whitespacesAndNewlines)
+    }.filter { !$0.isEmpty }
 }
 
 /// Reads matching Antigravity conversation IDs for a worktree path, newest first.
@@ -707,6 +758,7 @@ private func resolveAuthorModel(
 /// Discovers the original PR worktree and resolves reviewer and author models.
 func discoverLoopContext(
     canonicalRepoPath: String,
+    prRepoPath: String? = nil,
     branch: String,
     headSHA: String,
     action: LoopAction,
@@ -733,12 +785,28 @@ func discoverLoopContext(
             )
         }
 
-        let worktree = try locateWorktree(
+        var worktree = try locateWorktree(
             entries: normalizedEntries,
             branch: branch,
             headSHA: headSHA,
             homeDirectory: resolvedHome
         )
+        if worktree == nil, let prRepoPath, !prRepoPath.isEmpty {
+            let prCommits = resolvePRExclusiveCommits(
+                prRepoPath: prRepoPath,
+                canonicalRepoPath: canonicalRepoPath,
+                headSHA: headSHA
+            )
+            if !prCommits.isEmpty {
+                worktree = try locateWorktree(
+                    entries: normalizedEntries,
+                    branch: branch,
+                    headSHA: headSHA,
+                    homeDirectory: resolvedHome,
+                    prExclusiveCommits: prCommits
+                )
+            }
+        }
 
         var notes: [String] = []
         var detectedAuthor: AgentModel?
@@ -1709,6 +1777,7 @@ private func runCLI() -> Int32 {
             let agyDir = parsed.values["agy-dir"] ?? "\(home)/.gemini/antigravity"
             let result = discoverLoopContext(
                 canonicalRepoPath: repo,
+                prRepoPath: parsed.values["pr-repo"],
                 branch: branch,
                 headSHA: headSHA,
                 action: action,

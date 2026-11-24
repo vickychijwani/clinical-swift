@@ -29,7 +29,7 @@ Run `swift .agents/skills/my-pr-shepherd/scripts/pr_status.swift <pr> [--since-m
 3. **Watch and fix CI / conflicts** (skip initial spawn if review/address is done, CI is green, and there are no conflicts):
    Spawn a sub-agent (or worker) named `fixer` using `Gemini 4 Neon` at `high` effort (when your harness supports model selection; otherwise use your harness's default). Brief it with:
    - PR number, branch, and local worktree path (from `pr_status.swift`).
-   - Do **not** edit the worktree or push while the review/address workflow is queued or running, so the worktree stays clean and review results are not invalidated mid-run.
+   - Do **not** push while the review/address workflow is queued or running, so review and address results are not invalidated mid-run.
    - When the review loop is idle and CI fails or conflicts exist: pull the PR branch, merge `origin/main` for conflicts (never rebase or force-push), fix failures, verify locally following the repo's `AGENTS.md` and CI checks, commit, push, and report back.
    Keep `fixer` alive until Step 5 so Step 4 can reuse the same sub-agent.
 

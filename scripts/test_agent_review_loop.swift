@@ -360,6 +360,31 @@ private func testWorktreeClassificationAndParsing() throws {
         located?.path == "/Users/tester/.codex/worktrees/abcd/clinical-swift",
         "Detached fallback should ignore /private/tmp and pick author root"
     )
+
+    let ancestorEntries = parseWorktreeList("""
+        worktree /Users/tester/code/clinical-swift
+        HEAD 1111111
+        branch refs/heads/main
+
+        worktree /Users/tester/.codex/worktrees/mainwt/clinical-swift
+        HEAD 1111111
+        detached
+
+        worktree /Users/tester/.codex/worktrees/prwt/clinical-swift
+        HEAD 2222222
+        detached
+        """)
+    let ancestorLocated = try locateWorktree(
+        entries: ancestorEntries,
+        branch: "codex/pr",
+        headSHA: "3333333",
+        homeDirectory: home,
+        prExclusiveCommits: ["3333333", "2222222"]
+    )
+    try expect(
+        ancestorLocated?.path == "/Users/tester/.codex/worktrees/prwt/clinical-swift",
+        "Detached ancestor fallback should match PR commit ahead of main and ignore main worktree"
+    )
 }
 
 private func testDiscoveryIntegration(in root: URL) throws {
@@ -643,6 +668,20 @@ private func testDiscoveryIntegration(in root: URL) throws {
         "Dirty worktree must fail"
     )
 
+    let dirtyAllowedRes = discoverLoopContext(
+        canonicalRepoPath: canonical.path,
+        branch: "feature_one",
+        headSHA: agySHA,
+        action: .review,
+        agyDirectory: opusAgyDir.path,
+        homeDirectory: home.path,
+        requireClean: false
+    )
+    try expect(
+        dirtyAllowedRes.status == "ok" && dirtyAllowedRes.author == AgentModel.opus.profile,
+        "Dirty worktree should still resolve author when requireClean is false"
+    )
+
     // 6. /ask discovery supports both auto-detected author and explicit cross-model override.
     let askAutoRes = discoverLoopContext(
         canonicalRepoPath: canonical.path,
@@ -704,6 +743,39 @@ private func testDiscoveryIntegration(in root: URL) throws {
     try expect(
         askMissingRes.status == "error",
         "/ask without a local worktree must fail even when requireClean is false"
+    )
+
+    // 7. Detached Codex worktree at C1 survives dirty state and newer CI commit C2 via prRepoPath.
+    let codexPRRepo = root.appending(path: "ci-pr-base")
+    _ = try runGit(root.path, ["clone", canonical.path, codexPRRepo.path])
+    _ = try runGit(codexPRRepo.path, ["config", "user.name", "Tester"])
+    _ = try runGit(codexPRRepo.path, ["config", "user.email", "tester@example.com"])
+    _ = try runGit(codexPRRepo.path, ["checkout", "-b", "codex_pr_remote"])
+    try Data("c1\n".utf8).write(to: codexPRRepo.appending(path: "codex1.txt"))
+    _ = try runGit(codexPRRepo.path, ["add", "codex1.txt"])
+    _ = try runGit(codexPRRepo.path, ["commit", "-m", "Codex C1"])
+    let codexC1 = try runGit(codexPRRepo.path, ["rev-parse", "HEAD"])
+    _ = try runGit(canonical.path, ["fetch", codexPRRepo.path, codexC1])
+    _ = try runGit(codexWT.path, ["checkout", "--detach", codexC1])
+    try Data("wip\n".utf8).write(to: codexWT.appending(path: "wip.txt"))
+    try Data("c2\n".utf8).write(to: codexPRRepo.appending(path: "codex2.txt"))
+    _ = try runGit(codexPRRepo.path, ["add", "codex2.txt"])
+    _ = try runGit(codexPRRepo.path, ["commit", "-m", "CI C2"])
+    let codexC2 = try runGit(codexPRRepo.path, ["rev-parse", "HEAD"])
+
+    let codexAfterPushRes = discoverLoopContext(
+        canonicalRepoPath: canonical.path,
+        prRepoPath: codexPRRepo.path,
+        branch: "codex_pr_remote",
+        headSHA: codexC2,
+        action: .review,
+        agyDirectory: emptyAgyDir.path,
+        homeDirectory: home.path,
+        requireClean: false
+    )
+    try expect(
+        codexAfterPushRes.status == "ok" && codexAfterPushRes.author == AgentModel.sol.profile,
+        "Dirty detached Codex worktree at C1 should still resolve after CI pushes C2: \(codexAfterPushRes.error ?? "")"
     )
 }
 
