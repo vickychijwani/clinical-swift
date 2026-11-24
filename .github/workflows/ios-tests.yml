@@ -138,7 +138,7 @@ jobs:
           USE_LOCAL_RUNNER: ${{ needs.ui-runner.outputs.local }}
         run: |
           if [[ "$USE_LOCAL_RUNNER" == true ]]; then
-            echo 'TEST_DESTINATION=platform=iOS Simulator,name=CI Simulator 1,OS=26.5' >> "$GITHUB_ENV"
+            echo 'TEST_DESTINATION=platform=iOS Simulator,name=CI Simulator 1,OS=27.0' >> "$GITHUB_ENV"
             xcrun simctl bootstatus 'CI Simulator 1' -b
           else
             simulator_id=$(xcrun simctl create 'Clinical CI' \
