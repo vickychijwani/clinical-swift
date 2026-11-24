@@ -242,12 +242,8 @@ struct TimelineScale {
         return visibleOpening + Int(minutes.rounded())
     }
 
+    /// Compact breaks map minutes proportionally, so times inside the break stay visible.
     func showsTime(_ time: TimeOfDay) -> Bool {
-        guard (visibleOpening..<visibleClosing).contains(time) else {
-            return false
-        }
-
-        return isBreakExpanded
-            || !(Bitehaus.break.start..<Bitehaus.break.end).contains(time)
+        (visibleOpening..<visibleClosing).contains(time)
     }
 }

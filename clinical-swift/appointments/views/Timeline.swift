@@ -29,8 +29,8 @@ struct Timeline: View {
             if let previewNowMarker {
                 timelineContent(now: previewNowMarker)
             } else if showsNowMarker {
-                // Update every 1 minute.
-                TimelineView(.periodic(from: .now, by: 60)) { context in
+                // Update on minute boundaries so the time badge stays in sync with the clock.
+                TimelineView(.everyMinute) { context in
                     timelineContent(now: context.date)
                 }
             } else {
@@ -101,10 +101,14 @@ struct Timeline: View {
                     .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
 
-                if let nowY = nowY(for: now) {
-                    NowMarkerView(availableWidth: geometry.size.width)
-                        .position(x: geometry.size.width / 2, y: nowY)
-                        .zIndex(Double(layouts.count + 2))
+                if let now, let nowY = Self.nowY(for: now, scale: scale) {
+                    NowMarkerView(
+                        availableWidth: geometry.size.width,
+                        metrics: scale.metrics,
+                        indicator: .time(now)
+                    )
+                    .position(x: geometry.size.width / 2, y: nowY)
+                    .zIndex(Double(layouts.count + 2))
                 }
             }
         }
@@ -200,13 +204,8 @@ struct Timeline: View {
         adjustment.release()
     }
 
-    private func nowY(for now: Date?) -> CGFloat? {
-        guard let now else {
-            return nil
-        }
-
+    static func nowY(for now: Date, scale: TimelineScale) -> CGFloat? {
         let time = now.timeOfDay
-        let scale = allowsAdjustment ? editorSession?.scale(items, on: date) ?? scale : scale
         guard scale.showsTime(time) else {
             return nil
         }

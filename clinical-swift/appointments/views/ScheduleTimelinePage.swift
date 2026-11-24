@@ -28,12 +28,14 @@ struct ScheduleTimelinePage: View {
 
     var body: some View {
         let timelinePadding = Timeline.metrics.verticalPadding
+        let showsNowMarker = date.isSameDayAs(today)
         ScrollView {
             VStack(spacing: 0) {
                 Timeline(
                     items: items,
                     scale: TimelineScale(items: items),
-                    showsNowMarker: date.isSameDayAs(today),
+                    showsNowMarker: showsNowMarker,
+                    previewNowMarker: showsNowMarker ? debugNowMarker : nil,
                     itemInteractionsEnabled: itemInteractionsEnabled,
                     selectedAppointmentID: selectedAppointmentID,
                     canSelect: { swipeCooldown.allowsSelection },
@@ -172,6 +174,29 @@ struct ScheduleTimelinePage: View {
         guard delta != 0 else { return }
         pendingScrollY = max(scrollY + delta, 0)
     }
+
+    private var debugNowMarker: Date? {
+        #if DEBUG
+            Self.debugNowTime?.on(date: date)
+        #else
+            nil
+        #endif
+    }
+
+    #if DEBUG
+        private static let debugNowTime: TimeOfDay? = {
+            let arguments = CommandLine.arguments
+            guard let index = arguments.firstIndex(of: "--now"),
+                arguments.indices.contains(index + 1)
+            else { return nil }
+            let parts = arguments[index + 1].split(separator: ":")
+            guard parts.count == 2,
+                let hour = Int(parts[0]), (0..<24).contains(hour),
+                let minute = Int(parts[1]), (0..<60).contains(minute)
+            else { return nil }
+            return TimeOfDay(hour, minute)
+        }()
+    #endif
 }
 
 private struct TimelineScrollModifier: ViewModifier {
