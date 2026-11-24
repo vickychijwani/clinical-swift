@@ -37,6 +37,14 @@ nonisolated struct ScheduleCardTuning: Codable, Equatable, Sendable {
         var stripWidth = 16.0
         var shadowOpacity = 0.09
         var shadowRadius = 2.0
+
+        static let widget = Overlap(
+            mode: .textAware,
+            separation: .shadow,
+            stripWidth: 12.0,
+            shadowOpacity: 0.09,
+            shadowRadius: 1.5
+        )
     }
 }
 

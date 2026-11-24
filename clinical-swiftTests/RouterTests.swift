@@ -507,6 +507,17 @@ struct RouterTests {
         #expect(router.open(scheduleURL))
         #expect(router.detailsPresentation == nil)
         #expect(router.selectedScheduleDate == day.date(using: calendar))
+
+        let bookingDay = try #require(ScheduleDay(year: 2026, month: 7, day: 28))
+        let datedBookURL = try #require(ClinicalURL.bookAppointment(bookingDay).url)
+        #expect(router.open(datedBookURL))
+        #expect(router.selectedTab == .schedule)
+        #expect(router.selectedScheduleDate == bookingDay.date(using: calendar))
+        let creation = try #require(router.scheduleEditorRequest)
+        if case .create = creation.kind {
+        } else {
+            Issue.record("Expected schedule creation request.")
+        }
     }
 
     @Test func scheduleEditorEntryPointsUseUnifiedPresentationAndKeepTelemetryCompatible() throws {

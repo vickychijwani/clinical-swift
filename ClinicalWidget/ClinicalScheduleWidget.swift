@@ -233,7 +233,6 @@ private struct WidgetUnavailableView: View {
     }
 }
 
-@main
 struct ClinicalScheduleWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(

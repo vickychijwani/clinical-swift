@@ -2,10 +2,11 @@ import SwiftUI
 
 struct NowMarkerView: View {
     let availableWidth: CGFloat
+    var metrics: TimelineMetrics = .standard
+    var dotSize: CGFloat = 10
 
     @Environment(\.appPalette) private var palette
     private var color: Color { palette[.now] }
-    private let dotSize: CGFloat = 10
     private let lineHeight: CGFloat = 1
 
     var body: some View {
@@ -26,14 +27,14 @@ struct NowMarkerView: View {
     }
 
     private var dotCenterX: CGFloat {
-        Timeline.metrics.contentLeadingInset - dotSize / 2
+        metrics.contentLeadingInset - dotSize / 2
     }
 
     private var lineCenterX: CGFloat {
-        Timeline.metrics.contentLeadingInset + lineWidth / 2
+        metrics.contentLeadingInset + lineWidth / 2
     }
 
     private var lineWidth: CGFloat {
-        Timeline.metrics.contentWidth(availableWidth: availableWidth)
+        metrics.contentWidth(availableWidth: availableWidth)
     }
 }

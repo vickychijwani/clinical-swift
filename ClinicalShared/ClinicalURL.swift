@@ -2,7 +2,7 @@ import ClinicalModels
 import Foundation
 
 nonisolated enum ClinicalURL: Equatable, Sendable {
-    case bookAppointment
+    case bookAppointment(ScheduleDay? = nil)
     case appointment(Appointment.ID)
     case schedule(ScheduleDay)
     case unavailableTime(UUID)
@@ -20,12 +20,27 @@ nonisolated enum ClinicalURL: Equatable, Sendable {
 
         switch url.host?.lowercased() {
         case "appointments":
-            guard url.query == nil else { return nil }
-
             if url.path == "/book" {
-                self = .bookAppointment
+                guard let query = url.query else {
+                    self = .bookAppointment(nil)
+                    return
+                }
+                guard
+                    !query.isEmpty,
+                    let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                    components.queryItems?.count == 1,
+                    let item = components.queryItems?.first,
+                    item.name == "date",
+                    let value = item.value,
+                    let day = ScheduleDay(value)
+                else {
+                    return nil
+                }
+                self = .bookAppointment(day)
                 return
             }
+
+            guard url.query == nil else { return nil }
 
             let pathComponents = url.path.split(separator: "/")
             guard
@@ -66,9 +81,12 @@ nonisolated enum ClinicalURL: Equatable, Sendable {
         components.scheme = "clinical"
 
         switch self {
-        case .bookAppointment:
+        case .bookAppointment(let day):
             components.host = "appointments"
             components.path = "/book"
+            if let day {
+                components.queryItems = [URLQueryItem(name: "date", value: day.description)]
+            }
         case .appointment(let id):
             components.host = "appointments"
             components.path = "/\(id.uuidString.lowercased())"

@@ -69,8 +69,11 @@ final class Router {
         return request
     }
 
-    func requestScheduleCreation() {
+    func requestScheduleCreation(on date: Date? = nil) {
         selectedTab = .schedule
+        if let date {
+            selectedScheduleDate = ClinicDate.day(date)
+        }
         requestPresentation(.scheduleEditor(.create()))
     }
 
@@ -358,8 +361,8 @@ final class Router {
         )
 
         switch clinicalURL {
-        case .bookAppointment:
-            requestScheduleCreation()
+        case .bookAppointment(let day):
+            requestScheduleCreation(on: day?.date(using: ClinicDate.calendar))
         case .appointment(let id):
             openAppointment(id: id)
         case .schedule(let day):

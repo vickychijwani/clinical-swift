@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ScheduleCard: View {
     @Environment(\.scheduleCardTuning) private var tuning
+    @Environment(\.scheduleCardStyle) private var cardStyle
 
     let start: Date
     let label: String
@@ -16,10 +17,10 @@ struct ScheduleCard: View {
         ZStack(alignment: .topLeading) {
             switch appearance.background {
             case .color(let color):
-                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                RoundedRectangle(cornerRadius: cardStyle.cornerRadius)
                     .fill(color)
             case .draft:
-                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                RoundedRectangle(cornerRadius: cardStyle.cornerRadius)
                     .fill(AppColor.activeCard)
                     // Keep underlying card edges visible as possible conflict cues.
                     .opacity(tuning.surfaceOpacity)
@@ -31,7 +32,7 @@ struct ScheduleCard: View {
                 appearance: appearance,
                 presentation: presentation
             )
-            .padding(.leading, ScheduleCardStyle.horizontalPadding)
+            .padding(.leading, cardStyle.horizontalPadding)
             // Let overflowing text reach the card border unless a front card fences the trailing edge.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .clipped()
@@ -40,14 +41,14 @@ struct ScheduleCard: View {
                 appearance.contentOpacity * (isDeemphasized ? tuning.otherContentOpacity : 1))
 
             if appearance.usesInnerBorder {
-                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                RoundedRectangle(cornerRadius: cardStyle.cornerRadius)
                     .strokeBorder(appearance.border, style: appearance.borderStyle)
             } else {
-                RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
+                RoundedRectangle(cornerRadius: cardStyle.cornerRadius)
                     .stroke(appearance.border, style: appearance.borderStyle)
             }
         }
-        .clipShape(.rect(cornerRadius: ScheduleCardStyle.cornerRadius))
+        .clipShape(.rect(cornerRadius: cardStyle.cornerRadius))
     }
 
     struct Appearance {
@@ -99,6 +100,8 @@ struct ScheduleCardLift: ViewModifier {
 }
 
 private struct ScheduleCardContent: View {
+    @Environment(\.scheduleCardStyle) private var cardStyle
+
     let start: Date
     let label: String
     let appearance: ScheduleCard.Appearance
@@ -128,7 +131,7 @@ private struct ScheduleCardContent: View {
 
     @ViewBuilder
     private func content(for presentation: ScheduleCardPresentation) -> some View {
-        let style = presentation.layout.style
+        let style = presentation.layout.style(for: cardStyle)
         switch presentation.layout {
         case .stacked:
             VStack(alignment: .leading, spacing: style.spacing) {
@@ -187,20 +190,23 @@ private struct ScheduleCardContent: View {
 
 private struct ScheduleCardTime: View {
     @Environment(\.appPalette) private var palette
+    @Environment(\.scheduleCardStyle) private var cardStyle
     let start: Date
     let appearance: ScheduleCard.Appearance
     var usesCompactTime = false
-    var fontSize: CGFloat = ScheduleCardStyle.timeFontSize
+    var fontSize: CGFloat? = nil
 
     var body: some View {
-        HStack(spacing: ScheduleCardStyle.timeIconSpacing) {
+        HStack(spacing: cardStyle.timeIconSpacing) {
             Image(systemName: appearance.systemImage)
                 .foregroundStyle(appearance.timeColor ?? palette[.cardIcon])
             Text(ScheduleCardStyle.formattedTime(start, compact: usesCompactTime))
         }
-        .font(.system(size: fontSize, weight: .semibold).monospacedDigit())
+        .font(
+            .system(size: fontSize ?? cardStyle.timeFontSize, weight: .semibold).monospacedDigit()
+        )
         .foregroundStyle(appearance.timeColor ?? palette[.time])
-        .tracking(ScheduleCardStyle.timeTracking)
+        .tracking(cardStyle.timeTracking)
         .layoutPriority(1)
         .fixedSize(horizontal: true, vertical: false)
     }
@@ -208,13 +214,14 @@ private struct ScheduleCardTime: View {
 
 private struct ScheduleCardLabel: View {
     @Environment(\.appPalette) private var palette
+    @Environment(\.scheduleCardStyle) private var cardStyle
     let label: String
     let color: Color?
-    var fontSize: CGFloat = ScheduleCardStyle.labelFontSize
+    var fontSize: CGFloat? = nil
 
     var body: some View {
         Text(label)
-            .font(.system(size: fontSize, weight: .semibold))
+            .font(.system(size: fontSize ?? cardStyle.labelFontSize, weight: .semibold))
             .foregroundStyle(color ?? palette[.text])
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
@@ -222,4 +229,42 @@ private struct ScheduleCardLabel: View {
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .clipped()
     }
+}
+
+struct TimelineCardOverlapSeparation: ViewModifier {
+    @Environment(\.appPalette) private var palette
+    @Environment(\.scheduleCardTuning) private var tuning
+    @Environment(\.scheduleCardStyle) private var cardStyle
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        content.background {
+            if isActive {
+                switch tuning.overlap.separation {
+                case .shadow:
+                    RoundedRectangle(cornerRadius: cardStyle.cornerRadius)
+                        .fill(.black)
+                        .shadow(
+                            color: palette[.shadow].opacity(tuning.overlap.shadowOpacity),
+                            radius: tuning.overlap.shadowRadius,
+                            y: 2
+                        )
+                        .overlay {
+                            // Remove the shadow interior so translucent fills are not darkened.
+                            RoundedRectangle(cornerRadius: cardStyle.cornerRadius)
+                                .fill(.black)
+                                .blendMode(.destinationOut)
+                        }
+                        .compositingGroup()
+                        .allowsHitTesting(false)
+                case .flat:
+                    EmptyView()
+                }
+            }
+        }
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var scheduleCardStyle = ScheduleCardStyle.Configuration.standard
 }

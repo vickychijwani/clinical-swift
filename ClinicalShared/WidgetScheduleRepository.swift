@@ -61,6 +61,31 @@ nonisolated struct WidgetScheduleSnapshot: Sendable {
     }
 }
 
+nonisolated struct WidgetDaySnapshot: Sendable {
+    let day: ScheduleDay
+    let date: Date
+    let isToday: Bool
+    let isSunday: Bool
+    let items: [TimelineItem]
+    let generatedAt: Date
+
+    init(
+        day: ScheduleDay,
+        date: Date,
+        isToday: Bool,
+        items: [TimelineItem],
+        generatedAt: Date,
+        calendar: Calendar = ClinicDate.calendar
+    ) {
+        self.day = day
+        self.date = date
+        self.isToday = isToday
+        self.isSunday = calendar.component(.weekday, from: date) == 1
+        self.items = items.sorted(by: TimelineItem.ordered)
+        self.generatedAt = generatedAt
+    }
+}
+
 nonisolated struct WidgetScheduleRepository: Sendable {
     let databaseURL: URL
 
@@ -79,6 +104,43 @@ nonisolated struct WidgetScheduleRepository: Sendable {
         at now: Date
     ) throws -> WidgetScheduleSnapshot {
         try database.read { try snapshot(in: $0, at: now) }
+    }
+
+    func daySnapshot(for day: ScheduleDay, at now: Date) throws -> WidgetDaySnapshot? {
+        try ClinicalSharedDatabase.read(at: databaseURL) { database in
+            try daySnapshot(in: database, for: day, at: now)
+        }
+    }
+
+    func daySnapshot(
+        in database: any DatabaseReader,
+        for day: ScheduleDay,
+        at now: Date
+    ) throws -> WidgetDaySnapshot {
+        try database.read { try daySnapshot(in: $0, for: day, at: now) }
+    }
+
+    private func daySnapshot(
+        in database: Database,
+        for day: ScheduleDay,
+        at now: Date
+    ) throws -> WidgetDaySnapshot {
+        let calendar = ClinicDate.calendar
+        let date = day.date(using: calendar) ?? calendar.startOfDay(for: now)
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: date) ?? date
+        let startValue = Self.databaseDateString(date)
+        let endValue = Self.databaseDateString(nextDay)
+        let items = try items(in: database, startValue: startValue, endValue: endValue)
+        let today = ScheduleDay(date: now, calendar: calendar)
+
+        return WidgetDaySnapshot(
+            day: day,
+            date: date,
+            isToday: day == today,
+            items: items,
+            generatedAt: now,
+            calendar: calendar
+        )
     }
 
     private func snapshot(in database: Database, at now: Date) throws -> WidgetScheduleSnapshot {

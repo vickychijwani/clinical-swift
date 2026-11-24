@@ -1,21 +1,46 @@
 import SwiftUI
 
 struct TimelineBreakView: View {
+    struct Style: Equatable, Sendable {
+        let font: Font
+        let tracking: CGFloat
+        let badgeHorizontalPadding: CGFloat
+        let badgeVerticalPadding: CGFloat
+        let stripeSpacing: CGFloat
+
+        static let standard = Style(
+            font: .caption2.weight(.medium),
+            tracking: 1.4,
+            badgeHorizontalPadding: 10,
+            badgeVerticalPadding: 2,
+            stripeSpacing: 10
+        )
+
+        static let widget = Style(
+            font: .system(size: 8.5, weight: .medium),
+            tracking: 1.0,
+            badgeHorizontalPadding: 7,
+            badgeVerticalPadding: 1.5,
+            stripeSpacing: 8
+        )
+    }
+
     let scale: TimelineScale
     let availableWidth: CGFloat
+    var style: Style = .standard
 
     var body: some View {
         ZStack {
-            DiagonalStripePattern()
+            DiagonalStripePattern(spacing: style.stripeSpacing)
                 .stroke(AppColor.breakStripe, lineWidth: 1)
 
             if !scale.isBreakExpanded {
                 Text("\(Bitehaus.break.title.uppercased()) · \(timeRange)")
-                    .font(.caption2.weight(.medium))
+                    .font(style.font)
                     .foregroundStyle(AppColor.secondaryText.opacity(0.8))
-                    .tracking(1.4)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 2)
+                    .tracking(style.tracking)
+                    .padding(.horizontal, style.badgeHorizontalPadding)
+                    .padding(.vertical, style.badgeVerticalPadding)
                     // Mask stripes behind the label so strokes do not cross the text.
                     .background(AppColor.canvas, in: .capsule)
             }
@@ -42,11 +67,13 @@ struct TimelineBreakView: View {
 }
 
 nonisolated struct DiagonalStripePattern: Shape {
+    var spacing: CGFloat = 10
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let overshoot: CGFloat = 2
 
-        for offset in stride(from: -rect.height, through: rect.width, by: 10) {
+        for offset in stride(from: -rect.height, through: rect.width, by: spacing) {
             path.move(to: CGPoint(x: offset - overshoot, y: rect.maxY + overshoot))
             path.addLine(to: CGPoint(x: offset + rect.height + overshoot, y: rect.minY - overshoot))
         }
@@ -60,5 +87,5 @@ nonisolated struct DiagonalStripePattern: Shape {
         scale: TimelineScale(items: []),
         availableWidth: 390
     )
-    .frame(width: 390, height: Timeline.metrics.compactBreakHeight)
+    .frame(width: 390, height: TimelineMetrics.standard.compactBreakHeight)
 }

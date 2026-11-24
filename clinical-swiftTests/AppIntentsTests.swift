@@ -13,11 +13,23 @@ struct AppIntentsTests {
     @Test func bookingURLRequiresTheExactSafeRoute() throws {
         #expect(
             ClinicalURL(try #require(URL(string: "clinical://appointments/book")))
-                == .bookAppointment
+                == .bookAppointment()
         )
+        let day = try #require(ScheduleDay(year: 2026, month: 7, day: 13))
+        let datedBookURL = try #require(ClinicalURL.bookAppointment(day).url)
+        #expect(datedBookURL.absoluteString == "clinical://appointments/book?date=2026-07-13")
+        #expect(ClinicalURL(datedBookURL) == .bookAppointment(day))
         #expect(ClinicalURL(try #require(URL(string: "CLINICAL://APPOINTMENTS/book"))) != nil)
         #expect(
             ClinicalURL(try #require(URL(string: "clinical://appointments/book?patient=1"))) == nil)
+        #expect(
+            ClinicalURL(
+                try #require(URL(string: "clinical://appointments/book?date=2026-02-30"))
+            ) == nil)
+        #expect(
+            ClinicalURL(
+                try #require(URL(string: "clinical://appointments/book?date=2026-07-13&extra=1"))
+            ) == nil)
         #expect(ClinicalURL(try #require(URL(string: "clinical://appointments/delete"))) == nil)
         #expect(ClinicalURL(try #require(URL(string: "https://appointments/book"))) == nil)
     }

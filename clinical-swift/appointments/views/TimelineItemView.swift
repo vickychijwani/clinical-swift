@@ -116,39 +116,6 @@ private struct TimelineCardButtonStyle: ButtonStyle {
     }
 }
 
-struct TimelineCardOverlapSeparation: ViewModifier {
-    @Environment(\.appPalette) private var palette
-    @Environment(\.scheduleCardTuning) private var tuning
-    let isActive: Bool
-
-    func body(content: Content) -> some View {
-        content.background {
-            if isActive {
-                switch tuning.overlap.separation {
-                case .shadow:
-                    RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                        .fill(.black)
-                        .shadow(
-                            color: palette[.shadow].opacity(tuning.overlap.shadowOpacity),
-                            radius: tuning.overlap.shadowRadius,
-                            y: 2
-                        )
-                        .overlay {
-                            // Remove the shadow interior so translucent fills are not darkened.
-                            RoundedRectangle(cornerRadius: ScheduleCardStyle.cornerRadius)
-                                .fill(.black)
-                                .blendMode(.destinationOut)
-                        }
-                        .compositingGroup()
-                        .allowsHitTesting(false)
-                case .flat:
-                    EmptyView()
-                }
-            }
-        }
-    }
-}
-
 private struct TimelineAdjustmentActions: View {
     let item: TimelineItem
     let controls: TimelineItemView.AdjustmentControls

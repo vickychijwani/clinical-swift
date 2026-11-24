@@ -4,18 +4,81 @@ import CoreText
 import Foundation
 
 nonisolated enum ScheduleCardStyle {
-    static let cornerRadius: CGFloat = 8
-    static let horizontalPadding: CGFloat = 8
-    static let stackedTopSpacerHeight: CGFloat = 4
-    static let stackedSpacing: CGFloat = 2
-    static let compactStackedSpacing: CGFloat = 0
-    static let compactHorizontalSpacing: CGFloat = 8
-    static let timeIconSpacing: CGFloat = 2
-    static let timeFontSize: CGFloat = 12
-    static let timeTracking: CGFloat = 0.4
-    static let labelFontSize: CGFloat = 14
-    static let compactTimeFontSize: CGFloat = 10
-    static let compactLabelFontSize: CGFloat = 12
+    struct Configuration: Equatable, Sendable {
+        let cornerRadius: CGFloat
+        let borderWidth: CGFloat
+        let horizontalPadding: CGFloat
+        let stackedTopSpacerHeight: CGFloat
+        let stackedSpacing: CGFloat
+        let compactStackedSpacing: CGFloat
+        let compactHorizontalSpacing: CGFloat
+        let timeIconSpacing: CGFloat
+        let timeTracking: CGFloat
+        let timeFontSize: CGFloat
+        let labelFontSize: CGFloat
+        let iconWidth: CGFloat
+        let compactTimeFontSize: CGFloat
+        let compactLabelFontSize: CGFloat
+        let compactIconWidth: CGFloat
+        let horizontalTimeFontSize: CGFloat
+        let horizontalLabelFontSize: CGFloat
+        let horizontalIconWidth: CGFloat
+
+        static let standard = Configuration(
+            cornerRadius: 8,
+            borderWidth: 2,
+            horizontalPadding: 8,
+            stackedTopSpacerHeight: 4,
+            stackedSpacing: 2,
+            compactStackedSpacing: 0,
+            compactHorizontalSpacing: 8,
+            timeIconSpacing: 2,
+            timeTracking: 0.4,
+            timeFontSize: 12,
+            labelFontSize: 14,
+            iconWidth: 16,
+            compactTimeFontSize: 10,
+            compactLabelFontSize: 12,
+            compactIconWidth: 13,
+            horizontalTimeFontSize: 12,
+            horizontalLabelFontSize: 14,
+            horizontalIconWidth: 16
+        )
+
+        static let widget = Configuration(
+            cornerRadius: 6,
+            borderWidth: 1,
+            horizontalPadding: 5,
+            stackedTopSpacerHeight: 2,
+            stackedSpacing: 1,
+            compactStackedSpacing: 0,
+            compactHorizontalSpacing: 5,
+            timeIconSpacing: 2,
+            timeTracking: 0.2,
+            timeFontSize: 10,
+            labelFontSize: 11.5,
+            iconWidth: 13,
+            compactTimeFontSize: 9,
+            compactLabelFontSize: 10.5,
+            compactIconWidth: 11.5,
+            horizontalTimeFontSize: 9,
+            horizontalLabelFontSize: 10,
+            horizontalIconWidth: 11.5
+        )
+    }
+
+    static let cornerRadius: CGFloat = Configuration.standard.cornerRadius
+    static let horizontalPadding: CGFloat = Configuration.standard.horizontalPadding
+    static let stackedTopSpacerHeight: CGFloat = Configuration.standard.stackedTopSpacerHeight
+    static let stackedSpacing: CGFloat = Configuration.standard.stackedSpacing
+    static let compactStackedSpacing: CGFloat = Configuration.standard.compactStackedSpacing
+    static let compactHorizontalSpacing: CGFloat = Configuration.standard.compactHorizontalSpacing
+    static let timeIconSpacing: CGFloat = Configuration.standard.timeIconSpacing
+    static let timeFontSize: CGFloat = Configuration.standard.timeFontSize
+    static let timeTracking: CGFloat = Configuration.standard.timeTracking
+    static let labelFontSize: CGFloat = Configuration.standard.labelFontSize
+    static let compactTimeFontSize: CGFloat = Configuration.standard.compactTimeFontSize
+    static let compactLabelFontSize: CGFloat = Configuration.standard.compactLabelFontSize
 
     static func formattedTime(_ date: Date, compact: Bool) -> String {
         if compact {
@@ -35,29 +98,33 @@ nonisolated struct ScheduleCardPresentation: Equatable, Sendable {
         case horizontal
 
         var style: Style {
+            style(for: .standard)
+        }
+
+        func style(for configuration: ScheduleCardStyle.Configuration) -> Style {
             switch self {
             case .stacked:
                 Style(
-                    timeFontSize: ScheduleCardStyle.timeFontSize,
-                    labelFontSize: ScheduleCardStyle.labelFontSize,
-                    iconWidth: 16,
-                    spacing: ScheduleCardStyle.stackedSpacing,
-                    topSpacerHeight: ScheduleCardStyle.stackedTopSpacerHeight
+                    timeFontSize: configuration.timeFontSize,
+                    labelFontSize: configuration.labelFontSize,
+                    iconWidth: configuration.iconWidth,
+                    spacing: configuration.stackedSpacing,
+                    topSpacerHeight: configuration.stackedTopSpacerHeight
                 )
             case .compactStacked:
                 Style(
-                    timeFontSize: ScheduleCardStyle.compactTimeFontSize,
-                    labelFontSize: ScheduleCardStyle.compactLabelFontSize,
-                    iconWidth: 13,
-                    spacing: ScheduleCardStyle.compactStackedSpacing,
+                    timeFontSize: configuration.compactTimeFontSize,
+                    labelFontSize: configuration.compactLabelFontSize,
+                    iconWidth: configuration.compactIconWidth,
+                    spacing: configuration.compactStackedSpacing,
                     topSpacerHeight: 0
                 )
             case .horizontal:
                 Style(
-                    timeFontSize: ScheduleCardStyle.timeFontSize,
-                    labelFontSize: ScheduleCardStyle.labelFontSize,
-                    iconWidth: 16,
-                    spacing: ScheduleCardStyle.compactHorizontalSpacing,
+                    timeFontSize: configuration.horizontalTimeFontSize,
+                    labelFontSize: configuration.horizontalLabelFontSize,
+                    iconWidth: configuration.horizontalIconWidth,
+                    spacing: configuration.compactHorizontalSpacing,
                     topSpacerHeight: 0
                 )
             }
@@ -94,48 +161,69 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
     private static let horizontalSafetyMargin: CGFloat = 8
     private static let verticalSafetyMargin: CGFloat = 3
 
-    private static let timeLineHeight: CGFloat = measureLineHeight(
-        size: ScheduleCardStyle.timeFontSize, monospacedDigits: true)
-    private static let labelLineHeight: CGFloat = measureLineHeight(
-        size: ScheduleCardStyle.labelFontSize, monospacedDigits: false)
-    private static let compactTimeLineHeight: CGFloat = measureLineHeight(
-        size: ScheduleCardStyle.compactTimeFontSize, monospacedDigits: true)
-    private static let compactLabelLineHeight: CGFloat = measureLineHeight(
-        size: ScheduleCardStyle.compactLabelFontSize, monospacedDigits: false)
+    let configuration: ScheduleCardStyle.Configuration
+    private let timeLineHeight: CGFloat
+    private let labelLineHeight: CGFloat
+    private let compactTimeLineHeight: CGFloat
+    private let compactLabelLineHeight: CGFloat
+
+    init(configuration: ScheduleCardStyle.Configuration = .standard) {
+        self.configuration = configuration
+        self.timeLineHeight = Self.measureLineHeight(
+            size: configuration.timeFontSize, monospacedDigits: true)
+        self.labelLineHeight = Self.measureLineHeight(
+            size: configuration.labelFontSize, monospacedDigits: false)
+        self.compactTimeLineHeight = Self.measureLineHeight(
+            size: configuration.compactTimeFontSize, monospacedDigits: true)
+        self.compactLabelLineHeight = Self.measureLineHeight(
+            size: configuration.compactLabelFontSize, monospacedDigits: false)
+    }
+
+    static var stackedThresholdHeight: CGFloat {
+        ScheduleCardContentMetrics().stackedThresholdHeight
+    }
+
+    static var compactStackedThresholdHeight: CGFloat {
+        ScheduleCardContentMetrics().compactStackedThresholdHeight
+    }
+
+    static var stackedContentHeight: CGFloat {
+        ScheduleCardContentMetrics().stackedContentHeight
+    }
 
     /// Minimum card height where ScheduleCardContent's stacked vertical variant fits.
-    static var stackedThresholdHeight: CGFloat {
+    var stackedThresholdHeight: CGFloat {
         // Matches VStack(spacing: 2): 4 pt spacer + 2 + time + 2 + label + 2 (before bottom Spacer).
         ceil(
-            ScheduleCardStyle.stackedTopSpacerHeight
-                + ScheduleCardStyle.stackedSpacing * 3
+            configuration.stackedTopSpacerHeight
+                + configuration.stackedSpacing * 3
                 + timeLineHeight
                 + labelLineHeight
         ) + 2
     }
 
     /// Minimum card height where the compact 2-line stack fits (30 min cards qualify; 15-20 min stay horizontal).
-    static var compactStackedThresholdHeight: CGFloat {
+    var compactStackedThresholdHeight: CGFloat {
         ceil(
             compactTimeLineHeight
-                + ScheduleCardStyle.compactStackedSpacing
+                + configuration.compactStackedSpacing
                 + compactLabelLineHeight
         ) + 2
     }
 
     /// Protected height of the top-aligned stacked variant, including vertical safety margin.
-    static var stackedContentHeight: CGFloat {
+    var stackedContentHeight: CGFloat {
         // Ink ends after the label row; the trailing Spacer is empty.
         ceil(
-            ScheduleCardStyle.stackedTopSpacerHeight
-                + ScheduleCardStyle.stackedSpacing * 2
+            configuration.stackedTopSpacerHeight
+                + configuration.stackedSpacing * 2
                 + timeLineHeight
                 + labelLineHeight
-        ) + verticalSafetyMargin
+        ) + Self.verticalSafetyMargin
     }
 
     func defaultLayout(cardHeight: CGFloat) -> ScheduleCardPresentation.Layout {
-        cardHeight >= Self.stackedThresholdHeight ? .stacked : .horizontal
+        cardHeight >= stackedThresholdHeight ? .stacked : .horizontal
     }
 
     func defaultPresentation(cardHeight: CGFloat) -> ScheduleCardPresentation {
@@ -143,8 +231,8 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
     }
 
     func canCompactStack(cardHeight: CGFloat) -> Bool {
-        cardHeight >= Self.compactStackedThresholdHeight
-            && cardHeight < Self.stackedThresholdHeight
+        cardHeight >= compactStackedThresholdHeight
+            && cardHeight < stackedThresholdHeight
     }
 
     /// Presentations ordered from calmest to most compact for a card at `cardHeight`.
@@ -171,10 +259,10 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         availableWidth: CGFloat,
         minimum: ScheduleCardPresentation? = nil
     ) -> ScheduleCardPresentation {
-        let horizontalPaddingTotal = ScheduleCardStyle.horizontalPadding * 2
+        let horizontalPaddingTotal = configuration.horizontalPadding * 2
         let minimumCompactTime = minimum?.usesCompactTime ?? false
 
-        if cardHeight >= Self.stackedThresholdHeight {
+        if cardHeight >= stackedThresholdHeight {
             // Tall stacked cards keep AM/PM unless needed for text-aware overlap or ultra-narrow columns.
             let fullTimeWidth =
                 timeRowWidth(start: start, layout: .stacked, usesCompactTime: false)
@@ -192,7 +280,8 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
                     start: start,
                     label: label,
                     cardHeight: cardHeight,
-                    presentation: ScheduleCardPresentation(layout: .horizontal, usesCompactTime: false)
+                    presentation: ScheduleCardPresentation(
+                        layout: .horizontal, usesCompactTime: false)
                 ).width
                 if fullHorizontalWidth <= availableWidth {
                     return ScheduleCardPresentation(
@@ -222,14 +311,14 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         layout: ScheduleCardPresentation.Layout,
         usesCompactTime: Bool
     ) -> CGFloat {
-        let style = layout.style
+        let style = layout.style(for: configuration)
         let timeText = ScheduleCardStyle.formattedTime(start, compact: usesCompactTime)
         return style.iconWidth
-            + ScheduleCardStyle.timeIconSpacing
+            + configuration.timeIconSpacing
             + Self.measureTextWidth(
                 timeText,
                 size: style.timeFontSize,
-                tracking: ScheduleCardStyle.timeTracking,
+                tracking: configuration.timeTracking,
                 monospacedDigits: true)
     }
 
@@ -240,7 +329,7 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         presentation: ScheduleCardPresentation? = nil
     ) -> Bounds {
         let resolved = presentation ?? defaultPresentation(cardHeight: cardHeight)
-        let style = resolved.layout.style
+        let style = resolved.layout.style(for: configuration)
 
         let timeWidth = timeRowWidth(
             start: start,
@@ -258,7 +347,7 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         switch resolved.layout {
         case .stacked:
             rawWidth = max(timeWidth, labelWidth)
-            height = min(cardHeight, Self.stackedContentHeight)
+            height = min(cardHeight, stackedContentHeight)
         case .compactStacked:
             rawWidth = max(timeWidth, labelWidth)
             height = cardHeight
@@ -268,14 +357,15 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         }
 
         let width =
-            ScheduleCardStyle.horizontalPadding
+            configuration.horizontalPadding
             + ceil(rawWidth)
             + Self.horizontalSafetyMargin
         return Bounds(width: width, height: max(height, 0))
     }
 
     private static func makeSemiboldSystemFont(size: CGFloat, monospacedDigits: Bool) -> CTFont {
-        let base = CTFontCreateUIFontForLanguage(.system, size, nil)
+        let base =
+            CTFontCreateUIFontForLanguage(.system, size, nil)
             ?? CTFontCreateWithName("HelveticaNeue" as CFString, size, nil)
         // 0.23 matches UIFont.Weight.semibold without importing UIKit.
         var attributes: [CFString: Any] = [

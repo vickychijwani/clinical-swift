@@ -3,6 +3,7 @@ import SwiftUI
 
 struct UnavailableTimeCard: View {
     @Environment(\.appPalette) private var palette
+    @Environment(\.scheduleCardStyle) private var cardStyle
     let block: UnavailableTime
     var isDraft = false
     var isDeemphasized = false
@@ -17,7 +18,7 @@ struct UnavailableTimeCard: View {
                 systemImage: "nosign",
                 background: isDraft ? .draft : .color(palette[.unavailable]),
                 border: isDraft ? palette[.activeBorder] : palette[.unavailableBorder],
-                borderStyle: StrokeStyle(lineWidth: 2),
+                borderStyle: StrokeStyle(lineWidth: cardStyle.borderWidth),
                 timeColor: palette[.unavailableTime],
                 labelColor: palette[.unavailableLabel]
             ),

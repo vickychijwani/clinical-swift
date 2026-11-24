@@ -10,7 +10,9 @@ final class WidgetTimelineInvalidator {
     init(
         database: any DatabaseWriter,
         reload: @escaping @Sendable () -> Void = {
-            WidgetCenter.shared.reloadTimelines(ofKind: ClinicalWidgetConstants.scheduleKind)
+            for kind in ClinicalWidgetConstants.allKinds {
+                WidgetCenter.shared.reloadTimelines(ofKind: kind)
+            }
         }
     ) {
         @Dependency(\.telemetry) var telemetry

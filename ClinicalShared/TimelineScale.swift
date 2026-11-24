@@ -71,13 +71,19 @@ struct TimelineScale {
 
     let breakPresentation: BreakPresentation
     let metrics: TimelineMetrics
+    let visibleOpening: TimeOfDay
+    let visibleClosing: TimeOfDay
 
     init(
         items: [TimelineItem],
         breakPresentation: BreakPresentation? = nil,
-        metrics: TimelineMetrics = .standard
+        metrics: TimelineMetrics = .standard,
+        visibleOpening: TimeOfDay = Bitehaus.opening,
+        visibleClosing: TimeOfDay = Bitehaus.closing
     ) {
         self.metrics = metrics
+        self.visibleOpening = visibleOpening
+        self.visibleClosing = visibleClosing
         if let breakPresentation {
             self.breakPresentation = breakPresentation
             return
@@ -88,6 +94,78 @@ struct TimelineScale {
                     item.start.timeOfDay
                 )
             } ? .expanded : .compact
+    }
+
+    /// Builds a scale that fits the day into a fixed widget height without scrolling.
+    /// Expanded breaks trim empty outer hours (9–10 AM and 8–9 PM) to preserve short-card height.
+    static func widget(
+        items: [TimelineItem],
+        now: Date?,
+        availableHeight: CGFloat
+    ) -> TimelineScale {
+        let verticalPadding: CGFloat = 6
+        let compactBreakHeight: CGFloat = 20
+        let breakPresentation: BreakPresentation =
+            items.contains { item in
+                (Bitehaus.break.start..<Bitehaus.break.end).contains(item.start.timeOfDay)
+            } ? .expanded : .compact
+
+        let trimmedOpening = Bitehaus.preferredFirstShiftStart
+        let trimmedClosing = TimeOfDay(20, 0)
+        let nowTime = now?.timeOfDay
+
+        let visibleOpening: TimeOfDay
+        let visibleClosing: TimeOfDay
+        switch breakPresentation {
+        case .compact:
+            visibleOpening = Bitehaus.opening
+            visibleClosing = Bitehaus.closing
+        case .expanded:
+            let needsOpeningHour =
+                items.contains { $0.start.timeOfDay < trimmedOpening }
+                || (nowTime.map { (Bitehaus.opening..<trimmedOpening).contains($0) } ?? false)
+            let needsClosingHour =
+                items.contains {
+                    $0.start.timeOfDay.totalMinutes + $0.durationMinutes
+                        > trimmedClosing.totalMinutes
+                }
+                || (nowTime.map { (trimmedClosing..<Bitehaus.closing).contains($0) } ?? false)
+            visibleOpening = needsOpeningHour ? Bitehaus.opening : trimmedOpening
+            visibleClosing = needsClosingHour ? Bitehaus.closing : trimmedClosing
+        }
+
+        let usableHeight = max(availableHeight - verticalPadding * 2, 1)
+        let hourHeight: CGFloat
+        switch breakPresentation {
+        case .compact:
+            let workingMinutes =
+                Bitehaus.break.start.minutes(since: visibleOpening)
+                + visibleClosing.minutes(since: Bitehaus.break.end)
+            hourHeight = max(
+                (usableHeight - compactBreakHeight) / (CGFloat(workingMinutes) / 60),
+                1
+            )
+        case .expanded:
+            let visibleMinutes = visibleClosing.minutes(since: visibleOpening)
+            hourHeight = max(usableHeight / (CGFloat(visibleMinutes) / 60), 1)
+        }
+
+        let metrics = TimelineMetrics(
+            hourHeight: hourHeight,
+            timeColumnWidth: 32,
+            verticalPadding: verticalPadding,
+            horizontalCardMargin: 6,
+            verticalCardMargin: 0,
+            overlapColumnSpacing: 0,
+            compactBreakHeight: compactBreakHeight
+        )
+        return TimelineScale(
+            items: items,
+            breakPresentation: breakPresentation,
+            metrics: metrics,
+            visibleOpening: visibleOpening,
+            visibleClosing: visibleClosing
+        )
     }
 
     var isBreakExpanded: Bool {
@@ -104,11 +182,11 @@ struct TimelineScale {
     }
 
     var totalHeight: CGFloat {
-        yOffset(for: Bitehaus.closing)
+        yOffset(for: visibleClosing)
     }
 
     var hourMarkers: [TimeOfDay] {
-        (Bitehaus.opening.hour...Bitehaus.closing.hour)
+        (visibleOpening.hour...visibleClosing.hour)
             .map { TimeOfDay($0, 0) }
             .filter { time in
                 isBreakExpanded
@@ -119,12 +197,12 @@ struct TimelineScale {
 
     /// Content coordinate excluding Timeline's outer vertical padding.
     func yOffset(for proposedTime: TimeOfDay) -> CGFloat {
-        let time = min(max(proposedTime, Bitehaus.opening), Bitehaus.closing)
+        let time = min(max(proposedTime, visibleOpening), visibleClosing)
         let firstSegmentHeight = metrics.height(
-            for: Bitehaus.break.start.minutes(since: Bitehaus.opening))
+            for: Bitehaus.break.start.minutes(since: visibleOpening))
 
         if time <= Bitehaus.break.start {
-            return metrics.height(for: time.minutes(since: Bitehaus.opening))
+            return metrics.height(for: time.minutes(since: visibleOpening))
         }
 
         if time < Bitehaus.break.end {
@@ -153,19 +231,19 @@ struct TimelineScale {
             minutes = y / metrics.hourHeight * 60
         } else if y < breakY + breakHeight {
             minutes =
-                CGFloat(Bitehaus.break.start.minutes(since: Bitehaus.opening))
+                CGFloat(Bitehaus.break.start.minutes(since: visibleOpening))
                 + (y - breakY) / breakHeight
                 * CGFloat(Bitehaus.break.end.minutes(since: Bitehaus.break.start))
         } else {
             minutes =
-                CGFloat(Bitehaus.break.end.minutes(since: Bitehaus.opening))
+                CGFloat(Bitehaus.break.end.minutes(since: visibleOpening))
                 + (y - breakY - breakHeight) / metrics.hourHeight * 60
         }
-        return Bitehaus.opening + Int(minutes.rounded())
+        return visibleOpening + Int(minutes.rounded())
     }
 
     func showsTime(_ time: TimeOfDay) -> Bool {
-        guard (Bitehaus.opening..<Bitehaus.closing).contains(time) else {
+        guard (visibleOpening..<visibleClosing).contains(time) else {
             return false
         }
 

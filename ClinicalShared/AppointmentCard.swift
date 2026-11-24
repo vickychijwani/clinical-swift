@@ -5,6 +5,7 @@ struct AppointmentCard: View {
     @Environment(\.appPalette) private var palette
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.self) private var environment
+    @Environment(\.scheduleCardStyle) private var cardStyle
     let appt: Appointment
     var isSelected = false
     var isDeemphasized = false
@@ -37,7 +38,7 @@ struct AppointmentCard: View {
                 systemImage: systemImage,
                 background: .draft,
                 border: palette[.activeBorder],
-                borderStyle: StrokeStyle(lineWidth: 2)
+                borderStyle: StrokeStyle(lineWidth: cardStyle.borderWidth)
             )
 
         case .scheduled:
@@ -45,7 +46,7 @@ struct AppointmentCard: View {
                 systemImage: systemImage,
                 background: .color(palette[.card]),
                 border: palette[.cardBorder],
-                borderStyle: StrokeStyle(lineWidth: 2),
+                borderStyle: StrokeStyle(lineWidth: cardStyle.borderWidth),
                 contentOpacity: 1
             )
 
@@ -54,7 +55,7 @@ struct AppointmentCard: View {
                 systemImage: systemImage,
                 background: .color(palette[.completedCard]),
                 border: palette[.completedBorder],
-                borderStyle: StrokeStyle(lineWidth: 2),
+                borderStyle: StrokeStyle(lineWidth: cardStyle.borderWidth),
                 contentOpacity: 0.6
             )
 
