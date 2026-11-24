@@ -54,7 +54,7 @@ struct AppointmentDetailsSummary: View {
 
     var body: some View {
         HStack(alignment: .center) {
-            var statusColor = palette[statusPresentation.statusColor]
+            let statusColor = palette[statusPresentation.statusColor]
             Image(systemName: statusPresentation.systemImage)
                 .font(.system(size: 32))
                 .frame(width: 32, height: 32)
