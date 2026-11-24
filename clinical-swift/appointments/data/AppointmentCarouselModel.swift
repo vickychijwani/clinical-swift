@@ -1,7 +1,6 @@
 import ClinicalModels
 import ClinicalPersistence
 import CoreGraphics
-import Dependencies
 import Foundation
 import SQLiteData
 
@@ -60,7 +59,8 @@ nonisolated enum AppointmentCarouselMotion {
             let sign: CGFloat = translation < 0 ? -1 : 1
             let excess = abs(translation) - step
             boundedTranslation =
-                sign * (step + rubberBand(offset: excess, limit: step * singleDragOverflowLimitFraction))
+                sign
+                * (step + rubberBand(offset: excess, limit: step * singleDragOverflowLimitFraction))
         } else {
             boundedTranslation = translation
         }
@@ -73,7 +73,8 @@ nonisolated enum AppointmentCarouselMotion {
             return rubberBand(offset: raw, limit: step * boundaryLimitFraction)
         }
         if raw > maxPosition {
-            return maxPosition + rubberBand(offset: raw - maxPosition, limit: step * boundaryLimitFraction)
+            return maxPosition
+                + rubberBand(offset: raw - maxPosition, limit: step * boundaryLimitFraction)
         }
         return raw
     }
@@ -163,20 +164,16 @@ enum AppointmentCarouselOrder {
 
 @MainActor @Observable
 final class AppointmentDayCarouselModel {
-    @ObservationIgnored @Dependency(\.appointmentStatusClient) private var statusClient
-    @ObservationIgnored @Dependency(\.date.now) private var now
-    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
     @ObservationIgnored @FetchOne private var initialRow: AppointmentPatientSelection?
     @ObservationIgnored @FetchAll(AppointmentPatientSelection.none) private var dayAppointmentRows
     @ObservationIgnored @FetchAll(UnavailableTimeRecord.none) private var dayUnavailableTimeRows
+    @ObservationIgnored private let statusUpdater = AppointmentStatusUpdateModel()
     @ObservationIgnored private var cachedOrderKey: OrderCacheKey?
     @ObservationIgnored private var cachedOrderedAppointments: [AppointmentDetails] = []
 
     private(set) var currentAppointmentID: Appointment.ID
     private(set) var loadedDay: Date?
     private(set) var hasResolvedInitialDetails = false
-    private(set) var isUpdatingStatus = false
-    private(set) var errorMessage: String?
 
     init(initialAppointmentID: Appointment.ID, initialScheduleDate: Date) {
         self.currentAppointmentID = initialAppointmentID
@@ -191,6 +188,14 @@ final class AppointmentDayCarouselModel {
 
     var initialDetails: AppointmentDetails? {
         initialRow?.details
+    }
+
+    var isUpdatingStatus: Bool {
+        statusUpdater.isUpdating
+    }
+
+    var errorMessage: String? {
+        statusUpdater.errorMessage
     }
 
     func orderedAppointments(
@@ -239,11 +244,11 @@ final class AppointmentDayCarouselModel {
     func select(appointmentID: Appointment.ID) {
         guard currentAppointmentID != appointmentID else { return }
         currentAppointmentID = appointmentID
-        errorMessage = nil
+        statusUpdater.dismissError()
     }
 
     func dismissError() {
-        errorMessage = nil
+        statusUpdater.dismissError()
     }
 
     func loadInitial() async {
@@ -275,74 +280,20 @@ final class AppointmentDayCarouselModel {
         for appointmentID: Appointment.ID,
         to requestedStatus: Appointment.Status
     ) async -> Bool {
-        guard !isUpdatingStatus else { return false }
-
-        errorMessage = nil
-        isUpdatingStatus = true
-        defer { isUpdatingStatus = false }
-
-        do {
-            _ = try await statusClient.updateStatus(appointmentID, requestedStatus, now)
-            telemetry.event(
-                category: .appointment,
-                name: "appointment_status_updated",
-                recordID: appointmentID.uuidString.lowercased(),
-                status: requestedStatus.rawValue
-            )
-            return true
-        } catch let error as AppointmentStatusUpdateError {
-            telemetry.log(
-                .error,
-                category: .appointment,
-                name: "appointment_status_update_failed",
-                message: "Appointment status update rejected",
-                error: error,
-                recordID: appointmentID.uuidString.lowercased(),
-                status: requestedStatus.rawValue
-            )
-            await handleStatusUpdateError(error, appointmentID: appointmentID)
-            return false
-        } catch {
-            telemetry.log(
-                .error,
-                category: .appointment,
-                name: "appointment_status_update_failed",
-                message: "Appointment status update failed",
-                error: error,
-                recordID: appointmentID.uuidString.lowercased(),
-                status: requestedStatus.rawValue
-            )
-            errorMessage = "The appointment could not be updated."
-            return false
+        await statusUpdater.updateStatus(
+            for: appointmentID,
+            to: requestedStatus
+        ) {
+            await refreshAfterStaleStatusUpdate(appointmentID: appointmentID)
         }
     }
 
-    private func handleStatusUpdateError(
-        _ error: AppointmentStatusUpdateError,
-        appointmentID: Appointment.ID
-    ) async {
+    private func refreshAfterStaleStatusUpdate(appointmentID: Appointment.ID) async {
         if let loadedDay {
             await reloadDay(loadedDay)
         }
         if initialRow?.id == appointmentID {
             _ = try? await $initialRow.load(appointmentDetailsQuery(id: appointmentID))
-        }
-        switch error {
-        case .transition(.invalidTransition(let currentStatus, _)):
-            switch currentStatus {
-            case .completed:
-                errorMessage = "This appointment was already completed."
-            case .cancelled:
-                errorMessage = "This appointment was already cancelled."
-            case .draft, .scheduled:
-                errorMessage = "This appointment was already updated."
-            }
-
-        case .unavailable:
-            errorMessage = "This appointment is no longer available."
-
-        case .invalidStoredStatus, .transition(.transientStatus):
-            errorMessage = "The appointment could not be updated."
         }
     }
 

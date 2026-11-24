@@ -86,7 +86,8 @@ struct AppointmentCarouselTests {
         let tieShort = makeDetails(name: "Short", start: tenAM, duration: 15, status: .scheduled)
         let tieLong = makeDetails(name: "Long", start: tenAM, duration: 60, status: .scheduled)
         let tieMedium = makeDetails(name: "Medium", start: tenAM, duration: 45, status: .completed)
-        let cancelled = makeDetails(name: "Cancelled", start: tenAM, duration: 30, status: .cancelled)
+        let cancelled = makeDetails(
+            name: "Cancelled", start: tenAM, duration: 30, status: .cancelled)
         let draft = makeDetails(name: "Draft", start: noon, duration: 30, status: .draft)
         let late = makeDetails(name: "Late", start: noon, duration: 30, status: .scheduled)
         let block = UnavailableTime(
@@ -217,6 +218,71 @@ struct AppointmentCarouselTests {
             model.select(appointmentID: completed.id)
             #expect(model.activeDetails(in: ordered)?.id == completed.id)
         }
+    }
+
+    @Test func dayCarouselModelStatusUpdateRefreshesOnConflictAndClearsErrorOnSelect() async throws
+    {
+        let database = try testDatabase()
+        let morning = try Date("2026-10-30T04:30:00Z", strategy: .iso8601)  // 10:00 IST
+        let updatedAt = try Date("2026-10-30T05:00:00Z", strategy: .iso8601)
+        let patient = Patient(name: "Asha Rao")
+
+        let first = Appointment(
+            patientName: patient.displayName, start: morning, durationMinutes: 30,
+            status: .scheduled)
+        let second = Appointment(
+            patientName: patient.displayName, start: morning.addingTimeInterval(3600),
+            durationMinutes: 30, status: .scheduled)
+
+        try await database.write { db in
+            try PatientRecord.insert {
+                PatientRecord(
+                    id: patient.id, name: patient.name, phone: nil, dob: nil, gender: nil,
+                    createdAt: morning, updatedAt: morning)
+            }.execute(db)
+            for item in [first, second] {
+                let record = try AppointmentRecord.persisted(
+                    id: item.id, patientID: patient.id, start: item.start,
+                    durationMinutes: item.durationMinutes, status: item.status,
+                    createdAt: morning, updatedAt: morning)
+                try AppointmentRecord.insert { record }.execute(db)
+            }
+        }
+
+        try await withDependencies {
+            $0.defaultDatabase = database
+            $0.date.now = updatedAt
+        } operation: {
+            let model = AppointmentDayCarouselModel(
+                initialAppointmentID: first.id,
+                initialScheduleDate: morning
+            )
+            await model.loadInitial()
+
+            _ = try await database.updateAppointmentStatus(
+                id: first.id, to: .completed, at: morning.addingTimeInterval(600))
+
+            let conflictResult = await model.updateStatus(for: first.id, to: .cancelled)
+            #expect(!conflictResult)
+            #expect(model.errorMessage == "This appointment was already completed.")
+
+            let refreshed = model.orderedAppointments(
+                availableWidth: 402, overlap: ScheduleCardTuning().overlap)
+            #expect(model.activeDetails(in: refreshed)?.appointment.status == .completed)
+
+            model.select(appointmentID: second.id)
+            #expect(model.errorMessage == nil)
+
+            let cancelResult = await model.updateStatus(for: second.id, to: .cancelled)
+            #expect(cancelResult)
+            #expect(model.errorMessage == nil)
+        }
+
+        let secondRecord = try await database.read { db in
+            try AppointmentRecord.find(second.id).fetchOne(db)
+        }
+        #expect(secondRecord?.status == Appointment.Status.cancelled.rawValue)
+        #expect(secondRecord?.updatedAt == updatedAt)
     }
 
     private func makeDetails(
