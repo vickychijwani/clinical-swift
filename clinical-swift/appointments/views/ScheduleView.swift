@@ -114,6 +114,9 @@ struct ScheduleView: View {
             scrollToEditorPreview()
         }
         .task(id: visibleAppointmentDetailsScrollRequest) {
+            // Let SwiftUI lay out tray scroll clearance before animating to evening appointments.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             scrollToVisibleAppointmentDetails()
         }
         // Load the visible days without changing the doctor's chosen draft interval.

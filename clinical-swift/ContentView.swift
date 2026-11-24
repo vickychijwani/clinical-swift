@@ -196,6 +196,10 @@ private struct AppTrayHost: ViewModifier {
                     default: router.dismissPresentation()
                     }
                 }),
+            usesCustomSurface: {
+                if case .details = $0 { return true }
+                return false
+            },
             didAppear: router.presentationDidAppear,
             didDismiss: router.presentationDidDismiss
         ) { item in

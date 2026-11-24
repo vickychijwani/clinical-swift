@@ -19,7 +19,10 @@ App-owned flows share one tray. Child steps preserve their parent flow. Contacts
 and SMS use native presentation.
 
 Completion payment drafts belong to one appointment-details visit. Back keeps the
-draft; leaving the visit discards it. A late payment save must not close another visit.
+draft; leaving the visit (closing the tray or swiping to another appointment) discards
+it without confirmation. A late payment save must not close another visit.
 
 Appointment details must match the selected Schedule day before they appear.
 Selecting another day dismisses details so they cannot appear over the wrong day.
+Swiping root appointment details switches among scheduled and completed appointments
+on that same day in place and never crosses dates.

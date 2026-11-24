@@ -6,15 +6,10 @@ import SQLiteData
 
 @MainActor @Observable
 final class AppointmentDetailsModel {
-    @ObservationIgnored @Dependency(\.appointmentStatusClient) private var statusClient
-    @ObservationIgnored @Dependency(\.date.now) private var now
-    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
     @ObservationIgnored @FetchOne private var row: AppointmentPatientSelection?
+    @ObservationIgnored private let statusUpdater = AppointmentStatusUpdateModel()
 
     let appointmentID: Appointment.ID
-
-    private(set) var errorMessage: String?
-    private(set) var isUpdatingStatus = false
 
     init(appointmentID: Appointment.ID) {
         self.appointmentID = appointmentID
@@ -33,8 +28,16 @@ final class AppointmentDetailsModel {
         details?.appointment.status == .scheduled
     }
 
+    var errorMessage: String? {
+        statusUpdater.errorMessage
+    }
+
+    var isUpdatingStatus: Bool {
+        statusUpdater.isUpdating
+    }
+
     func dismissError() {
-        errorMessage = nil
+        statusUpdater.dismissError()
     }
 
     func load() async throws {
@@ -42,11 +45,40 @@ final class AppointmentDetailsModel {
     }
 
     func updateStatus(to requestedStatus: Appointment.Status) async -> Bool {
-        guard !isUpdatingStatus else { return false }
+        await statusUpdater.updateStatus(
+            for: appointmentID,
+            to: requestedStatus
+        ) {
+            _ = try? await $row.load(appointmentDetailsQuery(id: appointmentID))
+        }
+    }
+}
+
+/// Shared status-update workflow so both appointment details surfaces enforce the same
+/// submission guard, telemetry, and conflict messages.
+@MainActor @Observable
+final class AppointmentStatusUpdateModel {
+    @ObservationIgnored @Dependency(\.appointmentStatusClient) private var statusClient
+    @ObservationIgnored @Dependency(\.date.now) private var now
+    @ObservationIgnored @Dependency(\.telemetry) private var telemetry
+
+    private(set) var isUpdating = false
+    private(set) var errorMessage: String?
+
+    func dismissError() {
+        errorMessage = nil
+    }
+
+    func updateStatus(
+        for appointmentID: Appointment.ID,
+        to requestedStatus: Appointment.Status,
+        onStaleRecord: @MainActor () async -> Void = {}
+    ) async -> Bool {
+        guard !isUpdating else { return false }
 
         errorMessage = nil
-        isUpdatingStatus = true
-        defer { isUpdatingStatus = false }
+        isUpdating = true
+        defer { isUpdating = false }
 
         do {
             _ = try await statusClient.updateStatus(appointmentID, requestedStatus, now)
@@ -67,7 +99,7 @@ final class AppointmentDetailsModel {
                 recordID: appointmentID.uuidString.lowercased(),
                 status: requestedStatus.rawValue
             )
-            await handleStatusUpdateError(error)
+            await handleError(error, onStaleRecord: onStaleRecord)
             return false
         } catch {
             telemetry.log(
@@ -84,10 +116,13 @@ final class AppointmentDetailsModel {
         }
     }
 
-    private func handleStatusUpdateError(_ error: AppointmentStatusUpdateError) async {
+    private func handleError(
+        _ error: AppointmentStatusUpdateError,
+        onStaleRecord: @MainActor () async -> Void
+    ) async {
         switch error {
         case .transition(.invalidTransition(let currentStatus, _)):
-            _ = try? await $row.load(appointmentDetailsQuery(id: appointmentID))
+            await onStaleRecord()
             switch currentStatus {
             case .completed:
                 errorMessage = "This appointment was already completed."
@@ -98,7 +133,7 @@ final class AppointmentDetailsModel {
             }
 
         case .unavailable:
-            _ = try? await $row.load(appointmentDetailsQuery(id: appointmentID))
+            await onStaleRecord()
             errorMessage = "This appointment is no longer available."
 
         case .invalidStoredStatus, .transition(.transientStatus):

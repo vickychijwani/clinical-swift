@@ -222,24 +222,14 @@ nonisolated final class TrayUITests: XCTestCase {
     }
 
     @MainActor
-    func testOutsideTapConfirmsDraftDiscard() {
+    func testOutsideTapClosesDetailsAndDiscardsDraftDirectly() {
         let app = launch()
         app.buttons["Complete"].tap()
         app.textFields["completion-amount"].typeText("1000")
         app.navigationBars.buttons["BackButton"].tap()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.2)).tap()
-        XCTAssertTrue(app.buttons["Discard Changes"].hittableOrWait(timeout: 3))
-        if app.buttons["Keep Editing"].exists {
-            app.buttons["Keep Editing"].tap()
-        } else {
-            app.otherElements["PopoverDismissRegion"].firstMatch.tap()
-        }
-        app.buttons["Complete"].tap()
-        XCTAssertEqual(app.textFields["completion-amount"].value as? String, "1000")
-        app.navigationBars.buttons["BackButton"].tap()
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.2)).tap()
-        app.buttons["Discard Changes"].tap()
         XCTAssertTrue(app.navigationBars["Appointment"].absentOrWait(timeout: 3))
+        XCTAssertFalse(app.buttons["Discard Changes"].exists)
     }
 
     @MainActor

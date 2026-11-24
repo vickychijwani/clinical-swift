@@ -20,7 +20,7 @@ struct PatientSummaryView: View {
 
     init(
         patient: Patient,
-        onSelect: @escaping @MainActor @Sendable () -> Void
+        onSelect: (@MainActor @Sendable () -> Void)?
     ) {
         patientItemView = PatientItemView(patient: patient)
         self.patient = patient

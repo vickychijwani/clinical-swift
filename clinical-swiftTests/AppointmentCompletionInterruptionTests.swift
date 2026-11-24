@@ -12,29 +12,24 @@ import Testing
 struct AppointmentCompletionInterruptionTests {
     private enum Interruption: CaseIterable { case sheet, sameRoot, date, destination }
 
-    @Test func trayDismissalUsesTheDraftAndVisitThatRequestedDiscard() throws {
+    @Test func rootDismissalDiscardsDraftDirectlyAndRejectsStaleVisitPush() throws {
         let fixture = try makeFixture()
         let router = Router(selectedScheduleDate: fixture.timestamp)
         router.presentDetails(.appointment(fixture.details.id))
         let presentation = try #require(router.detailsPresentation)
         let visit = presentation.visitID
-        let policy = DetailsDismissal()
         router.beginAppointmentCompletion(
             fixture.details, visitID: visit, presentationID: presentation.id)
         let model = try #require(presentation.completionDrafts[visit])
         model.setAmountText("1000")
-        policy.request(router: router, presentation: presentation)
-        #expect(router.detailsPresentation === presentation)
-        #expect(!policy.isConfirmingDiscard)
         router.setDetailsPath([], presentationID: presentation.id)
-        policy.request(router: router, presentation: presentation)
-        #expect(policy.isConfirmingDiscard)
-        #expect(router.detailsPresentation === presentation)
+        #expect(presentation.hasUnsavedCompletion)
         router.presentDetails(.appointment(fixture.details.id))
-        policy.discard(router: router, presentation: presentation)
-        #expect(router.detailsPresentation === presentation)
+        #expect(presentation.completionDrafts.isEmpty)
         router.pushDetails(.patient(UUID()), presentationID: presentation.id, visitID: visit)
         #expect(presentation.path.isEmpty)
+        router.dismissDetails(presentationID: presentation.id)
+        #expect(router.detailsPresentation == nil)
     }
 
     @Test(arguments: Interruption.allCases)
@@ -70,10 +65,7 @@ struct AppointmentCompletionInterruptionTests {
             let model = try #require(presentation.completionDrafts[visit])
             model.setAmountText("1000")
             model.selectMethod(.upi)
-            let policy = DetailsDismissal()
             router.setDetailsPath([], presentationID: presentation.id)
-            policy.request(router: router, presentation: presentation)
-            #expect(policy.isConfirmingDiscard)
             router.beginAppointmentCompletion(
                 fixture.details, visitID: visit, presentationID: presentation.id)
             let saving = Task { await model.save() }
@@ -84,11 +76,6 @@ struct AppointmentCompletionInterruptionTests {
             try #require(gate.isWaiting)
             #expect(model.isSaving)
             #expect(presentation.isSavingCompletion)
-            policy.discard(router: router, presentation: presentation)
-            #expect(router.detailsPresentation === presentation)
-            policy.isConfirmingDiscard = false
-            policy.request(router: router, presentation: presentation)
-            #expect(!policy.isConfirmingDiscard)
             router.dismissDetails(presentationID: presentation.id)
             #expect(router.detailsPresentation === presentation)
             router.setDetailsPath([], presentationID: presentation.id)

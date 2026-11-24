@@ -60,8 +60,9 @@ struct ScheduleTimelinePage: View {
                     timelineFrame = $0
                 }
 
-                if needsAdjustmentClearance {
-                    // Direct adjustment needs scroll range to anchor an expanding break.
+                if needsAdjustmentClearance || selectedAppointmentID != nil {
+                    // Direct adjustment and open appointment details need bottom scroll range
+                    // so evening appointments can scroll clear of the tray.
                     Color.clear
                         .containerRelativeFrame(
                             .vertical,

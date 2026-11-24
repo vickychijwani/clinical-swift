@@ -42,7 +42,7 @@ struct AppointmentDetailsCard: View {
     typealias Action = @MainActor @Sendable () -> Void
 
     enum Variant: Sendable {
-        case standard(patient: Patient, onSelectPatient: Action)
+        case standard(patient: Patient, onSelectPatient: Action?)
         case patientTimeline(onSelectAppointment: Action)
     }
 }

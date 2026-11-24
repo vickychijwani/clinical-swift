@@ -185,47 +185,62 @@ private struct AppointmentDetailsContent: View {
     }
 }
 
-private struct AppointmentDetailsActionsView: View {
+struct AppointmentDetailsActionsView: View {
+    var showsActions = true
     let isUpdating: Bool
     let onComplete: @MainActor () -> Void
     let onReschedule: @MainActor () -> Void
     let onCancel: @MainActor () async -> Void
+    @Namespace private var glassNamespace
 
     var body: some View {
         GlassEffectContainer {
-            HStack {
-                Button(action: onComplete) {
-                    Label("Complete", systemImage: "checkmark")
+            if showsActions {
+                HStack {
+                    Button(action: onComplete) {
+                        Label("Complete", systemImage: "checkmark")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.appGlassProminent)
+                    .glassEffectID("complete", in: glassNamespace)
+                    .glassEffectTransition(.materialize)
+
+                    Button {
+                        onReschedule()
+                    } label: {
+                        Label(
+                            "Reschedule",
+                            systemImage: "clock.arrow.trianglehead.clockwise.rotate.90.path.dotted"
+                        )
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                         .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.appGlassProminent)
+                    }
+                    .buttonStyle(.glass)
+                    .glassEffectID("reschedule", in: glassNamespace)
+                    .glassEffectTransition(.materialize)
 
-                Button {
-                    onReschedule()
-                } label: {
-                    Label(
-                        "Reschedule",
-                        systemImage: "clock.arrow.trianglehead.clockwise.rotate.90.path.dotted"
-                    )
-                    .frame(maxWidth: .infinity)
+                    ConfirmingAsyncButton(
+                        "Cancel Appointment",
+                        role: .destructive,
+                        message: Text(
+                            "This appointment will be hidden from the schedule and appointment history."
+                        ),
+                        action: onCancel
+                    ) {
+                        Image(systemName: "xmark.bin")
+                    }
+                    .buttonStyle(.glass)
+                    .glassEffectID("cancel", in: glassNamespace)
+                    .glassEffectTransition(.materialize)
                 }
-                .buttonStyle(.glass)
-
-                ConfirmingAsyncButton(
-                    "Cancel Appointment",
-                    role: .destructive,
-                    message: Text(
-                        "This appointment will be hidden from the schedule and appointment history."
-                    ),
-                    action: onCancel
-                ) {
-                    Image(systemName: "xmark.bin")
-                }
-                .buttonStyle(.glass)
+                .disabled(isUpdating)
             }
-            .disabled(isUpdating)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.smooth(duration: 0.28), value: showsActions)
     }
 }
 
