@@ -3,12 +3,24 @@ import SwiftUI
 struct TimelineHourGrid: View {
     struct Style: Equatable, Sendable {
         let hourFont: Font
-        let alignsTrailingInTimeColumn: Bool
+        let periodFont: Font
+        let periodOpacity: Double
+        let periodSpacing: CGFloat
+        let gridLineGap: CGFloat
 
-        static let standard = Style(hourFont: .caption, alignsTrailingInTimeColumn: false)
+        static let standard = Style(
+            hourFont: .system(size: 15, weight: .regular).monospacedDigit(),
+            periodFont: .system(size: 9.5, weight: .regular),
+            periodOpacity: 0.65,
+            periodSpacing: 2,
+            gridLineGap: 8
+        )
         static let widget = Style(
-            hourFont: .system(size: 9.5, weight: .medium).monospacedDigit(),
-            alignsTrailingInTimeColumn: true
+            hourFont: .system(size: 10.5, weight: .medium).monospacedDigit(),
+            periodFont: .system(size: 7, weight: .medium),
+            periodOpacity: 0.65,
+            periodSpacing: 1.5,
+            gridLineGap: 10
         )
     }
 
@@ -26,22 +38,16 @@ struct TimelineHourGrid: View {
                     .frame(width: contentWidth, height: 1)
                     .position(x: contentCenterX, y: y)
 
-                if style.alignsTrailingInTimeColumn {
-                    Text(time.formatted(.hourOnly))
-                        .font(style.hourFont)
-                        .foregroundStyle(AppColor.hour)
-                        .lineLimit(1)
-                        .frame(width: scale.metrics.timeColumnWidth, alignment: .trailing)
-                        .position(x: scale.metrics.timeColumnWidth / 2, y: y)
-                } else {
-                    Text(time.formatted(.hourOnly))
-                        .font(style.hourFont)
-                        .foregroundStyle(AppColor.hour)
-                        .position(x: scale.metrics.timeColumnWidth - 8, y: y)
-                }
+                TimelineHourLabel(parts: time.hourParts, style: style)
+                    .frame(width: labelColumnWidth, alignment: .trailing)
+                    .position(x: labelColumnWidth / 2, y: y)
             }
         }
         .allowsHitTesting(false)
+    }
+
+    private var labelColumnWidth: CGFloat {
+        max(scale.metrics.contentLeadingInset - style.gridLineGap, 0)
     }
 
     private var contentWidth: CGFloat {
@@ -50,5 +56,26 @@ struct TimelineHourGrid: View {
 
     private var contentCenterX: CGFloat {
         scale.metrics.contentLeadingInset + contentWidth / 2
+    }
+}
+
+private struct TimelineHourLabel: View {
+    let parts: TimeOfDay.HourParts
+    let style: TimelineHourGrid.Style
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: style.periodSpacing) {
+            Text(parts.number)
+                .font(style.hourFont)
+                .foregroundStyle(AppColor.hour)
+
+            if !parts.period.isEmpty {
+                Text(parts.period)
+                    .font(style.periodFont)
+                    .textCase(.uppercase)
+                    .foregroundStyle(AppColor.hour.opacity(style.periodOpacity))
+            }
+        }
+        .lineLimit(1)
     }
 }

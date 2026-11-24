@@ -82,6 +82,11 @@ extension TimeOfDay {
         case full
     }
 
+    nonisolated struct HourParts: Equatable, Sendable {
+        let number: String
+        let period: String
+    }
+
     func formatted(_ format: Format) -> String {
         switch format {
         case .full:
@@ -89,5 +94,26 @@ extension TimeOfDay {
         case .hourOnly:
             today.formatted(ClinicDate.formatStyle.hour(.defaultDigits(amPM: .abbreviated)))
         }
+    }
+
+    /// Splits the clinic-formatted hour label into its numeric hour and AM/PM period.
+    nonisolated var hourParts: HourParts {
+        let attributed = today.formatted(
+            ClinicDate.formatStyle.hour(.defaultDigits(amPM: .abbreviated)).attributedStyle
+        )
+        var number = ""
+        var period = ""
+        for run in attributed.runs {
+            let text = String(attributed[run.range].characters)
+            switch run.dateField {
+            case .hour:
+                number += text
+            case .amPM:
+                period += text
+            default:
+                break
+            }
+        }
+        return HourParts(number: number, period: period)
     }
 }

@@ -1,4 +1,5 @@
 import ClinicalModels
+import Dependencies
 import Foundation
 import Testing
 
@@ -59,5 +60,18 @@ struct TimeOfDayTests {
         let appointmentStart = TimeOfDay(10, 15).on(date: referenceDate)
 
         #expect(appointmentStart.minutes(since: TimeOfDay(9, 0)) == 75)
+    }
+
+    @Test func hourPartsSplitsNumberAndPeriodAcrossDay() throws {
+        let now = try Date("2026-04-15T04:30:00Z", strategy: .iso8601)
+        withDependencies {
+            $0.date.now = now
+        } operation: {
+            #expect(TimeOfDay(0, 0).hourParts == TimeOfDay.HourParts(number: "12", period: "AM"))
+            #expect(TimeOfDay(9, 0).hourParts == TimeOfDay.HourParts(number: "9", period: "AM"))
+            #expect(TimeOfDay(12, 0).hourParts == TimeOfDay.HourParts(number: "12", period: "PM"))
+            #expect(TimeOfDay(13, 0).hourParts == TimeOfDay.HourParts(number: "1", period: "PM"))
+            #expect(TimeOfDay(21, 0).hourParts == TimeOfDay.HourParts(number: "9", period: "PM"))
+        }
     }
 }
