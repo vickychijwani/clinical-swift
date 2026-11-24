@@ -2,7 +2,7 @@ import XCTest
 
 nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
     @MainActor
-    func testBackKeepsDraftAndRootCloseConfirmsDiscard() {
+    func testBackKeepsDraftAndRootCloseDiscardsDirectly() {
         let app = AppointmentCompletionUITestSupport.launch(fromSchedule: true)
         app.textFields["completion-amount"].typeText("1000")
         app.segmentedControls["completion-method"].buttons["Cash"].tap()
@@ -11,29 +11,8 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
         XCTAssertEqual(app.textFields["completion-amount"].value as? String, "1000")
         XCTAssertTrue(app.segmentedControls["completion-method"].buttons["Cash"].isSelected)
         app.navigationBars.buttons["BackButton"].tap()
-        let detailsBar = app.navigationBars["Appointment"]
-        detailsBar.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.1)).press(
-            forDuration: 0.05,
-            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95)))
-        XCTAssertTrue(detailsBar.exists)
-        XCTAssertTrue(app.buttons["Discard Changes"].hittableOrWait(timeout: 3))
-        if app.buttons["Keep Editing"].exists {
-            app.buttons["Keep Editing"].tap()
-        } else {
-            app.otherElements["PopoverDismissRegion"].firstMatch.tap()
-        }
         app.buttons["Close"].tap()
-        XCTAssertTrue(app.buttons["Discard Changes"].hittableOrWait(timeout: 3))
-        if app.buttons["Keep Editing"].exists {
-            app.buttons["Keep Editing"].tap()
-        } else {
-            app.otherElements["PopoverDismissRegion"].firstMatch.tap()
-        }
-        app.buttons["Complete"].tap()
-        XCTAssertEqual(app.textFields["completion-amount"].value as? String, "1000")
-        app.navigationBars.buttons["BackButton"].tap()
-        app.buttons["Close"].tap()
-        app.buttons["Discard Changes"].tap()
+        XCTAssertFalse(app.buttons["Discard Changes"].exists)
         let appointment = app.buttons[AppointmentCompletionUITestSupport.appointmentID]
         XCTAssertTrue(appointment.hittableOrWait(timeout: 3))
         appointment.tap()

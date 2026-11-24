@@ -3,6 +3,7 @@ import SwiftUI
 struct TrayHost<Item: Identifiable & Sendable, TrayContent: View>: ViewModifier
 where Item.ID == UUID {
     @Binding var item: Item?
+    let usesCustomSurface: (Item) -> Bool
     let didAppear: (UUID) -> Void
     let didDismiss: (UUID) -> Void
     @ViewBuilder let trayContent: (Item) -> TrayContent
@@ -20,7 +21,9 @@ where Item.ID == UUID {
                                 let surfaceID = state.surfaceID
                                 TraySurface(
                                     item: retained, surfaceID: surfaceID,
-                                    phase: state.phase, content: trayContent,
+                                    phase: state.phase,
+                                    usesCustomSurface: usesCustomSurface(retained),
+                                    content: trayContent,
                                     dismiss: TrayDismissAction(
                                         id: surfaceID,
                                         isCurrent: {
@@ -60,13 +63,15 @@ where Item.ID == UUID {
 extension View {
     func tray<Item: Identifiable & Sendable, Content: View>(
         item: Binding<Item?>,
+        usesCustomSurface: @escaping (Item) -> Bool = { _ in false },
         didAppear: @escaping (UUID) -> Void = { _ in },
         didDismiss: @escaping (UUID) -> Void = { _ in },
         @ViewBuilder content: @escaping (Item) -> Content
     ) -> some View where Item.ID == UUID {
         modifier(
             TrayHost(
-                item: item, didAppear: didAppear, didDismiss: didDismiss,
+                item: item, usesCustomSurface: usesCustomSurface,
+                didAppear: didAppear, didDismiss: didDismiss,
                 trayContent: content))
     }
 }
@@ -75,6 +80,7 @@ where Item.ID == UUID {
     let item: Item
     let surfaceID: UUID
     let phase: TrayState<Item>.Phase
+    let usesCustomSurface: Bool
     @ViewBuilder let content: (Item) -> Content
     let dismiss: TrayDismissAction
     let size: CGSize
@@ -85,6 +91,7 @@ where Item.ID == UUID {
 
     @State private var isVisible = false
     @State private var dragOffset: CGFloat = 0
+    @State private var headerDragLockedVertical: Bool?
     @State private var options: TrayOptions?
 
     private var animates: Bool {
@@ -101,6 +108,11 @@ where Item.ID == UUID {
             sizing: options?.size ?? .full,
             size: size, topInset: safeArea.top, bottomInset: safeArea.bottom,
             keyboardHeight: keyboardHeight)
+        let surfaceMetrics = TraySurfaceMetrics(
+            topEdge: layout.topEdge, size: size, safeArea: safeArea,
+            bottomInset: layout.bottomInset, keyboardHeight: keyboardHeight,
+            showsIndicator: options?.showsIndicator ?? true,
+            animates: animates)
         ZStack(alignment: .bottom) {
             Button {
                 requestInteractiveDismiss()
@@ -113,52 +125,67 @@ where Item.ID == UUID {
             .accessibilityLabel("Close tray")
             .accessibilityIdentifier("tray-outside")
 
-            content(item)
-                .trayOptions(size: .full)
-                .environment(\.trayDismiss, dismiss)
-                .overlayPreferenceValue(TrayOptionsKey.self) { value in
-                    Color.clear
-                        .onAppear { options = value }
-                        .onChange(of: value?.size) { options = value }
-                        .onChange(of: value?.allowsInteractiveDismiss) { options = value }
-                        .onChange(of: value?.showsIndicator) { options = value }
-                        .onChange(of: value?.dismiss.id) { options = value }
-                        .allowsHitTesting(false)
-                }
-                // The standalone navigation bar supplies ten points of top space. Add six to
-                // match the native sheet's sixteen-point header without changing its controls.
-                .padding(.top, 6)
-                .safeAreaPadding(.bottom, layout.bottomInset + keyboardHeight)
-                .modifier(
-                    TrayFrame(
-                        topEdge: layout.topEdge, size: size, safeArea: safeArea,
-                        showsIndicator: options?.showsIndicator ?? true)
-                )
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("tray-surface")
-                // Entry frames move. Expose content to automation once its frame is stable.
-                .accessibilityHidden(phase != .visible(surfaceID))
-                .offset(
-                    y: isVisible ? dragOffset : layout.height * layout.scale + layout.bottomMargin
-                )
-                .animation(
-                    animates && phase == .visible(surfaceID)
-                        ? .spring(duration: 0.28, bounce: 0) : nil,
-                    value: options?.size
-                )
-                .allowsHitTesting(phase != .exiting(surfaceID))
-                .simultaneousGesture(
-                    DragGesture()
-                        .onChanged { value in
-                            guard value.startLocation.y < 70, canDismissInteractively
-                            else { return }
-                            dragOffset = max(0, value.translation.height)
+            TraySurfaceBody(
+                usesCustomSurface: usesCustomSurface,
+                layout: layout,
+                size: size,
+                safeArea: safeArea,
+                keyboardHeight: keyboardHeight,
+                showsIndicator: options?.showsIndicator ?? true
+            ) {
+                content(item)
+                    .trayOptions(size: .full)
+                    .environment(\.trayDismiss, dismiss)
+                    .environment(\.traySurfaceMetrics, surfaceMetrics)
+                    .overlayPreferenceValue(TrayOptionsKey.self) { value in
+                        Color.clear
+                            .onAppear { options = value }
+                            .onChange(of: value?.size) { options = value }
+                            .onChange(of: value?.allowsInteractiveDismiss) { options = value }
+                            .onChange(of: value?.showsIndicator) { options = value }
+                            .onChange(of: value?.dismiss.id) { options = value }
+                            .allowsHitTesting(false)
+                    }
+            }
+            // Entry frames move. Expose content to automation once its frame is stable.
+            .accessibilityHidden(phase != .visible(surfaceID))
+            .offset(
+                y: isVisible ? dragOffset : layout.height * layout.scale + layout.bottomMargin
+            )
+            .animation(
+                animates && phase == .visible(surfaceID)
+                    ? .spring(duration: 0.28, bounce: 0) : nil,
+                value: options?.size
+            )
+            .allowsHitTesting(phase != .exiting(surfaceID))
+            .simultaneousGesture(
+                DragGesture()
+                    .onChanged { value in
+                        guard value.startLocation.y < 70, canDismissInteractively
+                        else { return }
+                        if headerDragLockedVertical == nil {
+                            let dx = abs(value.translation.width)
+                            let dy = abs(value.translation.height)
+                            guard max(dx, dy) >= 6 else { return }
+                            headerDragLockedVertical = dy >= dx
                         }
-                        .onEnded { value in
-                            guard value.startLocation.y < 70 else { return }
-                            endDrag(value)
+                        guard headerDragLockedVertical == true else { return }
+                        dragOffset = max(0, value.translation.height)
+                    }
+                    .onEnded { value in
+                        let wasVertical = headerDragLockedVertical == true
+                        headerDragLockedVertical = nil
+                        guard value.startLocation.y < 70, wasVertical else {
+                            if dragOffset != 0 {
+                                withAnimation(animates ? .spring(duration: 0.24, bounce: 0) : nil) {
+                                    dragOffset = 0
+                                }
+                            }
+                            return
                         }
-                )
+                        endDrag(value)
+                    }
+            )
         }
         .frame(width: size.width, height: size.height)
         .onAppear { enterIfReady() }
@@ -209,7 +236,36 @@ where Item.ID == UUID {
     }
 }
 
-private struct TrayFrame: ViewModifier, Animatable {
+private struct TraySurfaceBody<Content: View>: View {
+    let usesCustomSurface: Bool
+    let layout: TrayLayout
+    let size: CGSize
+    let safeArea: EdgeInsets
+    let keyboardHeight: CGFloat
+    let showsIndicator: Bool
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if usesCustomSurface {
+            content()
+        } else {
+            content()
+                // The standalone navigation bar supplies ten points of top space. Add six to
+                // match the native sheet's sixteen-point header without changing its controls.
+                .padding(.top, 6)
+                .safeAreaPadding(.bottom, layout.bottomInset + keyboardHeight)
+                .modifier(
+                    TrayFrame(
+                        topEdge: layout.topEdge, size: size, safeArea: safeArea,
+                        showsIndicator: showsIndicator)
+                )
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("tray-surface")
+        }
+    }
+}
+
+struct TrayFrame: ViewModifier, Animatable {
     var topEdge: CGFloat
     let size: CGSize
     let safeArea: EdgeInsets

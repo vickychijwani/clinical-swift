@@ -140,6 +140,22 @@ final class Router {
         pushDetails(route)
     }
 
+    func selectCarouselAppointment(
+        _ appointmentID: Appointment.ID,
+        presentationID: DetailsPresentation.ID
+    ) {
+        // Swiping at root appointment details updates the active appointment in place without
+        // resetting visitID, so the carousel keeps its rendered window and spring motion intact.
+        guard let presentation = detailsPresentation,
+            presentation.id == presentationID,
+            presentation.path.isEmpty,
+            !presentation.isSavingCompletion,
+            case .appointment(let currentID) = presentation.root,
+            currentID != appointmentID
+        else { return }
+        presentation.selectCarouselAppointment(appointmentID)
+    }
+
     func setDetailsPath(_ path: [Route], presentationID: DetailsPresentation.ID) {
         // NavigationStack can write its path back after a sheet has been replaced. The session ID
         // prevents that stale write from mutating the new details flow.
@@ -583,6 +599,11 @@ final class DetailsPresentation: Identifiable {
         completionDrafts.removeAll()
         root = route
         path.removeAll()
+    }
+
+    fileprivate func selectCarouselAppointment(_ id: Appointment.ID) {
+        completionDrafts.removeAll()
+        root = .appointment(id)
     }
 
     fileprivate func push(_ route: Route) {

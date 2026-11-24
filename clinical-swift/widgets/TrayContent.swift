@@ -11,8 +11,19 @@ struct TrayDismissAction {
     }
 }
 
+struct TraySurfaceMetrics: Equatable {
+    var topEdge: CGFloat = 0
+    var size: CGSize = .zero
+    var safeArea = EdgeInsets()
+    var bottomInset: CGFloat = 0
+    var keyboardHeight: CGFloat = 0
+    var showsIndicator = true
+    var animates = true
+}
+
 extension EnvironmentValues {
     @Entry var trayDismiss = TrayDismissAction()
+    @Entry var traySurfaceMetrics = TraySurfaceMetrics()
 }
 
 struct TrayOptions {

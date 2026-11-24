@@ -60,58 +60,49 @@ struct DetailsFlowNavigation: View {
 struct DetailsFlowView: View {
     @Bindable var presentation: DetailsPresentation
     @Environment(Router.self) private var router
-    @State private var policy = DetailsDismissal()
+    @Environment(\.traySurfaceMetrics) private var metrics
 
     static func traySize(for presentation: DetailsPresentation) -> TraySize {
         presentation.showsCompletion ? .height(400) : .height(280)
     }
 
     var body: some View {
-        DetailsFlowNavigation(
-            presentation: presentation,
-            requestDismiss: { policy.request(router: router, presentation: presentation) }
-        )
-        .trayOptions(
-            size: Self.traySize(for: presentation),
-            allowsInteractiveDismiss: !presentation.showsCompletion
-                && !presentation.isSavingCompletion,
-            showsIndicator: !presentation.showsCompletion,
-            requestDismiss: { policy.request(router: router, presentation: presentation) }
-        )
-        .confirmationDialog(
-            "Discard unsaved payment?", isPresented: $policy.isConfirmingDiscard,
-            titleVisibility: .visible
-        ) {
-            Button("Keep Editing", role: .cancel) {}
-            Button("Discard Changes", role: .destructive) {
-                policy.discard(router: router, presentation: presentation)
-            }
-        } message: {
-            Text("Your payment changes have not been saved.")
+        switch presentation.root {
+        case .appointment(let appointmentID):
+            AppointmentRootCarouselFlow(
+                presentation: presentation,
+                initialAppointmentID: appointmentID,
+                initialScheduleDate: router.selectedScheduleDate,
+                requestDismiss: requestDismiss
+            )
+        case .patient, .appointmentCompletion:
+            DetailsFlowNavigation(
+                presentation: presentation,
+                requestDismiss: requestDismiss
+            )
+            // The standalone navigation bar supplies ten points of top space. Add six to
+            // match the native sheet's sixteen-point header without changing its controls.
+            .padding(.top, 6)
+            .safeAreaPadding(.bottom, metrics.bottomInset + metrics.keyboardHeight)
+            .modifier(
+                TrayFrame(
+                    topEdge: metrics.topEdge, size: metrics.size, safeArea: metrics.safeArea,
+                    showsIndicator: metrics.showsIndicator)
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("tray-surface")
+            .trayOptions(
+                size: Self.traySize(for: presentation),
+                allowsInteractiveDismiss: !presentation.showsCompletion
+                    && !presentation.isSavingCompletion,
+                showsIndicator: !presentation.showsCompletion,
+                requestDismiss: requestDismiss
+            )
         }
     }
-}
 
-/// A discard prompt belongs to the visit that opened it, even if its session is reused.
-@MainActor @Observable
-final class DetailsDismissal {
-    var isConfirmingDiscard = false
-    private var visitID: UUID?
-
-    func request(router: Router, presentation: DetailsPresentation) {
+    private func requestDismiss() {
         guard router.detailsPresentation === presentation,
-            !presentation.showsCompletion, !presentation.isSavingCompletion
-        else { return }
-        if presentation.hasUnsavedCompletion {
-            visitID = presentation.visitID
-            isConfirmingDiscard = true
-        } else {
-            router.dismissDetails(presentationID: presentation.id)
-        }
-    }
-
-    func discard(router: Router, presentation: DetailsPresentation) {
-        guard router.detailsPresentation === presentation, visitID == presentation.visitID,
             !presentation.showsCompletion, !presentation.isSavingCompletion
         else { return }
         router.dismissDetails(presentationID: presentation.id)
