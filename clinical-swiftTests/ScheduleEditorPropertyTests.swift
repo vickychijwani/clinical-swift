@@ -19,8 +19,10 @@ struct ScheduleEditorPropertyTests {
                 bookingID: UUID(), selectedDate: day, center: TimeOfDay(15, 59), items: []
             ) { _ in }
             let original = session.preview
+            #expect(TimeOfDay(date: original.start) == TimeOfDay(15, 45))
             // Moving back to the touch origin must restore the chosen interval.
             let outwardCorrection = session.updateAdjustment(translation: -10, items: [])
+            #expect(session.preview.start != original.start)
             let returnCorrection = session.updateAdjustment(translation: 0, items: [])
             #expect(outwardCorrection == 0)
             #expect(returnCorrection == 0)
@@ -37,9 +39,16 @@ struct ScheduleEditorPropertyTests {
         var generator = Generator(state: seed)
         for trial in 0..<8 {
             let hold = trial.isMultiple(of: 2)
-            let centers = [(540, 540), (548, 540), (780, 765), (959, 945), (1260, 1230)]
+            let centers =
+                trial < 4
+                ? [(TimeOfDay(13, 0), 765), (TimeOfDay(15, 59), 945)]
+                : [
+                    (Bitehaus.opening, Bitehaus.opening.totalMinutes),
+                    (TimeOfDay(9, 8), Bitehaus.opening.totalMinutes),
+                    (Bitehaus.closing, Bitehaus.closing.totalMinutes - 30),
+                ]
             let (center, initialMinute) = centers[generator.integer(centers.count)]
-            let actions = generator.history(unavailable: trial % 4 < 2, discard: trial % 3 == 0)
+            let actions = generator.history(hold: hold, trial: trial)
             if let failure = try await replay(
                 actions, hold: hold, center: center, initialMinute: initialMinute)
             {
@@ -106,30 +115,18 @@ struct ScheduleEditorPropertyTests {
         var finished = false
         var saved = false
 
+        func date(from origin: Date) -> Date {
+            origin.date(byAddingDays: day)
+        }
+
+        func start(from origin: Date) -> Date {
+            TimeOfDay(minute / 60, minute % 60).on(date: date(from: origin))
+        }
+
         mutating func apply(_ action: Action) -> Int? {
-            if case .fail(let enabled) = action {
-                rejectsWrites = enabled
-                return nil
-            }
-            // Bindings and release callbacks can still arrive while a finished view closes.
-            if case .sheet(let value) = action {
-                sheet = value
-                return nil
-            }
-            if case .label(let value) = action {
-                if unavailable { label = value }
-                return nil
-            }
-            if action == .release {
-                drag = nil
-                sheet = true
-                return nil
-            }
-            guard !finished else {
-                return action == .save || action == .saveTwice ? 0 : nil
-            }
             switch action {
             case .type(let value):
+                guard !finished else { return nil }
                 if value != unavailable {
                     unavailable = value
                     patient = nil
@@ -138,18 +135,23 @@ struct ScheduleEditorPropertyTests {
                     error = false
                 }
             case .patient(let index):
+                guard !finished else { return nil }
                 if !unavailable {
                     patient = index
                     sheet = false
                 }
             case .label(let text):
+                // Bindings and release callbacks can still arrive while a finished view closes.
                 if unavailable { label = text }
             case .sheet(let value): sheet = value
             case .day(let value):
+                guard !finished else { return nil }
                 if drag == nil { day = value }
             case .begin(let resize):
+                guard !finished else { return nil }
                 if drag == nil { drag = (minute, duration, resize) }
             case .travel(let direction):
+                guard !finished else { return nil }
                 // Extreme travel has a known boundary result, independent of display geometry.
                 if let drag {
                     if direction == 0 {
@@ -157,9 +159,12 @@ struct ScheduleEditorPropertyTests {
                         duration = drag.duration
                     } else if drag.resize {
                         minute = drag.minute
-                        duration = direction < 0 ? 15 : 1260 - drag.minute
+                        duration = direction < 0 ? 15 : Bitehaus.closing.totalMinutes - drag.minute
                     } else {
-                        minute = direction < 0 ? 540 : 1260 - drag.duration
+                        minute =
+                            direction < 0
+                            ? Bitehaus.opening.totalMinutes
+                            : Bitehaus.closing.totalMinutes - drag.duration
                         duration = drag.duration
                     }
                 }
@@ -167,6 +172,7 @@ struct ScheduleEditorPropertyTests {
                 drag = nil
                 sheet = true
             case .save, .saveTwice:
+                guard !finished else { return 0 }
                 drag = nil
                 if !unavailable, patient == nil {
                     sheet = true
@@ -178,9 +184,10 @@ struct ScheduleEditorPropertyTests {
                 saved = true
                 return 1
             case .discard:
+                guard !finished else { return nil }
                 drag = nil
                 finished = true
-            case .fail: break
+            case .fail(let enabled): rejectsWrites = enabled
             }
             return nil
         }
@@ -193,7 +200,7 @@ struct ScheduleEditorPropertyTests {
     }
 
     private func replay(
-        _ actions: [Action], hold: Bool, center: Int, initialMinute: Int
+        _ actions: [Action], hold: Bool, center: TimeOfDay, initialMinute: Int
     ) async throws -> Failure? {
         // Each replay gets a real SQLite database. No production save method is stubbed.
         let database = try testDatabase()
@@ -215,14 +222,15 @@ struct ScheduleEditorPropertyTests {
             if hold {
                 session = ScheduleEditorSession(
                     bookingID: UUID(), selectedDate: day,
-                    center: TimeOfDay(center / 60, center % 60), items: []
+                    center: center, items: []
                 ) { completions.append($0) }
             } else {
                 session = ScheduleEditorSession(
                     request: .create(), selectedDate: day, appointments: []
                 ) { completions.append($0) }
             }
-            var model = Model(minute: hold ? initialMinute : 540, sheet: !hold)
+            var model = Model(
+                minute: hold ? initialMinute : Bitehaus.opening.totalMinutes, sheet: !hold)
             if hold { model.drag = (model.minute, 30, false) }
             var previousID = session.preview.id
             for step in -1..<actions.count {
@@ -245,8 +253,7 @@ struct ScheduleEditorPropertyTests {
                 if let check = mismatch(
                     session, model: model, patients: patients, day: day, completions: completions)
                 {
-                    let expected = day.addingTimeInterval(
-                        Double(model.day * 86400 + model.minute * 60))
+                    let expected = model.start(from: day)
                     return Failure(
                         check: check, step: step,
                         details: "expected start=\(expected), duration=\(model.duration); "
@@ -265,7 +272,7 @@ struct ScheduleEditorPropertyTests {
                 {
                     return Failure(check: "only active draft commits once", step: step)
                 }
-                let start = day.addingTimeInterval(Double(model.day * 86400 + model.minute * 60))
+                let start = model.start(from: day)
                 if let record = records.0.first {
                     guard let patient = model.patient else {
                         return Failure(check: "stored patient", step: step)
@@ -296,8 +303,8 @@ struct ScheduleEditorPropertyTests {
         _ session: ScheduleEditorSession, model: Model, patients: [Patient], day: Date,
         completions: [ScheduleEditorSession.Completion]
     ) -> String? {
-        let date = day.addingTimeInterval(Double(model.day * 86400))
-        let start = date.addingTimeInterval(Double(model.minute * 60))
+        let date = model.date(from: day)
+        let start = model.start(from: day)
         if session.preview.start != start || session.preview.durationMinutes != model.duration
             || session.selectedDate != date
         {
@@ -341,7 +348,7 @@ struct ScheduleEditorPropertyTests {
             }
         }
         if session.visibleItems([], for: date).map(\.id) != [session.preview.id]
-            || !session.visibleItems([], for: date.addingTimeInterval(86400)).isEmpty
+            || !session.visibleItems([], for: date.date(byAddingDays: 1)).isEmpty
         {
             return "draft page membership"
         }
@@ -359,7 +366,7 @@ struct ScheduleEditorPropertyTests {
         case .label(let text):
             if case .unavailableTime(let model) = session.editor { model.draft.label = text }
         case .sheet(let value): session.isShowingSheet = value
-        case .day(let offset): session.selectDate(day.addingTimeInterval(Double(offset * 86400)))
+        case .day(let offset): session.selectDate(day.date(byAddingDays: offset))
         case .begin(let resize):
             session.beginAdjustment(session.preview, edge: resize ? .duration : .move, items: [])
         case .travel(let direction):
@@ -389,7 +396,7 @@ struct ScheduleEditorPropertyTests {
     }
 
     private func reduce(
-        _ actions: [Action], failure: String, hold: Bool, center: Int, initialMinute: Int
+        _ actions: [Action], failure: String, hold: Bool, center: TimeOfDay, initialMinute: Int
     ) async throws -> [Action] {
         var result = actions
         var width = max(result.count / 2, 1)
@@ -423,24 +430,35 @@ struct ScheduleEditorPropertyTests {
             return Int((state >> 16) % UInt64(count))
         }
 
-        mutating func history(unavailable: Bool, discard: Bool) -> [Action] {
-            var actions: [Action] = [.day(1), .save, .release, .patient(integer(2)), .sheet(true)]
+        mutating func history(hold: Bool, trial: Int) -> [Action] {
+            let unavailable = trial % 4 < 2
+            let labels = ["  Clinic meeting  ", "  ", "Travel"]
+            // Move the initial hold before any action can release it, then restore its interval.
+            var actions: [Action] = hold ? [.travel(integer(2) == 0 ? -1 : 1), .travel(0)] : []
+            // Random saves must fail so editing can continue to the terminal action.
+            actions.append(.fail(true))
             for _ in 0..<18 {
                 let choices: [Action] = [
                     .type(integer(2) == 0), .patient(integer(2)),
-                    .label(["Travel", "  Clinic meeting  ", "  "][integer(3)]),
+                    .label(labels[integer(labels.count)]),
                     .sheet(integer(2) == 0), .day(integer(5) - 2),
-                    .begin(resize: integer(2) == 0), .travel(integer(3) - 1), .release,
+                    .begin(resize: integer(2) == 0),
+                    .travel(trial < 4 ? 0 : integer(3) - 1), .release, .save, .saveTwice,
                 ]
                 actions.append(choices[integer(choices.count)])
             }
-            // Directed segments ensure useful failures, field clearing, and terminal calls in every run.
+            actions.append(.type(unavailable))
+            actions.append(
+                unavailable ? .label(labels[trial % labels.count]) : .patient(integer(2)))
+            // Retry a valid draft after a write failure. Keep some saves inside clinic hours,
+            // and vary the drag, sheet, and single/concurrent save states.
+            actions += [.save, .fail(false), .begin(resize: integer(2) == 0)]
+            if trial >= 4 { actions.append(.travel(integer(2) == 0 ? -1 : 1)) }
+            if !hold { actions.append(.release) }
             actions += [
-                .type(true), .label("Travel"), .type(false), .patient(integer(2)),
-                .type(true), .type(false), .save, .type(unavailable), .patient(integer(2)),
-                .begin(resize: integer(2) == 0), .travel(integer(2) == 0 ? -1 : 1),
-                .fail(true), .save, .fail(false), .release, .day(integer(5) - 2),
-                .sheet(false), .sheet(true), discard ? .discard : .saveTwice,
+                .sheet(trial % 3 != 0), trial == 7 ? .discard : (hold ? .save : .saveTwice),
+            ]
+            actions += [
                 .type(!unavailable), .patient(integer(2)), .day(7),
                 .begin(resize: true), .travel(-1), .saveTwice, .discard,
             ]
