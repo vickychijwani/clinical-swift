@@ -73,9 +73,10 @@ final class TimelineAdjustment {
             edge == .duration
             ? TimeOfDay(date: item.start) + item.durationMinutes
             : TimeOfDay(date: item.start)
-        anchorY = scale(items, draft: item).yOffset(for: time)
         translation = 0
         isDragging = true
+        // Measure the anchor on the drag scale, including compact break minutes.
+        anchorY = scale(items, draft: item).yOffset(for: time)
     }
 
     /// Return a scroll correction so a scale change does not move the card away from the finger.
