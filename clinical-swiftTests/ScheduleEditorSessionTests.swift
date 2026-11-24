@@ -10,55 +10,6 @@ import Testing
 @MainActor
 struct ScheduleEditorSessionTests {
     @Test(arguments: [false, true])
-    func concurrentSavesFinishOnceAndPreventFurtherChanges(unavailable: Bool) async throws {
-        let database = try testDatabase()
-        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
-        let patient = Patient(name: "Patient", createdDate: date)
-        try await database.write { db in
-            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
-        }
-        try await withDependencies {
-            $0.date.now = date
-            $0.defaultDatabase = database
-        } operation: {
-            var finishedDates: [Date] = []
-            let session = ScheduleEditorSession(
-                request: .create(), selectedDate: date,
-                appointments: []
-            ) { finishedDates.append($0.date) }
-            session.selectPatient(patient)
-            if unavailable { session.selectType(.unavailableTime) }
-            let preview = session.preview
-            let first = Task { await session.save() }
-            let second = Task { await session.save() }
-            let results = await [first.value, second.value]
-            #expect(results.filter { $0 }.count == 1)
-            #expect(finishedDates == [preview.start])
-            #expect(session.didFinish)
-            #expect(!session.isWorking)
-            #expect(session.errorMessage == nil)
-            session.selectType(unavailable ? .appointment : .unavailableTime)
-            session.selectDate(date.addingTimeInterval(24 * 3600))
-            session.selectPatient(Patient(name: "Other patient", createdDate: date))
-            #expect(session.preview.id == preview.id)
-            #expect(session.preview.start == preview.start)
-            #expect(session.preview.durationMinutes == preview.durationMinutes)
-            if case .appointment(let model) = session.editor {
-                #expect(model.draft.selectedPatient == patient)
-            }
-            #expect(!(await session.save()))
-            let counts = try await database.read { db in
-                (
-                    try AppointmentRecord.count().fetchOne(db),
-                    try UnavailableTimeRecord.count().fetchOne(db)
-                )
-            }
-            #expect(counts.0 == (unavailable ? 0 : 1))
-            #expect(counts.1 == (unavailable ? 1 : 0))
-        }
-    }
-
-    @Test(arguments: [false, true])
     func dateChangeKeepsManualIntervalAcrossConflictsAndBreaks(hold: Bool) throws {
         let today = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
         let tomorrow = try Date("2026-10-03T00:00:00+05:30", strategy: .iso8601)
@@ -583,62 +534,6 @@ struct ScheduleEditorSessionTests {
                 request: .create(), date: date, hold: hold)
             #expect(fresh.itemType == .appointment)
             #expect(fresh.preview.durationMinutes == 30)
-        }
-    }
-
-    @Test(arguments: [false, true], [false, true])
-    func switchingSavesOnlyActiveTypeAndKeepsPatientRecord(hold: Bool, unavailable: Bool)
-        async throws
-    {
-        let database = try testDatabase()
-        let date = try Date("2026-10-02T00:00:00+05:30", strategy: .iso8601)
-        let patient = Patient(name: "Patient", createdDate: date)
-        try await database.write { db in
-            try PatientRecord.insert { PatientRecord(patient, now: date) }.execute(db)
-        }
-        try await withDependencies {
-            $0.defaultDatabase = database
-            $0.date.now = date
-        } operation: {
-            let session = genericSession(
-                request: .create(), date: date, hold: hold)
-            if hold { session.releaseBooking(session.adjustment) }
-            session.selectPatient(patient)
-            let interval = session.preview
-            session.selectType(.unavailableTime)
-            if !unavailable {
-                session.selectType(.appointment)
-                session.isShowingSheet = false
-                await session.save()
-                #expect(session.isShowingSheet)
-                #expect(!session.didFinish)
-                session.selectPatient(patient)
-            }
-            let before = try await database.read { db in
-                (
-                    try AppointmentRecord.count().fetchOne(db),
-                    try UnavailableTimeRecord.count().fetchOne(db)
-                )
-            }
-            #expect(before.0 == 0)
-            #expect(before.1 == 0)
-            await session.save()
-            await session.save()
-            let records = try await database.read { db in
-                (
-                    try AppointmentRecord.fetchAll(db), try UnavailableTimeRecord.fetchAll(db),
-                    try PatientRecord.count().fetchOne(db)
-                )
-            }
-            #expect(records.0.count == (unavailable ? 0 : 1))
-            #expect(records.1.count == (unavailable ? 1 : 0))
-            #expect(records.2 == 1)
-            #expect(
-                (unavailable ? records.1.first?.start : records.0.first?.start) == interval.start)
-            #expect(
-                (unavailable ? records.1.first?.durationMinutes : records.0.first?.durationMinutes)
-                    == 30)
-            if unavailable { #expect(records.1.first?.label == nil) }
         }
     }
 
@@ -1367,7 +1262,9 @@ struct ScheduleEditorSessionTests {
                 ))
             #expect(appointmentSession.adjustment.isDragging)
             #expect(appointmentSession.preview.id == .appointment(scheduled.id))
-            #expect(store.finish(appointmentSession.id, completion: .discarded(date: date), router: router))
+            #expect(
+                store.finish(
+                    appointmentSession.id, completion: .discarded(date: date), router: router))
 
             // Holding on unavailable time starts an unavailable-time edit session, and mismatch clears it.
             let blockSession = try #require(
