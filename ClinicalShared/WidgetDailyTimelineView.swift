@@ -212,7 +212,7 @@ private struct WidgetDailyTimelineCanvasView: View {
                         NowMarkerView(
                             availableWidth: geometry.size.width,
                             metrics: scale.metrics,
-                            dotSize: 7
+                            indicator: .dot(size: 7)
                         )
                         .position(
                             x: geometry.size.width / 2,
@@ -221,7 +221,9 @@ private struct WidgetDailyTimelineCanvasView: View {
                         .zIndex(Double(layouts.count + 2))
                     }
                 }
-                .frame(width: geometry.size.width, height: scale.totalHeight, alignment: .topLeading)
+                .frame(
+                    width: geometry.size.width, height: scale.totalHeight, alignment: .topLeading
+                )
                 .padding(.vertical, scale.metrics.verticalPadding)
             }
         }

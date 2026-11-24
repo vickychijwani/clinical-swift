@@ -113,8 +113,19 @@ struct DailyTimelineWidgetTests {
         #expect(compactScale.visibleOpening == TimeOfDay(9, 0))
         #expect(compactScale.visibleClosing == TimeOfDay(21, 0))
         #expect(
-            abs((compactScale.totalHeight + compactScale.metrics.verticalPadding * 2) - availableHeight)
+            abs(
+                (compactScale.totalHeight + compactScale.metrics.verticalPadding * 2)
+                    - availableHeight)
                 < 0.01)
+        #expect(compactScale.showsTime(TimeOfDay(14, 30)))
+        #expect(
+            abs(
+                compactScale.yOffset(for: TimeOfDay(14, 30))
+                    - (compactScale.yOffset(for: Bitehaus.break.start) + compactScale.breakHeight
+                        / 2)
+            ) < 0.001)
+        #expect(!compactScale.showsTime(TimeOfDay(8, 59)))
+        #expect(!compactScale.showsTime(TimeOfDay(21, 0)))
 
         // Break item only: both outer hours (9–10 AM and 8–9 PM) trim.
         let breakOnlyItems = [
@@ -130,8 +141,17 @@ struct DailyTimelineWidgetTests {
         #expect(trimmedScale.visibleClosing == TimeOfDay(20, 0))
         #expect(trimmedScale.hourMarkers.map(\.hour) == Array(10...20))
         #expect(
-            abs((trimmedScale.totalHeight + trimmedScale.metrics.verticalPadding * 2) - availableHeight)
+            abs(
+                (trimmedScale.totalHeight + trimmedScale.metrics.verticalPadding * 2)
+                    - availableHeight)
                 < 0.01)
+        #expect(trimmedScale.showsTime(TimeOfDay(14, 30)))
+        #expect(
+            abs(
+                trimmedScale.yOffset(for: TimeOfDay(14, 30))
+                    - (trimmedScale.yOffset(for: Bitehaus.break.start)
+                        + trimmedScale.metrics.height(for: 90))
+            ) < 0.001)
         #expect(trimmedScale.height(from: TimeOfDay(14, 0), to: TimeOfDay(14, 15)) > 12)
 
         // Current time in 9–10 AM keeps opening at 9 AM; item ending after 8 PM keeps closing at 9 PM.
@@ -150,7 +170,9 @@ struct DailyTimelineWidgetTests {
         #expect(fullSpanScale.visibleClosing == TimeOfDay(21, 0))
         #expect(fullSpanScale.showsTime(earlyNow.timeOfDay))
         #expect(
-            abs((fullSpanScale.totalHeight + fullSpanScale.metrics.verticalPadding * 2) - availableHeight)
+            abs(
+                (fullSpanScale.totalHeight + fullSpanScale.metrics.verticalPadding * 2)
+                    - availableHeight)
                 < 0.01)
     }
 
@@ -176,7 +198,8 @@ struct DailyTimelineWidgetTests {
         #expect(layouts.count == items.count)
         let bounds = HorizontalSpan(
             min: scale.metrics.contentLeadingInset,
-            max: scale.metrics.contentLeadingInset + scale.metrics.contentWidth(availableWidth: width)
+            max: scale.metrics.contentLeadingInset
+                + scale.metrics.contentWidth(availableWidth: width)
         )
         let entries = layouts.map { info -> ValidatedLayoutEntry in
             let measured = contentMetrics.bounds(

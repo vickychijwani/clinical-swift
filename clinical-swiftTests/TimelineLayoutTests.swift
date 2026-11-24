@@ -644,7 +644,7 @@ struct TimelineLayoutTests {
         #expect(expandedScale.hourMarkers.map(\.hour) == Array(9...21))
     }
 
-    @Test func nowTimeWithinBreakIsVisibleOnlyWhenExpanded() {
+    @Test func nowTimeWithinClinicHoursIsVisibleInCompactAndExpandedBreak() throws {
         let breakAppointment = appointment(
             id: UUID(),
             startHour: 14,
@@ -653,8 +653,44 @@ struct TimelineLayoutTests {
         )
         let expandedScale = TimelineScale(items: [breakAppointment])
 
-        #expect(!scale.showsTime(TimeOfDay(14, 30)))
-        #expect(expandedScale.showsTime(TimeOfDay(14, 30)))
+        for visibleTime in [
+            TimeOfDay(9, 0),
+            TimeOfDay(12, 59),
+            TimeOfDay(13, 0),
+            TimeOfDay(14, 30),
+            TimeOfDay(15, 59),
+            TimeOfDay(16, 0),
+            TimeOfDay(20, 59),
+        ] {
+            #expect(scale.showsTime(visibleTime))
+            #expect(expandedScale.showsTime(visibleTime))
+        }
+
+        for hiddenTime in [TimeOfDay(8, 59), TimeOfDay(21, 0), TimeOfDay(21, 1)] {
+            #expect(!scale.showsTime(hiddenTime))
+            #expect(!expandedScale.showsTime(hiddenTime))
+        }
+
+        let midBreak = try Date("2026-07-18T14:30:00+05:30", strategy: .iso8601)
+        let beforeOpening = try Date("2026-07-18T08:59:00+05:30", strategy: .iso8601)
+        let atClosing = try Date("2026-07-18T21:00:00+05:30", strategy: .iso8601)
+
+        #expect(Timeline.nowY(for: beforeOpening, scale: scale) == nil)
+        #expect(Timeline.nowY(for: atClosing, scale: scale) == nil)
+        #expect(Timeline.nowY(for: midBreak, scale: scale) == 256)
+        #expect(Timeline.nowY(for: midBreak, scale: expandedScale) == 330)
+    }
+
+    @Test func nowMarkerFormatsHourAndMinuteWithoutMeridiem() throws {
+        let morning = try Date("2026-07-18T09:27:00+05:30", strategy: .iso8601)
+        let noon = try Date("2026-07-18T12:27:00+05:30", strategy: .iso8601)
+        let midBreak = try Date("2026-07-18T14:30:00+05:30", strategy: .iso8601)
+        let evening = try Date("2026-07-18T20:05:00+05:30", strategy: .iso8601)
+
+        #expect(NowMarkerView.formattedTime(morning) == "9:27")
+        #expect(NowMarkerView.formattedTime(noon) == "12:27")
+        #expect(NowMarkerView.formattedTime(midBreak) == "2:30")
+        #expect(NowMarkerView.formattedTime(evening) == "8:05")
     }
 
     @Test func timelineScaleUsesInjectedCustomMetrics() {
