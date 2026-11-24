@@ -26,6 +26,7 @@ CONFIGURATION ?= Debug
 SIMULATOR ?= iPhone 17
 SIMULATOR_OS ?= 27.0
 SIMULATOR_NAME ?=
+DEVICE ?=
 LAUNCH_ARGS ?=
 APPEARANCE ?=
 OUT ?= $(BUILD_DIR)/screenshot.png
@@ -53,6 +54,7 @@ MODULE_CACHE := $(BUILD_DIR)/cache/modules
 TMPDIR_PATH := $(BUILD_DIR)/tmp
 LOG_DIR := $(BUILD_DIR)/logs
 APP_PATH := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)-iphonesimulator/$(SCHEME).app
+DEVICE_APP_PATH := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)-iphoneos/$(SCHEME).app
 ARCHIVE_DIR := $(BUILD_DIR)/Archives
 EXPORT_DIR := $(BUILD_DIR)/Exports
 LATEST_ARCHIVE_FILE := $(ARCHIVE_DIR)/.latest-archive
@@ -62,6 +64,7 @@ TESTFLIGHT_EXPORT_OPTIONS := $(CURDIR)/TestFlightExportOptions.plist
 APP_STORE_CONNECT_SCRIPT := $(CURDIR)/scripts/app_store_connect.swift
 
 DESTINATION = platform=iOS Simulator,id=$(SIMULATOR_ID)
+DEVICE_DESTINATION := generic/platform=iOS
 ARCHIVE_DESTINATION := generic/platform=iOS
 XCBEAUTIFY := xcbeautify -q --disable-logging
 XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
@@ -88,7 +91,7 @@ BACKUP_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
-.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install validate-appearance require-appearance appearance run build-and-run screenshot uninstall clean
+.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-device check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build build-device test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install install-device validate-appearance require-appearance appearance run build-and-run screenshot uninstall clean
 
 help:
 	@printf "%s\n" \
@@ -99,6 +102,7 @@ help:
 		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when no simulator is booted" \
 		"  make sim-id           Print the target simulator UDID (creates SIMULATOR_NAME if missing)" \
 		"  make build            Build the app" \
+		"  make build-device     Build the app for iOS devices" \
 		"  make test             Run unit tests" \
 		"  make app-test         Run app unit tests without package tests" \
 		"  make data-test        Run model and persistence tests without Xcode" \
@@ -126,6 +130,7 @@ help:
 		"" \
 		"Device Hub and maintenance:" \
 		"  make install          Build and install on the selected iOS simulator" \
+		"  make install-device   Build and install on a physical iOS device (requires DEVICE='<name|udid>')" \
 		"  make run              Relaunch the installed app (accepts LAUNCH_ARGS='...' and APPEARANCE=light|dark)" \
 		"  make appearance       Set simulator appearance (requires APPEARANCE=light|dark)" \
 		"  make screenshot       Relaunch the installed app and capture a PNG (OUT=$(OUT), APPEARANCE, LAUNCH_ARGS, SCREENSHOT_DELAY=$(SCREENSHOT_DELAY))" \
@@ -210,6 +215,24 @@ build: check-tools check-simulator prepare
 		$(XCODEBUILD_FLAGS) $(EXTRA_BUILD_FLAGS) \
 		build \
 		2>&1 | tee "$(LOG_DIR)/build.log" | $(XCBEAUTIFY)
+
+build-device: check-tools prepare
+	@set -o pipefail; \
+	$(XCODEBUILD_ENV) xcodebuild \
+		-project "$(PROJECT)" \
+		-scheme "$(SCHEME)" \
+		-configuration "$(CONFIGURATION)" \
+		-destination "$(DEVICE_DESTINATION)" \
+		-destination-timeout 60 \
+		-derivedDataPath "$(DERIVED_DATA)" \
+		-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
+		-disableAutomaticPackageResolution \
+		-skipPackageUpdates \
+		-allowProvisioningUpdates \
+		DEVELOPMENT_TEAM="$(TEAM_ID)" \
+		$(EXTRA_BUILD_FLAGS) \
+		build \
+		2>&1 | tee "$(LOG_DIR)/build-device.log" | $(XCBEAUTIFY)
 
 test: check-tools check-simulator prepare
 	@$(MAKE) --no-print-directory data-test
@@ -348,6 +371,13 @@ boot: check-tools check-simulator
 install: build boot
 	@test -d "$(APP_PATH)" || { echo "Missing built app at $(APP_PATH)"; exit 1; }
 	@xcrun simctl install "$(SIMULATOR_ID)" "$(APP_PATH)"
+
+check-device:
+	@test -n "$(DEVICE)" || { echo "DEVICE is required. Example: make install-device DEVICE='Corp iPhone'"; exit 2; }
+
+install-device: check-device build-device
+	@test -d "$(DEVICE_APP_PATH)" || { echo "Missing built app at $(DEVICE_APP_PATH)"; exit 1; }
+	@xcrun devicectl device install app --device "$(DEVICE)" "$(DEVICE_APP_PATH)"
 
 validate-appearance:
 	@if [[ -n "$(APPEARANCE)" ]]; then \
