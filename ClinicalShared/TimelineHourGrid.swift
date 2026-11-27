@@ -38,7 +38,7 @@ struct TimelineHourGrid: View {
                     .frame(width: contentWidth, height: 1)
                     .position(x: contentCenterX, y: y)
 
-                TimelineHourLabel(parts: time.hourParts, style: style)
+                TimelineHourLabel(time: time, style: style)
                     .frame(width: labelColumnWidth, alignment: .trailing)
                     .position(x: labelColumnWidth / 2, y: y)
             }
@@ -60,10 +60,12 @@ struct TimelineHourGrid: View {
 }
 
 private struct TimelineHourLabel: View {
-    let parts: TimeOfDay.HourParts
+    let time: TimeOfDay
     let style: TimelineHourGrid.Style
 
     var body: some View {
+        let parts = time.hourParts
+
         HStack(alignment: .firstTextBaseline, spacing: style.periodSpacing) {
             Text(parts.number)
                 .font(style.hourFont)
@@ -77,5 +79,9 @@ private struct TimelineHourLabel: View {
             }
         }
         .lineLimit(1)
+        // Keep the split hour and period as one static text label for UI tests.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(time.formatted(.hourOnly))
+        .accessibilityAddTraits(.isStaticText)
     }
 }

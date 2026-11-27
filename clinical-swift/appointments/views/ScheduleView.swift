@@ -19,6 +19,7 @@ struct ScheduleView: View {
 
     @State private var scheduleModel: ScheduleModel
     @State private var scrollPosition = ScrollPosition()
+    @AppStorage(DayCapacitySettings.showIndicatorsKey) private var showDayCapacityIndicators = true
 
     init() {
         scheduleModel = ScheduleModel()
@@ -26,7 +27,12 @@ struct ScheduleView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            WeekDateStrip(selectedDate: selectedDateBinding, today: clinicToday)
+            WeekDateStrip(
+                selectedDate: selectedDateBinding,
+                today: clinicToday,
+                showsCapacityIndicators: showDayCapacityIndicators,
+                dayCapacity: { scheduleModel.dayCapacitySlots(for: $0) }
+            )
 
             CalendarDayPager(
                 selectedDate: selectedDateBinding,
@@ -144,6 +150,11 @@ struct ScheduleView: View {
                 return
             }
         }
+        // Keep the previous, current, and next weeks hydrated for `WeekDateStrip` capacity indicators.
+        .task(id: weekStripLoadKey) {
+            guard showDayCapacityIndicators else { return }
+            try? await scheduleModel.loadWeekStrip(centeredOn: visibleWeekStart)
+        }
         // Date and type changes can move the preview. Keep the session's repeated scroll requests.
         .onChange(of: editorSession?.scrollRequest) { previous, current in
             // Initial presentation scrolls after layout in the session task above.
@@ -164,6 +175,14 @@ struct ScheduleView: View {
         default:
             return false
         }
+    }
+
+    private var visibleWeekStart: Date {
+        editor.selectedDate(using: router).startOfWeek(using: ClinicDate.calendar)
+    }
+
+    private var weekStripLoadKey: WeekStripLoadKey {
+        WeekStripLoadKey(weekStart: visibleWeekStart, isEnabled: showDayCapacityIndicators)
     }
 
     private var selectedDateBinding: Binding<Date> {
@@ -295,6 +314,11 @@ private struct AppointmentDetailsScrollRequest: Equatable {
 private struct ScheduleEditorLoadKey: Equatable {
     let requestID: UUID
     let date: Date
+}
+
+private struct WeekStripLoadKey: Equatable {
+    let weekStart: Date
+    let isEnabled: Bool
 }
 
 #Preview {
