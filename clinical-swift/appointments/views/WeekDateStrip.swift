@@ -46,7 +46,8 @@ struct WeekDateStrip: View {
             ? WeekStripMetrics.expandedStripHeight : WeekStripMetrics.compactStripHeight
 
         ScrollView(.horizontal) {
-            LazyHStack(spacing: 0) {
+            // Keep all three pages mounted so adjacent weeks stay current before a swipe starts.
+            HStack(spacing: 0) {
                 ForEach(WeekPageOffset.allCases) { page in
                     WeekDatePage(
                         weekStart: visibleWeekStart.date(
@@ -67,6 +68,8 @@ struct WeekDateStrip: View {
             .scrollTargetLayout()
         }
         .scrollTargetBehavior(.paging)
+        // Start centered on .current because an eager HStack otherwise opens at .previous.
+        .defaultScrollAnchor(.center)
         .scrollPosition(id: $visiblePage)
         .scrollIndicators(.hidden)
         // Let the glass shadow extend below the strip without changing its layout height.
@@ -100,7 +103,12 @@ struct WeekDateStrip: View {
             }
 
             if !isDateVisible(normalizedDate) {
-                visibleWeekStart = normalizedDate.startOfWeek(using: calendar)
+                // Snap week changes without animation so cells do not cross-fade.
+                withoutAnimation {
+                    visibleWeekStart = normalizedDate.startOfWeek(using: calendar)
+                    visiblePage = .current
+                    pendingPage = nil
+                }
             }
         }
     }
@@ -117,11 +125,11 @@ struct WeekDateStrip: View {
     }
 
     private func moveVisibleWeek(by weekOffset: Int) {
-        selectedDate = selectedDate.date(
+        visibleWeekStart = visibleWeekStart.date(
             byAddingWeeks: weekOffset,
             using: calendar
         )
-        visibleWeekStart = visibleWeekStart.date(
+        selectedDate = selectedDate.date(
             byAddingWeeks: weekOffset,
             using: calendar
         )
@@ -132,9 +140,18 @@ struct WeekDateStrip: View {
             return
         }
 
-        moveVisibleWeek(by: pendingPage.weekOffset)
-        self.pendingPage = nil
-        visiblePage = .current
+        // Recenter without animation so week swaps do not cross-fade or jump the selection pill.
+        withoutAnimation {
+            moveVisibleWeek(by: pendingPage.weekOffset)
+            self.pendingPage = nil
+            visiblePage = .current
+        }
+    }
+
+    private func withoutAnimation(_ body: () -> Void) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction, body)
     }
 
     private func isDateVisible(_ date: Date) -> Bool {
@@ -177,10 +194,15 @@ private struct WeekDatePage: View {
     }
 
     var body: some View {
+        let weekDates = weekStart.weekDates(using: calendar)
+        let selectedSlot = weekDates.firstIndex { $0.isSameDayAs(selectedDate) }
+
         HStack(spacing: 8) {
-            ForEach(weekStart.weekDates(using: calendar), id: \.self) { date in
+            // Key cells by weekday slot so week shifts update text in place without cross-fading.
+            ForEach(weekDates.enumerated(), id: \.offset) { slot, date in
                 DateStripCell(
                     date: date,
+                    slot: slot,
                     isSelected: date.isSameDayAs(selectedDate),
                     isToday: date.isSameDayAs(today),
                     isPast: date < today,
@@ -194,7 +216,7 @@ private struct WeekDatePage: View {
             }
         }
         .background {
-            if selectedDate.startOfWeek(using: calendar).isSameDayAs(weekStart) {
+            if let selectedSlot {
                 let tint: Color? =
                     if selectedDate.isSameDayAs(today), palette.todaySelection.highlightOpacity > 0
                     {
@@ -212,12 +234,12 @@ private struct WeekDatePage: View {
                             cornerRadius: WeekStripMetrics.cellCornerRadius, style: .continuous)
                     )
                     .matchedGeometryEffect(
-                        id: selectedDate, in: selectionGlass, properties: .position, isSource: false
+                        id: selectedSlot, in: selectionGlass, properties: .position, isSource: false
                     )
+                    .animation(.bouncy(duration: 0.35), value: selectedSlot)
             }
         }
         .padding(.horizontal, WeekStripMetrics.stripHorizontalPadding)
-        .animation(.bouncy(duration: 0.35), value: selectedDate)
     }
 }
 
@@ -225,6 +247,7 @@ private struct DateStripCell: View {
     @Environment(\.appPalette) private var palette
     @Environment(\.self) private var environment
     let date: Date
+    let slot: Int
     let isSelected: Bool
     let isToday: Bool
     let isPast: Bool
@@ -258,11 +281,12 @@ private struct DateStripCell: View {
                 }
             }
             .foregroundStyle(foregroundStyle)
+            .animation(.bouncy(duration: 0.35), value: isSelected)
             .frame(minWidth: 44, minHeight: cellMinHeight)
             .contentShape(
                 .rect(cornerRadius: WeekStripMetrics.cellCornerRadius, style: .continuous)
             )
-            .matchedGeometryEffect(id: date, in: selectionGlass, properties: .position)
+            .matchedGeometryEffect(id: slot, in: selectionGlass, properties: .position)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
