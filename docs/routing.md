@@ -10,7 +10,7 @@ device shake and must not replace an active presentation because an accidental
 shake could discard an editor.
 
 Closing creation fields does not end the timeline draft. A new app-level action
-still replaces it. See [shared creation](appointment-booking.md#shared-creation).
+still replaces it. See [direct editing and creation](schedule.md#direct-editing-and-creation).
 
 Late saves, record loads, and dismissal callbacks must not change a newer flow or
 its selected date.

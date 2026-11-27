@@ -5,8 +5,8 @@ hang summaries to a local spool mirrored to `OSLog` and uploaded to Axiom.
 
 ## Boundaries and spool isolation
 
-Follow [architecture boundaries](architecture.md) so shared telemetry types run
-on Linux and widget telemetry stays free of persistence and app UI.
+Follow [architecture boundaries](../AGENTS.md#architecture) so shared telemetry
+types run on Linux and widget telemetry stays free of persistence and app UI.
 
 Keep spool files outside `SQLiteData.db` in `<AppGroup>/Telemetry/<env>/`. Google
 Drive [backups](backups.md) never include telemetry files.
