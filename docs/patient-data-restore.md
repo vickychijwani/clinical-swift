@@ -54,7 +54,7 @@ on-device paths; installation can change the container path.
 | Accept recovered data or completed rollback | `--restore-finalize --confirm-restore` |
 
 For Simulator, use
-`xcrun simctl launch <simulator-id> in.bitehaus.clinical <arguments>`. This does not
+`make run SIMULATOR_ID="<simulator-id>" LAUNCH_ARGS="<arguments>"`. This does not
 verify recovery on the physical clinic device.
 
 If installation is interrupted or coordination fails, keep recovery files and
