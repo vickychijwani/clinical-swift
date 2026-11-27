@@ -215,4 +215,33 @@ struct TimelineAdjustmentTests {
         model.release()
         #expect(!model.allowsSelection)
     }
+
+    @Test func tooltipStaysAboveCardOverDateStripAndClampsInsideScheduleBounds() {
+        let container = CGRect(x: 0, y: 0, width: 402, height: 760)
+        let tooltipSize = CGSize(width: 150, height: 26)
+
+        // Draft at clinic opening sits 8 pt below the 64 pt date strip, so the badge overlaps the strip.
+        let nearOpening = TimelineAdjustmentTooltipOverlay.tooltipOrigin(
+            cardTopLeading: CGPoint(x: 56, y: 72),
+            tooltipSize: tooltipSize,
+            containerBounds: container
+        )
+        #expect(nearOpening == CGPoint(x: 56, y: 42))
+
+        // If the card top is scrolled near or past the top edge, clamp below the navigation bar.
+        let scrolledTop = TimelineAdjustmentTooltipOverlay.tooltipOrigin(
+            cardTopLeading: CGPoint(x: 56, y: 12),
+            tooltipSize: tooltipSize,
+            containerBounds: container
+        )
+        #expect(scrolledTop == CGPoint(x: 56, y: 0))
+
+        // Keep horizontal position inside the container bounds even on narrow widths.
+        let nearTrailing = TimelineAdjustmentTooltipOverlay.tooltipOrigin(
+            cardTopLeading: CGPoint(x: 320, y: 200),
+            tooltipSize: tooltipSize,
+            containerBounds: container
+        )
+        #expect(nearTrailing == CGPoint(x: 252, y: 170))
+    }
 }

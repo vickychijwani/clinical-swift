@@ -30,7 +30,6 @@ struct TimelineItemView: View {
     let onSelect: () -> Void
 
     var body: some View {
-        let tooltipBelow = item.start.timeOfDay.minutes(since: Bitehaus.opening) <= 30
         let isDragging = adjustmentControls?.isDragging == true
 
         Button(action: onSelect) {
@@ -78,30 +77,17 @@ struct TimelineItemView: View {
             )
         )
         .modifier(ScheduleCardLift(isPressed: isDraft && isDragging))
-        .overlay(alignment: .topLeading) {
-            if adjustmentControls != nil, isDragging, !tooltipBelow {
-                TimelineAdjustmentTooltip(item: item)
-                    .visualEffect { content, geometry in
-                        content.offset(y: -geometry.size.height - 4)
-                    }
-            }
+        // Publish the card origin so ScheduleView can draw the tooltip above the timeline clip.
+        .anchorPreference(key: TimelineAdjustmentTooltipAnchorKey.self, value: .topLeading) {
+            adjustmentControls != nil && isDragging ? $0 : nil
         }
         .overlay(alignment: .topTrailing) {
             if let adjustmentControls {
-                HStack {
-                    if isDragging, tooltipBelow {
-                        // Keep the tooltip clear of the duration grip and card actions.
-                        TimelineAdjustmentTooltip(item: item)
-                    }
-                    Spacer(minLength: 0)
-                    TimelineAdjustmentActions(
-                        item: item,
-                        controls: adjustmentControls
-                    )
-                    .fixedSize()
-                }
-                .frame(width: size.width, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+                TimelineAdjustmentActions(
+                    item: item,
+                    controls: adjustmentControls
+                )
+                .fixedSize()
                 // Leave the duration handle its own touch area below the card.
                 .offset(y: size.height + 4)
             }
@@ -216,6 +202,73 @@ private struct TimelineAdjustmentHandles: View {
     }
 }
 
+struct TimelineAdjustmentTooltipAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGPoint>? { nil }
+
+    static func reduce(value: inout Anchor<CGPoint>?, nextValue: () -> Anchor<CGPoint>?) {
+        if let next = nextValue() { value = next }
+    }
+}
+
+struct TimelineAdjustmentTooltipOverlay: View {
+    nonisolated static let cardSpacing: CGFloat = 4
+
+    let item: TimelineItem
+    let anchor: Anchor<CGPoint>
+
+    var body: some View {
+        GeometryReader { proxy in
+            TimelineAdjustmentTooltipLayout(
+                cardTopLeading: proxy[anchor],
+                spacing: Self.cardSpacing
+            ) {
+                TimelineAdjustmentTooltip(item: item)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    nonisolated static func tooltipOrigin(
+        cardTopLeading: CGPoint,
+        tooltipSize: CGSize,
+        containerBounds: CGRect,
+        spacing: CGFloat = cardSpacing
+    ) -> CGPoint {
+        let maxX = max(containerBounds.minX, containerBounds.maxX - tooltipSize.width)
+        let x = min(max(cardTopLeading.x, containerBounds.minX), maxX)
+        let y = max(containerBounds.minY, cardTopLeading.y - tooltipSize.height - spacing)
+        return CGPoint(x: x, y: y)
+    }
+}
+
+private struct TimelineAdjustmentTooltipLayout: Layout {
+    let cardTopLeading: CGPoint
+    let spacing: CGFloat
+
+    nonisolated func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    nonisolated func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        guard let subview = subviews.first else { return }
+        let tooltipSize = subview.sizeThatFits(.unspecified)
+        let origin = TimelineAdjustmentTooltipOverlay.tooltipOrigin(
+            cardTopLeading: CGPoint(
+                x: bounds.minX + cardTopLeading.x,
+                y: bounds.minY + cardTopLeading.y
+            ),
+            tooltipSize: tooltipSize,
+            containerBounds: bounds,
+            spacing: spacing
+        )
+        subview.place(at: origin, anchor: .topLeading, proposal: ProposedViewSize(tooltipSize))
+    }
+}
+
 private struct TimelineAdjustmentTooltip: View {
     let item: TimelineItem
 
@@ -230,5 +283,6 @@ private struct TimelineAdjustmentTooltip: View {
         .background(AppColor.accent, in: .capsule)
         .fixedSize()
         .allowsHitTesting(false)
+        .accessibilityIdentifier("timeline-adjustment-tooltip")
     }
 }

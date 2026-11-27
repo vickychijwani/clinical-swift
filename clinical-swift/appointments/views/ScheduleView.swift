@@ -69,6 +69,16 @@ struct ScheduleView: View {
             }
             .accessibilityIdentifier("schedule-day-pager")
         }
+        // Draw the drag tooltip above the timeline scroll view and date strip so early drafts
+        // keep their badge above the finger without getting clipped.
+        .overlayPreferenceValue(TimelineAdjustmentTooltipAnchorKey.self) { anchor in
+            if let anchor, let editorSession, editorSession.adjustment.isDragging {
+                TimelineAdjustmentTooltipOverlay(
+                    item: editorSession.preview,
+                    anchor: anchor
+                )
+            }
+        }
         .background(palette[.canvas])
         .navigationTitle(
             router.selectedScheduleDate.formatted(
