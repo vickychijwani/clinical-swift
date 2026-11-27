@@ -2,10 +2,14 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.trayDismiss) private var dismiss
+    @AppStorage(DayCapacitySettings.showIndicatorsKey) private var showDayCapacityIndicators = true
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Schedule") {
+                    Toggle("Day indicators", isOn: $showDayCapacityIndicators)
+                }
                 BackupSettingsSections()
                 DiagnosticsSettingsSection()
                 TimelineTuningSettings()

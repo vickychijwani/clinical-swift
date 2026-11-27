@@ -68,6 +68,18 @@ nonisolated private func scheduleAppointmentsQuery(
         }
 }
 
+public nonisolated func appointmentCapacityQuery(
+    start: Date,
+    endExclusive: Date
+) -> some Statement<AppointmentRecord> & Sendable {
+    AppointmentRecord
+        .where { $0.start >= start }
+        .where { $0.start < endExclusive }
+        .where { $0.status.neq(Appointment.Status.cancelled.rawValue) }
+        .order { $0.start.asc() }
+        .select { $0 }
+}
+
 public nonisolated func appointmentDetailsQuery(
     id: Appointment.ID
 ) -> some Statement<AppointmentPatientSelection> & Sendable {

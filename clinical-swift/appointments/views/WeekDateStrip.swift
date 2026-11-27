@@ -2,9 +2,11 @@ import ClinicalModels
 import SwiftUI
 
 private enum WeekStripMetrics {
-    static let stripHeight: CGFloat = 64
+    static let compactStripHeight: CGFloat = 64
+    static let expandedStripHeight: CGFloat = 72
     static let stripHorizontalPadding: CGFloat = 8
-    static let cellMinHeight: CGFloat = 56
+    static let compactCellMinHeight: CGFloat = 56
+    static let expandedCellMinHeight: CGFloat = 64
     static let cellCornerRadius: CGFloat = 16
 }
 
@@ -13,6 +15,8 @@ struct WeekDateStrip: View {
 
     let today: Date
     let calendar: Calendar
+    let showsCapacityIndicators: Bool
+    let dayCapacity: (Date) -> [DayCapacitySlot]
 
     @State private var visibleWeekStart: Date
     @State private var visiblePage: WeekPageOffset? = .current
@@ -22,17 +26,25 @@ struct WeekDateStrip: View {
     init(
         selectedDate: Binding<Date>,
         today: Date,
-        calendar: Calendar = ClinicDate.calendar
+        calendar: Calendar = ClinicDate.calendar,
+        showsCapacityIndicators: Bool = true,
+        dayCapacity: @escaping (Date) -> [DayCapacitySlot] = { _ in [] }
     ) {
         self._selectedDate = selectedDate
         self.today = today.startOfDay(using: calendar)
         self.calendar = calendar
+        self.showsCapacityIndicators = showsCapacityIndicators
+        self.dayCapacity = dayCapacity
         self._visibleWeekStart = State(
             initialValue: selectedDate.wrappedValue.startOfWeek(using: calendar)
         )
     }
 
     var body: some View {
+        let stripHeight =
+            showsCapacityIndicators
+            ? WeekStripMetrics.expandedStripHeight : WeekStripMetrics.compactStripHeight
+
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(WeekPageOffset.allCases) { page in
@@ -44,6 +56,8 @@ struct WeekDateStrip: View {
                         selectedDate: selectedDate,
                         today: today,
                         calendar: calendar,
+                        showsCapacityIndicators: showsCapacityIndicators,
+                        dayCapacity: dayCapacity,
                         selectDate: selectDate
                     )
                     .containerRelativeFrame(.horizontal)
@@ -57,7 +71,7 @@ struct WeekDateStrip: View {
         .scrollIndicators(.hidden)
         // Let the glass shadow extend below the strip without changing its layout height.
         .scrollClipDisabled()
-        .frame(height: WeekStripMetrics.stripHeight)
+        .frame(height: stripHeight)
         .onAppear(perform: normalizeSelection)
         .onChange(of: visiblePage) {
             guard let visiblePage else {
@@ -151,9 +165,16 @@ private struct WeekDatePage: View {
     let selectedDate: Date
     let today: Date
     let calendar: Calendar
+    let showsCapacityIndicators: Bool
+    let dayCapacity: (Date) -> [DayCapacitySlot]
     let selectDate: (Date) -> Void
 
     @Namespace private var selectionGlass
+
+    private var cellMinHeight: CGFloat {
+        showsCapacityIndicators
+            ? WeekStripMetrics.expandedCellMinHeight : WeekStripMetrics.compactCellMinHeight
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -162,6 +183,10 @@ private struct WeekDatePage: View {
                     date: date,
                     isSelected: date.isSameDayAs(selectedDate),
                     isToday: date.isSameDayAs(today),
+                    isPast: date < today,
+                    showsCapacityIndicators: showsCapacityIndicators,
+                    cellMinHeight: cellMinHeight,
+                    capacitySlots: showsCapacityIndicators ? dayCapacity(date) : [],
                     selectionGlass: selectionGlass,
                     selectDate: selectDate
                 )
@@ -170,17 +195,21 @@ private struct WeekDatePage: View {
         }
         .background {
             if selectedDate.startOfWeek(using: calendar).isSameDayAs(weekStart) {
+                let tint: Color? =
+                    if selectedDate.isSameDayAs(today), palette.todaySelection.highlightOpacity > 0
+                    {
+                        palette.opaqueAccent(in: environment)
+                            .opacity(palette.todaySelection.highlightOpacity)
+                    } else {
+                        nil
+                    }
                 // Keep one glass view alive so date changes move it instead of fading separate effects.
                 Color.clear
-                    .frame(width: 44, height: WeekStripMetrics.cellMinHeight)
+                    .frame(width: 44, height: cellMinHeight)
                     .glassEffect(
-                        .regular.tint(
-                            selectedDate.isSameDayAs(today)
-                                ? palette.opaqueAccent(in: environment)
-                                    .opacity(palette.todaySelection.highlightOpacity) : nil
-                        )
-                        .interactive(),
-                        in: .rect(cornerRadius: WeekStripMetrics.cellCornerRadius, style: .continuous)
+                        .regular.tint(tint).interactive(),
+                        in: .rect(
+                            cornerRadius: WeekStripMetrics.cellCornerRadius, style: .continuous)
                     )
                     .matchedGeometryEffect(
                         id: selectedDate, in: selectionGlass, properties: .position, isSource: false
@@ -198,6 +227,10 @@ private struct DateStripCell: View {
     let date: Date
     let isSelected: Bool
     let isToday: Bool
+    let isPast: Bool
+    let showsCapacityIndicators: Bool
+    let cellMinHeight: CGFloat
+    let capacitySlots: [DayCapacitySlot]
     let selectionGlass: Namespace.ID
     let selectDate: (Date) -> Void
 
@@ -213,9 +246,19 @@ private struct DateStripCell: View {
                 Text(dayText)
                     .font(.title3)
                     .bold()
+
+                if showsCapacityIndicators {
+                    DayCapacityIndicatorView(
+                        slots: capacitySlots,
+                        isToday: isToday,
+                        isSelected: isSelected,
+                        isPast: isPast
+                    )
+                    .padding(.top, 4)
+                }
             }
             .foregroundStyle(foregroundStyle)
-            .frame(minWidth: 44, minHeight: WeekStripMetrics.cellMinHeight)
+            .frame(minWidth: 44, minHeight: cellMinHeight)
             .contentShape(
                 .rect(cornerRadius: WeekStripMetrics.cellCornerRadius, style: .continuous)
             )
@@ -233,8 +276,10 @@ private struct DateStripCell: View {
             return isSelected ? palette.todaySelection.textColor(accent: accent) : accent
         } else if isSelected {
             return palette[.text]
+        } else if isPast {
+            return palette[.text].opacity(0.32)
         } else {
-            return palette[.secondaryText]
+            return palette[.text].opacity(0.62)
         }
     }
 

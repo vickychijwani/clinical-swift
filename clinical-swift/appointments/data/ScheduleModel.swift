@@ -10,6 +10,7 @@ import SQLiteData
     @ObservationIgnored @Dependency(\.defaultDatabase) private var database
     @ObservationIgnored @Dependency(\.telemetry) private var telemetry
     @ObservationIgnored @FetchAll(AppointmentPatientSelection.none) private var appointmentRows
+    @ObservationIgnored @FetchAll(AppointmentRecord.none) private var stripAppointmentRows
 
     @ObservationIgnored @FetchAll(UnavailableTimeRecord.none) private var unavailableTimeRows
     @ObservationIgnored private var loadedWindow: ClosedRange<Date>?
@@ -26,6 +27,15 @@ import SQLiteData
             appointmentRows
             .compactMap { $0.details?.appointment }
             .filter { $0.start.isSameDayAs(selectedDate) }
+    }
+
+    /// Returns non-cancelled appointment time spans for the given day across the loaded 3-week strip.
+    func dayCapacitySlots(for date: Date) -> [DayCapacitySlot] {
+        let day = ClinicDate.day(date)
+        return
+            stripAppointmentRows
+            .filter { $0.start.isSameDayAs(day) }
+            .map { DayCapacitySlot(start: $0.start, durationMinutes: $0.durationMinutes) }
     }
 
     /// Reads the target day from storage when booking jumps outside the loaded timeline window.
@@ -85,5 +95,28 @@ import SQLiteData
             level: .debug,
             count: appointmentRows.count + unavailableTimeRows.count
         )
+    }
+
+    /// Loads non-cancelled appointments for the previous, current, and next calendar weeks so
+    /// horizontal paging across `WeekDateStrip` never shows blank indicators during a swipe.
+    func loadWeekStrip(centeredOn weekStart: Date) async throws {
+        let calendar = ClinicDate.calendar
+        let normalizedWeekStart = weekStart.startOfWeek(using: calendar)
+        let start = normalizedWeekStart.date(byAddingWeeks: -1, using: calendar)
+        let endExclusive = normalizedWeekStart.date(byAddingWeeks: 2, using: calendar)
+        do {
+            try await $stripAppointmentRows.load(
+                appointmentCapacityQuery(start: start, endExclusive: endExclusive)
+            )
+        } catch {
+            telemetry.log(
+                .error,
+                category: .schedule,
+                name: "schedule_week_strip_load_failed",
+                message: "Could not load appointments for week date strip",
+                error: error
+            )
+            throw error
+        }
     }
 }
