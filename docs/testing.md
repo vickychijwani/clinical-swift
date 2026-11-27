@@ -1,20 +1,25 @@
 # Testing
 
-Use the [test execution rules](../AGENTS.md#test-execution) and
-[Makefile](../Makefile) for commands and filters. See
+Use the [build and test execution rules](../AGENTS.md#build-and-test-execution)
+and [Makefile](../Makefile) for commands and filters. See
 [backup setup and release](backups.md#verification-and-release) for live checks
 and credentials.
 
 ## Test boundaries
 
-Use unit tests unless behavior requires UI tests. Keep routine tests independent
-of Google accounts and network access.
+Write unit tests for core application logic; only write UI tests when unit tests
+are not possible. Keep routine tests independent of Google accounts and network
+access.
 
 Package tests use public imports to enforce the same boundary as the app.
 App-owned editors and platform setup belong in app tests.
 
-Use `withDependencies` for construction and the complete operation under test;
-live dependencies can make results depend on the host machine.
+Use `withDependencies` for construction and the complete operation under test so
+production APIs do not acquire test-only parameters and results do not depend on
+the host machine.
+
+Prefer readable dates parsed with standard strategies (such as ISO-8601 strings)
+over custom `DateComponents` fixture builders.
 
 Do not link `DependenciesTestSupport` into hosted Xcode tests. Its second runtime
 can make overrides change a different context from the one production code reads.
