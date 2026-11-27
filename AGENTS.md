@@ -41,7 +41,7 @@ App and domain:
 
 - `docs/persistence.md` — Data boundaries, shared App Group database access, and future CloudKit sync
 - `docs/routing.md` — App-level presentation ownership, details navigation, and interruption policy
-- `docs/schedule.md` — Timeline layout, breaks, date strip, direct editing, and appointment booking
+- `docs/schedule.md` — Timeline break rules, booking rules, and patient recency
 - `docs/patients.md` — Unknown-patient rules, Indian phone matching, and contact search
 - `docs/payments.md` — Patient ledger, coverage, balances, dated reports, and derived summaries
 - `docs/widgets.md` — WidgetKit targets, App Group reads, refresh rules, and widget layouts
@@ -61,14 +61,14 @@ Documentation rules:
   and validation reports are historical context, not current architecture guidance.
 - Update guides only when a documented decision changes; routine code changes do
   not require doc updates.
-- Keep guides concise without setting word quotas. Record surprising product rules,
-  business reasons, cross-module/cross-process constraints, and runnable setup,
-  release, or recovery procedures (commands, prerequisites, limits). Omit
-  implementation inventories, ordinary UI details, test lists/results, status
-  reports, and temporary design tools (such as Card lab and Color lab).
-- Give each decision one home and link to it. Put local technical traps in code
-  comments rather than guides, without moving every removed doc detail into a
-  comment.
+- Write in super concise and easy to read fashion - don't use more words when fewer will do, without sacrificing clarity.
+- Keep major invariants, consequential decisions, and context whose reasons are unclear from code or tests. Explain surprising product rules and preserve business reasons even when tests enforce them.
+- Keep cross-module and cross-process constraints in guides; local traps belong beside code. Do not move every deleted detail into a comment.
+- Remove implementation descriptions, inventories, ordinary UI details, test lists/results, status reports, and feature summaries.
+- Give each decision one home and link to it. Remove duplicate and obsolete text.
+- Keep essential setup, release, and recovery procedures, including commands, prerequisites, and limits; omit internals.
+- Do not document temporary design tools, such as Card lab and Color lab.
+- Do not set word quotas.
 
 ## Code and scripts
 

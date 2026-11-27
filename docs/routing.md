@@ -1,28 +1,21 @@
 # Presentation and routing
 
 One owner controls app-level presentation and details history across tabs,
-widgets, and links. Every entry point must use the same interruption and date rules.
+widgets, and links so every entry point uses the same interruption and date
+rules.
 
-An accepted app-level action replaces the current flow and its temporary state.
-Keep only the newest request; never resume an interrupted flow. Internal details
-navigation keeps history; an external link starts new history. Settings opens on
-device shake and must not replace an active presentation because an accidental
-shake could discard an editor.
+An accepted app-level action replaces the current flow and its temporary state;
+never queue or resume an interrupted flow. Internal details navigation keeps
+history; an external link starts new history. Settings opens on device shake and
+must not replace an active presentation because an accidental shake could
+discard an editor.
 
-Closing creation fields does not end the timeline draft. A new app-level action
-still replaces it. See [direct editing and creation](schedule.md#direct-editing-and-creation).
+Late saves, record loads, and dismissal callbacks must not change a newer flow
+or its selected date.
 
-Late saves, record loads, and dismissal callbacks must not change a newer flow or
-its selected date.
+Completion payment drafts are discarded without confirmation when leaving the
+appointment-details visit, unlike standalone forms.
 
-App-owned flows share one tray. Child steps preserve their parent flow. Contacts
-and SMS use native presentation.
-
-Completion payment drafts belong to one appointment-details visit. Back keeps the
-draft; leaving the visit (closing the tray or swiping to another appointment) discards
-it without confirmation. A late payment save must not close another visit.
-
-Appointment details must match the selected Schedule day before they appear.
-Selecting another day dismisses details so they cannot appear over the wrong day.
-Swiping root appointment details switches among scheduled and completed appointments
-on that same day in place and never crosses dates.
+Appointment details must match the selected Schedule day before they appear;
+selecting another day dismisses details so they cannot appear over the wrong
+day.

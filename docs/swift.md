@@ -2,7 +2,7 @@
 
 ## Language and concurrency
 
-- Use strict concurrency and `async`/`await` (Swift 6.2+); do not use Grand Central Dispatch.
+- Use strict concurrency and `async`/`await`; do not use Grand Central Dispatch.
 - Mark every `@Observable` class `@MainActor` and flag missing annotations. Use `@Observable`
   for shared state: own with `@State`, pass with `@Bindable` or `@Environment`. Avoid legacy
   observation (`ObservableObject`, `@Published`, `@StateObject`, `@ObservedObject`,
@@ -23,7 +23,6 @@
 - Avoid force unwraps and force `try` except for unrecoverable failures.
 - Reuse domain date/time APIs before adding helpers or manual component arithmetic.
 - Group overloads together so their differences are easy to compare.
-- Mark unfinished work with `// TODO:`.
 
 ## SwiftUI
 
@@ -58,5 +57,5 @@
 - Use `confirmationDialog` for choices; reserve alerts for errors and information.
 - Use `AsyncButton` for immediate async work and `ConfirmingAsyncButton` for confirmed async
   work. Shared operations need model-owned progress and errors.
-- Use `ConfirmingTray.swift` for explicit dismissal of unsaved forms. Disable swipe and
-  outside-tap dismissal while dirty or saving. Child steps own their dismissal.
+- Use `ConfirmingTray.swift` for unsaved forms (disable interactive dismissal while saving;
+  child steps own their dismissal).
