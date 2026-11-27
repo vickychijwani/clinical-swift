@@ -46,25 +46,19 @@ nonisolated final class TrayUITests: XCTestCase {
     }
 
     @MainActor
-    func testPatientOptionalFieldsKeepTheFixedHeightAndFitWithoutScrolling() {
+    func testPatientOptionalFieldsAreVisibleByDefaultAndFitWithoutScrolling() {
         let app = launch()
         app.buttons["View Patient"].tap()
         app.buttons["Edit Patient"].tap()
         let bar = app.navigationBars["Edit Patient"]
         XCTAssertTrue(bar.stableFrameOrWait(timeout: 5))
-        let collapsed = bar.frame
-        app.buttons["Optional details"].tap()
-        let dob = app.buttons["Date of birth, Add"]
-        XCTAssertTrue(dob.hittableOrWait(timeout: 3))
-        XCTAssertTrue(bar.stableFrameOrWait(timeout: 3))
-        XCTAssertEqual(bar.frame.minY, collapsed.minY, accuracy: 1)
-        XCTAssertTrue(app.textFields["Phone number"].isHittable)
+        XCTAssertTrue(app.staticTexts["Optional details"].exists)
+        XCTAssertFalse(app.buttons["Optional details"].exists)
         XCTAssertTrue(app.textFields["Name"].isHittable)
+        XCTAssertTrue(app.textFields["Phone number"].isHittable)
+        XCTAssertTrue(app.buttons["Date of birth, Add"].isHittable)
         XCTAssertTrue(app.buttons["Other"].isHittable)
-        record(app, name: "patient-edit-expanded-fixed-height")
-        app.buttons["Optional details"].tap()
-        XCTAssertTrue(dob.absentOrWait(timeout: 3))
-        XCTAssertEqual(bar.frame.minY, collapsed.minY, accuracy: 1)
+        record(app, name: "patient-edit-optional-details-visible")
     }
 
     @MainActor
@@ -76,7 +70,6 @@ nonisolated final class TrayUITests: XCTestCase {
         XCTAssertTrue(name.hittableOrWait(timeout: 5))
         name.tap()
         name.typeText(" Updated")
-        app.buttons["Optional details"].tap()
         app.buttons["Date of birth, Add"].tap()
         XCTAssertTrue(app.navigationBars["Date of birth"].hittableOrWait(timeout: 3))
         XCTAssertFalse(app.navigationBars["Edit Patient"].isHittable)

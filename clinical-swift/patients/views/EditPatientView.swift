@@ -28,7 +28,7 @@ struct EditPatientView: View {
 
         NavigationStack {
             ConfirmingTray(
-                // Reserve space for all optional fields so expansion does not move the tray.
+                // Keep a fixed tray height so all fields fit without scrolling.
                 size: .height(370),
                 hasUnsavedChanges: model.hasUnsavedChanges,
                 title: "Discard unsaved changes?",
@@ -71,7 +71,6 @@ private struct EditPatientForm: View {
     let guardedDismiss: TrayCancelAction
     let savePatient: @MainActor () async -> Void
 
-    @State private var areOptionalDetailsExpanded = false
     @State private var hasRequestedContactsAccess = false
 
     init(
@@ -98,9 +97,7 @@ private struct EditPatientForm: View {
                         .textContentType(.name)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
-                }
 
-                Section {
                     PhoneField("Phone number", phone: $draft.phone.replacingNil()) { contactName in
                         draft.prefillName(fromContactName: contactName)
                     } onContactPickerOpened: {
@@ -108,23 +105,20 @@ private struct EditPatientForm: View {
                     }
                 }
 
-                Section {
-                    DisclosureGroup("Optional details", isExpanded: $areOptionalDetailsExpanded) {
-                        PatientDOBField(
-                            title: "Date of birth",
-                            selection: $draft.dob,
-                            dobRequest: $dobRequest,
-                            draftDOB: $draftDOB
-                        )
+                Section("Optional details") {
+                    PatientDOBField(
+                        title: "Date of birth",
+                        selection: $draft.dob,
+                        dobRequest: $dobRequest,
+                        draftDOB: $draftDOB
+                    )
 
-                        PatientGenderField(title: "Gender", selection: $draft.gender)
-                    }
+                    PatientGenderField(title: "Gender", selection: $draft.gender)
                 }
             }
             // The custom tray has no native sheet context to supply the subtle row fill.
             .listRowBackground(Rectangle().fill(.quinary))
         }
-        .listSectionSpacing(.compact)
         .contentMargins(.vertical, 16, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .containerBackground(AppColor.canvas, for: .navigation)
