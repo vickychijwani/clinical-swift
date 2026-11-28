@@ -106,9 +106,10 @@ func sourceImports(_ source: String) -> [ImportToken] {
     var line = 1
     var tokens: [(text: String, line: Int)] = []
     func matches(_ marker: String) -> Bool {
-        let part = Array(marker.utf8)
-        return offset + part.count <= bytes.count
-            && bytes[offset..<(offset + part.count)].elementsEqual(part)
+        let utf8 = marker.utf8
+        let count = utf8.count
+        return offset + count <= bytes.count
+            && bytes[offset..<(offset + count)].elementsEqual(utf8)
     }
     func advance(_ count: Int = 1) {
         let end = min(bytes.count, offset + count)
@@ -374,8 +375,316 @@ func checkPackage(_ graph: PackageGraph) throws -> [String] {
 
 let projectPath = "clinical-swift.xcodeproj/project.pbxproj"
 
-struct XcodeProject: Codable {
-    struct Object: Codable {
+enum OpenStepPlistValue: Equatable {
+    case string(String)
+    case array([OpenStepPlistValue])
+    case dictionary([String: OpenStepPlistValue])
+    case data(Data)
+}
+
+// Parse OpenStep ASCII property lists (used by Xcode project.pbxproj) without macOS plutil
+// so project membership checks run identically on Linux and macOS.
+func parseOpenStepPlist(_ data: Data) throws -> OpenStepPlistValue {
+    let bytes = Array(data)
+    var offset = 0
+    // Skip optional UTF-8 BOM.
+    if bytes.count >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF {
+        offset = 3
+    }
+
+    func fail(_ message: String) -> ArchitectureError {
+        ArchitectureError("Invalid OpenStep plist at byte \(offset): \(message)")
+    }
+
+    func isWhitespace(_ byte: UInt8) -> Bool {
+        byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D || byte == 0x0B || byte == 0x0C
+    }
+
+    func isUnquotedChar(_ byte: UInt8) -> Bool {
+        (byte >= 0x41 && byte <= 0x5A)  // A-Z
+            || (byte >= 0x61 && byte <= 0x7A)  // a-z
+            || (byte >= 0x30 && byte <= 0x39)  // 0-9
+            || byte == 0x5F  // _
+            || byte == 0x24  // $
+            || byte == 0x2F  // /
+            || byte == 0x3A  // :
+            || byte == 0x2E  // .
+            || byte == 0x2D  // -
+    }
+
+    func hexValue(_ byte: UInt8) -> UInt8? {
+        switch byte {
+        case 0x30...0x39: byte - 0x30
+        case 0x41...0x46: byte - 0x41 + 10
+        case 0x61...0x66: byte - 0x61 + 10
+        default: nil
+        }
+    }
+
+    func skipTrivia() throws {
+        while offset < bytes.count {
+            let byte = bytes[offset]
+            if isWhitespace(byte) {
+                offset += 1
+            } else if byte == 0x2F && offset + 1 < bytes.count && bytes[offset + 1] == 0x2F {
+                offset += 2
+                while offset < bytes.count && bytes[offset] != 0x0A && bytes[offset] != 0x0D {
+                    offset += 1
+                }
+            } else if byte == 0x2F && offset + 1 < bytes.count && bytes[offset + 1] == 0x2A {
+                offset += 2
+                var closed = false
+                while offset + 1 < bytes.count {
+                    if bytes[offset] == 0x2A && bytes[offset + 1] == 0x2F {
+                        offset += 2
+                        closed = true
+                        break
+                    }
+                    offset += 1
+                }
+                if !closed { throw fail("unterminated block comment") }
+            } else {
+                break
+            }
+        }
+    }
+
+    func readHex16() throws -> UInt16 {
+        guard offset + 4 <= bytes.count else { throw fail("truncated \\U escape") }
+        var value: UInt16 = 0
+        for _ in 0..<4 {
+            guard let digit = hexValue(bytes[offset]) else {
+                throw fail("invalid hex digit in \\U escape")
+            }
+            value = (value << 4) | UInt16(digit)
+            offset += 1
+        }
+        return value
+    }
+
+    func parseQuotedString() throws -> String {
+        let quote = bytes[offset]
+        offset += 1
+        var out: [UInt8] = []
+        while offset < bytes.count {
+            let byte = bytes[offset]
+            if byte == quote {
+                offset += 1
+                guard let text = String(bytes: out, encoding: .utf8) else {
+                    throw fail("invalid UTF-8 in quoted string")
+                }
+                return text
+            }
+            if byte == 0x5C {  // backslash
+                offset += 1
+                guard offset < bytes.count else { throw fail("unterminated escape sequence") }
+                let esc = bytes[offset]
+                switch esc {
+                case 0x6E:  // n
+                    out.append(0x0A)
+                    offset += 1
+                case 0x72:  // r
+                    out.append(0x0D)
+                    offset += 1
+                case 0x74:  // t
+                    out.append(0x09)
+                    offset += 1
+                case 0x61:  // a
+                    out.append(0x07)
+                    offset += 1
+                case 0x62:  // b
+                    out.append(0x08)
+                    offset += 1
+                case 0x66:  // f
+                    out.append(0x0C)
+                    offset += 1
+                case 0x76:  // v
+                    out.append(0x0B)
+                    offset += 1
+                case 0x55:  // Uxxxx
+                    offset += 1
+                    let unit = try readHex16()
+                    if (0xD800...0xDBFF).contains(unit),
+                        offset + 2 <= bytes.count,
+                        bytes[offset] == 0x5C, bytes[offset + 1] == 0x55
+                    {
+                        offset += 2
+                        let low = try readHex16()
+                        guard (0xDC00...0xDFFF).contains(low) else {
+                            throw fail("invalid UTF-16 low surrogate")
+                        }
+                        let codePoint =
+                            0x10000 + ((UInt32(unit - 0xD800) << 10) | UInt32(low - 0xDC00))
+                        guard let scalar = UnicodeScalar(codePoint) else {
+                            throw fail("invalid Unicode scalar")
+                        }
+                        out.append(contentsOf: String(scalar).utf8)
+                    } else {
+                        guard let scalar = UnicodeScalar(UInt32(unit)) else {
+                            throw fail("unpaired UTF-16 surrogate")
+                        }
+                        out.append(contentsOf: String(scalar).utf8)
+                    }
+                case 0x30...0x37:  // octal \ooo (up to 3 digits, decoded via legacy NeXTSTEP encoding to match plutil)
+                    var value: UInt32 = 0
+                    for _ in 0..<3 {
+                        guard offset < bytes.count, (0x30...0x37).contains(bytes[offset]) else {
+                            break
+                        }
+                        value = (value << 3) | UInt32(bytes[offset] - 0x30)
+                        offset += 1
+                    }
+                    let scalar: UnicodeScalar
+                    if value < 0x80, let ascii = UnicodeScalar(value) {
+                        scalar = ascii
+                    } else if value >= 0x80 && value <= 0xFD,
+                        let mapped = UnicodeScalar(nextStepHighBytes[Int(value - 0x80)])
+                    {
+                        scalar = mapped
+                    } else {
+                        throw fail("invalid octal escape")
+                    }
+                    out.append(contentsOf: String(scalar).utf8)
+                default:
+                    out.append(esc)
+                    offset += 1
+                }
+            } else {
+                out.append(byte)
+                offset += 1
+            }
+        }
+        throw fail("unterminated quoted string")
+    }
+
+    // Legacy NeXTSTEP encoding for octal escape bytes 0x80...0xFD (matches CoreFoundation / plutil).
+    let nextStepHighBytes: [UInt32] = [
+        0x00A0, 0x00C0, 0x00C1, 0x00C2, 0x00C3, 0x00C4, 0x00C5, 0x00C7,
+        0x00C8, 0x00C9, 0x00CA, 0x00CB, 0x00CC, 0x00CD, 0x00CE, 0x00CF,
+        0x00D0, 0x00D1, 0x00D2, 0x00D3, 0x00D4, 0x00D5, 0x00D6, 0x00D9,
+        0x00DA, 0x00DB, 0x00DC, 0x00DD, 0x00DE, 0x00B5, 0x00D7, 0x00F7,
+        0x00A9, 0x00A1, 0x00A2, 0x00A3, 0x2044, 0x00A5, 0x0192, 0x00A7,
+        0x00A4, 0x2019, 0x201C, 0x00AB, 0x2039, 0x203A, 0xFB01, 0xFB02,
+        0x00AE, 0x2013, 0x2020, 0x2021, 0x00B7, 0x00A6, 0x00B6, 0x2022,
+        0x201A, 0x201E, 0x201D, 0x00BB, 0x2026, 0x2030, 0x00AC, 0x00BF,
+        0x00B9, 0x02CB, 0x00B4, 0x02C6, 0x02DC, 0x00AF, 0x02D8, 0x02D9,
+        0x00A8, 0x00B2, 0x02DA, 0x00B8, 0x00B3, 0x02DD, 0x02DB, 0x02C7,
+        0x2014, 0x00B1, 0x00BC, 0x00BD, 0x00BE, 0x00E0, 0x00E1, 0x00E2,
+        0x00E3, 0x00E4, 0x00E5, 0x00E7, 0x00E8, 0x00E9, 0x00EA, 0x00EB,
+        0x00EC, 0x00C6, 0x00ED, 0x00AA, 0x00EE, 0x00EF, 0x00F0, 0x00F1,
+        0x0141, 0x00D8, 0x0152, 0x00BA, 0x00F2, 0x00F3, 0x00F4, 0x00F5,
+        0x00F6, 0x00E6, 0x00F9, 0x00FA, 0x00FB, 0x0131, 0x00FC, 0x00FD,
+        0x0142, 0x00F8, 0x0153, 0x00DF, 0x00FE, 0x00FF,
+    ]
+
+    func parseString() throws -> String {
+        try skipTrivia()
+        guard offset < bytes.count else { throw fail("expected string") }
+        if bytes[offset] == 0x22 || bytes[offset] == 0x27 {
+            return try parseQuotedString()
+        }
+        let start = offset
+        while offset < bytes.count && isUnquotedChar(bytes[offset]) {
+            offset += 1
+        }
+        guard offset > start else { throw fail("unexpected byte \(bytes[offset])") }
+        return String(decoding: bytes[start..<offset], as: UTF8.self)
+    }
+
+    func parseData() throws -> Data {
+        offset += 1  // skip '<'
+        var raw = Data()
+        var highNibble: UInt8?
+        while offset < bytes.count {
+            let byte = bytes[offset]
+            if byte == 0x3E {  // '>'
+                offset += 1
+                guard highNibble == nil else { throw fail("odd number of hex digits in data") }
+                return raw
+            }
+            if isWhitespace(byte) {
+                offset += 1
+                continue
+            }
+            guard let nibble = hexValue(byte) else {
+                throw fail("invalid hex character in data")
+            }
+            offset += 1
+            if let high = highNibble {
+                raw.append((high << 4) | nibble)
+                highNibble = nil
+            } else {
+                highNibble = nibble
+            }
+        }
+        throw fail("unterminated data literal")
+    }
+
+    func parseValue() throws -> OpenStepPlistValue {
+        try skipTrivia()
+        guard offset < bytes.count else { throw fail("unexpected end of input") }
+        switch bytes[offset] {
+        case 0x7B:  // '{'
+            offset += 1
+            var dict: [String: OpenStepPlistValue] = [:]
+            while true {
+                try skipTrivia()
+                guard offset < bytes.count else { throw fail("unterminated dictionary") }
+                if bytes[offset] == 0x7D {  // '}'
+                    offset += 1
+                    return .dictionary(dict)
+                }
+                let key = try parseString()
+                try skipTrivia()
+                guard offset < bytes.count && bytes[offset] == 0x3D else {  // '='
+                    throw fail("expected '=' after dictionary key \(key)")
+                }
+                offset += 1
+                let value = try parseValue()
+                try skipTrivia()
+                guard offset < bytes.count && bytes[offset] == 0x3B else {  // ';'
+                    throw fail("expected ';' after dictionary value for \(key)")
+                }
+                offset += 1
+                dict[key] = value
+            }
+        case 0x28:  // '('
+            offset += 1
+            var items: [OpenStepPlistValue] = []
+            while true {
+                try skipTrivia()
+                guard offset < bytes.count else { throw fail("unterminated array") }
+                if bytes[offset] == 0x29 {  // ')'
+                    offset += 1
+                    return .array(items)
+                }
+                items.append(try parseValue())
+                try skipTrivia()
+                guard offset < bytes.count else { throw fail("unterminated array") }
+                if bytes[offset] == 0x2C {  // ','
+                    offset += 1
+                } else if bytes[offset] == 0x29 {  // ')'
+                    offset += 1
+                    return .array(items)
+                } else {
+                    throw fail("expected ',' or ')' in array")
+                }
+            }
+        case 0x3C:  // '<'
+            return .data(try parseData())
+        default:
+            return .string(try parseString())
+        }
+    }
+
+    let root = try parseValue()
+    try skipTrivia()
+    guard offset == bytes.count else { throw fail("trailing content after root value") }
+    return root
+}
+
+struct XcodeProject: Equatable {
+    struct Object: Equatable {
         var isa: String?
         var mainGroup: String?
         var sourceTree: String?
@@ -393,9 +702,74 @@ struct XcodeProject: Codable {
         var membershipExceptions: [String]?
         var dependencies: [String]?
         var productName: String?
+
+        init(plist value: OpenStepPlistValue, id: String) throws {
+            guard case .dictionary(let fields) = value else {
+                throw ArchitectureError("\(projectPath):1: Object \(id) must be a dictionary")
+            }
+            func stringField(_ key: String) throws -> String? {
+                guard let raw = fields[key] else { return nil }
+                guard case .string(let text) = raw else {
+                    throw ArchitectureError("\(projectPath):1: \(id).\(key) must be a string")
+                }
+                return text
+            }
+            func stringArrayField(_ key: String) throws -> [String]? {
+                guard let raw = fields[key] else { return nil }
+                guard case .array(let items) = raw else {
+                    throw ArchitectureError("\(projectPath):1: \(id).\(key) must be an array")
+                }
+                return try items.map { item in
+                    guard case .string(let text) = item else {
+                        throw ArchitectureError(
+                            "\(projectPath):1: \(id).\(key) must contain strings")
+                    }
+                    return text
+                }
+            }
+            self.isa = try stringField("isa")
+            self.mainGroup = try stringField("mainGroup")
+            self.sourceTree = try stringField("sourceTree")
+            self.path = try stringField("path")
+            self.children = try stringArrayField("children")
+            self.name = try stringField("name")
+            self.packageProductDependencies = try stringArrayField("packageProductDependencies")
+            self.buildPhases = try stringArrayField("buildPhases")
+            self.files = try stringArrayField("files")
+            self.productRef = try stringField("productRef")
+            self.fileRef = try stringField("fileRef")
+            self.fileSystemSynchronizedGroups = try stringArrayField("fileSystemSynchronizedGroups")
+            self.exceptions = try stringArrayField("exceptions")
+            self.target = try stringField("target")
+            self.membershipExceptions = try stringArrayField("membershipExceptions")
+            self.dependencies = try stringArrayField("dependencies")
+            self.productName = try stringField("productName")
+        }
     }
     var rootObject: String
     var objects: [String: Object]
+
+    init(plist value: OpenStepPlistValue) throws {
+        guard case .dictionary(let root) = value,
+            case .string(let rootObject) = root["rootObject"],
+            case .dictionary(let rawObjects) = root["objects"]
+        else {
+            throw ArchitectureError(
+                "\(projectPath):1: Cannot read Xcode project rootObject and objects")
+        }
+        self.rootObject = rootObject
+        var decoded: [String: Object] = [:]
+        decoded.reserveCapacity(rawObjects.count)
+        for (id, rawObject) in rawObjects {
+            decoded[id] = try Object(plist: rawObject, id: id)
+        }
+        self.objects = decoded
+    }
+}
+
+func loadXcodeProject(at url: URL) throws -> XcodeProject {
+    let data = try Data(contentsOf: url)
+    return try XcodeProject(plist: try parseOpenStepPlist(data))
 }
 
 struct ProjectMembership {
@@ -536,14 +910,10 @@ func checkArchitecture(root: URL, staged: Bool) throws -> [String] {
         }
     }
     var failures = try checkPackage(packageGraph(root))
-    var widgetSources: Set<String> = []
-    #if os(macOS)
-        let data = try command(root, "plutil", ["-convert", "json", "-o", "-", projectPath])
-        let membership = try checkProject(
-            JSONDecoder().decode(XcodeProject.self, from: data), paths: paths)
-        failures += membership.failures
-        widgetSources = membership.widgetSources
-    #endif
+    let membership = try checkProject(
+        loadXcodeProject(at: root.appending(path: projectPath)), paths: paths)
+    failures += membership.failures
+    let widgetSources = membership.widgetSources
     for path in paths.sorted() {
         failures += try checkImports(
             path: path, source: String(contentsOf: root.appending(path: path), encoding: .utf8),
