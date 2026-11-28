@@ -28,6 +28,7 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "NO"
+      codeCoverageEnabled = "NO"
       shouldAutocreateTestPlan = "YES">
       <MacroExpansion>
          <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="79438C422FD2D07100C0E6EF" BuildableName="clinical-swift.app" BlueprintName="clinical-swift" ReferencedContainer="container:clinical-swift.xcodeproj"/>
