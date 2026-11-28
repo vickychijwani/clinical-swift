@@ -169,7 +169,32 @@ jobs:
               test_options+=(-skip-testing:clinical-swiftUITests/DailyTimelineWidgetPerformanceUITests)
             fi
           fi
-          xcodebuild -project clinical-swift.xcodeproj \
+          # Keep Release backup tests aligned with Release archives; skip extra work only in Debug.
+          if [[ "$TEST_CONFIGURATION" == Debug ]]; then
+            test_options+=(
+              DEAD_CODE_STRIPPING=NO
+              SWIFT_EMIT_LOC_STRINGS=NO
+              STRING_CATALOG_GENERATE_SYMBOLS=NO
+            )
+          fi
+          # Pin the xcodebuild environment so changing GITHUB_* vars do not bust BuildDescription caches.
+          # Fall back to xcode-select -p so setup-xcode's selected Xcode stays active on hosted runners.
+          xcode_env=(
+            env -i
+            HOME="$HOME"
+            USER="${USER:-$(id -un)}"
+            LOGNAME="${LOGNAME:-${USER:-$(id -un)}}"
+            LANG="en_US.UTF-8"
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+            DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+          )
+          if [[ -n "${TMPDIR:-}" ]]; then
+            xcode_env+=(TMPDIR="$TMPDIR")
+          fi
+          if [[ -n "${TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST:-}" ]]; then
+            xcode_env+=(TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST="$TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST")
+          fi
+          "${xcode_env[@]}" xcodebuild -project clinical-swift.xcodeproj \
             -scheme "$TEST_SCHEME" \
             -configuration "$TEST_CONFIGURATION" \
             -derivedDataPath "$CI_CACHE_ROOT/$TEST_DERIVED_DATA" \
@@ -186,6 +211,9 @@ jobs:
             DEBUG_INFORMATION_FORMAT=dwarf \
             ONLY_ACTIVE_ARCH=YES \
             ARCHS="$(uname -m)" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO \
+            CLANG_COVERAGE_MAPPING=NO \
             "${test_options[@]}" test
       - name: Upload failed test results
         if: failure()
