@@ -32,11 +32,6 @@ struct WidgetDailyTimelineContentView: View {
         .padding(.bottom, 8)
         .environment(\.scheduleCardStyle, .widget)
         .environment(\.scheduleCardTuning, Self.widgetTuning)
-        .transaction { transaction in
-            // Disable WidgetKit's implicit crossfade and morph animations so day taps snap immediately.
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-        }
     }
 }
 
@@ -63,7 +58,7 @@ private struct WidgetDailyTimelineHeaderView: View {
                 if !snapshot.isToday {
                     Button(intent: ResetDailyTimelineToTodayIntent()) {
                         Text("Today")
-                            .font(.caption.bold())
+                            .font(.footnote.bold())
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                             .foregroundStyle(Color.accentColor)
@@ -73,7 +68,6 @@ private struct WidgetDailyTimelineHeaderView: View {
                             .contentShape(.capsule)
                     }
                     .buttonStyle(.plain)
-                    .transition(.identity)
                 }
 
                 Button(intent: StepDailyTimelineDayIntent(delta: -1)) {
@@ -104,7 +98,6 @@ private struct WidgetDailyTimelineHeaderView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .transition(.identity)
                 }
             }
             .layoutPriority(1)
@@ -117,11 +110,10 @@ private struct WidgetDailyTimelineHeaderView: View {
             format: ClinicDate.formatStyle.weekday(.wide).day().month(.abbreviated)
         )
         .textCase(.uppercase)
-        .font(.caption.bold())
+        .font(.footnote.bold())
         .foregroundStyle(snapshot.isToday ? Color.accentColor : Color.primary)
         .lineLimit(1)
-        .minimumScaleFactor(0.8)
-        .contentTransition(.identity)
+        .minimumScaleFactor(0.75)
     }
 }
 
@@ -134,7 +126,7 @@ private struct WidgetHeaderIcon: View {
     var body: some View {
         Label(title, systemImage: systemImage)
             .labelStyle(.iconOnly)
-            .font(.caption.bold())
+            .font(.footnote.bold())
             .foregroundStyle(isAccented ? Color.accentColor : Color.secondary)
             .frame(width: size, height: size)
             .background(
@@ -201,7 +193,6 @@ private struct WidgetDailyTimelineCanvasView: View {
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .transition(.identity)
                 }
 
                 ZStack(alignment: .topLeading) {

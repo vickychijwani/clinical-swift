@@ -152,7 +152,8 @@ struct TimelineScale {
 
         let metrics = TimelineMetrics(
             hourHeight: hourHeight,
-            timeColumnWidth: 32,
+            // Size the time column tightly so two-digit hour labels align with the widget header's leading edge.
+            timeColumnWidth: 23,
             verticalPadding: verticalPadding,
             horizontalCardMargin: 6,
             verticalCardMargin: 0,
