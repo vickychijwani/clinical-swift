@@ -37,8 +37,8 @@ EXPLICIT_SIMULATOR_ID := $(if $(filter-out undefined,$(origin SIMULATOR_ID)),$(s
 EXPLICIT_DESTINATION := $(if $(filter-out undefined,$(origin DESTINATION)),$(strip $(DESTINATION)),)
 ifeq ($(origin SIMULATOR_ID), undefined)
 # Skip CI simulators so manual make runs cannot touch CI data; check-simulator also rejects overrides.
-# Resolve lazily so non-simulator targets skip simctl and check-simulator can create SIMULATOR_NAME first.
-SIMULATOR_ID = $(eval SIMULATOR_ID := $$(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" $(SWIFT) "$(SIMULATOR_SCRIPT)" resolve --simulator "$(SIMULATOR)" --os "$(SIMULATOR_OS)" --name "$(SIMULATOR_NAME)" 2>/dev/null))$(SIMULATOR_ID)
+# Resolve once through the compiled helper so check-simulator and recipes do not query simctl twice.
+SIMULATOR_ID = $(eval SIMULATOR_ID := $$(shell DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" "$(SIMULATOR_BIN)" ensure --simulator "$(SIMULATOR)" --os "$(SIMULATOR_OS)" --name "$(SIMULATOR_NAME)" --id "" --destination "$(EXPLICIT_DESTINATION)" 2>/dev/null))$(SIMULATOR_ID)
 endif
 BUNDLE_ID := in.bitehaus.clinical
 APP_NAME := Clinical
@@ -49,9 +49,11 @@ ASC_PRIVATE_KEYS_DIR ?= $(HOME)/.appstoreconnect/private_keys
 XCODE_CLOUD_WORKFLOW_ID := 3EE75F71-B995-470A-9CB8-745EEEF77267
 
 BUILD_DIR := $(CURDIR)/build
+SIMULATOR_BIN := $(BUILD_DIR)/bin/simulator
 DERIVED_DATA := $(BUILD_DIR)/DerivedData-$(CONFIGURATION)
+# Keep test outputs separate so hosted test bundles do not bloat the installed app or bust app caches.
+TEST_DERIVED_DATA := $(BUILD_DIR)/DerivedData-$(CONFIGURATION)-Tests
 SOURCE_PACKAGES := $(BUILD_DIR)/SourcePackages
-MODULE_CACHE := $(BUILD_DIR)/cache/modules
 TMPDIR_PATH := $(BUILD_DIR)/tmp
 LOG_DIR := $(BUILD_DIR)/logs
 APP_PATH := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)-iphonesimulator/$(SCHEME).app
@@ -68,23 +70,49 @@ DESTINATION = platform=iOS Simulator,id=$(SIMULATOR_ID)
 DEVICE_DESTINATION := generic/platform=iOS
 ARCHIVE_DESTINATION := generic/platform=iOS
 XCBEAUTIFY := xcbeautify -q --disable-logging
-XCODEBUILD_ENV := env CLANG_MODULE_CACHE_PATH="$(MODULE_CACHE)" SWIFT_MODULE_CACHE_PATH="$(MODULE_CACHE)" TMPDIR="$(TMPDIR_PATH)/"
+# Pin the xcodebuild environment so shell noise does not bust XCBuildData BuildDescription caches.
+XCODEBUILD_ENV := env -i \
+	HOME="$(HOME)" \
+	USER="$(USER)" \
+	LOGNAME="$(or $(LOGNAME),$(USER))" \
+	LANG="en_US.UTF-8" \
+	PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+	DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" \
+	TMPDIR="$(TMPDIR_PATH)/"
 RESOLVE_BUILD_NUMBER := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" $(SWIFT) "$(APP_STORE_CONNECT_SCRIPT)" next-build-number "$(BUNDLE_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
 TRIGGER_XCODE_CLOUD_BUILD := env API_PRIVATE_KEYS_DIR="$(ASC_PRIVATE_KEYS_DIR)" $(SWIFT) "$(APP_STORE_CONNECT_SCRIPT)" trigger-build "$(XCODE_CLOUD_WORKFLOW_ID)" "$(ASC_KEY_ID)" "$(ASC_ISSUER_ID)"
-XCODEBUILD_COMMON_FLAGS = -project "$(PROJECT)" \
+XCODEBUILD_BASE_FLAGS = -project "$(PROJECT)" \
 	-configuration "$(CONFIGURATION)" \
 	-destination "$(DESTINATION)" \
 	-destination-timeout 60 \
-	-derivedDataPath "$(DERIVED_DATA)" \
 	-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
 	-disableAutomaticPackageResolution \
 	-skipPackageUpdates
+XCODEBUILD_COMMON_FLAGS = $(XCODEBUILD_BASE_FLAGS) -derivedDataPath "$(DERIVED_DATA)"
+XCODEBUILD_TEST_COMMON_FLAGS = $(XCODEBUILD_BASE_FLAGS) -derivedDataPath "$(TEST_DERIVED_DATA)"
 NATIVE_ARCH := $(shell uname -m)
-TEST_BUILD_SETTINGS := ENABLE_TESTABILITY=YES DEBUG_INFORMATION_FORMAT=dwarf ONLY_ACTIVE_ARCH=YES ARCHS=$(NATIVE_ARCH)
-XCODEBUILD_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)"
-UNIT_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
-UI_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)" -parallel-testing-enabled $(UI_TEST_PARALLEL_ENABLED) $(TEST_BUILD_SETTINGS)
-BACKUP_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
+# Skip CLI coverage, indexing, dead-code stripping, and loc emission during Debug CLI builds.
+DEBUG_FAST_BUILD_SETTINGS := \
+	DEBUG_INFORMATION_FORMAT=dwarf \
+	CLANG_ENABLE_CODE_COVERAGE=NO \
+	CLANG_COVERAGE_MAPPING=NO \
+	COMPILER_INDEX_STORE_ENABLE=NO \
+	DEAD_CODE_STRIPPING=NO \
+	SWIFT_EMIT_LOC_STRINGS=NO \
+	STRING_CATALOG_GENERATE_SYMBOLS=NO
+SIMULATOR_BUILD_SETTINGS := ONLY_ACTIVE_ARCH=YES ARCHS=$(NATIVE_ARCH)
+DEVICE_BUILD_SETTINGS := COMPILER_INDEX_STORE_ENABLE=NO CLANG_ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO
+DEBUG_TEST_BUILD_SETTINGS :=
+ifeq ($(CONFIGURATION),Debug)
+SIMULATOR_BUILD_SETTINGS += $(DEBUG_FAST_BUILD_SETTINGS)
+DEVICE_BUILD_SETTINGS := $(DEBUG_FAST_BUILD_SETTINGS) ONLY_ACTIVE_ARCH=YES ARCHS=arm64
+DEBUG_TEST_BUILD_SETTINGS := DEAD_CODE_STRIPPING=NO SWIFT_EMIT_LOC_STRINGS=NO STRING_CATALOG_GENERATE_SYMBOLS=NO
+endif
+TEST_BUILD_SETTINGS := ENABLE_TESTABILITY=YES DEBUG_INFORMATION_FORMAT=dwarf ONLY_ACTIVE_ARCH=YES ARCHS=$(NATIVE_ARCH) COMPILER_INDEX_STORE_ENABLE=NO CLANG_ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO
+XCODEBUILD_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)" $(SIMULATOR_BUILD_SETTINGS)
+UNIT_TEST_FLAGS = $(XCODEBUILD_TEST_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS) $(DEBUG_TEST_BUILD_SETTINGS)
+UI_TEST_FLAGS = $(XCODEBUILD_TEST_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)" -parallel-testing-enabled $(UI_TEST_PARALLEL_ENABLED) $(TEST_BUILD_SETTINGS) $(DEBUG_TEST_BUILD_SETTINGS)
+BACKUP_TEST_FLAGS = $(XCODEBUILD_TEST_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
 
 .DEFAULT_GOAL := build-and-run
 
@@ -92,7 +120,7 @@ BACKUP_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
-.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-device check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build build-device test ui-test widget-perf-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install install-device validate-appearance require-appearance appearance run build-and-run screenshot uninstall clean
+.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-device check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build build-device test ui-test widget-perf-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install install-device validate-appearance require-appearance appearance run build-and-run screenshot snap uninstall clean
 
 help:
 	@printf "%s\n" \
@@ -136,33 +164,46 @@ help:
 		"  make run              Relaunch the installed app (accepts LAUNCH_ARGS='...' and APPEARANCE=light|dark)" \
 		"  make appearance       Set simulator appearance (requires APPEARANCE=light|dark)" \
 		"  make screenshot       Relaunch the installed app and capture a PNG (OUT=$(OUT), APPEARANCE, LAUNCH_ARGS, SCREENSHOT_DELAY=$(SCREENSHOT_DELAY))" \
+		"  make snap             Capture the current simulator screen without relaunching (OUT=$(OUT))" \
 		"  make resolve-packages Resolve Swift package dependencies" \
 		"  make diagnose         Print tool and project settings" \
 		"  make agent-monitor    Open the live PR review and address loop monitor UI" \
 		"  make uninstall        Remove the app from the selected iOS simulator" \
 		"  make clean            Remove local build outputs"
 
-diagnose:
-	@printf "Project:       %s\n" "$(PROJECT)"
-	@printf "Scheme:        %s\n" "$(SCHEME)"
-	@printf "Unit tests:    %s\n" "$(UNIT_TEST_SCHEME)"
-	@printf "UI tests:      %s\n" "$(UI_TEST_SCHEME)"
-	@printf "Configuration: %s\n" "$(CONFIGURATION)"
-	@printf "Xcode tools:   %s\n" "$(DEVELOPER_DIR)"
-	@printf "Fallback:      %s (iOS %s)\n" "$(SIMULATOR)" "$(SIMULATOR_OS)"
-	@printf "Target Name:   %s\n" "$(SIMULATOR_NAME)"
-	@printf "Target ID:     %s\n" "$(SIMULATOR_ID)"
-	@printf "Destination:   %s\n" "$(DESTINATION)"
-	@printf "App path:      %s\n" "$(APP_PATH)"
-	@printf "Bundle ID:     %s\n" "$(BUNDLE_ID)"
-	@printf "ASC key ID:    %s\n" "$(ASC_KEY_ID)"
-	@printf "ASC issuer ID: %s\n" "$(ASC_ISSUER_ID)"
-	@printf "Cloud workflow: %s\n" "$(XCODE_CLOUD_WORKFLOW_ID)"
-	@printf "xcodebuild:    %s\n" "$$(xcrun --find xcodebuild)"
-	@printf "xcbeautify:    %s\n" "$$(command -v $(firstword $(XCBEAUTIFY)))"
+$(SIMULATOR_BIN): $(SIMULATOR_SCRIPT)
+	@mkdir -p "$(dir $@)"
+	@tmp="$@.$$$$"; trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun swiftc \
+		-sdk "$$(DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun --sdk macosx --show-sdk-path)" \
+		"$(SIMULATOR_SCRIPT)" -o "$$tmp" && mv "$$tmp" "$@"
+
+diagnose: $(SIMULATOR_BIN)
+	@target_id="$(EXPLICIT_SIMULATOR_ID)"; \
+	if [[ -z "$$target_id" ]]; then \
+		target_id="$$(DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" "$(SIMULATOR_BIN)" resolve --simulator "$(SIMULATOR)" --os "$(SIMULATOR_OS)" --name "$(SIMULATOR_NAME)" 2>/dev/null || true)"; \
+	fi; \
+	dest="$(if $(EXPLICIT_DESTINATION),$(EXPLICIT_DESTINATION),platform=iOS Simulator,id=$$target_id)"; \
+	printf "Project:       %s\n" "$(PROJECT)"; \
+	printf "Scheme:        %s\n" "$(SCHEME)"; \
+	printf "Unit tests:    %s\n" "$(UNIT_TEST_SCHEME)"; \
+	printf "UI tests:      %s\n" "$(UI_TEST_SCHEME)"; \
+	printf "Configuration: %s\n" "$(CONFIGURATION)"; \
+	printf "Xcode tools:   %s\n" "$(DEVELOPER_DIR)"; \
+	printf "Fallback:      %s (iOS %s)\n" "$(SIMULATOR)" "$(SIMULATOR_OS)"; \
+	printf "Target Name:   %s\n" "$(SIMULATOR_NAME)"; \
+	printf "Target ID:     %s\n" "$$target_id"; \
+	printf "Destination:   %s\n" "$$dest"; \
+	printf "App path:      %s\n" "$(APP_PATH)"; \
+	printf "Bundle ID:     %s\n" "$(BUNDLE_ID)"; \
+	printf "ASC key ID:    %s\n" "$(ASC_KEY_ID)"; \
+	printf "ASC issuer ID: %s\n" "$(ASC_ISSUER_ID)"; \
+	printf "Cloud workflow: %s\n" "$(XCODE_CLOUD_WORKFLOW_ID)"; \
+	printf "xcodebuild:    %s\n" "$$(xcrun --find xcodebuild)"; \
+	printf "xcbeautify:    %s\n" "$$(command -v $(firstword $(XCBEAUTIFY)))"
 
 prepare:
-	@mkdir -p "$(DERIVED_DATA)" "$(SOURCE_PACKAGES)" "$(MODULE_CACHE)" "$(TMPDIR_PATH)" "$(LOG_DIR)" "$(ARCHIVE_DIR)" "$(EXPORT_DIR)"
+	@mkdir -p "$(DERIVED_DATA)" "$(TEST_DERIVED_DATA)" "$(SOURCE_PACKAGES)" "$(TMPDIR_PATH)" "$(LOG_DIR)" "$(ARCHIVE_DIR)" "$(EXPORT_DIR)"
 
 check-tools:
 	@command -v xcodebuild >/dev/null
@@ -170,16 +211,18 @@ check-tools:
 	@command -v $(firstword $(XCBEAUTIFY)) >/dev/null || { echo "xcbeautify is required. Install it with: brew install xcbeautify"; exit 1; }
 	@test -d "$(DEVELOPER_DIR)" || { echo "Xcode developer directory not found: $(DEVELOPER_DIR)"; exit 1; }
 
-check-simulator:
-	@$(SWIFT) "$(SIMULATOR_SCRIPT)" ensure \
-		--simulator "$(SIMULATOR)" \
-		--os "$(SIMULATOR_OS)" \
-		--name "$(SIMULATOR_NAME)" \
-		--id "$(EXPLICIT_SIMULATOR_ID)" \
-		--destination "$(EXPLICIT_DESTINATION)" >/dev/null
+check-simulator: $(SIMULATOR_BIN)
+	@if [[ -n "$(EXPLICIT_SIMULATOR_ID)" || -z "$(SIMULATOR_ID)" ]]; then \
+		"$(SIMULATOR_BIN)" ensure \
+			--simulator "$(SIMULATOR)" \
+			--os "$(SIMULATOR_OS)" \
+			--name "$(SIMULATOR_NAME)" \
+			--id "$(EXPLICIT_SIMULATOR_ID)" \
+			--destination "$(EXPLICIT_DESTINATION)" >/dev/null; \
+	fi
 
-sim-id:
-	@$(SWIFT) "$(SIMULATOR_SCRIPT)" ensure \
+sim-id: $(SIMULATOR_BIN)
+	@"$(SIMULATOR_BIN)" ensure \
 		--simulator "$(SIMULATOR)" \
 		--os "$(SIMULATOR_OS)" \
 		--name "$(SIMULATOR_NAME)" \
@@ -232,6 +275,7 @@ build-device: check-tools prepare
 		-skipPackageUpdates \
 		-allowProvisioningUpdates \
 		DEVELOPMENT_TEAM="$(TEAM_ID)" \
+		$(DEVICE_BUILD_SETTINGS) \
 		$(EXTRA_BUILD_FLAGS) \
 		build \
 		2>&1 | tee "$(LOG_DIR)/build-device.log" | $(XCBEAUTIFY)
@@ -305,14 +349,18 @@ widget-perf-test: check-device check-tools prepare
 		-skipPackageUpdates \
 		-allowProvisioningUpdates \
 		DEVELOPMENT_TEAM="$(TEAM_ID)" \
+		COMPILER_INDEX_STORE_ENABLE=NO \
+		CLANG_ENABLE_CODE_COVERAGE=NO \
+		CLANG_COVERAGE_MAPPING=NO \
 		build-for-testing \
 		2>&1 | tee "$(LOG_DIR)/widget-perf-build.log" | $(XCBEAUTIFY) && \
 	xcrun devicectl device install app --device "$$device_id" \
 		"$(BUILD_DIR)/DerivedData-Release/Build/Products/Release-iphoneos/$(SCHEME).app" && \
-	TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST=1 \
-	TEST_RUNNER_CLINICAL_WIDGET_MAX_LATENCY_MS="$(WIDGET_PERF_MAX_LATENCY_MS)" \
-	TEST_RUNNER_CLINICAL_WIDGET_MAX_TOTAL_MS="$(WIDGET_PERF_MAX_TOTAL_MS)" \
-	$(XCODEBUILD_ENV) xcodebuild \
+	$(XCODEBUILD_ENV) \
+		TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST=1 \
+		TEST_RUNNER_CLINICAL_WIDGET_MAX_LATENCY_MS="$(WIDGET_PERF_MAX_LATENCY_MS)" \
+		TEST_RUNNER_CLINICAL_WIDGET_MAX_TOTAL_MS="$(WIDGET_PERF_MAX_TOTAL_MS)" \
+		xcodebuild \
 		-project "$(PROJECT)" \
 		-scheme "$(UI_TEST_SCHEME)" \
 		-configuration Release \
@@ -352,6 +400,9 @@ archive-with-build-number: check-tools check-build-number prepare
 		-allowProvisioningUpdates \
 		DEVELOPMENT_TEAM="$(TEAM_ID)" \
 		CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" \
+		COMPILER_INDEX_STORE_ENABLE=NO \
+		CLANG_ENABLE_CODE_COVERAGE=NO \
+		CLANG_COVERAGE_MAPPING=NO \
 		archive \
 		2>&1 | tee "$(LOG_DIR)/archive-$(BUILD_NUMBER).log" | $(XCBEAUTIFY)
 	@python3 scripts/backup_candidate.py attest "$(ARCHIVE_PATH)" "$(ARCHIVE_PATH).candidate.json"
@@ -446,6 +497,11 @@ build-and-run: validate-appearance install run
 
 screenshot: run
 	@if [[ -n "$(SCREENSHOT_DELAY)" && "$(SCREENSHOT_DELAY)" != "0" ]]; then sleep "$(SCREENSHOT_DELAY)"; fi
+	@mkdir -p "$$(dirname "$(OUT)")"
+	@xcrun simctl io "$(SIMULATOR_ID)" screenshot "$(OUT)"
+	@printf "Saved screenshot: %s\n" "$(OUT)"
+
+snap: check-tools check-simulator boot
 	@mkdir -p "$$(dirname "$(OUT)")"
 	@xcrun simctl io "$(SIMULATOR_ID)" screenshot "$(OUT)"
 	@printf "Saved screenshot: %s\n" "$(OUT)"
