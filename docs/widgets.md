@@ -29,3 +29,6 @@ archiving the full day up front. Keep interactive button taps (`Previous`, `Next
 and `Today`) to a single timeline entry (1 day read, 1 archived view) with
 `.after(resetAt)` or `.after(nextTick)` so taps stay fast, and keep widget-only
 intents in `ClinicalWidget` without manual `reloadTimelines` calls.
+
+After changing the Daily Timeline widget, ask the user whether to run on-device
+widget performance tests (`make widget-perf-test DEVICE='<name|udid>'`).
