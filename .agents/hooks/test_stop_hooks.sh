@@ -15,7 +15,7 @@ ui_pass=$(cd "$agents_dir" && printf '%s' '{"terminationReason":"NO_TOOL_CALL","
 test "$ui_pass" = '{}'
 
 swift_pass=$(cd "$agents_dir" && printf '%s' '{"terminationReason":"NO_TOOL_CALL","cwd":"'"$repo_root"'"}' \
-    | /bin/sh ./hooks/stop_hook.sh ../.codex/hooks/check_swift.sh --check)
+    | /bin/sh ./hooks/stop_hook.sh ../.codex/hooks/format_swift.sh)
 test "$swift_pass" = '{}'
 
 # Verify non-NO_TOOL_CALL termination reasons allow stopping immediately.
@@ -44,20 +44,21 @@ cancel_result=$(cd "$agents_dir" && printf '%s' '{"terminationReason":"USER_CANC
     | /bin/sh ./hooks/stop_hook.sh "$test_dir/mock_block.sh")
 test "$cancel_result" = '{}'
 
-# Verify Stop hook formats changed Swift files from repo root even when invoked from .agents/.
+# Verify Stop hook formats changed Swift files from repo root even when invoked from .agents/,
+# and does not block when a comment is removed.
 format_repo="$test_dir/format repo"
 mkdir -p "$format_repo/.agents/hooks" "$format_repo/.codex/hooks" "$format_repo/Sources"
 cp "$agents_dir/hooks/stop_hook.sh" "$format_repo/.agents/hooks/"
-cp "$repo_root/.codex/hooks/check_swift.sh" "$repo_root/.codex/hooks/check_comments.swift" "$format_repo/.codex/hooks/"
+cp "$repo_root/.codex/hooks/format_swift.sh" "$format_repo/.codex/hooks/"
 git -C "$format_repo" init -q
 git -C "$format_repo" config user.email "test@example.com"
 git -C "$format_repo" config user.name "Test"
-printf 'let x = 1\n' > "$format_repo/Sources/Example.swift"
+printf '// Keep this comment.\nlet x = 1\n' > "$format_repo/Sources/Example.swift"
 git -C "$format_repo" add Sources/Example.swift
 git -C "$format_repo" commit -q -m "Initial"
 printf 'let   x=2\n' > "$format_repo/Sources/Example.swift"
 format_result=$(cd "$format_repo/.agents" && printf '%s' '{"terminationReason":"NO_TOOL_CALL","cwd":"'"$format_repo"'"}' \
-    | /bin/sh ./hooks/stop_hook.sh ../.codex/hooks/check_swift.sh)
+    | /bin/sh ./hooks/stop_hook.sh ../.codex/hooks/format_swift.sh)
 test "$format_result" = '{}'
 test "$(cat "$format_repo/Sources/Example.swift")" = "let x = 2"
 

@@ -6,7 +6,7 @@ scripts_dir="$repo_root/scripts"
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/clinical-script-tests.XXXXXX")
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
-[ "$#" -gt 0 ] || set -- check_architecture simulator device app_store_connect agent_monitor agent_review_loop
+[ "$#" -gt 0 ] || set -- check_architecture check_comments simulator device app_store_connect agent_monitor agent_review_loop
 
 for name in "$@"; do
     src="$scripts_dir/$name.swift"

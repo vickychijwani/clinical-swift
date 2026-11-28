@@ -54,35 +54,19 @@ Run the check and its regression tests with:
 /bin/sh .codex/hooks/test_ui_waits.sh
 ```
 
-# Comment preservation check
+# Swift formatting
 
-The repository Stop hook runs Swift formatting, then checks Swift comments. It
-uses Git, the system shell, and Swift. On macOS it uses the Xcode Swift
-toolchain that this app already requires. On Linux, install Swift 6.2 or later
-and put `swiftc` and `swift-format` on `PATH`. On the first run, the hook
-compiles its checker into the worktree's Git metadata.
+The repository Stop hook runs `format_swift.sh` to format changed Swift files
+with `swift-format`. On macOS it uses the Xcode toolchain; on Linux it uses
+`swift-format` from `PATH`.
 
-The check compares HEAD with the current working tree, including staged changes,
-deleted files, moved code, and new Swift files.
-
-Missing or rewritten comment text makes the Stop hook require another pass. For
-each finding, restore or update the comment if it still applies. If the comment
-was rewritten or is obsolete, inspect its code and record the reasons:
+Comment preservation checking runs on demand instead of as a Stop hook:
 
 ```sh
-/bin/sh .codex/hooks/check_swift.sh --review 'Explain each intentional change.'
-/bin/sh .codex/hooks/check_swift.sh --check </dev/null
+swift scripts/check_comments.swift
+swift scripts/check_comments.swift --base origin/main
 ```
 
-The review is stored in the worktree's Git metadata, not in source files. It is
-valid only for that exact Swift change set. A later Swift change requires review
-again.
-
-Git hashes the source snapshot without writing it to the object database or
-applying file filters. This avoids a platform-specific crypto dependency.
-
-Run the checker tests with:
-
-```sh
-/bin/sh .codex/hooks/test_comments.sh
-```
+It compares `HEAD` (or the merge base with `--base <ref>`) against the working
+tree, including staged changes, deleted files, moved code, and new Swift files.
+Run its tests with `sh scripts/test_scripts.sh check_comments`.
