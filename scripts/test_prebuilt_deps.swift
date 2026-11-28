@@ -31,7 +31,8 @@ private func runCommand(_ arguments: [String]) throws -> Data {
 private func runUnitTests(repoRoot: URL) throws {
     let fm = FileManager.default
     let tmp = fm.temporaryDirectory.appendingPathComponent(
-        "prebuilt-deps-test-\(UUID().uuidString)")
+        "prebuilt-deps-test-\(UUID().uuidString)"
+    )
     defer { try? fm.removeItem(at: tmp) }
 
     try fm.createDirectory(
@@ -61,32 +62,47 @@ private func runUnitTests(repoRoot: URL) throws {
     let repeatBase = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.2-27B52")
     try expect(base == repeatBase, "Fingerprints must be deterministic.")
 
+    // Editing Sources/ must NOT bust either fingerprint because Sources/ compiles natively.
+    try Data("public struct Sample { public var id = 1 }\n".utf8).write(to: sourceFile)
+    let sourceChanged = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.2-27B52")
+    try expect(sourceChanged == base, "Sources/ edits must keep prebuilt fingerprints stable.")
+
     // Xcode upgrade invalidates both deps and project fingerprints.
     let xcodeChanged = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.3-27C10")
     try expect(
-        xcodeChanged.deps != base.deps, "Xcode version change must invalidate deps fingerprint.")
+        xcodeChanged.deps != base.deps,
+        "Xcode version change must invalidate deps fingerprint."
+    )
     try expect(
         xcodeChanged.project != base.project,
-        "Xcode version change must invalidate project fingerprint.")
+        "Xcode version change must invalidate project fingerprint."
+    )
+
+    // Updating Package.resolved invalidates both deps and project fingerprints.
+    try Data("{\"pins\":[\"v2\"]}\n".utf8).write(to: packageResolved)
+    let pinChanged = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.2-27B52")
+    try expect(
+        pinChanged.deps != base.deps,
+        "Package.resolved change must invalidate deps fingerprint."
+    )
+    try expect(
+        pinChanged.project != base.project,
+        "Package.resolved change must invalidate project fingerprint."
+    )
 
     // Editing project.pbxproj alone invalidates project fingerprint without invalidating deps.
     try Data("pbx v2\n".utf8).write(to: pbxURL)
     let pbxChanged = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.2-27B52")
     try expect(
-        pbxChanged.deps == base.deps, "project.pbxproj change must keep deps fingerprint stable.")
+        pbxChanged.deps == pinChanged.deps,
+        "project.pbxproj change must keep deps fingerprint stable."
+    )
     try expect(
-        pbxChanged.project != base.project,
-        "project.pbxproj change must invalidate project fingerprint.")
+        pbxChanged.project != pinChanged.project,
+        "project.pbxproj change must invalidate project fingerprint."
+    )
 
-    // Editing a file under Sources/ invalidates both deps and project fingerprints.
-    try Data("public struct Sample { public var id = 1 }\n".utf8).write(to: sourceFile)
-    let sourceChanged = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.2-27B52")
-    try expect(sourceChanged.deps != base.deps, "Sources/ change must invalidate deps fingerprint.")
-    try expect(
-        sourceChanged.project != pbxChanged.project,
-        "Sources/ change must invalidate project fingerprint.")
-
-    // Real project.pbxproj rewrite produces a valid plist with zero SPM packages and 22 XCFrameworks.
+    // Real project.pbxproj rewrite produces a valid plist with 0 SPM packages, 20 third-party XCFrameworks, and 2 native Sources targets.
     let realPBX = try String(
         contentsOf: repoRoot.appendingPathComponent("clinical-swift.xcodeproj/project.pbxproj"),
         encoding: .utf8
@@ -99,26 +115,51 @@ private func runUnitTests(repoRoot: URL) throws {
     )
     try expect(
         !rewritten.contains("XCRemoteSwiftPackageReference"),
-        "Rewritten pbxproj must drop remote packages.")
+        "Rewritten pbxproj must drop remote packages."
+    )
     try expect(
         !rewritten.contains("XCLocalSwiftPackageReference"),
-        "Rewritten pbxproj must drop local package.")
+        "Rewritten pbxproj must drop local package."
+    )
     try expect(
         !rewritten.contains("XCSwiftPackageProductDependency"),
-        "Rewritten pbxproj must drop SPM product deps.")
+        "Rewritten pbxproj must drop SPM product deps."
+    )
     try expect(
-        rewritten.contains("projectDirPath = \"../..\";"),
-        "Rewritten pbxproj must set projectDirPath.")
+        !rewritten.contains("ClinicalModels.xcframework"),
+        "ClinicalModels must compile natively, not as an XCFramework."
+    )
+    try expect(
+        !rewritten.contains("ClinicalPersistence.xcframework"),
+        "ClinicalPersistence must compile natively, not as an XCFramework."
+    )
+    try expect(
+        rewritten.contains("path = Sources/ClinicalModels;"),
+        "Rewritten pbxproj must mount Sources/ClinicalModels."
+    )
+    try expect(
+        rewritten.contains("path = Sources/ClinicalPersistence;"),
+        "Rewritten pbxproj must mount Sources/ClinicalPersistence."
+    )
+    try expect(
+        rewritten.contains("libClinicalModels.a in Frameworks"),
+        "Rewritten pbxproj must link libClinicalModels.a."
+    )
+    try expect(
+        rewritten.contains("libClinicalPersistence.a in Frameworks"),
+        "Rewritten pbxproj must link libClinicalPersistence.a."
+    )
+    try expect(
+        rewritten.contains("Macros/StructuredQueriesSQLiteMacros#StructuredQueriesSQLiteMacros"),
+        "Rewritten pbxproj must pass prebuilt macro plugins to ClinicalPersistence."
+    )
     try expect(
         rewritten.contains("SQLiteData.xcframework"),
-        "Rewritten pbxproj must link SQLiteData.xcframework.")
+        "Rewritten pbxproj must link third-party SQLiteData.xcframework."
+    )
     try expect(
         rewritten.contains("GRDB_GRDB.bundle in Resources"),
-        "Rewritten pbxproj must include GRDB bundle.")
-    try expect(
-        rewritten.contains(
-            "-fmodule-map-file=$(PROJECT_DIR)/build/PrebuiltDeps/GRDBSQLite/module.modulemap"),
-        "Rewritten pbxproj must pass GRDBSQLite modulemap."
+        "Rewritten pbxproj must include GRDB bundle."
     )
 
     let lintTarget = tmp.appendingPathComponent("rewritten.pbxproj")
@@ -161,6 +202,8 @@ struct PrebuiltDepsTests {
             try expect(error.description.contains("Usage:"), error.description)
         }
 
-        print("PASS prebuilt_deps: fingerprinting, pbxproj/scheme rewrites, and CLI validation")
+        print(
+            "PASS prebuilt_deps: fingerprinting, 4-target pbxproj/scheme rewrites, and CLI validation"
+        )
     }
 }

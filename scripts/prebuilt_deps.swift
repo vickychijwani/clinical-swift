@@ -6,11 +6,10 @@ struct PrebuiltDepsError: Error, CustomStringConvertible {
 }
 
 enum PrebuiltModules {
-    static let schemaVersion = "v1"
+    static let schemaVersion = "v2"
 
-    static let all: [String] = [
-        "ClinicalModels",
-        "ClinicalPersistence",
+    // Prebuild third-party SPM modules only; ClinicalModels and ClinicalPersistence compile natively.
+    static let thirdParty: [String] = [
         "Clocks",
         "CombineSchedulers",
         "ConcurrencyExtras",
@@ -33,8 +32,17 @@ enum PrebuiltModules {
         "StructuredQueriesSQLiteCore",
     ]
 
-    static let widget: Set<String> = [
-        "ClinicalModels",
+    static let clinicalModelsDeps: Set<String> = [
+        "Clocks",
+        "CombineSchedulers",
+        "ConcurrencyExtras",
+        "CustomDump",
+        "Dependencies",
+        "IssueReporting",
+        "PerceptionCore",
+    ]
+
+    static let widgetDeps: Set<String> = [
         "Clocks",
         "CombineSchedulers",
         "ConcurrencyExtras",
@@ -45,10 +53,44 @@ enum PrebuiltModules {
         "PerceptionCore",
     ]
 
+    static let macros: [String] = [
+        "PerceptionMacros",
+        "StructuredQueriesMacros",
+        "StructuredQueriesSQLiteMacros",
+    ]
+
     static let resourceBundles: [String] = [
         "GRDB_GRDB.bundle",
         "swift-sharing_Sharing.bundle",
     ]
+}
+
+private enum LocalTargetIDs {
+    static let modelsTarget = "F0A000000000000000000001"
+    static let modelsProduct = "F0A000000000000000000002"
+    static let modelsGroup = "F0A000000000000000000003"
+    static let modelsSourcesPhase = "F0A000000000000000000004"
+    static let modelsFrameworksPhase = "F0A000000000000000000005"
+    static let modelsConfigList = "F0A000000000000000000006"
+    static let modelsDebugConfig = "F0A000000000000000000007"
+    static let modelsReleaseConfig = "F0A000000000000000000008"
+    static let modelsProxy = "F0A000000000000000000009"
+    static let modelsDependency = "F0A00000000000000000000A"
+    static let modelsLinkInApp = "F0A00000000000000000000B"
+    static let modelsLinkInWidget = "F0A00000000000000000000C"
+    static let modelsLinkInPersistence = "F0A00000000000000000000D"
+
+    static let persistenceTarget = "F0B000000000000000000001"
+    static let persistenceProduct = "F0B000000000000000000002"
+    static let persistenceGroup = "F0B000000000000000000003"
+    static let persistenceSourcesPhase = "F0B000000000000000000004"
+    static let persistenceFrameworksPhase = "F0B000000000000000000005"
+    static let persistenceConfigList = "F0B000000000000000000006"
+    static let persistenceDebugConfig = "F0B000000000000000000007"
+    static let persistenceReleaseConfig = "F0B000000000000000000008"
+    static let persistenceProxy = "F0B000000000000000000009"
+    static let persistenceDependency = "F0B00000000000000000000A"
+    static let persistenceLinkInApp = "F0B00000000000000000000B"
 }
 
 struct PrebuiltFingerprints: Equatable {
@@ -93,12 +135,17 @@ func readXcodeVersion(developerDir: String) -> String? {
 }
 
 func computeFingerprints(repoRoot: URL, xcodeVersion: String) throws -> PrebuiltFingerprints {
-    let fm = FileManager.default
     var depsHasher = SHA256()
     depsHasher.update(data: Data("SCHEMA:\(PrebuiltModules.schemaVersion)\n".utf8))
     depsHasher.update(data: Data("XCODE:\(xcodeVersion)\n".utf8))
-    depsHasher.update(data: Data("MODULES:\(PrebuiltModules.all.joined(separator: ","))\n".utf8))
+    depsHasher.update(
+        data: Data("MODULES:\(PrebuiltModules.thirdParty.joined(separator: ","))\n".utf8)
+    )
+    depsHasher.update(
+        data: Data("MACROS:\(PrebuiltModules.macros.joined(separator: ","))\n".utf8)
+    )
 
+    // Sources/ compiles natively in the generated project, so only package/Xcode changes bust deps.
     try hashFileIfPresent(
         at: repoRoot.appendingPathComponent("Package.swift"),
         label: "Package.swift",
@@ -116,35 +163,6 @@ func computeFingerprints(repoRoot: URL, xcodeVersion: String) throws -> Prebuilt
         label: "xcodeproj/Package.resolved",
         into: &depsHasher
     )
-
-    let sourcesDir = repoRoot.appendingPathComponent("Sources")
-    if fm.fileExists(atPath: sourcesDir.path),
-        let enumerator = fm.enumerator(
-            at: sourcesDir,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        )
-    {
-        var sourceFiles: [(relativePath: String, url: URL)] = []
-        let basePath = sourcesDir.standardizedFileURL.path + "/"
-        for case let fileURL as URL in enumerator {
-            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
-            guard values.isRegularFile == true else { continue }
-            let fullPath = fileURL.standardizedFileURL.path
-            let rel =
-                fullPath.hasPrefix(basePath)
-                ? String(fullPath.dropFirst(basePath.count)) : fileURL.lastPathComponent
-            sourceFiles.append((rel, fileURL))
-        }
-        sourceFiles.sort { $0.relativePath < $1.relativePath }
-        for item in sourceFiles {
-            try hashFileIfPresent(
-                at: item.url,
-                label: "Sources/\(item.relativePath)",
-                into: &depsHasher
-            )
-        }
-    }
 
     let depsHash = hexDigest(depsHasher)
 
@@ -185,6 +203,13 @@ private func regexReplace(
     let matches = regex.numberOfMatches(in: text, range: range)
     let result = regex.stringByReplacingMatches(in: text, range: range, withTemplate: template)
     return (result, matches)
+}
+
+private func insertAfterMarker(_ marker: String, content: String, in text: inout String) throws {
+    guard let range = text.range(of: marker) else {
+        throw PrebuiltDepsError(description: "Missing marker in project.pbxproj: \(marker)")
+    }
+    text.replaceSubrange(range, with: marker + content)
 }
 
 func rewriteProjectForPrebuilt(
@@ -243,20 +268,40 @@ func rewriteProjectForPrebuilt(
     )
     guard projectDirReplacement.count == 1 else {
         throw PrebuiltDepsError(
-            description: "Could not locate projectDirPath/projectRoot in project.pbxproj.")
+            description: "Could not locate projectDirPath/projectRoot in project.pbxproj."
+        )
     }
     text = projectDirReplacement.result
 
-    var fileRefs: [String] = []
-    var buildFiles: [String] = []
-    var appFrameworkEntries: [String] = []
-    var widgetFrameworkEntries: [String] = []
+    var fileRefs: [String] = [
+        "\t\t\(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libClinicalModels.a; sourceTree = BUILT_PRODUCTS_DIR; };",
+        "\t\t\(LocalTargetIDs.persistenceProduct) /* libClinicalPersistence.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libClinicalPersistence.a; sourceTree = BUILT_PRODUCTS_DIR; };",
+    ]
+    var buildFiles: [String] = [
+        "\t\t\(LocalTargetIDs.modelsLinkInApp) /* libClinicalModels.a in Frameworks */ = {isa = PBXBuildFile; fileRef = \(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */; };",
+        "\t\t\(LocalTargetIDs.persistenceLinkInApp) /* libClinicalPersistence.a in Frameworks */ = {isa = PBXBuildFile; fileRef = \(LocalTargetIDs.persistenceProduct) /* libClinicalPersistence.a */; };",
+        "\t\t\(LocalTargetIDs.modelsLinkInWidget) /* libClinicalModels.a in Frameworks */ = {isa = PBXBuildFile; fileRef = \(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */; };",
+        "\t\t\(LocalTargetIDs.modelsLinkInPersistence) /* libClinicalModels.a in Frameworks */ = {isa = PBXBuildFile; fileRef = \(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */; };",
+    ]
+
+    var appFrameworkEntries: [String] = [
+        "\t\t\t\t\(LocalTargetIDs.modelsLinkInApp) /* libClinicalModels.a in Frameworks */,",
+        "\t\t\t\t\(LocalTargetIDs.persistenceLinkInApp) /* libClinicalPersistence.a in Frameworks */,",
+    ]
+    var widgetFrameworkEntries: [String] = [
+        "\t\t\t\t\(LocalTargetIDs.modelsLinkInWidget) /* libClinicalModels.a in Frameworks */,"
+    ]
+    var modelsFrameworkEntries: [String] = []
+    var persistenceFrameworkEntries: [String] = [
+        "\t\t\t\t\(LocalTargetIDs.modelsLinkInPersistence) /* libClinicalModels.a in Frameworks */,"
+    ]
     var appResourceEntries: [String] = []
 
-    for (offset, mod) in PrebuiltModules.all.enumerated() {
+    for (offset, mod) in PrebuiltModules.thirdParty.enumerated() {
         let idx = offset + 1
         let fref = makeObjectID("0100", index: idx)
         let appBuild = makeObjectID("0200", index: idx)
+        let persistenceBuild = makeObjectID("0700", index: idx)
         fileRefs.append(
             "\t\t\(fref) /* \(mod).xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = \(mod).xcframework; path = \(outputRelativePath)/XCFrameworks/\(mod).xcframework; sourceTree = SOURCE_ROOT; };"
         )
@@ -265,13 +310,31 @@ func rewriteProjectForPrebuilt(
         )
         appFrameworkEntries.append("\t\t\t\t\(appBuild) /* \(mod).xcframework in Frameworks */,")
 
-        if PrebuiltModules.widget.contains(mod) {
+        buildFiles.append(
+            "\t\t\(persistenceBuild) /* \(mod).xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = \(fref) /* \(mod).xcframework */; };"
+        )
+        persistenceFrameworkEntries.append(
+            "\t\t\t\t\(persistenceBuild) /* \(mod).xcframework in Frameworks */,"
+        )
+
+        if PrebuiltModules.widgetDeps.contains(mod) {
             let widgetBuild = makeObjectID("0300", index: idx)
             buildFiles.append(
                 "\t\t\(widgetBuild) /* \(mod).xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = \(fref) /* \(mod).xcframework */; };"
             )
             widgetFrameworkEntries.append(
-                "\t\t\t\t\(widgetBuild) /* \(mod).xcframework in Frameworks */,")
+                "\t\t\t\t\(widgetBuild) /* \(mod).xcframework in Frameworks */,"
+            )
+        }
+
+        if PrebuiltModules.clinicalModelsDeps.contains(mod) {
+            let modelsBuild = makeObjectID("0600", index: idx)
+            buildFiles.append(
+                "\t\t\(modelsBuild) /* \(mod).xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = \(fref) /* \(mod).xcframework */; };"
+            )
+            modelsFrameworkEntries.append(
+                "\t\t\t\t\(modelsBuild) /* \(mod).xcframework in Frameworks */,"
+            )
         }
     }
 
@@ -288,23 +351,345 @@ func rewriteProjectForPrebuilt(
         appResourceEntries.append("\t\t\t\t\(resBuild) /* \(bundle) in Resources */,")
     }
 
-    let buildFileMarker = "/* Begin PBXBuildFile section */\n"
-    guard let buildFileRange = text.range(of: buildFileMarker) else {
-        throw PrebuiltDepsError(description: "Missing PBXBuildFile section in project.pbxproj.")
-    }
-    text.replaceSubrange(
-        buildFileRange,
-        with: buildFileMarker + buildFiles.joined(separator: "\n") + "\n"
+    try insertAfterMarker(
+        "/* Begin PBXBuildFile section */\n",
+        content: buildFiles.joined(separator: "\n") + "\n",
+        in: &text
+    )
+    try insertAfterMarker(
+        "/* Begin PBXFileReference section */\n",
+        content: fileRefs.joined(separator: "\n") + "\n",
+        in: &text
     )
 
-    let fileRefMarker = "/* Begin PBXFileReference section */\n"
-    guard let fileRefRange = text.range(of: fileRefMarker) else {
-        throw PrebuiltDepsError(description: "Missing PBXFileReference section in project.pbxproj.")
-    }
-    text.replaceSubrange(
-        fileRefRange,
-        with: fileRefMarker + fileRefs.joined(separator: "\n") + "\n"
+    let syncGroups = """
+        		\(LocalTargetIDs.modelsGroup) /* ClinicalModels */ = {
+        			isa = PBXFileSystemSynchronizedRootGroup;
+        			path = Sources/ClinicalModels;
+        			sourceTree = "<group>";
+        		};
+        		\(LocalTargetIDs.persistenceGroup) /* ClinicalPersistence */ = {
+        			isa = PBXFileSystemSynchronizedRootGroup;
+        			path = Sources/ClinicalPersistence;
+        			sourceTree = "<group>";
+        		};
+
+        """
+    try insertAfterMarker(
+        "/* Begin PBXFileSystemSynchronizedRootGroup section */\n",
+        content: syncGroups,
+        in: &text
     )
+
+    let proxies = """
+        		\(LocalTargetIDs.modelsProxy) /* PBXContainerItemProxy */ = {
+        			isa = PBXContainerItemProxy;
+        			containerPortal = 79438C3B2FD2D07100C0E6EF /* Project object */;
+        			proxyType = 1;
+        			remoteGlobalIDString = \(LocalTargetIDs.modelsTarget);
+        			remoteInfo = ClinicalModels;
+        		};
+        		\(LocalTargetIDs.persistenceProxy) /* PBXContainerItemProxy */ = {
+        			isa = PBXContainerItemProxy;
+        			containerPortal = 79438C3B2FD2D07100C0E6EF /* Project object */;
+        			proxyType = 1;
+        			remoteGlobalIDString = \(LocalTargetIDs.persistenceTarget);
+        			remoteInfo = ClinicalPersistence;
+        		};
+
+        """
+    try insertAfterMarker(
+        "/* Begin PBXContainerItemProxy section */\n",
+        content: proxies,
+        in: &text
+    )
+
+    let targetDeps = """
+        		\(LocalTargetIDs.modelsDependency) /* PBXTargetDependency */ = {
+        			isa = PBXTargetDependency;
+        			target = \(LocalTargetIDs.modelsTarget) /* ClinicalModels */;
+        			targetProxy = \(LocalTargetIDs.modelsProxy) /* PBXContainerItemProxy */;
+        		};
+        		\(LocalTargetIDs.persistenceDependency) /* PBXTargetDependency */ = {
+        			isa = PBXTargetDependency;
+        			target = \(LocalTargetIDs.persistenceTarget) /* ClinicalPersistence */;
+        			targetProxy = \(LocalTargetIDs.persistenceProxy) /* PBXContainerItemProxy */;
+        		};
+
+        """
+    try insertAfterMarker(
+        "/* Begin PBXTargetDependency section */\n",
+        content: targetDeps,
+        in: &text
+    )
+
+    let localSourcesPhases = """
+        		\(LocalTargetIDs.modelsSourcesPhase) /* Sources */ = {
+        			isa = PBXSourcesBuildPhase;
+        			buildActionMask = 2147483647;
+        			files = (
+        			);
+        			runOnlyForDeploymentPostprocessing = 0;
+        		};
+        		\(LocalTargetIDs.persistenceSourcesPhase) /* Sources */ = {
+        			isa = PBXSourcesBuildPhase;
+        			buildActionMask = 2147483647;
+        			files = (
+        			);
+        			runOnlyForDeploymentPostprocessing = 0;
+        		};
+
+        """
+    try insertAfterMarker(
+        "/* Begin PBXSourcesBuildPhase section */\n",
+        content: localSourcesPhases,
+        in: &text
+    )
+
+    let localFrameworksPhases = """
+        		\(LocalTargetIDs.modelsFrameworksPhase) /* Frameworks */ = {
+        			isa = PBXFrameworksBuildPhase;
+        			buildActionMask = 2147483647;
+        			files = (
+        \(modelsFrameworkEntries.joined(separator: "\n"))
+        			);
+        			runOnlyForDeploymentPostprocessing = 0;
+        		};
+        		\(LocalTargetIDs.persistenceFrameworksPhase) /* Frameworks */ = {
+        			isa = PBXFrameworksBuildPhase;
+        			buildActionMask = 2147483647;
+        			files = (
+        \(persistenceFrameworkEntries.joined(separator: "\n"))
+        			);
+        			runOnlyForDeploymentPostprocessing = 0;
+        		};
+
+        """
+    try insertAfterMarker(
+        "/* Begin PBXFrameworksBuildPhase section */\n",
+        content: localFrameworksPhases,
+        in: &text
+    )
+
+    let macroFlagEntries = PrebuiltModules.macros.flatMap { macro in
+        [
+            "\t\t\t\t\t\"-Xfrontend\",",
+            "\t\t\t\t\t\"-load-plugin-executable\",",
+            "\t\t\t\t\t\"-Xfrontend\",",
+            "\t\t\t\t\t\"$(PROJECT_DIR)/\(outputRelativePath)/Macros/\(macro)#\(macro)\",",
+        ]
+    }.joined(separator: "\n")
+
+    // Mirror Package.swift settings: Swift 6 with nonisolated default isolation and macro plugins for Persistence.
+    func localTargetConfigs(
+        debugID: String,
+        releaseID: String,
+        moduleName: String,
+        extraSwiftFlags: String?,
+        extensionSafe: Bool
+    ) -> String {
+        func oneConfig(id: String, name: String) -> String {
+            let extLine = extensionSafe ? "\t\t\t\tAPPLICATION_EXTENSION_API_ONLY = YES;\n" : ""
+            let swiftFlagsBlock =
+                extraSwiftFlags.map {
+                    """
+                    				OTHER_SWIFT_FLAGS = (
+                    					"$(inherited)",
+                    \($0)
+                    				);
+
+                    """
+                } ?? ""
+            return """
+                		\(id) /* \(name) */ = {
+                			isa = XCBuildConfiguration;
+                			buildSettings = {
+                \(extLine)				CODE_SIGN_STYLE = Automatic;
+                				ENABLE_PREVIEWS = NO;
+                				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+                \(swiftFlagsBlock)				PRODUCT_MODULE_NAME = \(moduleName);
+                				PRODUCT_NAME = \(moduleName);
+                				SKIP_INSTALL = YES;
+                				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+                				SWIFT_EMIT_LOC_STRINGS = NO;
+                				SWIFT_VERSION = 6.0;
+                				TARGETED_DEVICE_FAMILY = "1,2";
+                			};
+                			name = \(name);
+                		};
+
+                """
+        }
+        return oneConfig(id: debugID, name: "Debug") + oneConfig(id: releaseID, name: "Release")
+    }
+
+    let persistenceSwiftFlags = """
+        					"-Xcc",
+        					"-fmodule-map-file=$(PROJECT_DIR)/\(outputRelativePath)/GRDBSQLite/module.modulemap",
+        \(macroFlagEntries)
+        """
+
+    let localBuildConfigs =
+        localTargetConfigs(
+            debugID: LocalTargetIDs.modelsDebugConfig,
+            releaseID: LocalTargetIDs.modelsReleaseConfig,
+            moduleName: "ClinicalModels",
+            extraSwiftFlags: nil,
+            extensionSafe: true
+        )
+        + localTargetConfigs(
+            debugID: LocalTargetIDs.persistenceDebugConfig,
+            releaseID: LocalTargetIDs.persistenceReleaseConfig,
+            moduleName: "ClinicalPersistence",
+            extraSwiftFlags: persistenceSwiftFlags,
+            extensionSafe: false
+        )
+    try insertAfterMarker(
+        "/* Begin XCBuildConfiguration section */\n",
+        content: localBuildConfigs,
+        in: &text
+    )
+
+    let localConfigLists = """
+        		\(LocalTargetIDs.modelsConfigList) /* Build configuration list for PBXNativeTarget "ClinicalModels" */ = {
+        			isa = XCConfigurationList;
+        			buildConfigurations = (
+        				\(LocalTargetIDs.modelsDebugConfig) /* Debug */,
+        				\(LocalTargetIDs.modelsReleaseConfig) /* Release */,
+        			);
+        			defaultConfigurationIsVisible = 0;
+        			defaultConfigurationName = Release;
+        		};
+        		\(LocalTargetIDs.persistenceConfigList) /* Build configuration list for PBXNativeTarget "ClinicalPersistence" */ = {
+        			isa = XCConfigurationList;
+        			buildConfigurations = (
+        				\(LocalTargetIDs.persistenceDebugConfig) /* Debug */,
+        				\(LocalTargetIDs.persistenceReleaseConfig) /* Release */,
+        			);
+        			defaultConfigurationIsVisible = 0;
+        			defaultConfigurationName = Release;
+        		};
+
+        """
+    try insertAfterMarker(
+        "/* Begin XCConfigurationList section */\n",
+        content: localConfigLists,
+        in: &text
+    )
+
+    let localNativeTargets = """
+        		\(LocalTargetIDs.modelsTarget) /* ClinicalModels */ = {
+        			isa = PBXNativeTarget;
+        			buildConfigurationList = \(LocalTargetIDs.modelsConfigList) /* Build configuration list for PBXNativeTarget "ClinicalModels" */;
+        			buildPhases = (
+        				\(LocalTargetIDs.modelsSourcesPhase) /* Sources */,
+        				\(LocalTargetIDs.modelsFrameworksPhase) /* Frameworks */,
+        			);
+        			buildRules = (
+        			);
+        			dependencies = (
+        			);
+        			fileSystemSynchronizedGroups = (
+        				\(LocalTargetIDs.modelsGroup) /* ClinicalModels */,
+        			);
+        			name = ClinicalModels;
+        			packageProductDependencies = (
+        			);
+        			productName = ClinicalModels;
+        			productReference = \(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */;
+        			productType = "com.apple.product-type.library.static";
+        		};
+        		\(LocalTargetIDs.persistenceTarget) /* ClinicalPersistence */ = {
+        			isa = PBXNativeTarget;
+        			buildConfigurationList = \(LocalTargetIDs.persistenceConfigList) /* Build configuration list for PBXNativeTarget "ClinicalPersistence" */;
+        			buildPhases = (
+        				\(LocalTargetIDs.persistenceSourcesPhase) /* Sources */,
+        				\(LocalTargetIDs.persistenceFrameworksPhase) /* Frameworks */,
+        			);
+        			buildRules = (
+        			);
+        			dependencies = (
+        				\(LocalTargetIDs.modelsDependency) /* PBXTargetDependency */,
+        			);
+        			fileSystemSynchronizedGroups = (
+        				\(LocalTargetIDs.persistenceGroup) /* ClinicalPersistence */,
+        			);
+        			name = ClinicalPersistence;
+        			packageProductDependencies = (
+        			);
+        			productName = ClinicalPersistence;
+        			productReference = \(LocalTargetIDs.persistenceProduct) /* libClinicalPersistence.a */;
+        			productType = "com.apple.product-type.library.static";
+        		};
+
+        """
+    try insertAfterMarker(
+        "/* Begin PBXNativeTarget section */\n",
+        content: localNativeTargets,
+        in: &text
+    )
+
+    // Register local targets in PBXProject.targets, mainGroup, and Products group.
+    let projectTargets = try regexReplace(
+        in: text,
+        pattern: #"(targets = \(\n\t\t\t\t79438C422FD2D07100C0E6EF /\* clinical-swift \*/,\n)"#,
+        template:
+            "$1\t\t\t\t\(LocalTargetIDs.modelsTarget) /* ClinicalModels */,\n\t\t\t\t\(LocalTargetIDs.persistenceTarget) /* ClinicalPersistence */,\n"
+    )
+    guard projectTargets.count == 1 else {
+        throw PrebuiltDepsError(description: "Could not add local targets to PBXProject.targets.")
+    }
+    text = projectTargets.result
+
+    let mainGroupChildren = try regexReplace(
+        in: text,
+        pattern:
+            #"(79438C3A2FD2D07100C0E6EF = \{\n\t\t\tisa = PBXGroup;\n\t\t\tchildren = \(\n\t\t\t\t79438C452FD2D07100C0E6EF /\* clinical-swift \*/,\n)"#,
+        template:
+            "$1\t\t\t\t\(LocalTargetIDs.modelsGroup) /* ClinicalModels */,\n\t\t\t\t\(LocalTargetIDs.persistenceGroup) /* ClinicalPersistence */,\n"
+    )
+    guard mainGroupChildren.count == 1 else {
+        throw PrebuiltDepsError(description: "Could not add local groups to mainGroup.")
+    }
+    text = mainGroupChildren.result
+
+    let productsChildren = try regexReplace(
+        in: text,
+        pattern:
+            #"(79438C442FD2D07100C0E6EF /\* Products \*/ = \{\n\t\t\tisa = PBXGroup;\n\t\t\tchildren = \(\n\t\t\t\t79438C432FD2D07100C0E6EF /\* clinical-swift\.app \*/,\n)"#,
+        template:
+            "$1\t\t\t\t\(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */,\n\t\t\t\t\(LocalTargetIDs.persistenceProduct) /* libClinicalPersistence.a */,\n"
+    )
+    guard productsChildren.count == 1 else {
+        throw PrebuiltDepsError(description: "Could not add local products to Products group.")
+    }
+    text = productsChildren.result
+
+    // Add target dependencies so Xcode builds ClinicalModels and ClinicalPersistence before app & widget.
+    let appDeps = try regexReplace(
+        in: text,
+        pattern: #"(B2000000000000000000000E /\* PBXTargetDependency \*/,\n)"#,
+        template:
+            "$1\t\t\t\t\(LocalTargetIDs.modelsDependency) /* PBXTargetDependency */,\n\t\t\t\t\(LocalTargetIDs.persistenceDependency) /* PBXTargetDependency */,\n"
+    )
+    guard appDeps.count == 1 else {
+        throw PrebuiltDepsError(description: "Could not add local dependencies to clinical-swift.")
+    }
+    text = appDeps.result
+
+    let widgetDepsPatch = try regexReplace(
+        in: text,
+        pattern:
+            #"(B20000000000000000000004 /\* ClinicalWidgetExtension \*/ = \{.*?dependencies = \(\n)(\t\t\t\);\n)"#,
+        template: "$1\t\t\t\t\(LocalTargetIDs.modelsDependency) /* PBXTargetDependency */,\n$2",
+        dotMatchesLineSeparators: true
+    )
+    guard widgetDepsPatch.count == 1 else {
+        throw PrebuiltDepsError(
+            description: "Could not add ClinicalModels dependency to ClinicalWidgetExtension."
+        )
+    }
+    text = widgetDepsPatch.result
 
     func replaceBuildPhase(
         phaseID: String,
@@ -437,9 +822,11 @@ private func runProcess(
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             let errText = String(decoding: errData, as: UTF8.self).trimmingCharacters(
-                in: .whitespacesAndNewlines)
+                in: .whitespacesAndNewlines
+            )
             let outText = String(decoding: outData, as: UTF8.self).trimmingCharacters(
-                in: .whitespacesAndNewlines)
+                in: .whitespacesAndNewlines
+            )
             let detail = errText.isEmpty ? outText : errText
             throw PrebuiltDepsError(
                 description: "\(executable) \(arguments.joined(separator: " ")) failed: \(detail)"
@@ -518,9 +905,15 @@ private func isDepsCacheValid(outputDir: URL, expectedFingerprint: String) -> Bo
     guard fm.fileExists(atPath: moduleMap.path), fm.fileExists(atPath: shimHeader.path) else {
         return false
     }
-    for mod in PrebuiltModules.all {
+    for mod in PrebuiltModules.thirdParty {
         let plist = outputDir.appendingPathComponent("XCFrameworks/\(mod).xcframework/Info.plist")
         if !fm.fileExists(atPath: plist.path) {
+            return false
+        }
+    }
+    for macro in PrebuiltModules.macros {
+        let bin = outputDir.appendingPathComponent("Macros/\(macro)")
+        if !fm.isExecutableFile(atPath: bin.path) {
             return false
         }
     }
@@ -586,6 +979,7 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
     let productsDir = request.derivedData.appendingPathComponent(
         "Build/Products/Debug-iphonesimulator"
     )
+    let hostProductsDir = request.derivedData.appendingPathComponent("Build/Products/Debug")
     let grdbSQLiteSource = request.repoRoot.appendingPathComponent(
         "build/SourcePackages/checkouts/GRDB.swift/Sources/GRDBSQLite"
     )
@@ -599,6 +993,7 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
     let stagingDir = request.outputDir.appendingPathComponent("staging.\(pid)")
     let xcfwTmpDir = request.outputDir.appendingPathComponent("XCFrameworks.tmp.\(pid)")
     let xcfwFinalDir = request.outputDir.appendingPathComponent("XCFrameworks")
+    let macrosFinalDir = request.outputDir.appendingPathComponent("Macros")
     let grdbDestDir = request.outputDir.appendingPathComponent("GRDBSQLite")
     let resourcesDestDir = request.outputDir.appendingPathComponent("Resources")
 
@@ -611,19 +1006,22 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
     try fm.createDirectory(at: xcfwTmpDir, withIntermediateDirectories: true)
 
     FileHandle.standardError.write(
-        Data("[prebuilt] Packaging \(PrebuiltModules.all.count) binary XCFrameworks...\n".utf8)
+        Data(
+            "[prebuilt] Packaging \(PrebuiltModules.thirdParty.count) third-party XCFrameworks and \(PrebuiltModules.macros.count) macros...\n"
+                .utf8
+        )
     )
 
     let lock = NSLock()
     var firstError: Error?
 
-    DispatchQueue.concurrentPerform(iterations: PrebuiltModules.all.count) { idx in
+    DispatchQueue.concurrentPerform(iterations: PrebuiltModules.thirdParty.count) { idx in
         lock.lock()
         let alreadyFailed = firstError != nil
         lock.unlock()
         if alreadyFailed { return }
 
-        let mod = PrebuiltModules.all[idx]
+        let mod = PrebuiltModules.thirdParty[idx]
         do {
             let objectFile = productsDir.appendingPathComponent("\(mod).o")
             let swiftModule = productsDir.appendingPathComponent("\(mod).swiftmodule")
@@ -649,7 +1047,9 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
                 environment: env
             )
             try fm.copyItem(
-                at: swiftModule, to: modulesDir.appendingPathComponent("\(mod).swiftmodule"))
+                at: swiftModule,
+                to: modulesDir.appendingPathComponent("\(mod).swiftmodule")
+            )
             try Data(frameworkInfoPlist(moduleName: mod).utf8).write(
                 to: fwDir.appendingPathComponent("Info.plist")
             )
@@ -682,6 +1082,21 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
     }
     try fm.moveItem(at: xcfwTmpDir, to: xcfwFinalDir)
 
+    if fm.fileExists(atPath: macrosFinalDir.path) {
+        try fm.removeItem(at: macrosFinalDir)
+    }
+    try fm.createDirectory(at: macrosFinalDir, withIntermediateDirectories: true)
+    for macro in PrebuiltModules.macros {
+        let src = hostProductsDir.appendingPathComponent(macro)
+        guard fm.isExecutableFile(atPath: src.path) else {
+            throw PrebuiltDepsError(
+                description:
+                    "Missing compiled macro executable \(macro) in \(hostProductsDir.path)."
+            )
+        }
+        try fm.copyItem(at: src, to: macrosFinalDir.appendingPathComponent(macro))
+    }
+
     if fm.fileExists(atPath: grdbDestDir.path) {
         try fm.removeItem(at: grdbDestDir)
     }
@@ -699,7 +1114,9 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
     }
 
     try writeAtomically(
-        depsFingerprint + "\n", to: request.outputDir.appendingPathComponent("deps.fingerprint"))
+        depsFingerprint + "\n",
+        to: request.outputDir.appendingPathComponent("deps.fingerprint")
+    )
 }
 
 private func regeneratePrebuiltProject(request: PrebuiltEnsureRequest, projectFingerprint: String)
@@ -707,7 +1124,8 @@ private func regeneratePrebuiltProject(request: PrebuiltEnsureRequest, projectFi
 {
     let fm = FileManager.default
     let canonicalPBXURL = request.repoRoot.appendingPathComponent(
-        "clinical-swift.xcodeproj/project.pbxproj")
+        "clinical-swift.xcodeproj/project.pbxproj"
+    )
     let canonicalSchemeURL = request.repoRoot.appendingPathComponent(
         "clinical-swift.xcodeproj/xcshareddata/xcschemes/clinical-swift.xcscheme"
     )
@@ -733,13 +1151,17 @@ private func regeneratePrebuiltProject(request: PrebuiltEnsureRequest, projectFi
     )
 
     let prebuiltProjectURL = request.outputDir.appendingPathComponent(
-        "clinical-swift-prebuilt.xcodeproj")
+        "clinical-swift-prebuilt.xcodeproj"
+    )
     try writeAtomically(
-        rewrittenPBX, to: prebuiltProjectURL.appendingPathComponent("project.pbxproj"))
+        rewrittenPBX,
+        to: prebuiltProjectURL.appendingPathComponent("project.pbxproj")
+    )
     try writeAtomically(
         rewrittenScheme,
         to: prebuiltProjectURL.appendingPathComponent(
-            "xcshareddata/xcschemes/clinical-swift.xcscheme")
+            "xcshareddata/xcschemes/clinical-swift.xcscheme"
+        )
     )
     try writeAtomically(
         projectFingerprint + "\n",
@@ -762,9 +1184,13 @@ private func ensurePrebuilt(_ request: PrebuiltEnsureRequest) throws {
     }
 
     let fingerprints = try computeFingerprints(
-        repoRoot: request.repoRoot, xcodeVersion: xcodeVersion)
+        repoRoot: request.repoRoot,
+        xcodeVersion: xcodeVersion
+    )
     let depsValid = isDepsCacheValid(
-        outputDir: request.outputDir, expectedFingerprint: fingerprints.deps)
+        outputDir: request.outputDir,
+        expectedFingerprint: fingerprints.deps
+    )
     if !depsValid {
         try rebuildDepsCache(request: request, depsFingerprint: fingerprints.deps)
     }
@@ -772,7 +1198,9 @@ private func ensurePrebuilt(_ request: PrebuiltEnsureRequest) throws {
     let projectValid =
         depsValid
         && isProjectCacheValid(
-            outputDir: request.outputDir, expectedFingerprint: fingerprints.project)
+            outputDir: request.outputDir,
+            expectedFingerprint: fingerprints.project
+        )
     if !projectValid {
         try regeneratePrebuiltProject(request: request, projectFingerprint: fingerprints.project)
     }
