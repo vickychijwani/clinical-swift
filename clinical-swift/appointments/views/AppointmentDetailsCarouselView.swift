@@ -409,7 +409,7 @@ private struct AppointmentCardCarouselSurface<CarouselGesture: Gesture>: View {
                     }
                 }
             }
-            .animation(.smooth(duration: 0.28), value: showsScheduledActions)
+            .animation(AppMotion.animation(.smooth(duration: 0.28)), value: showsScheduledActions)
             .navigationDestination(for: Route.self) { route in
                 DetailsRouteView(
                     route: route,
@@ -474,7 +474,8 @@ private struct FloatingAppointmentCardTrack<CarouselGesture: Gesture>: View {
                             appointment: entry.details.appointment,
                             variant: .standard(
                                 patient: entry.details.patient,
-                                onSelectPatient: selectAction(for: entry.details, isActive: isActive)
+                                onSelectPatient: selectAction(
+                                    for: entry.details, isActive: isActive)
                             )
                         )
                         .frame(width: cardWidth)

@@ -236,7 +236,7 @@ private struct WeekDatePage: View {
                     .matchedGeometryEffect(
                         id: selectedSlot, in: selectionGlass, properties: .position, isSource: false
                     )
-                    .animation(.bouncy(duration: 0.35), value: selectedSlot)
+                    .animation(AppMotion.animation(.bouncy(duration: 0.35)), value: selectedSlot)
             }
         }
         .padding(.horizontal, WeekStripMetrics.stripHorizontalPadding)
@@ -281,7 +281,7 @@ private struct DateStripCell: View {
                 }
             }
             .foregroundStyle(foregroundStyle)
-            .animation(.bouncy(duration: 0.35), value: isSelected)
+            .animation(AppMotion.animation(.bouncy(duration: 0.35)), value: isSelected)
             .frame(minWidth: 44, minHeight: cellMinHeight)
             .contentShape(
                 .rect(cornerRadius: WeekStripMetrics.cellCornerRadius, style: .continuous)

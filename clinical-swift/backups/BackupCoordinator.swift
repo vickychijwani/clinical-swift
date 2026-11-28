@@ -21,6 +21,7 @@ final class BackupCoordinator {
     private let snapshotWorker = BackupSnapshotWorker()
     private var work: Task<Bool, Never>?
     private var stateIsReadable = true
+    private var isBackgroundTaskRegistered = false
     nonisolated static let backgroundIdentifier = "in.bitehaus.clinical.backup"
 
     init(
@@ -281,7 +282,7 @@ final class BackupCoordinator {
 
     func registerBackgroundTask() {
         // The launch handler inherits MainActor isolation, so iOS must call it on the main queue.
-        BGTaskScheduler.shared.register(
+        isBackgroundTaskRegistered = BGTaskScheduler.shared.register(
             forTaskWithIdentifier: Self.backgroundIdentifier, using: .main
         ) { [weak self] task in
             Task { @MainActor in
@@ -303,7 +304,8 @@ final class BackupCoordinator {
     }
 
     func scheduleBackground() {
-        guard state.accountID != nil else { return }
+        // BGTaskScheduler throws an ObjC exception if submit runs without a registered handler.
+        guard isBackgroundTaskRegistered, state.accountID != nil else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.backgroundIdentifier)
         let request = BGProcessingTaskRequest(identifier: Self.backgroundIdentifier)
         request.requiresNetworkConnectivity = true

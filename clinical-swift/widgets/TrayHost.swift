@@ -95,12 +95,8 @@ where Item.ID == UUID {
     @State private var options: TrayOptions?
 
     private var animates: Bool {
-        #if DEBUG
-            // UIKit's animation switch does not stop SwiftUI tray motion during UI tests.
-            !CommandLine.arguments.contains(where: { $0.hasPrefix("--ui-testing-") })
-        #else
-            true
-        #endif
+        // UIKit's animation switch does not stop SwiftUI tray motion during UI tests.
+        AppMotion.isEnabled
     }
 
     var body: some View {

@@ -3,8 +3,8 @@ import XCTest
 nonisolated final class TimelineSharedSheetUITests: XCTestCase {
     @MainActor func testDoneWithoutPatientReopensSelection() {
         let app = TimelineUITestSupport.launch()
-        TimelineUITestSupport.emptySpaceAbove(TimelineUITestSupport.original(app))
-            .press(forDuration: 1)
+        TimelineUITestSupport.emptySpaceAbove(TimelineUITestSupport.original(app), in: app)
+            .press(forDuration: 0.45)
         let search = app.textFields["Search patient by name"]
         XCTAssertTrue(search.hittableOrWait(timeout: 3))
         app.buttons["Back"].tap()
@@ -76,8 +76,8 @@ nonisolated final class TimelineSharedSheetUITests: XCTestCase {
         XCTAssertEqual(label.value as? String, "Optional label")
         label.typeText("Kept label")
         let bar = app.navigationBars["Unavailable Time"]
-        let top = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
-        top.press(forDuration: 0.1, thenDragTo: top.withOffset(CGVector(dx: 0, dy: 650)))
+        let top = TimelineUITestSupport.coordinate(in: app, of: bar, dx: 0.5, dy: 0)
+        top.press(forDuration: 0.05, thenDragTo: top.withOffset(CGVector(dx: 0, dy: 650)))
         XCTAssertTrue(app.buttons["Done"].hittableOrWait(timeout: 3))
         XCTAssertFalse(label.exists)
         let block = TimelineUITestSupport.newBlock(app)
@@ -110,7 +110,8 @@ nonisolated final class TimelineSharedSheetUITests: XCTestCase {
     @MainActor func testHoldSwitchToUnavailableTimeKeepsFirstDrag() {
         let app = TimelineUITestSupport.launch()
         TimelineUITestSupport.hold(
-            TimelineUITestSupport.emptySpaceAbove(TimelineUITestSupport.original(app)), move: 30)
+            TimelineUITestSupport.emptySpaceAbove(TimelineUITestSupport.original(app), in: app),
+            move: 30)
         XCTAssertTrue(
             app.segmentedControls.buttons["Unavailable Time"].existsOrWait(timeout: 3))
         app.segmentedControls.buttons["Unavailable Time"].tap()

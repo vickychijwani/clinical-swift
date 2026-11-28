@@ -5,7 +5,8 @@ nonisolated final class TimelineBookingHoldUITests: XCTestCase {
         let app = TimelineUITestSupport.launch()
         let original = TimelineUITestSupport.original(app)
         let originalTime = TimelineUITestSupport.time(original)
-        TimelineUITestSupport.hold(TimelineUITestSupport.emptySpaceAbove(original), move: 30)
+        TimelineUITestSupport.hold(
+            TimelineUITestSupport.emptySpaceAbove(original, in: app), move: 30)
         TimelineUITestSupport.selectPatient(app)
         let draft = TimelineUITestSupport.draft(app)
         XCTAssertEqual(TimelineUITestSupport.time(draft), "12:15 PM")
@@ -14,10 +15,12 @@ nonisolated final class TimelineBookingHoldUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["details-opened"].exists)
         let done = app.buttons["Done"]
         let cancel = app.buttons["Cancel"]
-        XCTAssertGreaterThan(done.frame.minY, draft.frame.maxY)
-        XCTAssertLessThanOrEqual(done.frame.minY - draft.frame.maxY, 8)
-        XCTAssertEqual(done.frame.maxX, draft.frame.maxX, accuracy: 3)
-        XCTAssertLessThan(cancel.frame.maxX, done.frame.minX)
+        let draftFrame = draft.frame
+        let doneFrame = done.frame
+        XCTAssertGreaterThan(doneFrame.minY, draftFrame.maxY)
+        XCTAssertLessThanOrEqual(doneFrame.minY - draftFrame.maxY, 8)
+        XCTAssertEqual(doneFrame.maxX, draftFrame.maxX, accuracy: 3)
+        XCTAssertLessThan(cancel.frame.maxX, doneFrame.minX)
         XCTAssertFalse(app.navigationBars.buttons["Done"].exists)
         TimelineUITestSupport.attach(app, "Booking with glass card actions", to: self)
         let id = draft.identifier
@@ -32,7 +35,7 @@ nonisolated final class TimelineBookingHoldUITests: XCTestCase {
         let card = TimelineUITestSupport.original(app)
         // Target the uncovered top half so the overlapping 12:15 PM front card is not hit.
         TimelineUITestSupport.hold(
-            card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.25)), move: 17)
+            TimelineUITestSupport.coordinate(in: app, of: card, dx: 0.4, dy: 0.25), move: 17)
         XCTAssertTrue(app.buttons["Done"].hittableOrWait(timeout: 3))
         XCTAssertEqual(TimelineUITestSupport.time(card), "12:15 PM")
         XCTAssertEqual(card.value as? String, "30 min")
@@ -48,9 +51,9 @@ nonisolated final class TimelineBookingHoldUITests: XCTestCase {
     @MainActor func testHoldOnEmptyTimelineCreatesCenteredBooking() {
         let app = TimelineUITestSupport.launch()
         let card = TimelineUITestSupport.original(app)
-        let point = card.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
-            .withOffset(CGVector(dx: 0, dy: -120))
-        point.press(forDuration: 1)
+        let point = TimelineUITestSupport.coordinate(
+            in: app, of: card, dx: 0.4, dy: 0.5, offsetY: -120)
+        point.press(forDuration: 0.45)
         TimelineUITestSupport.selectPatient(app)
         let draft = TimelineUITestSupport.draft(app)
         XCTAssertEqual(TimelineUITestSupport.time(draft), "10:00 AM")
@@ -60,11 +63,10 @@ nonisolated final class TimelineBookingHoldUITests: XCTestCase {
     @MainActor func testHoldNearClosingCreatesBooking() {
         let app = TimelineUITestSupport.launch()
         // The compact break puts 8:45 PM 362 points below the noon card's center.
-        let point = TimelineUITestSupport.original(app)
-            .coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
-            .withOffset(CGVector(dx: 0, dy: 362))
+        let point = TimelineUITestSupport.coordinate(
+            in: app, of: TimelineUITestSupport.original(app), dx: 0.4, dy: 0.5, offsetY: 362)
         TimelineUITestSupport.attach(app, "Timeline before bottom-edge hold", to: self)
-        point.press(forDuration: 0.4)
+        point.press(forDuration: 0.45)
         TimelineUITestSupport.selectPatient(app)
         let draft = TimelineUITestSupport.draft(app)
         XCTAssertEqual(TimelineUITestSupport.time(draft), "8:30 PM")
@@ -90,7 +92,7 @@ nonisolated final class TimelineBookingHoldUITests: XCTestCase {
     @MainActor func testQuickSwipeDoesNotStartBooking() {
         let app = TimelineUITestSupport.launch()
         let original = TimelineUITestSupport.original(app)
-        let point = original.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+        let point = TimelineUITestSupport.coordinate(in: app, of: original, dx: 0.4, dy: 0.5)
         point.press(
             forDuration: 0.05, thenDragTo: point.withOffset(CGVector(dx: 0, dy: -80)),
             withVelocity: .fast, thenHoldForDuration: 0)

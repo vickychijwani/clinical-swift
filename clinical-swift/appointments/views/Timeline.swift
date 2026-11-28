@@ -87,7 +87,7 @@ struct Timeline: View {
                 editorSession.preview.start.isSameDayAs(date)
             else { return }
             do { try await Task.sleep(for: .milliseconds(550)) } catch { return }
-            withAnimation(.smooth(duration: 0.22)) {
+            withAnimation(AppMotion.animation(.smooth(duration: 0.22))) {
                 onScaleChange(editorSession.expandBreak(items: items))
             }
         }

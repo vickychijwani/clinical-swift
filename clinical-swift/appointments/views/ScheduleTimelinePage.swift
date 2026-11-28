@@ -218,7 +218,7 @@ private struct TimelineScrollModifier: ViewModifier {
                         .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: isScrolled)
+            .animation(AppMotion.animation(.easeInOut(duration: 0.18)), value: isScrolled)
     }
 }
 

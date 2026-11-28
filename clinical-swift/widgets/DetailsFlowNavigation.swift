@@ -21,7 +21,7 @@ struct DetailsFlowNavigation: View {
                 .id(presentation.visitID)
                 .transition(.opacity)
             }
-            .animation(.easeInOut(duration: 0.15), value: presentation.root)
+            .animation(AppMotion.animation(.easeInOut(duration: 0.15)), value: presentation.root)
             .navigationDestination(for: Route.self) { route in
                 DetailsRouteView(
                     route: route,

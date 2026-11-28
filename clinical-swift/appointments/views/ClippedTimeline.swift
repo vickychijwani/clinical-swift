@@ -23,7 +23,7 @@ struct ClippedTimeline<Content: View>: View {
         ClippedView(height: clippedHeight, yOffset: yOffset) {
             timeline
         }
-        .animation(.easeInOut(duration: 0.2), value: yOffset)
+        .animation(AppMotion.animation(.easeInOut(duration: 0.2)), value: yOffset)
         .allowsHitTesting(false)
     }
 

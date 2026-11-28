@@ -335,6 +335,12 @@ private struct WindowObserver: UIViewRepresentable {
     func updateUIView(_ uiView: ObserverView, context: Context) {
         uiView.windowBox = windowBox
         windowBox.window = uiView.window
+        #if DEBUG
+            if !AppMotion.isEnabled {
+                // Accelerate CoreAnimation layers so system transitions settle immediately during UI tests.
+                uiView.window?.layer.speed = 100
+            }
+        #endif
     }
 
     final class ObserverView: UIView {
@@ -353,6 +359,11 @@ private struct WindowObserver: UIViewRepresentable {
         override func didMoveToWindow() {
             super.didMoveToWindow()
             windowBox.window = window
+            #if DEBUG
+                if !AppMotion.isEnabled {
+                    window?.layer.speed = 100
+                }
+            #endif
         }
     }
 }

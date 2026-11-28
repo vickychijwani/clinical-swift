@@ -5,7 +5,10 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
     func testBackKeepsDraftAndRootCloseDiscardsDirectly() {
         let app = AppointmentCompletionUITestSupport.launch(fromSchedule: true)
         app.textFields["completion-amount"].typeText("1000")
-        app.segmentedControls["completion-method"].buttons["Cash"].tap()
+        let cash = app.segmentedControls["completion-method"].buttons["Cash"]
+        // Wait for any remote InputUI keyboard bounce after typeText before tapping the segmented control.
+        XCTAssertTrue(cash.stableFrameOrWait(timeout: 3))
+        cash.tap()
         app.navigationBars.buttons["BackButton"].tap()
         app.buttons["Complete"].tap()
         XCTAssertEqual(app.textFields["completion-amount"].value as? String, "1000")
@@ -26,10 +29,11 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
 
     @MainActor
     func testCleanDetailsCanDismissAfterBack() {
-        let app = AppointmentCompletionUITestSupport.launch()
+        let app = AppointmentCompletionUITestSupport.launch(expectsKeyboard: false)
         app.navigationBars.buttons["BackButton"].tap()
         let detailsBar = app.navigationBars["Appointment"]
-        detailsBar.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.1)).press(
+        let start = TimelineUITestSupport.coordinate(in: app, of: detailsBar, dx: 0.7, dy: 0.1)
+        start.press(
             forDuration: 0.05,
             thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95)))
         XCTAssertTrue(detailsBar.absentOrWait(timeout: 3))
@@ -64,7 +68,8 @@ nonisolated final class AppointmentCompletionFlowUITests: XCTestCase {
 
     @MainActor
     func testCompletionToastBooksFollowUpOnNextBusinessDay() {
-        let app = AppointmentCompletionUITestSupport.launch(fromSchedule: true)
+        let app = AppointmentCompletionUITestSupport.launch(
+            fromSchedule: true, expectsKeyboard: false)
         app.buttons["complete-appointment"].tap()
         XCTAssertTrue(app.navigationBars["Complete Appointment"].absentOrWait(timeout: 5))
 

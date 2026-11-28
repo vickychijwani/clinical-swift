@@ -97,6 +97,9 @@ struct AppointmentCompletionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.isSaving)
         .task {
+            #if DEBUG
+                if CommandLine.arguments.contains("--completion-no-autofocus") { return }
+            #endif
             // Let the tray finish its initial layout pass before requesting the keyboard.
             await Task.yield()
             guard !Task.isCancelled else { return }
