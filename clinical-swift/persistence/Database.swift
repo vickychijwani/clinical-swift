@@ -156,5 +156,55 @@ nonisolated private let databaseLogger = Logger(
             }
             try seedSamplePaymentsIfNeeded()
         }
+
+        /// Ensures Today has realistic overlapping sample appointments on persistent CI simulators
+        /// whose initial sample seed may have been created on an earlier calendar day.
+        func ensureTodayWidgetPerfSamples(now: Date = .now) throws {
+            try seedSampleDataIfNeeded()
+            let calendar = ClinicDate.calendar
+            let todayStart = calendar.startOfDay(for: now)
+            let tomorrowStart =
+                calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+            try write { db in
+                let existingTodayCount =
+                    try AppointmentRecord
+                    .where { $0.start >= todayStart && $0.start < tomorrowStart }
+                    .count()
+                    .fetchOne(db) ?? 0
+                guard existingTodayCount == 0 else { return }
+
+                var patientIDsByName: [String: Patient.ID] = [:]
+                for record in try PatientRecord.all.fetchAll(db) {
+                    if let name = record.name {
+                        patientIDsByName[name] = record.id
+                    }
+                }
+                for appointment in sampleAppointments {
+                    let patientID: Patient.ID
+                    if let existing = patientIDsByName[appointment.patientName] {
+                        patientID = existing
+                    } else {
+                        let patient = Patient(name: appointment.patientName, createdDate: now)
+                        try PatientRecord.insert { PatientRecord(patient) }.execute(db)
+                        patientIDsByName[appointment.patientName] = patient.id
+                        patientID = patient.id
+                    }
+                    let record = try AppointmentRecord.persisted(
+                        id: UUID(),
+                        patientID: patientID,
+                        start: appointment.start,
+                        durationMinutes: appointment.durationMinutes,
+                        status: appointment.status,
+                        createdAt: appointment.start,
+                        updatedAt: appointment.start
+                    )
+                    try AppointmentRecord.insert { record }.execute(db)
+                    try AppointmentCalendarSyncRecord
+                        .where { $0.appointmentID.eq(record.id) }
+                        .delete()
+                        .execute(db)
+                }
+            }
+        }
     }
 #endif
