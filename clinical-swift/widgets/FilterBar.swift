@@ -28,7 +28,9 @@ struct FilterBar<Selection: Hashable, Label: View>: View {
             Color.clear
                 .glassEffect(.regular, in: .capsule)
                 .matchedGeometryEffect(id: selection, in: selectionGlass, isSource: false)
-                .animation(.spring(duration: 0.35, bounce: 0.15), value: selection)
+                .animation(
+                    AppMotion.animation(.spring(duration: 0.35, bounce: 0.15)), value: selection
+                )
                 .allowsHitTesting(false)
         }
         .font(.system(size: 15))

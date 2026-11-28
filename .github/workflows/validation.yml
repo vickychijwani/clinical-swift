@@ -19,33 +19,70 @@ jobs:
       - name: Trust the container checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install test dependencies
-        run: apt-get update && apt-get install -y libsqlite3-dev
-      - name: Cache SwiftPM dependencies and build state
-        uses: actions/cache@v4
-        with:
-          path: .build
-          key: spm-v1-${{ runner.os }}-${{ runner.arch }}-swift-6.4.1-${{ hashFiles('Package.swift', 'Package.resolved') }}
-          restore-keys: |
-            spm-v1-${{ runner.os }}-${{ runner.arch }}-swift-6.4.1-
-      - name: Resolve Linux package dependencies
-        run: swift package resolve
+        # zstd lets actions/cache use multi-threaded compression instead of slow gzip fallback.
+        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev zstd
       - name: Check shared package versions
+        # Verify tracked Package.resolved before Linux resolution modifies it.
         run: swift scripts/check_package_versions.swift
       - name: Check ClinicDate usage
         run: swift scripts/check_clinic_date.swift
+      - name: Cache SwiftPM dependencies and build state
+        id: spm-cache
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-v2-${{ runner.os }}-${{ runner.arch }}-swift-6.4.1-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            spm-v2-${{ runner.os }}-${{ runner.arch }}-swift-6.4.1-
+      - name: Resolve Linux package dependencies
+        run: |
+          if [ "${{ steps.spm-cache.outputs.cache-hit }}" = "true" ] && [ -f .build/Package.resolved.linux ]; then
+            cp .build/Package.resolved.linux Package.resolved
+          else
+            swift package resolve
+            mkdir -p .build
+            cp Package.resolved .build/Package.resolved.linux
+          fi
+      - name: Restore cached mtimes for unchanged inputs
+        # Restore cached mtimes only when file content matches the cached SHA-256 digest.
+        # Changed files keep fresh checkout timestamps so Swift Build always recompiles them.
+        run: |
+          manifest=".build/.input-mtimes.sha256"
+          if [ -f "$manifest" ]; then
+            while IFS=' ' read -r expected_hash cached_mtime rel_path; do
+              [ -n "$rel_path" ] && [ -f "$rel_path" ] || continue
+              current_hash=$(sha256sum "$rel_path" | awk '{print $1}')
+              if [ "$current_hash" = "$expected_hash" ]; then
+                touch -d "@$cached_mtime" "$rel_path"
+              fi
+            done < "$manifest"
+          fi
       - name: Test package
         run: >-
           swift test --disable-automatic-resolution
           --explicit-target-dependency-import-check error
+          --disable-xctest
+      - name: Record input manifest and prune git mirrors before cache save
+        if: steps.spm-cache.outputs.cache-hit != 'true'
+        run: |
+          rm -rf .build/repositories
+          manifest=".build/.input-mtimes.sha256"
+          : > "$manifest"
+          for rel_path in $(find Sources Tests -type f | LC_ALL=C sort) Package.swift Package.resolved; do
+            [ -f "$rel_path" ] || continue
+            file_hash=$(sha256sum "$rel_path" | awk '{print $1}')
+            file_mtime=$(stat -c '%Y' "$rel_path")
+            printf '%s %s %s\n' "$file_hash" "$file_mtime" "$rel_path" >> "$manifest"
+          done
 
   architecture:
     name: Architecture
-    runs-on: xcode-27
+    runs-on: ubuntu-24.04
+    container: swift:6.4.1-noble
     steps:
       - uses: actions/checkout@v4
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '27.1'
+      - name: Trust the container checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Check architecture
         run: sh scripts/check_architecture.sh
       - name: Test architecture checker

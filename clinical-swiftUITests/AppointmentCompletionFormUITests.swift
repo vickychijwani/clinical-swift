@@ -51,7 +51,10 @@ nonisolated final class AppointmentCompletionFormUITests: XCTestCase {
     func testSaveFailureKeepsTheFormAndMethod() {
         let app = AppointmentCompletionUITestSupport.launch(["--completion-credit-conflict"])
         app.textFields["completion-amount"].typeText("1000")
-        app.segmentedControls["completion-method"].buttons["Card"].tap()
+        let card = app.segmentedControls["completion-method"].buttons["Card"]
+        // Wait for any remote InputUI keyboard bounce after typeText before tapping the segmented control.
+        XCTAssertTrue(card.stableFrameOrWait(timeout: 3))
+        card.tap()
         app.buttons["complete-appointment"].tap()
         XCTAssertTrue(app.alerts["Unable to complete appointment"].existsOrWait(timeout: 5))
         XCTAssertTrue(
@@ -67,9 +70,10 @@ nonisolated final class AppointmentCompletionFormUITests: XCTestCase {
 
     @MainActor
     func testUnknownPatientAndSavingControls() {
-        let app = AppointmentCompletionUITestSupport.launch([
-            "--completion-unknown-patient", "--completion-gated-save",
-        ])
+        let app = AppointmentCompletionUITestSupport.launch(
+            ["--completion-unknown-patient", "--completion-gated-save"],
+            expectsKeyboard: false
+        )
         XCTAssertTrue(app.staticTexts["For Unknown Patient"].exists)
         app.buttons["complete-appointment"].tap()
         let release = app.buttons["release-test-save"]

@@ -19,9 +19,10 @@ func stripCommentsAndStrings(_ source: String) -> String {
     var offset = 0
 
     func matches(_ marker: String) -> Bool {
-        let part = Array(marker.utf8)
-        return offset + part.count <= bytes.count
-            && bytes[offset..<(offset + part.count)].elementsEqual(part)
+        let utf8 = marker.utf8
+        let count = utf8.count
+        return offset + count <= bytes.count
+            && bytes[offset..<(offset + count)].elementsEqual(utf8)
     }
 
     func emitSpaces(_ count: Int = 1) {

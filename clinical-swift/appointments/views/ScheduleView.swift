@@ -298,7 +298,7 @@ struct ScheduleView: View {
     }
 
     private func scrollToStart(_ start: Date) {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(AppMotion.animation(.easeInOut(duration: 0.2))) {
             scrollPosition.scrollTo(y: max(timelineScrollY(for: start), 0))
         }
     }

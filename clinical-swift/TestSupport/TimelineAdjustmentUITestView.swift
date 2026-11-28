@@ -12,10 +12,17 @@
         private static let patient = Patient(
             id: UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)),
             name: "Test Patient")
-        private static let saveGate = UITestSaveGate()
+        static let saveGate = UITestSaveGate()
+
+        private static var baseDate: Date {
+            guard CommandLine.arguments.contains("--ui-testing-week-boundary") else { return .now }
+            let calendar = ClinicDate.calendar
+            // Pin to the last day of the current week so two swipes cross the week boundary and an empty day.
+            return Date.now.startOfWeek(using: calendar).date(byAddingDays: 6, using: calendar)
+        }
 
         init() {
-            let router = Router()
+            let router = Router(selectedScheduleDate: Self.baseDate)
             _router = State(initialValue: router)
             if CommandLine.arguments.contains("--ui-testing-selected-draft") {
                 router.requestScheduleCreation()
@@ -42,28 +49,8 @@
         static func makeDatabase() throws -> any DatabaseWriter {
             let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
             try migrateDatabase(database)
-            let patient = patient
             try database.write { db in
-                try PatientRecord.insert {
-                    PatientRecord(patient, now: .now)
-                }.execute(db)
-                for (suffix, day, hour, minute) in [
-                    (10, 0, 12, 0), (11, 0, 12, 15), (12, 1, 12, 0),
-                ] {
-                    let id = UUID(
-                        uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, UInt8(suffix)))
-                    let start = Date.now.date(byAddingDays: day).setTime(hour, minute)
-                    let record = try AppointmentRecord.persisted(
-                        id: id, patientID: patient.id, start: start, durationMinutes: 30,
-                        status: .scheduled, createdAt: .now, updatedAt: .now)
-                    try AppointmentRecord.insert { record }.execute(db)
-                }
-                try UnavailableTimeRecord.insert {
-                    UnavailableTimeRecord(
-                        id: UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20)),
-                        label: "Travel", start: Date.now.setTime(11, 0), durationMinutes: 30,
-                        createdAt: .now, updatedAt: .now)
-                }.execute(db)
+                try seed(in: db)
             }
             if CommandLine.arguments.contains("--ui-testing-gated-save") {
                 // Pause the test writer so the UI can swipe while the real save is pending.
@@ -72,6 +59,31 @@
                 return GatedDatabaseWriter(base: database, gate: saveGate)
             }
             return database
+        }
+
+        static func seed(in db: Database) throws {
+            let patient = patient
+            let baseDate = Self.baseDate
+            try PatientRecord.insert {
+                PatientRecord(patient, now: .now)
+            }.execute(db)
+            for (suffix, day, hour, minute) in [
+                (10, 0, 12, 0), (11, 0, 12, 15), (12, 1, 12, 0),
+            ] {
+                let id = UUID(
+                    uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, UInt8(suffix)))
+                let start = baseDate.date(byAddingDays: day).setTime(hour, minute)
+                let record = try AppointmentRecord.persisted(
+                    id: id, patientID: patient.id, start: start, durationMinutes: 30,
+                    status: .scheduled, createdAt: .now, updatedAt: .now)
+                try AppointmentRecord.insert { record }.execute(db)
+            }
+            try UnavailableTimeRecord.insert {
+                UnavailableTimeRecord(
+                    id: UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20)),
+                    label: "Travel", start: baseDate.setTime(11, 0), durationMinutes: 30,
+                    createdAt: .now, updatedAt: .now)
+            }.execute(db)
         }
 
         var body: some View {
@@ -94,13 +106,13 @@
     final class UITestSaveGate {
         private(set) var isWaiting = false
         private var isReleased = false
-        private var continuations: [CheckedContinuation<Void, Never>] = []
+        private var continuations: [CheckedContinuation<Void, any Error>] = []
 
         /// Suspends async writes without blocking the DatabaseQueue serial queue.
-        func waitAsync() async {
+        func waitAsync() async throws {
             guard !isReleased else { return }
             isWaiting = true
-            await withCheckedContinuation { continuation in
+            try await withCheckedThrowingContinuation { continuation in
                 continuations.append(continuation)
             }
         }
@@ -112,6 +124,16 @@
             continuations.removeAll()
             for continuation in pending {
                 continuation.resume()
+            }
+        }
+
+        func reset() {
+            isReleased = false
+            isWaiting = false
+            let pending = continuations
+            continuations.removeAll()
+            for continuation in pending {
+                continuation.resume(throwing: CancellationError())
             }
         }
     }
@@ -174,7 +196,7 @@
         func writeWithoutTransaction<T: Sendable>(
             _ updates: @Sendable (Database) throws -> T
         ) async throws -> T {
-            await gate.waitAsync()
+            try await gate.waitAsync()
             return try await base.writeWithoutTransaction(updates)
         }
 

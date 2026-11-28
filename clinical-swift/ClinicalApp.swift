@@ -16,20 +16,37 @@ struct ClinicalApp: App {
     @State private var router: Router
     @State private var backups: BackupCoordinator?
     @State private var telemetry: TelemetryCoordinator
+    private let isHostedUnitTest: Bool
     private let startupError: String?
     private let widgetTimelineInvalidator: WidgetTimelineInvalidator?
     private let calendarSyncCoordinator: CalendarSyncCoordinator?
     private let metricKitCollector: MetricKitCollector?
 
+    static var isRunningHostedUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
     init() {
+        let isHostedUnitTest = Self.isRunningHostedUnitTests
+        self.isHostedUnitTest = isHostedUnitTest
+        let router = Router()
+        _router = State(initialValue: router)
+        if isHostedUnitTest {
+            // Skip live database, telemetry, backup, widget, and calendar startup while hosting unit or backup tests.
+            _backups = State(initialValue: nil)
+            _telemetry = State(initialValue: .disabled())
+            widgetTimelineInvalidator = nil
+            calendarSyncCoordinator = nil
+            metricKitCollector = nil
+            startupError = nil
+            return
+        }
         #if DEBUG
-            if CommandLine.arguments.contains(where: { $0.hasPrefix("--ui-testing-") }) {
+            if !AppMotion.isEnabled {
                 // Skip transition animations during UI tests so XCTest idle waits settle immediately.
                 UIView.setAnimationsEnabled(false)
             }
         #endif
-        let router = Router()
-        _router = State(initialValue: router)
         let startup = AppStartup.load(router: router)
         _backups = State(initialValue: startup.backups)
         _telemetry = State(initialValue: startup.telemetry)
@@ -41,90 +58,96 @@ struct ClinicalApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if let startupError {
-                    ContentUnavailableView(
-                        "Data unavailable", systemImage: "externaldrive.badge.exclamationmark",
-                        description: Text(startupError))
-                } else if let backups {
-                    Group {
-                        #if DEBUG
-                            if CommandLine.arguments.contains("--ui-testing-timeline-adjustment") {
-                                TimelineAdjustmentUITestView()
-                            } else if CommandLine.arguments.contains(
-                                "--ui-testing-appointment-hitboxes")
-                            {
-                                AppointmentHitboxUITestView()
-                            } else {
+            if isHostedUnitTest {
+                Color.clear
+            } else {
+                Group {
+                    if let startupError {
+                        ContentUnavailableView(
+                            "Data unavailable", systemImage: "externaldrive.badge.exclamationmark",
+                            description: Text(startupError))
+                    } else if let backups {
+                        Group {
+                            #if DEBUG
+                                if CommandLine.arguments.contains(
+                                    "--ui-testing-timeline-adjustment")
+                                {
+                                    TimelineAdjustmentUITestView()
+                                } else {
+                                    ContentView(router: router)
+                                }
+                            #else
                                 ContentView(router: router)
+                            #endif
+                        }
+                        .environment(backups)
+                        .environment(telemetry)
+                    } else {
+                        #if INTERNAL_BACKUP_CHECK
+                            if BackupCheckAuthorization.isRequested {
+                                BackupCheckAuthorizationView()
                             }
-                        #else
-                            ContentView(router: router)
+                        #endif
+                        #if DEBUG
+                            if CommandLine.arguments.contains("--ui-testing-appointment-hitboxes") {
+                                AppointmentHitboxUITestView()
+                            } else if CommandLine.arguments.contains(
+                                "--ui-testing-widget-perf-setup")
+                                || CommandLine.arguments.contains(
+                                    "--ui-testing-widget-perf-cleanup")
+                            {
+                                Text("Widget Perf Ready")
+                            }
                         #endif
                     }
-                    .environment(backups)
-                    .environment(telemetry)
-                } else {
-                    #if INTERNAL_BACKUP_CHECK
-                        if BackupCheckAuthorization.isRequested {
-                            BackupCheckAuthorizationView()
-                        }
-                    #endif
-                    #if DEBUG
-                        if CommandLine.arguments.contains("--ui-testing-widget-perf-setup")
-                            || CommandLine.arguments.contains("--ui-testing-widget-perf-cleanup")
-                        {
-                            Text("Widget Perf Ready")
-                        }
-                    #endif
                 }
-            }
-            .environment(\.timeZone, ClinicDate.timeZone)
-            .environment(\.calendar, ClinicDate.calendar)
-            .environment(\.locale, ClinicDate.locale)
-            .modifier(ClinicDayModifier())
-            .task {
-                telemetry.handleForeground()
-            }
-            .task {
-                await backups?.opportunity()
-            }
-            .task {
-                await calendarSyncCoordinator?.activate()
-            }
-            .onChange(of: scenePhase) { _, scenePhase in
-                guard backups != nil else { return }
-                @Dependency(\.telemetry) var telemetryClient
-                // The live writer opts into these notifications in
-                // ClinicalSharedDatabase.openWriter.
-                // TODO: Revisit this when building iPad/Mac support
-                // scenePhase does not necessarily indicate whole-app state when there are multiple
-                // windows - scene B could suspend even though scene A still needs the database
-                switch scenePhase {
-                case .active:
-                    NotificationCenter.default.post(
-                        name: Database.resumeNotification,
-                        object: nil
-                    )
-                    backups?.isForeground = true
-                    telemetryClient.event(category: .startup, name: "app_foregrounded")
+                .environment(\.timeZone, ClinicDate.timeZone)
+                .environment(\.calendar, ClinicDate.calendar)
+                .environment(\.locale, ClinicDate.locale)
+                .modifier(ClinicDayModifier())
+                .task {
                     telemetry.handleForeground()
-                    Task { await calendarSyncCoordinator?.activate() }
-                    Task { await backups?.opportunity() }
-                case .background:
-                    backups?.isForeground = false
-                    backups?.cancel()
-                    backups?.scheduleBackground()
-                    telemetryClient.event(category: .startup, name: "app_backgrounded")
-                    telemetry.handleBackground()
-                    NotificationCenter.default.post(
-                        name: Database.suspendNotification,
-                        object: nil
-                    )
-                case .inactive:
-                    break
-                @unknown default:
-                    break
+                }
+                .task {
+                    await backups?.opportunity()
+                }
+                .task {
+                    await calendarSyncCoordinator?.activate()
+                }
+                .onChange(of: scenePhase) { _, scenePhase in
+                    guard backups != nil else { return }
+                    @Dependency(\.telemetry) var telemetryClient
+                    // The live writer opts into these notifications in
+                    // ClinicalSharedDatabase.openWriter.
+                    // TODO: Revisit this when building iPad/Mac support
+                    // scenePhase does not necessarily indicate whole-app state when there are multiple
+                    // windows - scene B could suspend even though scene A still needs the database
+                    switch scenePhase {
+                    case .active:
+                        NotificationCenter.default.post(
+                            name: Database.resumeNotification,
+                            object: nil
+                        )
+                        backups?.isForeground = true
+                        telemetryClient.event(category: .startup, name: "app_foregrounded")
+                        telemetry.handleForeground()
+                        Task { await calendarSyncCoordinator?.activate() }
+                        Task { await backups?.opportunity() }
+                    case .background:
+                        backups?.isForeground = false
+                        backups?.cancel()
+                        backups?.scheduleBackground()
+                        telemetryClient.event(category: .startup, name: "app_backgrounded")
+                        telemetry.handleBackground()
+                        NotificationCenter.default.post(
+                            name: Database.suspendNotification,
+                            object: nil
+                        )
+                    case .inactive:
+                        break
+                    @unknown default:
+                        break
+                    }
                 }
             }
         }
@@ -155,6 +178,10 @@ private struct AppStartup {
                 }
                 if CommandLine.arguments.contains("--ui-testing-widget-perf-cleanup") {
                     cleanupWidgetPerfTest()
+                    return Self()
+                }
+                if CommandLine.arguments.contains("--ui-testing-appointment-hitboxes") {
+                    // Hitbox tests render static in-memory fixtures and need no database or background services.
                     return Self()
                 }
                 // Keep gesture tests away from clinic data and its background integrations.
@@ -256,7 +283,7 @@ private struct AppStartup {
 
         private static func isolatedUITest(router: Router) throws -> Self {
             let database = try prepareDependencies {
-                let database: any DatabaseWriter =
+                let database =
                     try CommandLine.arguments.contains("--ui-testing-appointment-completion")
                     ? AppointmentCompletionUITestData.makeDatabase()
                     : TimelineAdjustmentUITestView.makeDatabase()
@@ -265,6 +292,8 @@ private struct AppStartup {
             }
             if CommandLine.arguments.contains("--completion-open-form") {
                 try AppointmentCompletionUITestData.openForm(router: router, database: database)
+            } else if CommandLine.arguments.contains("--open-appointment-details") {
+                AppointmentCompletionUITestData.openDetails(router: router)
             }
             return Self(
                 backups: BackupCoordinator(

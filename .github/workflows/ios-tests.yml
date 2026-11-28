@@ -67,9 +67,223 @@ jobs:
               core.warning('Runner status check failed; using GitHub macOS.');
             }
 
-  ios-tests:
+  ios-tests-local:
+    name: iOS tests (local)
+    needs: ui-runner
+    if: needs.ui-runner.outputs.local == 'true'
+    runs-on: ${{ fromJSON(needs.ui-runner.outputs.labels) }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare persistent build paths
+        # Keep build state outside checkout because checkout removes untracked files.
+        run: |
+          cache_root="$HOME/ci/clinical-swift/cache/$(xcodebuild -version | shasum -a 256 | cut -c 1-16)"
+          mkdir -p "$cache_root/DerivedData-Debug" \
+            "$cache_root/DerivedData-Debug-Tests-Prebuilt" \
+            "$cache_root/DerivedData-Release" \
+            "$cache_root/PrebuiltDeps" \
+            "$cache_root/SourcePackages"
+          echo "CI_CACHE_ROOT=$cache_root" >> "$GITHUB_ENV"
+          xcodebuild -version
+      - name: Apply Xcode CI setup
+        run: sh ci_scripts/ci_post_clone.sh
+      - name: Check architecture parser parity (macOS)
+        # Architecture CI runs on Linux, so keep the macOS plutil differential check here.
+        run: sh scripts/test_scripts.sh check_architecture
+      - name: Boot test simulator
+        # Let first-boot setup finish before XCTest loads Accessibility.
+        run: |
+          echo 'TEST_DESTINATION=platform=iOS Simulator,name=CI Simulator 1,OS=27.0' >> "$GITHUB_ENV"
+          xcrun simctl bootstatus 'CI Simulator 1' -b
+      - name: Ensure prebuilt Debug dependencies
+        env:
+          XCBEAUTIFY: cat
+        run: |
+          make ensure-prebuilt \
+            CONFIGURATION=Debug \
+            PREBUILT=1 \
+            WITHOUT_WIDGET=0 \
+            DERIVED_DATA="$CI_CACHE_ROOT/DerivedData-Debug" \
+            PREBUILT_DEPS_DIR="$CI_CACHE_ROOT/PrebuiltDeps" \
+            SOURCE_PACKAGES="$CI_CACHE_ROOT/SourcePackages"
+      - name: Build Debug app and tests
+        # Single Debug build produces app, widget, unit tests, and UI tests without TEST_RUNNER_* env noise.
+        run: |
+          xcode_env=(
+            env -i
+            HOME="$HOME"
+            USER="${USER:-$(id -un)}"
+            LOGNAME="${LOGNAME:-${USER:-$(id -un)}}"
+            LANG="en_US.UTF-8"
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+            DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+          )
+          if [[ -n "${TMPDIR:-}" ]]; then
+            xcode_env+=(TMPDIR="$TMPDIR")
+          fi
+          "${xcode_env[@]}" xcodebuild \
+            -project "$CI_CACHE_ROOT/PrebuiltDeps/clinical-swift-prebuilt.xcodeproj" \
+            -scheme clinical-swift \
+            -configuration Debug \
+            -derivedDataPath "$CI_CACHE_ROOT/DerivedData-Debug-Tests-Prebuilt" \
+            -clonedSourcePackagesDirPath "$CI_CACHE_ROOT/SourcePackages" \
+            -destination 'generic/platform=iOS Simulator' \
+            -destination-timeout 120 \
+            -disableAutomaticPackageResolution \
+            -skipPackageUpdates \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_ALLOWED=YES \
+            ENABLE_TESTABILITY=YES \
+            DEBUG_INFORMATION_FORMAT=dwarf \
+            ONLY_ACTIVE_ARCH=YES \
+            ARCHS="$(uname -m)" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO \
+            CLANG_COVERAGE_MAPPING=NO \
+            DEAD_CODE_STRIPPING=NO \
+            ENABLE_PREVIEWS=NO \
+            ENABLE_DEBUG_DYLIB=NO \
+            VALIDATE_PRODUCT=NO \
+            ASSETCATALOG_COMPILER_OPTIMIZATION=time \
+            COMPRESS_PNG_FILES=NO \
+            SWIFT_EMIT_LOC_STRINGS=NO \
+            STRING_CATALOG_GENERATE_SYMBOLS=NO \
+            build-for-testing
+      - name: Run unit tests while building Release backup tests
+        # Overlap canonical Release backup build with Debug unit test execution.
+        run: |
+          rm -rf TestResults-unit.xcresult
+          xcode_env=(
+            env -i
+            HOME="$HOME"
+            USER="${USER:-$(id -un)}"
+            LOGNAME="${LOGNAME:-${USER:-$(id -un)}}"
+            LANG="en_US.UTF-8"
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+            DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+          )
+          if [[ -n "${TMPDIR:-}" ]]; then
+            xcode_env+=(TMPDIR="$TMPDIR")
+          fi
+          "${xcode_env[@]}" xcodebuild \
+            -project clinical-swift.xcodeproj \
+            -scheme clinical-swift-Backups \
+            -configuration Release \
+            -derivedDataPath "$CI_CACHE_ROOT/DerivedData-Release" \
+            -clonedSourcePackagesDirPath "$CI_CACHE_ROOT/SourcePackages" \
+            -destination 'generic/platform=iOS Simulator' \
+            -destination-timeout 120 \
+            -disableAutomaticPackageResolution \
+            -skipPackageUpdates \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_ALLOWED=YES \
+            ENABLE_TESTABILITY=YES \
+            DEBUG_INFORMATION_FORMAT=dwarf \
+            ONLY_ACTIVE_ARCH=YES \
+            ARCHS="$(uname -m)" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO \
+            CLANG_COVERAGE_MAPPING=NO \
+            VALIDATE_PRODUCT=NO \
+            SWIFT_EMIT_LOC_STRINGS=NO \
+            STRING_CATALOG_GENERATE_SYMBOLS=NO \
+            build-for-testing > backup-build.log 2>&1 &
+          backup_build_pid=$!
+
+          unit_status=0
+          "${xcode_env[@]}" xcodebuild \
+            -project "$CI_CACHE_ROOT/PrebuiltDeps/clinical-swift-prebuilt.xcodeproj" \
+            -scheme clinical-swift \
+            -configuration Debug \
+            -derivedDataPath "$CI_CACHE_ROOT/DerivedData-Debug-Tests-Prebuilt" \
+            -destination "$TEST_DESTINATION" \
+            -destination-timeout 120 \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
+            -only-testing:clinical-swiftTests \
+            -resultBundlePath TestResults-unit.xcresult \
+            test-without-building || unit_status=$?
+
+          backup_build_status=0
+          wait "$backup_build_pid" || backup_build_status=$?
+          echo "=== Release backup build log ==="
+          cat backup-build.log
+          if (( unit_status != 0 )); then exit "$unit_status"; fi
+          if (( backup_build_status != 0 )); then exit "$backup_build_status"; fi
+      - name: Run Release backup tests
+        run: |
+          rm -rf TestResults-backup.xcresult
+          xcode_env=(
+            env -i
+            HOME="$HOME"
+            USER="${USER:-$(id -un)}"
+            LOGNAME="${LOGNAME:-${USER:-$(id -un)}}"
+            LANG="en_US.UTF-8"
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+            DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+          )
+          if [[ -n "${TMPDIR:-}" ]]; then
+            xcode_env+=(TMPDIR="$TMPDIR")
+          fi
+          "${xcode_env[@]}" xcodebuild \
+            -project clinical-swift.xcodeproj \
+            -scheme clinical-swift-Backups \
+            -configuration Release \
+            -derivedDataPath "$CI_CACHE_ROOT/DerivedData-Release" \
+            -destination "$TEST_DESTINATION" \
+            -destination-timeout 120 \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
+            -skip-testing:clinical-swiftBackupTests/BackupDriveTests \
+            -resultBundlePath TestResults-backup.xcresult \
+            test-without-building
+      - name: Run UI tests
+        run: |
+          rm -rf TestResults-ui.xcresult
+          xcode_env=(
+            env -i
+            HOME="$HOME"
+            USER="${USER:-$(id -un)}"
+            LOGNAME="${LOGNAME:-${USER:-$(id -un)}}"
+            LANG="en_US.UTF-8"
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+            DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+            TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST=1
+          )
+          if [[ -n "${TMPDIR:-}" ]]; then
+            xcode_env+=(TMPDIR="$TMPDIR")
+          fi
+          "${xcode_env[@]}" xcodebuild \
+            -project "$CI_CACHE_ROOT/PrebuiltDeps/clinical-swift-prebuilt.xcodeproj" \
+            -scheme clinical-swift \
+            -configuration Debug \
+            -derivedDataPath "$CI_CACHE_ROOT/DerivedData-Debug-Tests-Prebuilt" \
+            -destination "$TEST_DESTINATION" \
+            -destination-timeout 120 \
+            -parallel-testing-enabled YES \
+            -parallel-testing-worker-count 5 \
+            -collect-test-diagnostics on-failure \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            -only-testing:clinical-swiftUITests \
+            -resultBundlePath TestResults-ui.xcresult \
+            test-without-building
+      - name: Upload failed test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-local
+          path: TestResults-*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ios-tests-hosted:
     name: ${{ matrix.name }}
     needs: ui-runner
+    if: needs.ui-runner.outputs.local != 'true'
     runs-on: ${{ fromJSON(needs.ui-runner.outputs.labels) }}
     timeout-minutes: 45
     strategy:
@@ -82,6 +296,7 @@ jobs:
             configuration: Debug
             derived_data: DerivedData
             parallel: NO
+            diagnostics: never
           - suite: backup
             name: Local backup tests
             scheme: clinical-swift-Backups
@@ -89,22 +304,22 @@ jobs:
             configuration: Release
             derived_data: DerivedData-Release
             parallel: NO
+            diagnostics: never
           - suite: ui
             name: UI tests
             scheme: clinical-swift-UITests
             configuration: Debug
             derived_data: DerivedData
             parallel: YES
+            diagnostics: on-failure
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: maxim-lobanov/setup-xcode@v1
-        if: needs.ui-runner.outputs.local != 'true'
         with:
           xcode-version: '27.1'
       - name: Cache Xcode package downloads
-        if: needs.ui-runner.outputs.local != 'true'
         uses: actions/cache@v4
         with:
           path: build/SourcePackages
@@ -112,41 +327,28 @@ jobs:
           restore-keys: |
             spm-v1-${{ runner.os }}-${{ runner.arch }}-xcode-27.1-
       - name: Cache Xcode build state
-        if: needs.ui-runner.outputs.local != 'true'
         uses: actions/cache@v4
         with:
           path: build/${{ matrix.derived_data }}
           key: derived-v1-${{ runner.os }}-${{ runner.arch }}-xcode-27.1-${{ matrix.suite }}-${{ matrix.configuration }}-${{ hashFiles('Package.swift', 'clinical-swift.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             derived-v1-${{ runner.os }}-${{ runner.arch }}-xcode-27.1-${{ matrix.suite }}-${{ matrix.configuration }}-
-      - name: Prepare persistent build paths
-        if: needs.ui-runner.outputs.local == 'true'
-        # Keep build state outside checkout because checkout removes untracked files.
-        run: |
-          cache_root="$HOME/ci/clinical-swift/cache/$(xcodebuild -version | shasum -a 256 | cut -c 1-16)"
-          mkdir -p "$cache_root/${{ matrix.derived_data }}" "$cache_root/SourcePackages"
-          echo "CI_CACHE_ROOT=$cache_root" >> "$GITHUB_ENV"
-          xcodebuild -version
       - name: Prepare hosted build paths
-        if: needs.ui-runner.outputs.local != 'true'
         run: echo "CI_CACHE_ROOT=$GITHUB_WORKSPACE/build" >> "$GITHUB_ENV"
       - name: Apply Xcode CI setup
         run: sh ci_scripts/ci_post_clone.sh
+      - name: Check architecture parser parity (macOS)
+        if: matrix.suite == 'unit'
+        # Architecture CI runs on Linux, so keep the macOS plutil differential check here.
+        run: sh scripts/test_scripts.sh check_architecture
       - name: Boot test simulator
         # Let first-boot setup finish before XCTest loads Accessibility.
-        env:
-          USE_LOCAL_RUNNER: ${{ needs.ui-runner.outputs.local }}
         run: |
-          if [[ "$USE_LOCAL_RUNNER" == true ]]; then
-            echo 'TEST_DESTINATION=platform=iOS Simulator,name=CI Simulator 1,OS=27.0' >> "$GITHUB_ENV"
-            xcrun simctl bootstatus 'CI Simulator 1' -b
-          else
-            simulator_id=$(xcrun simctl create 'Clinical CI' \
-              com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
-              com.apple.CoreSimulator.SimRuntime.iOS-27-0)
-            echo "TEST_DESTINATION=platform=iOS Simulator,id=$simulator_id" >> "$GITHUB_ENV"
-            xcrun simctl bootstatus "$simulator_id" -b
-          fi
+          simulator_id=$(xcrun simctl create 'Clinical CI' \
+            com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
+            com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+          echo "TEST_DESTINATION=platform=iOS Simulator,id=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$simulator_id" -b
       - name: Run simulator tests
         # Ad hoc signing preserves Keychain and App Group entitlements without a certificate.
         # Release needs testability for the backup bundle's @testable import.
@@ -156,20 +358,53 @@ jobs:
           TEST_CONFIGURATION: ${{ matrix.configuration }}
           TEST_DERIVED_DATA: ${{ matrix.derived_data }}
           TEST_PARALLEL: ${{ matrix.parallel }}
-          USE_LOCAL_RUNNER: ${{ needs.ui-runner.outputs.local }}
+          TEST_DIAGNOSTICS: ${{ matrix.diagnostics }}
         run: |
           test_options=()
           if [[ "$TEST_SUITE" == backup ]]; then
             test_options+=(-skip-testing:clinical-swiftBackupTests/BackupDriveTests)
           elif [[ "$TEST_SUITE" == ui ]]; then
-            if [[ "$USE_LOCAL_RUNNER" == true ]]; then
-              export TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST=1
-            else
-              # Fresh GitHub-hosted simulators do not have the Daily Timeline widget pinned on Home Screen.
-              test_options+=(-skip-testing:clinical-swiftUITests/DailyTimelineWidgetPerformanceUITests)
-            fi
+            # Fresh GitHub-hosted simulators do not have the Daily Timeline widget pinned on Home Screen.
+            test_options+=(
+              -skip-testing:clinical-swiftUITests/DailyTimelineWidgetPerformanceUITests
+              -test-timeouts-enabled YES
+              -default-test-execution-time-allowance 120
+            )
           fi
-          xcodebuild -project clinical-swift.xcodeproj \
+          # Keep Release backup tests aligned with Release archives; skip extra work only in Debug.
+          if [[ "$TEST_CONFIGURATION" == Debug ]]; then
+            test_options+=(
+              DEAD_CODE_STRIPPING=NO
+              ENABLE_PREVIEWS=NO
+              ENABLE_DEBUG_DYLIB=NO
+              VALIDATE_PRODUCT=NO
+              ASSETCATALOG_COMPILER_OPTIMIZATION=time
+              COMPRESS_PNG_FILES=NO
+              SWIFT_EMIT_LOC_STRINGS=NO
+              STRING_CATALOG_GENERATE_SYMBOLS=NO
+            )
+          else
+            test_options+=(
+              VALIDATE_PRODUCT=NO
+              SWIFT_EMIT_LOC_STRINGS=NO
+              STRING_CATALOG_GENERATE_SYMBOLS=NO
+            )
+          fi
+          # Pin the xcodebuild environment so changing GITHUB_* vars do not bust BuildDescription caches.
+          # Fall back to xcode-select -p so setup-xcode's selected Xcode stays active on hosted runners.
+          xcode_env=(
+            env -i
+            HOME="$HOME"
+            USER="${USER:-$(id -un)}"
+            LOGNAME="${LOGNAME:-${USER:-$(id -un)}}"
+            LANG="en_US.UTF-8"
+            PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+            DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+          )
+          if [[ -n "${TMPDIR:-}" ]]; then
+            xcode_env+=(TMPDIR="$TMPDIR")
+          fi
+          "${xcode_env[@]}" xcodebuild -project clinical-swift.xcodeproj \
             -scheme "$TEST_SCHEME" \
             -configuration "$TEST_CONFIGURATION" \
             -derivedDataPath "$CI_CACHE_ROOT/$TEST_DERIVED_DATA" \
@@ -179,6 +414,7 @@ jobs:
             -disableAutomaticPackageResolution \
             -skipPackageUpdates \
             -parallel-testing-enabled "$TEST_PARALLEL" \
+            -collect-test-diagnostics "$TEST_DIAGNOSTICS" \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_ALLOWED=YES \
@@ -186,6 +422,9 @@ jobs:
             DEBUG_INFORMATION_FORMAT=dwarf \
             ONLY_ACTIVE_ARCH=YES \
             ARCHS="$(uname -m)" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO \
+            CLANG_COVERAGE_MAPPING=NO \
             "${test_options[@]}" test
       - name: Upload failed test results
         if: failure()

@@ -33,14 +33,15 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         rightAppointment.tap()
         XCTAssertEqual(selectionStatus.label, "Selected right appointment")
 
+        let appFrame = app.frame
         let leakedHitboxX = rightAppointment.frame.maxX + 24
-        XCTAssertLessThan(leakedHitboxX, app.frame.maxX)
+        XCTAssertLessThan(leakedHitboxX, appFrame.maxX)
 
         let appOrigin = app.coordinate(withNormalizedOffset: .zero)
         let leakedHitboxArea = appOrigin.withOffset(
             CGVector(
-                dx: leakedHitboxX - app.frame.minX,
-                dy: leftAppointment.frame.midY - app.frame.minY
+                dx: leakedHitboxX - appFrame.minX,
+                dy: leftAppointment.frame.midY - appFrame.minY
             )
         )
         leakedHitboxArea.tap()
@@ -64,10 +65,12 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         XCTAssertEqual(status.label, "Selected middle block")
         right.tap()
         XCTAssertEqual(status.label, "Selected right block")
+        let appFrame = app.frame
+        let rightFrame = right.frame
         app.coordinate(withNormalizedOffset: .zero).withOffset(
             CGVector(
-                dx: right.frame.maxX + 24 - app.frame.minX,
-                dy: right.frame.midY - app.frame.minY
+                dx: rightFrame.maxX + 24 - appFrame.minX,
+                dy: rightFrame.midY - appFrame.minY
             )
         ).tap()
         XCTAssertEqual(status.label, "Selected right block")
@@ -124,10 +127,7 @@ nonisolated final class AppointmentHitboxUITests: XCTestCase {
         app.buttons[draftID].tap()
         XCTAssertTrue(label.hittableOrWait(timeout: 5))
         XCTAssertEqual(label.value as? String, "Draft travel")
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Unavailable time editor"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        TimelineUITestSupport.attach(app, "Unavailable time editor", to: self)
         app.buttons["Back"].tap()
         XCTAssertTrue(app.buttons["Cancel"].hittableOrWait(timeout: 5))
         app.buttons["Cancel"].tap()

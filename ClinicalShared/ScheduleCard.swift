@@ -95,7 +95,8 @@ struct ScheduleCardLift: ViewModifier {
             }
             // Keep the time edges fixed. Height and vertical position communicate the interval.
             .scaleEffect(x: isPressed ? 1 + tuning.lift.width : 1, y: 1)
-            .animation(.smooth(duration: tuning.lift.duration), value: isPressed)
+            .animation(
+                AppMotion.animation(.smooth(duration: tuning.lift.duration)), value: isPressed)
     }
 }
 

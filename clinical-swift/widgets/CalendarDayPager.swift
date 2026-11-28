@@ -60,9 +60,15 @@ struct CalendarDayPager<Content: View>: View {
                         abs(value.translation.width) > 50,
                         abs(value.translation.width) > abs(value.translation.height) * 2
                     else { return }
-                    isScrollActive = true
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        visiblePage = value.translation.width < 0 ? 1 : -1
+                    let nextPage = value.translation.width < 0 ? 1 : -1
+                    if AppMotion.isEnabled {
+                        isScrollActive = true
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            visiblePage = nextPage
+                        }
+                    } else {
+                        // Skip isScrollActive without animation so onChange commits without waiting for scroll idle.
+                        visiblePage = nextPage
                     }
                 }
         )

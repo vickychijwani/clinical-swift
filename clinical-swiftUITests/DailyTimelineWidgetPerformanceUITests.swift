@@ -55,7 +55,7 @@ nonisolated final class DailyTimelineWidgetPerformanceUITests: XCTestCase {
                 todayButton.absentOrWait(timeout: 15),
                 "Widget did not return to Today during setup"
             )
-            _ = measureUntil(timeout: 2.0) { false }
+            _ = measureUntil(timeout: 0.3) { false }
         }
 
         let headerKind = try detectHeaderElementKind(in: springboard, dayOffset: 0)
@@ -113,7 +113,7 @@ nonisolated final class DailyTimelineWidgetPerformanceUITests: XCTestCase {
             )
 
             // Let any trailing system work settle briefly before the next measured tap.
-            _ = measureUntil(timeout: 1.0) { false }
+            _ = measureUntil(timeout: 0.3) { false }
         }
 
         let afterTapValues = measurements.map(\.afterTapMS).sorted()

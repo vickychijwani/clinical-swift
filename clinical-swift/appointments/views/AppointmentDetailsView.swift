@@ -240,7 +240,7 @@ struct AppointmentDetailsActionsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.smooth(duration: 0.28), value: showsActions)
+        .animation(AppMotion.animation(.smooth(duration: 0.28)), value: showsActions)
     }
 }
 

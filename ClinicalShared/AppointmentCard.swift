@@ -23,8 +23,8 @@ struct AppointmentCard: View {
             contentTrailingInset: contentTrailingInset,
             presentation: presentation
         )
-        .animation(.easeInOut(duration: 0.2), value: appt.status)
-        .animation(.smooth(duration: 0.2), value: isSelected)
+        .animation(AppMotion.animation(.easeInOut(duration: 0.2)), value: appt.status)
+        .animation(AppMotion.animation(.smooth(duration: 0.2)), value: isSelected)
     }
 
     private var appearance: ScheduleCard.Appearance {

@@ -81,13 +81,7 @@ struct ToastOverlayModifier: ViewModifier {
     let store: ToastStore
     var placement: ToastPlacement = .bottom()
 
-    private var animates: Bool {
-        #if DEBUG
-            !CommandLine.arguments.contains(where: { $0.hasPrefix("--ui-testing-") })
-        #else
-            true
-        #endif
-    }
+    private var animates: Bool { AppMotion.isEnabled }
 
     func body(content: Content) -> some View {
         let layout = placement.layout

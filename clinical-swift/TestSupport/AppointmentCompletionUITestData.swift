@@ -9,6 +9,11 @@
     enum AppointmentCompletionUITestData {
         static let saveGate = UITestSaveGate()
 
+        static func openDetails(router: Router) {
+            let id = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10))
+            router.openAppointment(id: id)
+        }
+
         static func openForm(router: Router, database: any DatabaseReader) throws {
             let id = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10))
             guard
@@ -28,30 +33,7 @@
             let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
             try migrateDatabase(database)
             try database.write { db in
-                let patientID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1))
-                let unknown = CommandLine.arguments.contains("--completion-unknown-patient")
-                try PatientRecord.insert {
-                    PatientRecord(
-                        id: patientID, name: unknown ? nil : "Test Patient", phone: nil,
-                        dob: nil, gender: nil, createdAt: .now, updatedAt: .now)
-                }.execute(db)
-                let appointmentID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10))
-                let appointment = try AppointmentRecord.persisted(
-                    id: appointmentID, patientID: patientID, start: Date.now.setTime(12, 0),
-                    durationMinutes: 30, status: .scheduled, createdAt: .now, updatedAt: .now)
-                try AppointmentRecord.insert { appointment }.execute(db)
-                if CommandLine.arguments.contains("--completion-credit-conflict") {
-                    try saveAccountEntries(
-                        .init(inserts: [
-                            AccountEntry(
-                                details: .charge(
-                                    patientID: patientID, appointmentID: appointmentID),
-                                amount: 1500),
-                            AccountEntry(
-                                details: .receipt(source: .patient(patientID), paymentMethod: nil),
-                                amount: 500),
-                        ]), in: db)
-                }
+                try seed(in: db)
             }
             if CommandLine.arguments.contains("--completion-gated-save") {
                 // Hold the real save while UI tests check its disabled controls.
@@ -60,6 +42,33 @@
                 return GatedDatabaseWriter(base: database, gate: saveGate)
             }
             return database
+        }
+
+        static func seed(in db: Database) throws {
+            let patientID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1))
+            let unknown = CommandLine.arguments.contains("--completion-unknown-patient")
+            try PatientRecord.insert {
+                PatientRecord(
+                    id: patientID, name: unknown ? nil : "Test Patient", phone: nil,
+                    dob: nil, gender: nil, createdAt: .now, updatedAt: .now)
+            }.execute(db)
+            let appointmentID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10))
+            let appointment = try AppointmentRecord.persisted(
+                id: appointmentID, patientID: patientID, start: Date.now.setTime(12, 0),
+                durationMinutes: 30, status: .scheduled, createdAt: .now, updatedAt: .now)
+            try AppointmentRecord.insert { appointment }.execute(db)
+            if CommandLine.arguments.contains("--completion-credit-conflict") {
+                try saveAccountEntries(
+                    .init(inserts: [
+                        AccountEntry(
+                            details: .charge(
+                                patientID: patientID, appointmentID: appointmentID),
+                            amount: 1500),
+                        AccountEntry(
+                            details: .receipt(source: .patient(patientID), paymentMethod: nil),
+                            amount: 500),
+                    ]), in: db)
+            }
         }
     }
 #endif

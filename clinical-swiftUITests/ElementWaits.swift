@@ -41,7 +41,9 @@ extension XCUIElement {
     @MainActor
     func valueContainsOrWait(_ text: String, timeout: TimeInterval) -> Bool {
         waitUntil(timeout: timeout) {
-            exists && (value as? String)?.contains(text) == true
+            // Read existence and value in one snapshot instead of two IPC round-trips per poll.
+            guard let snap = try? snapshot() else { return false }
+            return (snap.value as? String)?.contains(text) == true
         }
     }
 }

@@ -4,26 +4,38 @@ nonisolated final class TrayUITests: XCTestCase {
     private let appointmentID = "appointment-00000000-0000-0000-0000-00000000000A"
 
     @MainActor
-    private func launch(_ arguments: [String] = []) -> XCUIApplication {
+    private func launchDetails(_ arguments: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments =
+            ["--ui-testing-appointment-completion", "--open-appointment-details"] + arguments
+        app.launch()
+        let bar = app.navigationBars["Appointment"]
+        if arguments.contains("--ui-testing-normal-motion") {
+            XCTAssertTrue(bar.stableFrameOrWait(timeout: 5))
+        } else {
+            XCTAssertTrue(bar.hittableOrWait(timeout: 5))
+        }
+        return app
+    }
+
+    @MainActor
+    private func launchSchedule(_ arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing-appointment-completion"] + arguments
         app.launch()
-        let appointment = app.buttons[appointmentID]
-        XCTAssertTrue(appointment.hittableOrWait(timeout: 5))
-        appointment.tap()
-        XCTAssertTrue(app.navigationBars["Appointment"].stableFrameOrWait(timeout: 5))
+        XCTAssertTrue(app.buttons[appointmentID].hittableOrWait(timeout: 5))
         return app
     }
 
     @MainActor
     func testDetailsNavigationKeepsTheSameSurfaceAndHeight() {
-        let app = launch()
+        let app = launchDetails()
         let original = app.navigationBars["Appointment"].frame
         app.buttons["View Patient"].tap()
-        XCTAssertTrue(app.navigationBars["Patient Details"].stableFrameOrWait(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Patient Details"].hittableOrWait(timeout: 3))
         XCTAssertEqual(app.navigationBars["Patient Details"].frame.minY, original.minY, accuracy: 1)
         app.navigationBars.buttons["BackButton"].tap()
-        XCTAssertTrue(app.navigationBars["Appointment"].stableFrameOrWait(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Appointment"].hittableOrWait(timeout: 3))
         XCTAssertEqual(app.navigationBars["Appointment"].frame.minY, original.minY, accuracy: 1)
         app.buttons["Close"].tap()
         XCTAssertTrue(app.navigationBars["Appointment"].absentOrWait(timeout: 3))
@@ -31,7 +43,7 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testKeyboardKeepsCompletionActionsReachableAndBlocksOutsideDismissal() {
-        let app = launch()
+        let app = launchDetails()
         app.buttons["Complete"].tap()
         app.textFields["completion-amount"].tap()
         app.textFields["completion-amount"].typeText("1")
@@ -47,11 +59,11 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testPatientOptionalFieldsAreVisibleByDefaultAndFitWithoutScrolling() {
-        let app = launch()
+        let app = launchDetails()
         app.buttons["View Patient"].tap()
         app.buttons["Edit Patient"].tap()
         let bar = app.navigationBars["Edit Patient"]
-        XCTAssertTrue(bar.stableFrameOrWait(timeout: 5))
+        XCTAssertTrue(bar.hittableOrWait(timeout: 5))
         XCTAssertTrue(app.staticTexts["Optional details"].exists)
         XCTAssertFalse(app.buttons["Optional details"].exists)
         XCTAssertTrue(app.textFields["Name"].isHittable)
@@ -63,14 +75,18 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testPatientChildCancellationPreservesTheDraftAndDismissalBoundary() {
-        let app = launch()
+        let app = launchDetails()
         app.buttons["View Patient"].tap()
         app.buttons["Edit Patient"].tap()
         let name = app.textFields["Name"]
         XCTAssertTrue(name.hittableOrWait(timeout: 5))
         name.tap()
         name.typeText(" Updated")
-        app.buttons["Date of birth, Add"].tap()
+        // Wait for the remote keyboard to present and shift the tray before tapping the DOB row.
+        _ = app.keyboards.firstMatch.existsOrWait(timeout: 2)
+        let dob = app.buttons["Date of birth, Add"]
+        XCTAssertTrue(dob.stableFrameOrWait(timeout: 3))
+        dob.tap()
         XCTAssertTrue(app.navigationBars["Date of birth"].hittableOrWait(timeout: 3))
         XCTAssertFalse(app.navigationBars["Edit Patient"].isHittable)
         record(app, name: "patient-dob-child")
@@ -122,9 +138,7 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testSettingsUsesTheTrayAndCloses() {
-        let app = launch()
-        app.buttons["Close"].tap()
-        XCTAssertTrue(app.navigationBars["Appointment"].absentOrWait(timeout: 3))
+        let app = launchSchedule()
         triggerShake()
         XCTAssertTrue(app.navigationBars["Settings"].hittableOrWait(timeout: 3))
         XCTAssertTrue(app.otherElements["tray-surface"].exists)
@@ -135,9 +149,7 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testBackupWarningButtonShowsAcrossTabsAndOpensSettings() {
-        let app = launch()
-        app.buttons["Close"].tap()
-        XCTAssertTrue(app.navigationBars["Appointment"].absentOrWait(timeout: 3))
+        let app = launchSchedule()
         XCTAssertTrue(app.buttons["Settings"].hittableOrWait(timeout: 3))
         app.tabBars.buttons["Patients"].tap()
         XCTAssertTrue(app.navigationBars["Patients"].hittableOrWait(timeout: 3))
@@ -170,7 +182,7 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testMessageBlocksBothInteractiveDismissalActions() {
-        let app = launch()
+        let app = launchDetails()
         app.buttons["Send Appointment Confirmation"].tap()
         let bar = app.navigationBars["Send Message"]
         XCTAssertTrue(bar.hittableOrWait(timeout: 3))
@@ -184,7 +196,7 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testHeaderSwipeClosesCleanDetails() {
-        let app = launch()
+        let app = launchDetails()
         let bar = app.navigationBars["Appointment"]
         swipeHeader(bar, in: app)
         XCTAssertTrue(bar.absentOrWait(timeout: 3))
@@ -193,21 +205,26 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testShortHeaderDragReturnsToTheSameHeight() {
-        let app = launch()
+        // Keep normal motion on this check so animated tray spring return remains covered.
+        let app = launchDetails(["--ui-testing-normal-motion"])
         let bar = app.navigationBars["Appointment"]
         let original = bar.frame
-        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.1))
+        let start = app.coordinate(withNormalizedOffset: .zero).withOffset(
+            CGVector(
+                dx: original.minX + original.width * 0.7,
+                dy: original.minY + original.height * 0.1
+            ))
         start.press(
             forDuration: 0.05,
             thenDragTo: start.withOffset(CGVector(dx: 0, dy: 30)),
             withVelocity: .slow, thenHoldForDuration: 0.2)
-        XCTAssertTrue(bar.exists)
+        XCTAssertTrue(bar.stableFrameOrWait(timeout: 3))
         XCTAssertEqual(bar.frame.minY, original.minY, accuracy: 1)
     }
 
     @MainActor
     func testOutsideTapClosesCleanDetailsAndDoesNotTapTheSchedule() {
-        let app = launch()
+        let app = launchDetails()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.2)).tap()
         XCTAssertTrue(app.navigationBars["Appointment"].absentOrWait(timeout: 3))
         XCTAssertTrue(app.buttons[appointmentID].isHittable)
@@ -216,7 +233,7 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testOutsideTapClosesDetailsAndDiscardsDraftDirectly() {
-        let app = launch()
+        let app = launchDetails()
         app.buttons["Complete"].tap()
         app.textFields["completion-amount"].typeText("1000")
         app.navigationBars.buttons["BackButton"].tap()
@@ -227,7 +244,7 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     func testContentScrollDoesNotDismissAndEditorHandoffWorks() {
-        let app = launch()
+        let app = launchDetails()
         app.buttons["View Patient"].tap()
         let bar = app.navigationBars["Patient Details"]
         XCTAssertTrue(bar.existsOrWait(timeout: 3))
@@ -244,7 +261,7 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     private func swipeHeader(_ bar: XCUIElement, in app: XCUIApplication) {
-        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.1))
+        let start = TimelineUITestSupport.coordinate(in: app, of: bar, dx: 0.7, dy: 0.1)
         start.press(
             forDuration: 0.05,
             thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95)))
@@ -252,9 +269,6 @@ nonisolated final class TrayUITests: XCTestCase {
 
     @MainActor
     private func record(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        TimelineUITestSupport.attach(app, name, to: self)
     }
 }
