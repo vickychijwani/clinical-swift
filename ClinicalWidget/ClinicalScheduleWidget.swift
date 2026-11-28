@@ -27,8 +27,8 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
             let now = Date.now
             var entries: [TelemetryEntry] = []
             let entry = liveEntry(at: now, source: "snapshot", entries: &entries)
-            flushWidgetTelemetry(entries, at: now)
             completion(entry)
+            flushWidgetTelemetry(entries, at: now)
         }
     }
 
@@ -39,7 +39,6 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
         let now = Date.now
         var entries: [TelemetryEntry] = []
         let entry = liveEntry(at: now, source: "timeline", entries: &entries)
-        flushWidgetTelemetry(entries, at: now)
         let nextRefresh =
             switch entry.content {
             case .schedule(let snapshot):
@@ -51,7 +50,9 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
                     to: entry.date
                 ) ?? entry.date.addingTimeInterval(30 * 60)
             }
+        // Hand the timeline to WidgetKit before writing the telemetry segment so disk I/O stays off the refresh path.
         completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
+        flushWidgetTelemetry(entries, at: now)
     }
 
     private func liveEntry(
@@ -105,18 +106,6 @@ nonisolated struct ClinicalScheduleProvider: TimelineProvider {
                 ))
             return ClinicalScheduleEntry(date: date, content: .unavailable)
         }
-    }
-
-    private func flushWidgetTelemetry(_ entries: [TelemetryEntry], at date: Date) {
-        guard !entries.isEmpty,
-            let directory = TelemetrySpool.defaultDirectory()
-        else { return }
-        // Widget runs collect records in memory and write one immutable segment atomically.
-        let settings = TelemetrySettingsStore()
-        let builder = TelemetryRecordBuilder(process: .widget, settings: settings)
-        let records = entries.map { builder.makeRecord(from: $0, now: date) }
-        let spool = TelemetrySpool(directory: directory)
-        spool.writeWidgetSegment(records, now: date)
     }
 
     fileprivate func sampleEntry(

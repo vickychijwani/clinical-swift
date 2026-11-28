@@ -101,18 +101,6 @@ nonisolated enum DailyTimelineTapMetrics {
                 + Double(elapsed.components.attoseconds) / 1e15).rounded()
         )
     }
-
-    static func flushWidgetTelemetry(_ entries: [TelemetryEntry], at date: Date) {
-        guard !entries.isEmpty,
-            let directory = TelemetrySpool.defaultDirectory()
-        else { return }
-        // Widget runs collect records in memory and write one immutable segment atomically.
-        let settings = TelemetrySettingsStore()
-        let builder = TelemetryRecordBuilder(process: .widget, settings: settings)
-        let records = entries.map { builder.makeRecord(from: $0, now: date) }
-        let spool = TelemetrySpool(directory: directory)
-        spool.writeWidgetSegment(records, now: date)
-    }
 }
 
 nonisolated enum DailyTimelineEntryContent: Sendable {
@@ -167,13 +155,13 @@ nonisolated struct DailyTimelineProvider: TimelineProvider {
             source: "daily_timeline_snapshot",
             entries: &entries
         )
-        DailyTimelineTapMetrics.flushWidgetTelemetry(entries, at: realNow)
         let entry = DailyTimelineEntry(
             date: realNow,
             displayDate: simulatedNow,
             content: snapshot.map(DailyTimelineEntryContent.day) ?? .unavailable
         )
         completion(entry)
+        flushWidgetTelemetry(entries, at: realNow)
     }
 
     func getTimeline(
@@ -257,7 +245,7 @@ nonisolated struct DailyTimelineProvider: TimelineProvider {
         }
         // Hand the timeline to WidgetKit before writing the telemetry segment so disk I/O stays off the tap path.
         completion(Timeline(entries: entries, policy: .after(plan.reloadDate)))
-        DailyTimelineTapMetrics.flushWidgetTelemetry(telemetryEntries, at: realNow)
+        flushWidgetTelemetry(telemetryEntries, at: realNow)
     }
 
     private func loadSnapshot(
