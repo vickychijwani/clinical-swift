@@ -102,14 +102,52 @@ private func runUnitTests(repoRoot: URL) throws {
         repoRoot: tmp,
         derivedData: tmp.appendingPathComponent("dd"),
         outputDir: tmp.appendingPathComponent("out"),
+        sourcePackages: tmp.appendingPathComponent("SourcePackages"),
         simulatorID: "SIM-123",
-        developerDir: "/Applications/Xcode.app/Contents/Developer"
+        developerDir: "/Applications/Xcode.app/Contents/Developer",
+        withoutWidget: true
     )
     let warmArgs = canonicalWarmMakeArguments(request: dummyReq)
     try expect(warmArgs.contains("SIMULATOR_NAME="), "Nested make must clear SIMULATOR_NAME.")
     try expect(
         warmArgs.contains("EXTRA_BUILD_FLAGS="),
         "Nested make must clear EXTRA_BUILD_FLAGS."
+    )
+    try expect(
+        warmArgs.contains("CONFIGURATION=Debug"),
+        "Nested make must stay Debug-only."
+    )
+    try expect(
+        warmArgs.contains("WITHOUT_WIDGET=0"),
+        "Nested make must build with widget so widget deps stay canonical."
+    )
+
+    let movedOutputBase = try computeFingerprints(
+        repoRoot: tmp,
+        xcodeVersion: "27.2-27B52",
+        outputRelativePath: "../shared/PrebuiltDeps",
+        projectDirPath: "../../repo"
+    )
+    try expect(
+        movedOutputBase.deps == base.deps,
+        "Output path change must keep deps fingerprint stable."
+    )
+    try expect(
+        movedOutputBase.project != base.project,
+        "Output path change must invalidate project fingerprint."
+    )
+    let noWidgetBase = try computeFingerprints(
+        repoRoot: tmp,
+        xcodeVersion: "27.2-27B52",
+        withoutWidget: true
+    )
+    try expect(
+        noWidgetBase.deps == base.deps,
+        "withoutWidget toggle must keep deps fingerprint stable."
+    )
+    try expect(
+        noWidgetBase.project != base.project,
+        "withoutWidget toggle must invalidate project fingerprint."
     )
 
     // Atomic writer creates and replaces existing files cleanly.
@@ -220,6 +258,38 @@ private func runUnitTests(repoRoot: URL) throws {
     try Data(rewritten.utf8).write(to: lintTarget)
     try runCommand(["plutil", "-lint", lintTarget.path])
 
+    try expect(
+        rewritten.contains("-Wl,-export_dynamic"),
+        "Rewritten pbxproj must export dynamic symbols for BUNDLE_LOADER tests."
+    )
+    try expect(
+        rewritten.contains("-Wl,-force_load,$(BUILT_PRODUCTS_DIR)/libClinicalModels.a"),
+        "Rewritten pbxproj must force-load libClinicalModels.a."
+    )
+    try expect(
+        rewritten.contains("-Wl,-force_load,$(BUILT_PRODUCTS_DIR)/libClinicalPersistence.a"),
+        "Rewritten pbxproj must force-load libClinicalPersistence.a."
+    )
+
+    let rewrittenNoWidget = try rewriteProjectForPrebuilt(
+        canonicalPBXProj: realPBX,
+        outputRelativePath: "build/PrebuiltDeps",
+        projectDirPath: "../..",
+        resourceBundles: PrebuiltModules.resourceBundles,
+        withoutWidget: true
+    )
+    try expect(
+        !rewrittenNoWidget.contains("B2000000000000000000000E /* PBXTargetDependency */,"),
+        "withoutWidget pbxproj must drop widget dependency from clinical-swift."
+    )
+    try expect(
+        !rewrittenNoWidget.contains("B2000000000000000000000B /* Embed Foundation Extensions */,"),
+        "withoutWidget pbxproj must drop widget embed phase from clinical-swift."
+    )
+    let noWidgetLintTarget = tmp.appendingPathComponent("rewritten-nowidget.pbxproj")
+    try Data(rewrittenNoWidget.utf8).write(to: noWidgetLintTarget)
+    try runCommand(["plutil", "-lint", noWidgetLintTarget.path])
+
     // Scheme rewrite updates container references to the generated project relative to projectDirPath.
     let realScheme = try String(
         contentsOf: repoRoot.appendingPathComponent(
@@ -227,7 +297,7 @@ private func runUnitTests(repoRoot: URL) throws {
         ),
         encoding: .utf8
     )
-    let rewrittenScheme = rewriteSchemeForPrebuilt(
+    let rewrittenScheme = try rewriteSchemeForPrebuilt(
         realScheme,
         prebuiltProjectRelativePath: "build/PrebuiltDeps/clinical-swift-prebuilt.xcodeproj"
     )
@@ -236,8 +306,81 @@ private func runUnitTests(repoRoot: URL) throws {
         "Rewritten scheme must not point to canonical project."
     )
     try expect(
-        rewrittenScheme.contains("container:build/PrebuiltDeps/clinical-swift-prebuilt.xcodeproj"),
+        rewrittenScheme.contains(
+            "container:build/PrebuiltDeps/clinical-swift-prebuilt.xcodeproj"),
         "Rewritten scheme must point to prebuilt project."
+    )
+    let rewrittenSchemeNoWidget = try rewriteSchemeForPrebuilt(
+        realScheme,
+        prebuiltProjectRelativePath:
+            "build/PrebuiltDeps/clinical-swift-prebuilt-nowidget.xcodeproj",
+        withoutWidget: true
+    )
+    try expect(
+        !rewrittenSchemeNoWidget.contains("ClinicalWidgetExtension.appex"),
+        "withoutWidget scheme must drop ClinicalWidgetExtension build entry."
+    )
+
+    // LinkFileList parsing preserves spaces inside object paths.
+    let linkListSample = """
+        /Users/dev/My Project/Build/Module A.o
+        "/Users/dev/My Project/Build/Quoted \\"Name\\".o"
+
+        /Users/dev/simple.o\r
+        """
+    try expect(
+        parseLinkFileList(linkListSample) == [
+            "/Users/dev/My Project/Build/Module A.o",
+            "/Users/dev/My Project/Build/Quoted \"Name\".o",
+            "/Users/dev/simple.o",
+        ],
+        "parseLinkFileList must preserve spaces and unescape quoted paths."
+    )
+
+    // Canonical Makefile build settings must bust deps fingerprint while unrelated targets do not.
+    let makefilePath = tmp.appendingPathComponent("Makefile")
+    try Data(
+        """
+        CLI_COMMON_BUILD_SETTINGS := COMPILER_INDEX_STORE_ENABLE=NO
+        DEBUG_SIM_FAST_BUILD_SETTINGS := \\
+        \tENABLE_PREVIEWS=NO \\
+        \tENABLE_DEBUG_DYLIB=NO
+        help:
+        \t@echo "v1"
+        """.utf8
+    ).write(to: makefilePath)
+    let fpMake1 = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.2-27B52")
+    try Data(
+        """
+        CLI_COMMON_BUILD_SETTINGS := COMPILER_INDEX_STORE_ENABLE=NO
+        DEBUG_SIM_FAST_BUILD_SETTINGS := \\
+        \tENABLE_PREVIEWS=NO \\
+        \tENABLE_DEBUG_DYLIB=NO
+        help:
+        \t@echo "v2"
+        """.utf8
+    ).write(to: makefilePath)
+    let fpMakeHelpOnly = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.2-27B52")
+    try expect(
+        fpMake1.deps == fpMakeHelpOnly.deps,
+        "Unrelated Makefile target edits must not bust deps fingerprint."
+    )
+    try Data(
+        """
+        CLI_COMMON_BUILD_SETTINGS := COMPILER_INDEX_STORE_ENABLE=NO
+        DEBUG_SIM_FAST_BUILD_SETTINGS := \\
+        \tENABLE_PREVIEWS=YES \\
+        \tENABLE_DEBUG_DYLIB=NO
+        help:
+        \t@echo "v2"
+        """.utf8
+    ).write(to: makefilePath)
+    let fpMakeSettingChanged = try computeFingerprints(
+        repoRoot: tmp, xcodeVersion: "27.2-27B52"
+    )
+    try expect(
+        fpMake1.deps != fpMakeSettingChanged.deps,
+        "Changing canonical Makefile build settings must bust deps fingerprint."
     )
 }
 

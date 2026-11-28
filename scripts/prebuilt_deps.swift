@@ -7,7 +7,14 @@ struct PrebuiltDepsError: Error, CustomStringConvertible {
 }
 
 enum PrebuiltModules {
-    static let schemaVersion = "v2"
+    static let schemaVersion = "v3"
+
+    static let schemes: [String] = [
+        "clinical-swift.xcscheme",
+        "clinical-swift-UnitTests.xcscheme",
+        "clinical-swift-UITests.xcscheme",
+        "clinical-swift-Backups.xcscheme",
+    ]
 
     // Prebuild third-party SPM modules only; ClinicalModels and ClinicalPersistence compile natively.
     static let thirdParty: [String] = [
@@ -103,8 +110,19 @@ struct PrebuiltEnsureRequest {
     let repoRoot: URL
     let derivedData: URL
     let outputDir: URL
+    let sourcePackages: URL
     let simulatorID: String
     let developerDir: String
+    let withoutWidget: Bool
+
+    var projectName: String {
+        withoutWidget
+            ? "clinical-swift-prebuilt-nowidget.xcodeproj" : "clinical-swift-prebuilt.xcodeproj"
+    }
+
+    var projectFingerprintFilename: String {
+        withoutWidget ? "project-nowidget.fingerprint" : "project.fingerprint"
+    }
 }
 
 private func hexDigest(_ hasher: SHA256) -> String {
@@ -143,9 +161,73 @@ func currentHostArch() -> String {
     #endif
 }
 
+func canonicalBuildRecipe(from makefileText: String) -> String {
+    let trackedKeys: Set<String> = [
+        "XCODEBUILD_ENV",
+        "XCODEBUILD_APP_FLAGS",
+        "CLI_COMMON_BUILD_SETTINGS",
+        "DEBUG_SIM_FAST_BUILD_SETTINGS",
+        "DEBUG_FAST_BUILD_SETTINGS",
+        "SIMULATOR_BUILD_SETTINGS",
+        "XCODEBUILD_FLAGS",
+    ]
+    let lines = makefileText.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        .map(String.init)
+    var captured: [String] = []
+    var inContinuation = false
+    for line in lines {
+        if inContinuation {
+            captured.append(line)
+            inContinuation = line.hasSuffix("\\")
+            continue
+        }
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if let key = trackedKeys.first(where: {
+            trimmed.hasPrefix("\($0) :=") || trimmed.hasPrefix("\($0) =")
+                || trimmed.hasPrefix("\($0) +=") || trimmed.hasPrefix("\($0) ?=")
+        }) {
+            _ = key
+            captured.append(line)
+            inContinuation = line.hasSuffix("\\")
+        }
+    }
+    return captured.joined(separator: "\n")
+}
+
+func parseLinkFileList(_ text: String) -> [String] {
+    var paths: [String] = []
+    for rawLine in text.split(whereSeparator: \.isNewline) {
+        let trimmed = rawLine.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+        guard !trimmed.isEmpty else { continue }
+        if trimmed.hasPrefix("\""), trimmed.hasSuffix("\""), trimmed.count >= 2 {
+            let inner = trimmed.dropFirst().dropLast()
+            var unescaped = ""
+            var escaping = false
+            for ch in inner {
+                if escaping {
+                    unescaped.append(ch)
+                    escaping = false
+                } else if ch == "\\" {
+                    escaping = true
+                } else {
+                    unescaped.append(ch)
+                }
+            }
+            if escaping { unescaped.append("\\") }
+            paths.append(unescaped)
+        } else {
+            paths.append(trimmed)
+        }
+    }
+    return paths
+}
+
 func computeFingerprints(
     repoRoot: URL,
     xcodeVersion: String,
+    outputRelativePath: String = "",
+    projectDirPath: String = "",
+    withoutWidget: Bool = false,
     arch: String = currentHostArch()
 ) throws -> PrebuiltFingerprints {
     var depsHasher = SHA256()
@@ -159,7 +241,17 @@ func computeFingerprints(
         data: Data("MACROS:\(PrebuiltModules.macros.joined(separator: ","))\n".utf8)
     )
 
-    // Sources/ compiles natively in the generated project, so only package/Xcode changes bust deps.
+    // Sources/ compiles natively in the generated project, so only package/Xcode/script/build-recipe changes bust deps.
+    try hashFileIfPresent(
+        at: repoRoot.appendingPathComponent("scripts/prebuilt_deps.swift"),
+        label: "scripts/prebuilt_deps.swift",
+        into: &depsHasher
+    )
+    let makefileURL = repoRoot.appendingPathComponent("Makefile")
+    if let makefileText = try? String(contentsOf: makefileURL, encoding: .utf8) {
+        let recipe = canonicalBuildRecipe(from: makefileText)
+        depsHasher.update(data: Data("MAKEFILE_RECIPE:\n\(recipe)\n".utf8))
+    }
     try hashFileIfPresent(
         at: repoRoot.appendingPathComponent("Package.swift"),
         label: "Package.swift",
@@ -182,18 +274,23 @@ func computeFingerprints(
 
     var projectHasher = SHA256()
     projectHasher.update(data: Data("DEPS:\(depsHash)\n".utf8))
+    projectHasher.update(data: Data("WITHOUT_WIDGET:\(withoutWidget)\n".utf8))
+    projectHasher.update(data: Data("OUTPUT_REL:\(outputRelativePath)\n".utf8))
+    projectHasher.update(data: Data("PROJECT_DIR:\(projectDirPath)\n".utf8))
     try hashFileIfPresent(
         at: repoRoot.appendingPathComponent("clinical-swift.xcodeproj/project.pbxproj"),
         label: "project.pbxproj",
         into: &projectHasher
     )
-    try hashFileIfPresent(
-        at: repoRoot.appendingPathComponent(
-            "clinical-swift.xcodeproj/xcshareddata/xcschemes/clinical-swift.xcscheme"
-        ),
-        label: "clinical-swift.xcscheme",
-        into: &projectHasher
-    )
+    for scheme in PrebuiltModules.schemes {
+        try hashFileIfPresent(
+            at: repoRoot.appendingPathComponent(
+                "clinical-swift.xcodeproj/xcshareddata/xcschemes/\(scheme)"
+            ),
+            label: scheme,
+            into: &projectHasher
+        )
+    }
 
     return PrebuiltFingerprints(deps: depsHash, project: hexDigest(projectHasher))
 }
@@ -230,7 +327,8 @@ func rewriteProjectForPrebuilt(
     canonicalPBXProj: String,
     outputRelativePath: String,
     projectDirPath: String,
-    resourceBundles: [String]
+    resourceBundles: [String],
+    withoutWidget: Bool = false
 ) throws -> String {
     var text = canonicalPBXProj
 
@@ -295,7 +393,6 @@ func rewriteProjectForPrebuilt(
         "\t\t\(LocalTargetIDs.modelsLinkInApp) /* libClinicalModels.a in Frameworks */ = {isa = PBXBuildFile; fileRef = \(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */; };",
         "\t\t\(LocalTargetIDs.persistenceLinkInApp) /* libClinicalPersistence.a in Frameworks */ = {isa = PBXBuildFile; fileRef = \(LocalTargetIDs.persistenceProduct) /* libClinicalPersistence.a */; };",
         "\t\t\(LocalTargetIDs.modelsLinkInWidget) /* libClinicalModels.a in Frameworks */ = {isa = PBXBuildFile; fileRef = \(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */; };",
-        "\t\t\(LocalTargetIDs.modelsLinkInPersistence) /* libClinicalModels.a in Frameworks */ = {isa = PBXBuildFile; fileRef = \(LocalTargetIDs.modelsProduct) /* libClinicalModels.a */; };",
     ]
 
     var appFrameworkEntries: [String] = [
@@ -306,9 +403,8 @@ func rewriteProjectForPrebuilt(
         "\t\t\t\t\(LocalTargetIDs.modelsLinkInWidget) /* libClinicalModels.a in Frameworks */,"
     ]
     var modelsFrameworkEntries: [String] = []
-    var persistenceFrameworkEntries: [String] = [
-        "\t\t\t\t\(LocalTargetIDs.modelsLinkInPersistence) /* libClinicalModels.a in Frameworks */,"
-    ]
+    // Omit libClinicalModels.a here (modelsDependency preserves build order) so -force_load on both archives never duplicates symbols.
+    var persistenceFrameworkEntries: [String] = []
     var appResourceEntries: [String] = []
 
     for (offset, mod) in PrebuiltModules.thirdParty.enumerated() {
@@ -680,16 +776,33 @@ func rewriteProjectForPrebuilt(
     text = productsChildren.result
 
     // Add target dependencies so Xcode builds ClinicalModels and ClinicalPersistence before app & widget.
+    let appDepReplacement =
+        withoutWidget
+        ? "\t\t\t\t\(LocalTargetIDs.modelsDependency) /* PBXTargetDependency */,\n\t\t\t\t\(LocalTargetIDs.persistenceDependency) /* PBXTargetDependency */,\n"
+        : "$1\t\t\t\t\(LocalTargetIDs.modelsDependency) /* PBXTargetDependency */,\n\t\t\t\t\(LocalTargetIDs.persistenceDependency) /* PBXTargetDependency */,\n"
     let appDeps = try regexReplace(
         in: text,
         pattern: #"(B2000000000000000000000E /\* PBXTargetDependency \*/,\n)"#,
-        template:
-            "$1\t\t\t\t\(LocalTargetIDs.modelsDependency) /* PBXTargetDependency */,\n\t\t\t\t\(LocalTargetIDs.persistenceDependency) /* PBXTargetDependency */,\n"
+        template: appDepReplacement
     )
     guard appDeps.count == 1 else {
         throw PrebuiltDepsError(description: "Could not add local dependencies to clinical-swift.")
     }
     text = appDeps.result
+
+    if withoutWidget {
+        let embedRemoval = try regexReplace(
+            in: text,
+            pattern: #"\t\t\t\tB2000000000000000000000B /\* Embed Foundation Extensions \*/,\n"#,
+            template: ""
+        )
+        guard embedRemoval.count == 1 else {
+            throw PrebuiltDepsError(
+                description: "Could not drop Embed Foundation Extensions phase from clinical-swift."
+            )
+        }
+        text = embedRemoval.result
+    }
 
     let widgetDepsPatch = try regexReplace(
         in: text,
@@ -760,46 +873,90 @@ func rewriteProjectForPrebuilt(
         )
     }
 
-    let extraSettings = """
+    let targetSwiftFlags = """
+        				OTHER_SWIFT_FLAGS = (
+        					"$(inherited)",
+        					"-Xcc",
+        					"-fmodule-map-file=$(PROJECT_DIR)/\(outputRelativePath)/GRDBSQLite/module.modulemap",
+        \(macroFlagEntries)
+        				);
+
+        """
+    // Force-load local static archives and export symbols so BUNDLE_LOADER tests resolve symbols even with ENABLE_DEBUG_DYLIB=NO.
+    let appExtraSettings = """
+        				OTHER_LDFLAGS = (
+        					"$(inherited)",
+        					"-lsqlite3",
+        					"-lz",
+        					"-Wl,-export_dynamic",
+        					"-Wl,-force_load,$(BUILT_PRODUCTS_DIR)/libClinicalModels.a",
+        					"-Wl,-force_load,$(BUILT_PRODUCTS_DIR)/libClinicalPersistence.a",
+        				);
+        \(targetSwiftFlags)
+        """
+    let widgetExtraSettings = """
         				OTHER_LDFLAGS = (
         					"$(inherited)",
         					"-lsqlite3",
         					"-lz",
         				);
-        				OTHER_SWIFT_FLAGS = (
-        					"$(inherited)",
-        					"-Xcc",
-        					"-fmodule-map-file=$(PROJECT_DIR)/\(outputRelativePath)/GRDBSQLite/module.modulemap",
-        				);
-
+        \(targetSwiftFlags)
         """
-    let escapedExtra = NSRegularExpression.escapedTemplate(for: extraSettings)
-    for cfgID in ["79438C512FD2D07300C0E6EF", "B20000000000000000000009"] {
-        let pattern =
-            #"(\t\t"# + cfgID
-            + #" /\* Debug \*/ = \{\n\t\t\tisa = XCBuildConfiguration;\n\t\t\tbuildSettings = \{\n)"#
-        let replaced = try regexReplace(
-            in: text,
-            pattern: pattern,
-            template: "$1" + escapedExtra
-        )
-        guard replaced.count == 1 else {
-            throw PrebuiltDepsError(description: "Could not patch Debug configuration \(cfgID).")
+
+    func injectDebugBuildSettings(_ settings: String, into configIDs: [String]) throws {
+        let escaped = NSRegularExpression.escapedTemplate(for: settings)
+        for cfgID in configIDs {
+            let pattern =
+                #"(\t\t"# + cfgID
+                + #" /\* Debug \*/ = \{\n\t\t\tisa = XCBuildConfiguration;\n\t\t\tbuildSettings = \{\n)"#
+            let replaced = try regexReplace(
+                in: text,
+                pattern: pattern,
+                template: "$1" + escaped
+            )
+            guard replaced.count == 1 else {
+                throw PrebuiltDepsError(
+                    description: "Could not patch Debug configuration \(cfgID)."
+                )
+            }
+            text = replaced.result
         }
-        text = replaced.result
     }
+
+    try injectDebugBuildSettings(appExtraSettings, into: ["79438C512FD2D07300C0E6EF"])
+    try injectDebugBuildSettings(widgetExtraSettings, into: ["B20000000000000000000009"])
+    try injectDebugBuildSettings(
+        targetSwiftFlags,
+        into: [
+            "8BE2A01A2FE0000000000005",
+            "D30000000000000000000008",
+        ]
+    )
 
     return text
 }
 
-func rewriteSchemeForPrebuilt(_ canonicalScheme: String, prebuiltProjectRelativePath: String)
-    -> String
-{
+func rewriteSchemeForPrebuilt(
+    _ canonicalScheme: String,
+    prebuiltProjectRelativePath: String,
+    withoutWidget: Bool = false
+) throws -> String {
     // Xcode resolves container: paths relative to projectDirPath (the repo root).
-    canonicalScheme.replacingOccurrences(
+    var rewritten = canonicalScheme.replacingOccurrences(
         of: "container:clinical-swift.xcodeproj",
         with: "container:\(prebuiltProjectRelativePath)"
     )
+    if withoutWidget {
+        rewritten =
+            try regexReplace(
+                in: rewritten,
+                pattern:
+                    #"\s*<BuildActionEntry\b[^>]*>\s*<BuildableReference[^>]*BlueprintIdentifier\s*=\s*"B20000000000000000000004"[^>]*>\s*</BuildableReference>\s*</BuildActionEntry>"#,
+                template: "",
+                dotMatchesLineSeparators: true
+            ).result
+    }
+    return rewritten
 }
 
 private func runProcess(
@@ -943,17 +1100,22 @@ func canonicalWarmMakeEnvironment(
 }
 
 func canonicalWarmMakeArguments(request: PrebuiltEnsureRequest) -> [String] {
-    [
+    var args = [
         "--no-print-directory",
         "build",
         "PREBUILT=0",
+        "WITHOUT_WIDGET=0",
         "CONFIGURATION=Debug",
-        "SIMULATOR_ID=\(request.simulatorID)",
         "SIMULATOR_NAME=",
         "EXTRA_BUILD_FLAGS=",
         "XCODE_DEVELOPER_DIR=\(request.developerDir)",
         "DERIVED_DATA=\(request.derivedData.path)",
+        "SOURCE_PACKAGES=\(request.sourcePackages.path)",
     ]
+    if !request.simulatorID.isEmpty {
+        args.append("SIMULATOR_ID=\(request.simulatorID)")
+    }
+    return args
 }
 
 private func isDepsCacheValid(outputDir: URL, expectedFingerprint: String) -> Bool {
@@ -986,9 +1148,11 @@ private func isDepsCacheValid(outputDir: URL, expectedFingerprint: String) -> Bo
     return true
 }
 
-private func isProjectCacheValid(outputDir: URL, expectedFingerprint: String) -> Bool {
+private func isProjectCacheValid(request: PrebuiltEnsureRequest, expectedFingerprint: String)
+    -> Bool
+{
     let fm = FileManager.default
-    let stampURL = outputDir.appendingPathComponent("project.fingerprint")
+    let stampURL = request.outputDir.appendingPathComponent(request.projectFingerprintFilename)
     guard
         let current = try? String(contentsOf: stampURL, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -996,11 +1160,50 @@ private func isProjectCacheValid(outputDir: URL, expectedFingerprint: String) ->
     else {
         return false
     }
-    let pbx = outputDir.appendingPathComponent("clinical-swift-prebuilt.xcodeproj/project.pbxproj")
-    let scheme = outputDir.appendingPathComponent(
-        "clinical-swift-prebuilt.xcodeproj/xcshareddata/xcschemes/clinical-swift.xcscheme"
-    )
-    return fm.fileExists(atPath: pbx.path) && fm.fileExists(atPath: scheme.path)
+    let projectURL = request.outputDir.appendingPathComponent(request.projectName)
+    let pbx = projectURL.appendingPathComponent("project.pbxproj")
+    guard fm.fileExists(atPath: pbx.path) else { return false }
+    for scheme in PrebuiltModules.schemes {
+        let schemeURL = projectURL.appendingPathComponent("xcshareddata/xcschemes/\(scheme)")
+        if !fm.fileExists(atPath: schemeURL.path) {
+            return false
+        }
+    }
+    return true
+}
+
+private func findLinkFileList(
+    moduleName: String,
+    derivedData: URL,
+    arch: String = currentHostArch()
+) -> URL? {
+    let fm = FileManager.default
+    let intermediates = derivedData.appendingPathComponent("Build/Intermediates.noindex")
+    guard
+        let pkgDirs = try? fm.contentsOfDirectory(
+            at: intermediates, includingPropertiesForKeys: nil)
+    else {
+        return nil
+    }
+    let configDirName = "Debug-iphonesimulator"
+    for pkgDir in pkgDirs where pkgDir.pathExtension == "build" {
+        let cfgDir = pkgDir.appendingPathComponent(configDirName)
+        guard
+            let targetDirs = try? fm.contentsOfDirectory(
+                at: cfgDir, includingPropertiesForKeys: nil)
+        else {
+            continue
+        }
+        for targetDir in targetDirs where targetDir.pathExtension == "build" {
+            let candidate = targetDir.appendingPathComponent(
+                "Objects-normal/\(arch)/\(moduleName).LinkFileList"
+            )
+            if fm.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+    }
+    return nil
 }
 
 private func relativePath(from base: URL, to target: URL) -> String {
@@ -1025,6 +1228,22 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
         developerDir: request.developerDir
     )
 
+    let productsDir = request.derivedData.appendingPathComponent(
+        "Build/Products/Debug-iphonesimulator"
+    )
+    // Remove stale candidate outputs before the canonical build so persistent DerivedData cannot mask package-graph changes.
+    for mod in PrebuiltModules.thirdParty {
+        for stalePath in [
+            productsDir.appendingPathComponent("\(mod).o"),
+            productsDir.appendingPathComponent("\(mod).swiftmodule"),
+            productsDir.appendingPathComponent("PackageFrameworks/\(mod).framework"),
+        ] {
+            if fm.fileExists(atPath: stalePath.path) {
+                try fm.removeItem(at: stalePath)
+            }
+        }
+    }
+
     FileHandle.standardError.write(
         Data("[prebuilt] Refreshing canonical Debug simulator dependencies...\n".utf8)
     )
@@ -1036,12 +1255,9 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
         captureOutput: false
     )
 
-    let productsDir = request.derivedData.appendingPathComponent(
-        "Build/Products/Debug-iphonesimulator"
-    )
     let hostProductsDir = request.derivedData.appendingPathComponent("Build/Products/Debug")
-    let grdbSQLiteSource = request.repoRoot.appendingPathComponent(
-        "build/SourcePackages/checkouts/GRDB.swift/Sources/GRDBSQLite"
+    let grdbSQLiteSource = request.sourcePackages.appendingPathComponent(
+        "checkouts/GRDB.swift/Sources/GRDBSQLite"
     )
     guard fm.fileExists(atPath: grdbSQLiteSource.path) else {
         throw PrebuiltDepsError(
@@ -1085,31 +1301,61 @@ private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: S
         do {
             let objectFile = productsDir.appendingPathComponent("\(mod).o")
             let swiftModule = productsDir.appendingPathComponent("\(mod).swiftmodule")
-            guard fm.fileExists(atPath: objectFile.path), fm.fileExists(atPath: swiftModule.path)
-            else {
-                throw PrebuiltDepsError(
-                    description:
-                        "Missing compiled module artifacts for \(mod) in \(productsDir.path)."
-                )
-            }
+            let dynamicSwiftModule = productsDir.appendingPathComponent(
+                "PackageFrameworks/\(mod).framework/Modules/\(mod).swiftmodule"
+            )
 
             let fwDir = stagingDir.appendingPathComponent("\(mod).framework")
             let modulesDir = fwDir.appendingPathComponent("Modules")
             try fm.createDirectory(at: modulesDir, withIntermediateDirectories: true)
 
-            _ = try runProcess(
-                executable: "/usr/bin/xcrun",
-                arguments: [
-                    "libtool", "-static",
-                    "-o", fwDir.appendingPathComponent(mod).path,
-                    objectFile.path,
-                ],
-                environment: env
-            )
-            try fm.copyItem(
-                at: swiftModule,
-                to: modulesDir.appendingPathComponent("\(mod).swiftmodule")
-            )
+            if fm.fileExists(atPath: objectFile.path), fm.fileExists(atPath: swiftModule.path) {
+                _ = try runProcess(
+                    executable: "/usr/bin/xcrun",
+                    arguments: [
+                        "libtool", "-static",
+                        "-o", fwDir.appendingPathComponent(mod).path,
+                        objectFile.path,
+                    ],
+                    environment: env
+                )
+                try fm.copyItem(
+                    at: swiftModule,
+                    to: modulesDir.appendingPathComponent("\(mod).swiftmodule")
+                )
+            } else if fm.fileExists(atPath: dynamicSwiftModule.path),
+                let linkFileList = findLinkFileList(
+                    moduleName: mod,
+                    derivedData: request.derivedData
+                )
+            {
+                // When Xcode promotes a shared SPM target to a dynamic framework, pack its compiled .o files statically.
+                let objectPaths = parseLinkFileList(
+                    try String(contentsOf: linkFileList, encoding: .utf8)
+                )
+                guard !objectPaths.isEmpty else {
+                    throw PrebuiltDepsError(
+                        description: "Empty LinkFileList for \(mod) at \(linkFileList.path)."
+                    )
+                }
+                _ = try runProcess(
+                    executable: "/usr/bin/xcrun",
+                    arguments: [
+                        "libtool", "-static",
+                        "-o", fwDir.appendingPathComponent(mod).path,
+                    ] + objectPaths,
+                    environment: env
+                )
+                try fm.copyItem(
+                    at: dynamicSwiftModule,
+                    to: modulesDir.appendingPathComponent("\(mod).swiftmodule")
+                )
+            } else {
+                throw PrebuiltDepsError(
+                    description:
+                        "Missing compiled module artifacts for \(mod) in \(productsDir.path)."
+                )
+            }
             try Data(frameworkInfoPlist(moduleName: mod).utf8).write(
                 to: fwDir.appendingPathComponent("Info.plist")
             )
@@ -1186,11 +1432,7 @@ private func regeneratePrebuiltProject(request: PrebuiltEnsureRequest, projectFi
     let canonicalPBXURL = request.repoRoot.appendingPathComponent(
         "clinical-swift.xcodeproj/project.pbxproj"
     )
-    let canonicalSchemeURL = request.repoRoot.appendingPathComponent(
-        "clinical-swift.xcodeproj/xcshareddata/xcschemes/clinical-swift.xcscheme"
-    )
     let canonicalPBX = try String(contentsOf: canonicalPBXURL, encoding: .utf8)
-    let canonicalScheme = try String(contentsOf: canonicalSchemeURL, encoding: .utf8)
 
     let outputRel = relativePath(from: request.repoRoot, to: request.outputDir)
     let projectDirPath = relativePath(from: request.outputDir, to: request.repoRoot)
@@ -1203,29 +1445,36 @@ private func regeneratePrebuiltProject(request: PrebuiltEnsureRequest, projectFi
         canonicalPBXProj: canonicalPBX,
         outputRelativePath: outputRel,
         projectDirPath: projectDirPath,
-        resourceBundles: presentBundles
-    )
-    let rewrittenScheme = rewriteSchemeForPrebuilt(
-        canonicalScheme,
-        prebuiltProjectRelativePath: "\(outputRel)/clinical-swift-prebuilt.xcodeproj"
+        resourceBundles: presentBundles,
+        withoutWidget: request.withoutWidget
     )
 
-    let prebuiltProjectURL = request.outputDir.appendingPathComponent(
-        "clinical-swift-prebuilt.xcodeproj"
-    )
+    let prebuiltProjectURL = request.outputDir.appendingPathComponent(request.projectName)
     try writeAtomically(
         rewrittenPBX,
         to: prebuiltProjectURL.appendingPathComponent("project.pbxproj")
     )
-    try writeAtomically(
-        rewrittenScheme,
-        to: prebuiltProjectURL.appendingPathComponent(
-            "xcshareddata/xcschemes/clinical-swift.xcscheme"
+
+    let prebuiltProjectRel = "\(outputRel)/\(request.projectName)"
+    for scheme in PrebuiltModules.schemes {
+        let canonicalSchemeURL = request.repoRoot.appendingPathComponent(
+            "clinical-swift.xcodeproj/xcshareddata/xcschemes/\(scheme)"
         )
-    )
+        let canonicalScheme = try String(contentsOf: canonicalSchemeURL, encoding: .utf8)
+        let rewrittenScheme = try rewriteSchemeForPrebuilt(
+            canonicalScheme,
+            prebuiltProjectRelativePath: prebuiltProjectRel,
+            withoutWidget: request.withoutWidget
+        )
+        try writeAtomically(
+            rewrittenScheme,
+            to: prebuiltProjectURL.appendingPathComponent("xcshareddata/xcschemes/\(scheme)")
+        )
+    }
+
     try writeAtomically(
         projectFingerprint + "\n",
-        to: request.outputDir.appendingPathComponent("project.fingerprint")
+        to: request.outputDir.appendingPathComponent(request.projectFingerprintFilename)
     )
 }
 
@@ -1243,14 +1492,19 @@ private func ensurePrebuilt(_ request: PrebuiltEnsureRequest) throws {
         ).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    let outputRel = relativePath(from: request.repoRoot, to: request.outputDir)
+    let projectDirPath = relativePath(from: request.outputDir, to: request.repoRoot)
     let fingerprints = try computeFingerprints(
         repoRoot: request.repoRoot,
-        xcodeVersion: xcodeVersion
+        xcodeVersion: xcodeVersion,
+        outputRelativePath: outputRel,
+        projectDirPath: projectDirPath,
+        withoutWidget: request.withoutWidget
     )
     // Lock-free fast path when both caches already match.
     if isDepsCacheValid(outputDir: request.outputDir, expectedFingerprint: fingerprints.deps)
         && isProjectCacheValid(
-            outputDir: request.outputDir,
+            request: request,
             expectedFingerprint: fingerprints.project
         )
     {
@@ -1270,7 +1524,7 @@ private func ensurePrebuilt(_ request: PrebuiltEnsureRequest) throws {
         let projectValid =
             depsValid
             && isProjectCacheValid(
-                outputDir: request.outputDir,
+                request: request,
                 expectedFingerprint: fingerprints.project
             )
         if !projectValid {
@@ -1286,13 +1540,15 @@ private func parseEnsureArguments(_ arguments: [String]) throws -> PrebuiltEnsur
     guard arguments.count >= 2, arguments[1] == "ensure" else {
         throw PrebuiltDepsError(
             description:
-                "Usage: prebuilt_deps.swift ensure --repo-root PATH --derived-data PATH --output-dir PATH --simulator-id UDID [--developer-dir PATH]"
+                "Usage: prebuilt_deps.swift ensure --repo-root PATH --derived-data PATH --output-dir PATH [--simulator-id UDID] [--source-packages PATH] [--without-widget] [--developer-dir PATH]"
         )
     }
     var repoRoot = ""
     var derivedData = ""
     var outputDir = ""
+    var sourcePackages = ""
     var simulatorID = ""
+    var withoutWidget = false
     var developerDir =
         ProcessInfo.processInfo.environment["DEVELOPER_DIR"]
         ?? "/Applications/Xcode.app/Contents/Developer"
@@ -1300,6 +1556,11 @@ private func parseEnsureArguments(_ arguments: [String]) throws -> PrebuiltEnsur
     var index = 2
     while index < arguments.count {
         let flag = arguments[index]
+        if flag == "--without-widget" {
+            withoutWidget = true
+            index += 1
+            continue
+        }
         guard index + 1 < arguments.count else {
             throw PrebuiltDepsError(description: "Missing value for \(flag).")
         }
@@ -1308,6 +1569,7 @@ private func parseEnsureArguments(_ arguments: [String]) throws -> PrebuiltEnsur
         case "--repo-root": repoRoot = value
         case "--derived-data": derivedData = value
         case "--output-dir": outputDir = value
+        case "--source-packages": sourcePackages = value
         case "--simulator-id": simulatorID = value
         case "--developer-dir": developerDir = value
         default:
@@ -1316,19 +1578,26 @@ private func parseEnsureArguments(_ arguments: [String]) throws -> PrebuiltEnsur
         index += 2
     }
 
-    guard !repoRoot.isEmpty, !derivedData.isEmpty, !outputDir.isEmpty, !simulatorID.isEmpty else {
+    guard !repoRoot.isEmpty, !derivedData.isEmpty, !outputDir.isEmpty else {
         throw PrebuiltDepsError(
-            description:
-                "Required options: --repo-root, --derived-data, --output-dir, --simulator-id."
+            description: "Required options: --repo-root, --derived-data, --output-dir."
         )
     }
 
+    let repoRootURL = URL(fileURLWithPath: repoRoot)
+    let sourcePackagesURL =
+        sourcePackages.isEmpty
+        ? repoRootURL.appendingPathComponent("build/SourcePackages")
+        : URL(fileURLWithPath: sourcePackages)
+
     return PrebuiltEnsureRequest(
-        repoRoot: URL(fileURLWithPath: repoRoot),
+        repoRoot: repoRootURL,
         derivedData: URL(fileURLWithPath: derivedData),
         outputDir: URL(fileURLWithPath: outputDir),
+        sourcePackages: sourcePackagesURL,
         simulatorID: simulatorID,
-        developerDir: developerDir
+        developerDir: developerDir,
+        withoutWidget: withoutWidget
     )
 }
 
