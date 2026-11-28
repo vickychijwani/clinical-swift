@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 
 struct PrebuiltDepsError: Error, CustomStringConvertible {
@@ -134,10 +135,23 @@ func readXcodeVersion(developerDir: String) -> String? {
     return "\(shortVersion)-\(buildVersion)"
 }
 
-func computeFingerprints(repoRoot: URL, xcodeVersion: String) throws -> PrebuiltFingerprints {
+func currentHostArch() -> String {
+    #if arch(arm64)
+        "arm64"
+    #else
+        "x86_64"
+    #endif
+}
+
+func computeFingerprints(
+    repoRoot: URL,
+    xcodeVersion: String,
+    arch: String = currentHostArch()
+) throws -> PrebuiltFingerprints {
     var depsHasher = SHA256()
     depsHasher.update(data: Data("SCHEMA:\(PrebuiltModules.schemaVersion)\n".utf8))
     depsHasher.update(data: Data("XCODE:\(xcodeVersion)\n".utf8))
+    depsHasher.update(data: Data("ARCH:\(arch)\n".utf8))
     depsHasher.update(
         data: Data("MODULES:\(PrebuiltModules.thirdParty.joined(separator: ","))\n".utf8)
     )
@@ -879,15 +893,67 @@ private func frameworkInfoPlist(moduleName: String) -> String {
     """
 }
 
-private func writeAtomically(_ text: String, to url: URL) throws {
+func writeAtomically(_ text: String, to url: URL) throws {
     let fm = FileManager.default
     try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    let tmp = url.appendingPathExtension("tmp.\(ProcessInfo.processInfo.processIdentifier)")
+    let tmp = url.appendingPathExtension(
+        "tmp.\(ProcessInfo.processInfo.processIdentifier).\(UUID().uuidString)"
+    )
     try Data(text.utf8).write(to: tmp)
-    if fm.fileExists(atPath: url.path) {
-        try fm.removeItem(at: url)
+    // Use POSIX rename(2) for atomic replacement so concurrent readers never see a missing file.
+    guard Darwin.rename(tmp.path, url.path) == 0 else {
+        let code = errno
+        try? fm.removeItem(at: tmp)
+        throw PrebuiltDepsError(
+            description:
+                "Failed to atomically replace \(url.path): \(String(cString: strerror(code)))"
+        )
     }
-    try fm.moveItem(at: tmp, to: url)
+}
+
+private func withExclusiveLock<T>(at lockURL: URL, _ body: () throws -> T) throws -> T {
+    try FileManager.default.createDirectory(
+        at: lockURL.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    // O_EXLOCK acquires an exclusive advisory lock atomically on open and releases it on close.
+    let fd = Darwin.open(lockURL.path, O_CREAT | O_RDWR | O_EXLOCK, 0o644)
+    guard fd >= 0 else {
+        let code = errno
+        throw PrebuiltDepsError(
+            description:
+                "Failed to acquire lock \(lockURL.path): \(String(cString: strerror(code)))"
+        )
+    }
+    defer { Darwin.close(fd) }
+    return try body()
+}
+
+func canonicalWarmMakeEnvironment(
+    baseEnvironment: [String: String],
+    developerDir: String
+) -> [String: String] {
+    var env = baseEnvironment
+    // Drop inherited Make overrides so caller SIMULATOR_NAME or EXTRA_BUILD_FLAGS cannot conflict or poison the cache.
+    for key in ["MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES", "MAKELEVEL"] {
+        env.removeValue(forKey: key)
+    }
+    env["DEVELOPER_DIR"] = developerDir
+    return env
+}
+
+func canonicalWarmMakeArguments(request: PrebuiltEnsureRequest) -> [String] {
+    [
+        "--no-print-directory",
+        "build",
+        "PREBUILT=0",
+        "CONFIGURATION=Debug",
+        "SIMULATOR_ID=\(request.simulatorID)",
+        "SIMULATOR_NAME=",
+        "EXTRA_BUILD_FLAGS=",
+        "XCODE_DEVELOPER_DIR=\(request.developerDir)",
+        "DERIVED_DATA=\(request.derivedData.path)",
+    ]
 }
 
 private func isDepsCacheValid(outputDir: URL, expectedFingerprint: String) -> Bool {
@@ -954,23 +1020,17 @@ private func relativePath(from base: URL, to target: URL) -> String {
 
 private func rebuildDepsCache(request: PrebuiltEnsureRequest, depsFingerprint: String) throws {
     let fm = FileManager.default
-    var env = ProcessInfo.processInfo.environment
-    env["DEVELOPER_DIR"] = request.developerDir
+    let env = canonicalWarmMakeEnvironment(
+        baseEnvironment: ProcessInfo.processInfo.environment,
+        developerDir: request.developerDir
+    )
 
     FileHandle.standardError.write(
         Data("[prebuilt] Refreshing canonical Debug simulator dependencies...\n".utf8)
     )
     _ = try runProcess(
         executable: "/usr/bin/make",
-        arguments: [
-            "--no-print-directory",
-            "build",
-            "PREBUILT=0",
-            "CONFIGURATION=Debug",
-            "SIMULATOR_ID=\(request.simulatorID)",
-            "XCODE_DEVELOPER_DIR=\(request.developerDir)",
-            "DERIVED_DATA=\(request.derivedData.path)",
-        ],
+        arguments: canonicalWarmMakeArguments(request: request),
         currentDirectory: request.repoRoot,
         environment: env,
         captureOutput: false
@@ -1187,22 +1247,38 @@ private func ensurePrebuilt(_ request: PrebuiltEnsureRequest) throws {
         repoRoot: request.repoRoot,
         xcodeVersion: xcodeVersion
     )
-    let depsValid = isDepsCacheValid(
-        outputDir: request.outputDir,
-        expectedFingerprint: fingerprints.deps
-    )
-    if !depsValid {
-        try rebuildDepsCache(request: request, depsFingerprint: fingerprints.deps)
-    }
-
-    let projectValid =
-        depsValid
+    // Lock-free fast path when both caches already match.
+    if isDepsCacheValid(outputDir: request.outputDir, expectedFingerprint: fingerprints.deps)
         && isProjectCacheValid(
             outputDir: request.outputDir,
             expectedFingerprint: fingerprints.project
         )
-    if !projectValid {
-        try regeneratePrebuiltProject(request: request, projectFingerprint: fingerprints.project)
+    {
+        return
+    }
+
+    // Serialize stale refreshes across parallel builds and re-check after acquiring the lock.
+    try withExclusiveLock(at: request.outputDir.appendingPathComponent(".lock")) {
+        let depsValid = isDepsCacheValid(
+            outputDir: request.outputDir,
+            expectedFingerprint: fingerprints.deps
+        )
+        if !depsValid {
+            try rebuildDepsCache(request: request, depsFingerprint: fingerprints.deps)
+        }
+
+        let projectValid =
+            depsValid
+            && isProjectCacheValid(
+                outputDir: request.outputDir,
+                expectedFingerprint: fingerprints.project
+            )
+        if !projectValid {
+            try regeneratePrebuiltProject(
+                request: request,
+                projectFingerprint: fingerprints.project
+            )
+        }
     }
 }
 

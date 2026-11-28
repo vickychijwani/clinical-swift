@@ -67,6 +67,60 @@ private func runUnitTests(repoRoot: URL) throws {
     let sourceChanged = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.2-27B52")
     try expect(sourceChanged == base, "Sources/ edits must keep prebuilt fingerprints stable.")
 
+    // Architecture change invalidates both deps and project fingerprints.
+    let archChanged = try computeFingerprints(
+        repoRoot: tmp,
+        xcodeVersion: "27.2-27B52",
+        arch: currentHostArch() == "arm64" ? "x86_64" : "arm64"
+    )
+    try expect(
+        archChanged.deps != base.deps,
+        "Host architecture change must invalidate deps fingerprint."
+    )
+
+    // Nested warm-up make strips inherited MAKEFLAGS and clears SIMULATOR_NAME / EXTRA_BUILD_FLAGS.
+    let cleanEnv = canonicalWarmMakeEnvironment(
+        baseEnvironment: [
+            "MAKEFLAGS": "SIMULATOR_NAME=task EXTRA_BUILD_FLAGS=FOO=1",
+            "MFLAGS": "-w",
+            "MAKEOVERRIDES": "SIMULATOR_NAME=task",
+            "MAKELEVEL": "1",
+            "PATH": "/usr/bin:/bin",
+        ],
+        developerDir: "/Applications/Xcode.app/Contents/Developer"
+    )
+    try expect(cleanEnv["MAKEFLAGS"] == nil, "Nested make env must strip MAKEFLAGS.")
+    try expect(cleanEnv["MFLAGS"] == nil, "Nested make env must strip MFLAGS.")
+    try expect(cleanEnv["MAKEOVERRIDES"] == nil, "Nested make env must strip MAKEOVERRIDES.")
+    try expect(cleanEnv["MAKELEVEL"] == nil, "Nested make env must strip MAKELEVEL.")
+    try expect(
+        cleanEnv["DEVELOPER_DIR"] == "/Applications/Xcode.app/Contents/Developer",
+        "Nested make env must preserve DEVELOPER_DIR."
+    )
+
+    let dummyReq = PrebuiltEnsureRequest(
+        repoRoot: tmp,
+        derivedData: tmp.appendingPathComponent("dd"),
+        outputDir: tmp.appendingPathComponent("out"),
+        simulatorID: "SIM-123",
+        developerDir: "/Applications/Xcode.app/Contents/Developer"
+    )
+    let warmArgs = canonicalWarmMakeArguments(request: dummyReq)
+    try expect(warmArgs.contains("SIMULATOR_NAME="), "Nested make must clear SIMULATOR_NAME.")
+    try expect(
+        warmArgs.contains("EXTRA_BUILD_FLAGS="),
+        "Nested make must clear EXTRA_BUILD_FLAGS."
+    )
+
+    // Atomic writer creates and replaces existing files cleanly.
+    let atomicFile = tmp.appendingPathComponent("nested/stamp.txt")
+    try writeAtomically("first\n", to: atomicFile)
+    try writeAtomically("second\n", to: atomicFile)
+    try expect(
+        try String(contentsOf: atomicFile, encoding: .utf8) == "second\n",
+        "writeAtomically must replace existing content."
+    )
+
     // Xcode upgrade invalidates both deps and project fingerprints.
     let xcodeChanged = try computeFingerprints(repoRoot: tmp, xcodeVersion: "27.3-27C10")
     try expect(
