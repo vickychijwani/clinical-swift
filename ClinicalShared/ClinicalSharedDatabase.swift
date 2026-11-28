@@ -106,7 +106,10 @@ nonisolated enum ClinicalSharedDatabase {
                 }
                 var configuration = Configuration()
                 configuration.readonly = true
-                let database = try DatabasePool(
+                // Match DatabasePool's default read-only busy timeout so cross-process WAL recovery retries.
+                configuration.busyMode = .timeout(10)
+                // A single read-only DatabaseQueue avoids reader-pool startup overhead on one-shot widget reads.
+                let database = try DatabaseQueue(
                     path: coordinatedURL.path(percentEncoded: false),
                     configuration: configuration
                 )

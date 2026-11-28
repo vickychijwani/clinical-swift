@@ -200,29 +200,23 @@ nonisolated struct WidgetScheduleRepository: Sendable {
         )
 
         let appointments = try rows.map(Self.appointment(from:)).map(TimelineItem.appointment)
-        // A widget can open the old schema before the app has run its new migration.
-        let blocks: [TimelineItem]
-        if try database.tableExists("unavailableTimes") {
-            blocks = try Row.fetchAll(
-                database,
-                sql: """
-                    SELECT id, label, start, durationMinutes FROM unavailableTimes
-                    WHERE start >= ? AND start < ?
-                    """,
-                arguments: [startValue, endValue]
-            ).map { row in
-                let rawID: String = row["id"]
-                guard let id = UUID(uuidString: rawID) else {
-                    throw WidgetScheduleRepositoryError.invalidUnavailableTimeRow
-                }
-                return .unavailableTime(
-                    UnavailableTime(
-                        id: id, label: row["label"], start: row["start"],
-                        durationMinutes: row["durationMinutes"]
-                    ))
+        let blocks: [TimelineItem] = try Row.fetchAll(
+            database,
+            sql: """
+                SELECT id, label, start, durationMinutes FROM unavailableTimes
+                WHERE start >= ? AND start < ?
+                """,
+            arguments: [startValue, endValue]
+        ).map { row in
+            let rawID: String = row["id"]
+            guard let id = UUID(uuidString: rawID) else {
+                throw WidgetScheduleRepositoryError.invalidUnavailableTimeRow
             }
-        } else {
-            blocks = []
+            return .unavailableTime(
+                UnavailableTime(
+                    id: id, label: row["label"], start: row["start"],
+                    durationMinutes: row["durationMinutes"]
+                ))
         }
         return (appointments + blocks).sorted(by: TimelineItem.ordered)
     }

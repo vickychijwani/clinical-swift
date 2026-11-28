@@ -16,7 +16,7 @@ struct TimelineLayoutEngine {
         availableWidth: CGFloat,
         scale: TimelineScale,
         overlap: ScheduleCardTuning.Overlap = .init(),
-        contentMetrics: ScheduleCardContentMetrics = .init(),
+        contentMetrics: ScheduleCardContentMetrics = .standard,
         assertOnFallback: Bool = true
     ) {
         self.availableWidth = availableWidth
