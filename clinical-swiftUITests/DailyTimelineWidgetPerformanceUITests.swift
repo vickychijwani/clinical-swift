@@ -24,9 +24,10 @@ nonisolated final class DailyTimelineWidgetPerformanceUITests: XCTestCase {
         )
         continueAfterFailure = true
         #if targetEnvironment(simulator)
-            // Simulator Debug renders ~55–70ms after tap (~435–1100ms total) vs 7–15s on regression.
-            let defaultMaxLatencyMS = 400
-            let defaultMaxTotalMS = 1500
+            // Idle Simulator Debug renders ~55–70ms after tap, and up to ~600ms under 5-clone
+            // parallel CI load (~435–1150ms total), vs 7–15s on regression.
+            let defaultMaxLatencyMS = 1000
+            let defaultMaxTotalMS = 2000
             prepareSimulatorWidgetEnvironment()
             defer { cleanupSimulatorWidgetEnvironment() }
         #else

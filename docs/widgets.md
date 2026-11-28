@@ -18,8 +18,9 @@ Appointments and unavailable time share capacity and overflow counts.
 
 Show all non-cancelled items for one clinic day in proportional timeline form so
 the entire day fits without scrolling. Step consecutive calendar days backward and
-forward, including Sundays, and return to today automatically after 15 minutes of
-inactivity or at clinic midnight so a browsed day cannot linger as today.
+forward, including Sundays, and request a return to today after 15 minutes of
+inactivity or at clinic midnight via `.after(resetAt)` (best-effort on WidgetKit's
+next background reload rather than archiving a second fallback view on every tap).
 
 When an item starts inside the 1:00–4:00 PM break, expand the break and trim empty
 outer hours (`9–10 AM`, `8–9 PM` when no item or current time falls in them) to
