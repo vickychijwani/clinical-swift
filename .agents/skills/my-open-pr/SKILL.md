@@ -3,6 +3,10 @@ name: my-open-pr
 description: Open a pull request in this repo with net-new code breakdowns and the skip-ios-tests label when applicable. Use whenever opening a PR.
 ---
 
+## Swift comment check
+
+Before opening the PR, run `swift scripts/check_comments.swift --base origin/main` once. Restore any dropped comment that still applies, update stale ones, and ignore intentional rewrites or obsolete comments.
+
 ## Net-new code breakdown (200+ lines)
 
 Count net new production code lines against the base branch (exclude tests, docs, configs, deletions, and moved code).

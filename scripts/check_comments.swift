@@ -1,6 +1,6 @@
 import Foundation
 
-struct Comment: Codable, Equatable {
+struct Comment: Equatable {
     let path: String
     let line: Int
     let text: String
@@ -101,6 +101,7 @@ struct CommandResult {
     var text: String { String(decoding: data, as: UTF8.self) }
 }
 
+@discardableResult
 func git(_ root: URL, _ arguments: [String], check: Bool = true) throws -> CommandResult {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
@@ -110,7 +111,7 @@ func git(_ root: URL, _ arguments: [String], check: Bool = true) throws -> Comma
     process.standardOutput = pipe
     process.standardError = pipe
     try process.run()
-    // Drain while Git runs so a large source file cannot fill the pipe and stall the hook.
+    // Drain while Git runs so a large source file cannot fill the pipe and stall execution.
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
     let result = CommandResult(status: process.terminationStatus, data: data)
@@ -118,30 +119,38 @@ func git(_ root: URL, _ arguments: [String], check: Bool = true) throws -> Comma
     return result
 }
 
-struct SourceSnapshot: Codable {
-    let path: String
-    let old: String
-    let current: String
+func resolveBaseline(_ root: URL, baseRef: String?) throws -> String? {
+    let hasHead = try git(root, ["rev-parse", "--verify", "HEAD"], check: false).status == 0
+    guard let baseRef else { return hasHead ? "HEAD" : nil }
+    // Use the merge base so unrelated commits merged onto the base branch are not reported as losses.
+    if hasHead {
+        let mergeBase = try git(root, ["merge-base", "HEAD", baseRef], check: false)
+        if mergeBase.status == 0 {
+            return mergeBase.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+    return try git(root, ["rev-parse", "--verify", "\(baseRef)^{commit}"]).text
+        .trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-func audit(_ root: URL) throws -> (missing: [Comment], fingerprint: String) {
-    let hasHead = try git(root, ["rev-parse", "--verify", "HEAD"], check: false).status == 0
+func missingComments(_ root: URL, baseRef: String? = nil) throws -> [Comment] {
+    let baseline = try resolveBaseline(root, baseRef: baseRef)
     let changed = try git(
         root,
-        hasHead
-            ? ["diff", "HEAD", "--no-renames", "--name-only", "-z", "--", "*.swift"]
-            : ["ls-files", "-z", "--", "*.swift"])
+        baseline.map { ["diff", $0, "--no-renames", "--name-only", "-z", "--", "*.swift"] }
+            ?? ["ls-files", "-z", "--", "*.swift"])
     let untracked = try git(
         root, ["ls-files", "--others", "--exclude-standard", "-z", "--", "*.swift"])
     let paths = Set((changed.text + untracked.text).split(separator: "\0").map(String.init))
         .sorted()
     var oldComments: [Comment] = []
     var currentCounts: [String: Int] = [:]
-    var snapshot: [SourceSnapshot] = []
     for path in paths {
         var old = ""
-        if hasHead, try git(root, ["cat-file", "-e", "HEAD:" + path], check: false).status == 0 {
-            old = try git(root, ["show", "HEAD:" + path]).text
+        if let baseline,
+            try git(root, ["cat-file", "-e", "\(baseline):\(path)"], check: false).status == 0
+        {
+            old = try git(root, ["show", "\(baseline):\(path)"]).text
         }
         let file = root.appending(path: path)
         let current =
@@ -151,121 +160,47 @@ func audit(_ root: URL) throws -> (missing: [Comment], fingerprint: String) {
         for comment in comments(in: current, path: path) {
             currentCounts[comment.text, default: 0] += 1
         }
-        snapshot.append(SourceSnapshot(path: path, old: old, current: current))
     }
     // Match across files so a comment moved with its code is not reported as a loss.
-    let missing = oldComments.filter { comment in
+    return oldComments.filter { comment in
         guard currentCounts[comment.text, default: 0] > 0 else { return true }
         currentCounts[comment.text, default: 0] -= 1
         return false
     }
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = .sortedKeys
-    // Use Git so the fingerprint needs no platform-specific crypto module.
-    let directory = FileManager.default.temporaryDirectory.appending(
-        path: "comment-audit-\(UUID())")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    let file = directory.appending(path: "snapshot.json")
-    try encoder.encode(snapshot).write(to: file)
-    let fingerprint = try git(root, ["hash-object", "--no-filters", "--", file.path]).text
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    return (missing, fingerprint)
 }
 
-struct ReviewRecord: Codable {
-    let fingerprint: String
-    let reason: String
-    let comments: [Comment]
-}
-
-func reviewPath(_ root: URL) throws -> URL {
-    let path = try git(root, ["rev-parse", "--git-path", "codex-comment-review.json"]).text
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    return path.hasPrefix("/") ? URL(fileURLWithPath: path) : root.appending(path: path)
-}
-
-func reviewed(_ root: URL, fingerprint: String) throws -> Bool {
-    let path = try reviewPath(root)
-    guard let data = try? Data(contentsOf: path),
-        let record = try? JSONDecoder().decode(ReviewRecord.self, from: data)
-    else { return false }
-    return record.fingerprint == fingerprint && !normalized(record.reason).isEmpty
-}
-
-func stopResult(_ root: URL) throws -> [String: String] {
-    let result = try audit(root)
-    if result.missing.isEmpty { return [:] }
-    if try reviewed(root, fingerprint: result.fingerprint) { return [:] }
-    let findings = result.missing.map { "- \($0.path):\($0.line): \($0.text)" }.joined(
-        separator: "\n")
-    return [
-        "decision": "block",
-        "reason": """
-        Review these removed or rewritten comments before finishing:
-        \(findings)
-        Restore comments that still apply, or update and move them with their code.
-        For intentional rewrites or obsolete comments, inspect each finding and record the reasons:
-        /bin/sh .codex/hooks/check_swift.sh --review 'reasons'
-        This records a review of this exact source change set only. Do not record a review just to clear the hook.
-        Then run the check again: /bin/sh .codex/hooks/check_swift.sh --check
-        """,
-    ]
-}
-
-private struct HookEvent: Decodable {
-    let cwd: String?
-    enum CodingKeys: String, CodingKey { case cwd }
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        cwd = container.contains(.cwd) ? try container.decode(String.self, forKey: .cwd) : nil
-    }
-}
-
-func runHook() -> Int32 {
+func runCLI() {
     let args = Array(CommandLine.arguments.dropFirst())
-    let isReview = args.first == "--review"
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = .sortedKeys
     do {
-        if isReview && (args.count != 2 || normalized(args[1]).isEmpty) {
-            throw CheckError(description: "Supply a non-blank review reason after --review.")
+        let baseRef: String?
+        if args.isEmpty {
+            baseRef = nil
+        } else if args.count == 2 && args[0] == "--base" && !normalized(args[1]).isEmpty {
+            baseRef = args[1]
+        } else {
+            throw CheckError(
+                description: "Usage: swift scripts/check_comments.swift [--base <ref>]")
         }
-        let input = isReview ? Data() : FileHandle.standardInput.readDataToEndOfFile()
-        let eventCWD =
-            input.isEmpty ? nil : try JSONDecoder().decode(HookEvent.self, from: input).cwd
-        let cwd = URL(fileURLWithPath: eventCWD ?? FileManager.default.currentDirectoryPath)
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let rootPath = try git(cwd, ["rev-parse", "--show-toplevel"]).text.trimmingCharacters(
             in: .whitespacesAndNewlines)
-        let root = URL(fileURLWithPath: rootPath)
-        if isReview {
-            let result = try audit(root)
-            let record = ReviewRecord(
-                fingerprint: result.fingerprint, reason: args[1], comments: result.missing)
-            try JSONEncoder().encode(record).write(to: reviewPath(root), options: .atomic)
-            print("Recorded review for \(result.missing.count) comment(s).")
-        } else {
-            print(String(decoding: try encoder.encode(try stopResult(root)), as: UTF8.self))
+        let missing = try missingComments(URL(fileURLWithPath: rootPath), baseRef: baseRef)
+        if missing.isEmpty {
+            print("No removed or rewritten Swift comments.")
+            return
         }
-        return 0
+        print("Removed or rewritten Swift comments:")
+        for comment in missing {
+            print("- \(comment.path):\(comment.line): \(comment.text)")
+        }
+        print("Restore comments that still apply, or update and move them with their code.")
+        print("Ignore intentional rewrites and obsolete comments.")
     } catch {
-        if isReview {
-            FileHandle.standardError.write(Data("Comment review failed: \(error)\n".utf8))
-            return 2
-        }
-        let output = [
-            "decision": "block", "reason": "Comment check failed. Fix and rerun it: \(error)",
-        ]
-        if let data = try? encoder.encode(output) {
-            print(String(decoding: data, as: UTF8.self))
-        }
-        return 0
+        FileHandle.standardError.write(Data("Comment check failed: \(error)\n".utf8))
+        exit(1)
     }
 }
 
-#if !COMMENT_HOOK_TESTS
-    @main
-    struct CommentHook {
-        static func main() { exit(runHook()) }
-    }
+#if !SCRIPT_TESTS
+    let _ = runCLI()
 #endif

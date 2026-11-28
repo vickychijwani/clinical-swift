@@ -22,11 +22,11 @@
       }
     ]
   },
-  "swift-format-and-comments": {
+  "swift-format": {
     "Stop": [
       {
         "type": "command",
-        "command": "/bin/sh ./hooks/stop_hook.sh ../.codex/hooks/check_swift.sh",
+        "command": "/bin/sh ./hooks/stop_hook.sh ../.codex/hooks/format_swift.sh",
         "timeout": 60
       }
     ]
