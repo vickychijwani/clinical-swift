@@ -11,7 +11,7 @@ Shepherd a PR to merge in this repo. Skip any step already triggered or complete
 - Post PR comments as `clinical-pr-shepherd[bot]` using `GH_TOKEN="$(swift .agents/skills/my-pr-shepherd/scripts/shepherd_token.swift)"`.
 - Never force-push or write to `main`.
 - Wait asynchronously on CI, workflow runs, and sub-agents using your harness's timer/wait tools rather than busy-polling.
-- Stop and ask the user if: the PR is closed or merged, an unresolved thread tags `@vickychijwani` or needs a human decision, or the automated review loop fails on an error that cannot be fixed cleanly.
+- Stop and ask the user if: the PR is closed or merged, an unresolved thread tags `@vickychijwani` or needs a human decision, or the automated review loop fails on an error that cannot be fixed cleanly. When asking for a design decision or resolving a disagreement, frame the real-world user scenario first in plain language without jargon, list each option with its concrete upside and downside (using real numbers or user-visible impact where available), and state the recommendation.
 
 ## State check
 

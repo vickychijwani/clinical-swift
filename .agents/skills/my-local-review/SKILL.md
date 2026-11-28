@@ -10,7 +10,7 @@ Run one local review-and-address round with Codex. Do not run a second round.
    - Prompt Codex to review local changes using `my-review` and `my-design-review`, not modify files or use GitHub, and return findings directly.
    - Include settled user decisions from this chat so Codex does not reopen them.
 3. **Address findings**: Follow `my-address-review`, skipping its GitHub and PR-branch rules.
-4. **Stop on disagreement**: If you disagree with a finding or need a design decision, do not commit, push, or open a PR. Show the finding, your recommendation, and ask the user.
+4. **Stop on disagreement**: If you disagree with a finding or need a design decision, do not commit, push, or open a PR. Frame the real-world user scenario first in plain language without jargon, list each option with its concrete upside and downside (using real numbers or user-visible impact where available), state your recommendation, and ask the user.
 5. **Finish as chosen**: Otherwise, summarize Codex's feedback and your changes, and apply the choice from step 1:
    - **Push to `main`**: Commit, rebase onto `origin/main` if needed, and push to `main`.
    - **Open a PR**: Commit, push the branch, and open a PR using `my-open-pr`.
