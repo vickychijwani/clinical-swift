@@ -1,6 +1,107 @@
 import ClinicalModels
 import SwiftUI
+import Synchronization
 import WidgetKit
+
+/// Tracks in-extension ContinuousClock timestamps across an interactive widget button tap
+/// (`perform()` -> `getTimeline()` -> `completion()` -> final SwiftUI view layout pass).
+nonisolated enum DailyTimelineTapMetrics {
+    struct PendingTap: Sendable {
+        let id: UUID
+        let action: String
+        let startedAt: ContinuousClock.Instant
+    }
+
+    private struct ActiveRender: Sendable {
+        let id: UUID
+        let action: String
+        let startedAt: ContinuousClock.Instant
+        let totalEntries: Int
+        var renderedEntries: Int
+    }
+
+    private struct State: Sendable {
+        var pendingTap: PendingTap?
+        var activeRender: ActiveRender?
+    }
+
+    private static let state = Mutex<State>(State())
+
+    static func recordIntentStart(action: String) {
+        state.withLock { state in
+            state.pendingTap = PendingTap(id: UUID(), action: action, startedAt: .now)
+        }
+    }
+
+    static func consumePendingTap() -> PendingTap? {
+        state.withLock { state in
+            let tap = state.pendingTap
+            state.pendingTap = nil
+            return tap
+        }
+    }
+
+    static func beginRenderTracking(for tap: PendingTap, entryCount: Int) {
+        guard entryCount > 0 else { return }
+        state.withLock { state in
+            state.activeRender = ActiveRender(
+                id: tap.id,
+                action: tap.action,
+                startedAt: tap.startedAt,
+                totalEntries: entryCount,
+                renderedEntries: 0
+            )
+        }
+    }
+
+    /// Marks one archived widget entry's SwiftUI body as evaluated and dispatches the telemetry
+    /// write asynchronously off the view-construction path once the final entry completes.
+    static func recordEntryBodyEvaluated(renderID: UUID?) {
+        guard let renderID else { return }
+        let completed: (action: String, totalEntries: Int, durationMS: Int)? = state.withLock {
+            state in
+            guard var active = state.activeRender, active.id == renderID else { return nil }
+            active.renderedEntries += 1
+            if active.renderedEntries >= active.totalEntries {
+                state.activeRender = nil
+                return (
+                    active.action,
+                    active.totalEntries,
+                    milliseconds(from: active.startedAt, to: .now)
+                )
+            }
+            state.activeRender = active
+            return nil
+        }
+        guard let completed else { return }
+        let entry = TelemetryEntry(
+            kind: .event,
+            level: .info,
+            category: .widget,
+            name: "widget_tap_body_evaluated",
+            durationMS: completed.durationMS,
+            count: completed.totalEntries,
+            status: "body_evaluated",
+            source: "daily_timeline",
+            action: completed.action
+        )
+        let now = Date.now
+        Task.detached(priority: .utility) {
+            flushWidgetTelemetry([entry], at: now)
+        }
+    }
+
+    static func milliseconds(
+        from start: ContinuousClock.Instant,
+        to end: ContinuousClock.Instant
+    ) -> Int {
+        let elapsed = start.duration(to: end)
+        return Int(
+            (Double(elapsed.components.seconds) * 1000.0
+                + Double(elapsed.components.attoseconds) / 1e15).rounded()
+        )
+    }
+}
 
 nonisolated enum DailyTimelineEntryContent: Sendable {
     case day(WidgetDaySnapshot)
@@ -9,7 +110,21 @@ nonisolated enum DailyTimelineEntryContent: Sendable {
 
 nonisolated struct DailyTimelineEntry: TimelineEntry, Sendable {
     let date: Date
+    let displayDate: Date
     let content: DailyTimelineEntryContent
+    let tapRenderID: UUID?
+
+    init(
+        date: Date,
+        displayDate: Date? = nil,
+        content: DailyTimelineEntryContent,
+        tapRenderID: UUID? = nil
+    ) {
+        self.date = date
+        self.displayDate = displayDate ?? date
+        self.content = content
+        self.tapRenderID = tapRenderID
+    }
 }
 
 nonisolated struct DailyTimelineProvider: TimelineProvider {
@@ -26,89 +141,119 @@ nonisolated struct DailyTimelineProvider: TimelineProvider {
             return
         }
 
-        let now = Date.now
-        let selection = DailyTimelineWidgetState.live.selection(at: now)
+        let realNow = Date.now
+        #if DEBUG
+            let simulatedNow = DailyTimelineWidgetState.live.effectiveNow(from: realNow)
+        #else
+            let simulatedNow = realNow
+        #endif
+        let selection = DailyTimelineWidgetState.live.selection(at: simulatedNow)
         var entries: [TelemetryEntry] = []
-        let entry = loadEntry(
+        let snapshot = loadSnapshot(
             for: selection.day,
-            at: now,
+            at: simulatedNow,
             source: "daily_timeline_snapshot",
             entries: &entries
         )
-        flushWidgetTelemetry(entries, at: now)
+        let entry = DailyTimelineEntry(
+            date: realNow,
+            displayDate: simulatedNow,
+            content: snapshot.map(DailyTimelineEntryContent.day) ?? .unavailable
+        )
         completion(entry)
+        flushWidgetTelemetry(entries, at: realNow)
     }
 
     func getTimeline(
         in context: Context,
         completion: @escaping @Sendable (Timeline<DailyTimelineEntry>) -> Void
     ) {
-        let now = Date.now
-        let selection = DailyTimelineWidgetState.live.selection(at: now)
+        let timelineStart = ContinuousClock.now
+        let pendingTap = DailyTimelineTapMetrics.consumePendingTap()
+        let realNow = Date.now
+        #if DEBUG
+            let simulatedNow = DailyTimelineWidgetState.live.effectiveNow(from: realNow)
+        #else
+            let simulatedNow = realNow
+        #endif
+        let selection = DailyTimelineWidgetState.live.selection(at: simulatedNow)
+        let preferFastToday = DailyTimelineWidgetState.live.consumeFastTodayPending()
         var telemetryEntries: [TelemetryEntry] = []
 
-        if let resetAt = selection.resetAt {
-            let selectedEntry = loadEntry(
-                for: selection.day,
-                at: now,
-                source: "daily_timeline",
-                entries: &telemetryEntries
-            )
-            let resetDay = ScheduleDay(date: resetAt, calendar: ClinicDate.calendar)
-            let resetEntry = loadEntry(
-                for: resetDay,
-                at: resetAt,
-                source: "daily_timeline_reset",
-                entries: &telemetryEntries
-            )
-            flushWidgetTelemetry(telemetryEntries, at: now)
-            switch resetEntry.content {
-            case .day(let resetSnapshot):
-                let schedule = DailyTimelineSchedule.resetEntryDates(at: now, resetAt: resetAt)
-                let entries =
-                    [selectedEntry]
-                    + schedule.resetEntryDates.map { date in
-                        DailyTimelineEntry(date: date, content: .day(resetSnapshot))
-                    }
-                completion(Timeline(entries: entries, policy: .after(schedule.reloadDate)))
-            case .unavailable:
-                completion(
-                    Timeline(entries: [selectedEntry, resetEntry], policy: .after(resetAt))
+        if let pendingTap {
+            telemetryEntries.append(
+                TelemetryEntry(
+                    kind: .event,
+                    level: .info,
+                    category: .widget,
+                    name: "widget_intent_dispatch",
+                    durationMS: DailyTimelineTapMetrics.milliseconds(
+                        from: pendingTap.startedAt,
+                        to: timelineStart
+                    ),
+                    status: "dispatched",
+                    source: "daily_timeline",
+                    action: pendingTap.action
+                ))
+        }
+
+        let plan = DailyTimelineSchedule.plan(
+            at: simulatedNow,
+            selection: selection,
+            preferFastToday: preferFastToday,
+            loadDay: { day, date in
+                loadSnapshot(
+                    for: day,
+                    at: date,
+                    source: "daily_timeline",
+                    entries: &telemetryEntries
                 )
             }
-            return
-        }
-
-        let currentEntry = loadEntry(
-            for: selection.day,
-            at: now,
-            source: "daily_timeline",
-            entries: &telemetryEntries
         )
-        flushWidgetTelemetry(telemetryEntries, at: now)
+        .shifted(to: realNow, from: simulatedNow)
 
-        switch currentEntry.content {
-        case .day(let snapshot):
-            let schedule = DailyTimelineSchedule.todayEntryDates(from: now)
-            let timelineEntries = schedule.entryDates.map { date in
-                DailyTimelineEntry(date: date, content: .day(snapshot))
-            }
-            completion(Timeline(entries: timelineEntries, policy: .after(schedule.reloadDate)))
-
-        case .unavailable:
-            let retryDate =
-                ClinicDate.calendar.date(byAdding: .minute, value: 30, to: now)
-                ?? now.addingTimeInterval(30 * 60)
-            completion(Timeline(entries: [currentEntry], policy: .after(retryDate)))
+        let tapRenderID = pendingTap?.id
+        if let pendingTap {
+            DailyTimelineTapMetrics.beginRenderTracking(
+                for: pendingTap,
+                entryCount: plan.entries.count
+            )
+            telemetryEntries.append(
+                TelemetryEntry(
+                    kind: .event,
+                    level: .info,
+                    category: .widget,
+                    name: "widget_tap_completed",
+                    durationMS: DailyTimelineTapMetrics.milliseconds(
+                        from: pendingTap.startedAt,
+                        to: .now
+                    ),
+                    count: plan.entries.count,
+                    status: "completed",
+                    source: "daily_timeline",
+                    action: pendingTap.action
+                ))
         }
+
+        let entries = plan.entries.map { entry in
+            DailyTimelineEntry(
+                date: entry.date,
+                displayDate: entry.displayDate,
+                content: entry.snapshot.map(DailyTimelineEntryContent.day) ?? .unavailable,
+                tapRenderID: tapRenderID
+            )
+        }
+        // Hand the timeline to WidgetKit before writing the telemetry segment so disk I/O stays off the tap path.
+        completion(Timeline(entries: entries, policy: .after(plan.reloadDate)))
+        flushWidgetTelemetry(telemetryEntries, at: realNow)
     }
 
-    private func loadEntry(
+    private func loadSnapshot(
         for day: ScheduleDay,
         at date: Date,
         source: String,
         entries: inout [TelemetryEntry]
-    ) -> DailyTimelineEntry {
+    ) -> WidgetDaySnapshot? {
         let start = ContinuousClock.now
         do {
             let databaseURL = try ClinicalSharedDatabase.databaseURL()
@@ -123,7 +268,7 @@ nonisolated struct DailyTimelineProvider: TimelineProvider {
                         status: "missing_database",
                         source: source
                     ))
-                return DailyTimelineEntry(date: date, content: .unavailable)
+                return nil
             }
             let elapsed = start.duration(to: ContinuousClock.now)
             let durationMS = Int(
@@ -140,7 +285,7 @@ nonisolated struct DailyTimelineProvider: TimelineProvider {
                     status: "loaded",
                     source: source
                 ))
-            return DailyTimelineEntry(date: date, content: .day(snapshot))
+            return snapshot
         } catch {
             entries.append(
                 TelemetryEntry(
@@ -152,20 +297,8 @@ nonisolated struct DailyTimelineProvider: TimelineProvider {
                     error: error,
                     source: source
                 ))
-            return DailyTimelineEntry(date: date, content: .unavailable)
+            return nil
         }
-    }
-
-    private func flushWidgetTelemetry(_ entries: [TelemetryEntry], at date: Date) {
-        guard !entries.isEmpty,
-            let directory = TelemetrySpool.defaultDirectory()
-        else { return }
-        // Widget runs collect records in memory and write one immutable segment atomically.
-        let settings = TelemetrySettingsStore()
-        let builder = TelemetryRecordBuilder(process: .widget, settings: settings)
-        let records = entries.map { builder.makeRecord(from: $0, now: date) }
-        let spool = TelemetrySpool(directory: directory)
-        spool.writeWidgetSegment(records, now: date)
     }
 
     private func sampleReferenceTime(on date: Date) -> Date {
@@ -269,9 +402,13 @@ private struct DailyTimelineWidgetView: View {
     var body: some View {
         switch entry.content {
         case .day(let snapshot):
-            WidgetDailyTimelineContentView(snapshot: snapshot, entryDate: entry.date)
+            WidgetDailyTimelineContentView(
+                snapshot: snapshot,
+                entryDate: entry.displayDate,
+                tapRenderID: entry.tapRenderID
+            )
         case .unavailable:
-            DailyTimelineUnavailableView(date: entry.date)
+            DailyTimelineUnavailableView(date: entry.displayDate)
         }
     }
 }

@@ -7,6 +7,7 @@ import SwiftUI
 
 #if DEBUG
     import UIKit
+    import WidgetKit
 #endif
 
 @main
@@ -67,6 +68,13 @@ struct ClinicalApp: App {
                     #if INTERNAL_BACKUP_CHECK
                         if BackupCheckAuthorization.isRequested {
                             BackupCheckAuthorizationView()
+                        }
+                    #endif
+                    #if DEBUG
+                        if CommandLine.arguments.contains("--ui-testing-widget-perf-setup")
+                            || CommandLine.arguments.contains("--ui-testing-widget-perf-cleanup")
+                        {
+                            Text("Widget Perf Ready")
                         }
                     #endif
                 }
@@ -141,6 +149,14 @@ private struct AppStartup {
         #endif
         do {
             #if DEBUG
+                if CommandLine.arguments.contains("--ui-testing-widget-perf-setup") {
+                    try prepareWidgetPerfTest()
+                    return Self()
+                }
+                if CommandLine.arguments.contains("--ui-testing-widget-perf-cleanup") {
+                    cleanupWidgetPerfTest()
+                    return Self()
+                }
                 // Keep gesture tests away from clinic data and its background integrations.
                 if CommandLine.arguments.contains("--ui-testing-timeline-adjustment")
                     || CommandLine.arguments.contains("--ui-testing-color-lab")
@@ -212,6 +228,32 @@ private struct AppStartup {
     }
 
     #if DEBUG
+        private static func prepareWidgetPerfTest() throws {
+            let database = try appDatabase(seedSamples: true, recoverySafe: false)
+            try database.ensureTodayWidgetPerfSamples()
+            if let pool = database as? DatabasePool {
+                try pool.close()
+            }
+            // Pin the widget clinic clock to 09:30 AM IST so CI always exercises worst-case
+            // morning timelines regardless of wall-clock time.
+            let minutes =
+                CommandLine.arguments
+                .first { $0.hasPrefix("--ui-testing-widget-perf-minutes=") }
+                .flatMap {
+                    Int($0.replacingOccurrences(of: "--ui-testing-widget-perf-minutes=", with: ""))
+                }
+                ?? (9 * 60 + 30)
+            DailyTimelineWidgetState.live.setDebugTimeOfDayMinutes(minutes)
+            DailyTimelineWidgetState.live.resetToToday(markFastReturn: false)
+            WidgetCenter.shared.reloadTimelines(ofKind: ClinicalWidgetConstants.dailyTimelineKind)
+        }
+
+        private static func cleanupWidgetPerfTest() {
+            DailyTimelineWidgetState.live.setDebugTimeOfDayMinutes(nil)
+            DailyTimelineWidgetState.live.resetToToday(markFastReturn: false)
+            WidgetCenter.shared.reloadTimelines(ofKind: ClinicalWidgetConstants.dailyTimelineKind)
+        }
+
         private static func isolatedUITest(router: Router) throws -> Self {
             let database = try prepareDependencies {
                 let database: any DatabaseWriter =

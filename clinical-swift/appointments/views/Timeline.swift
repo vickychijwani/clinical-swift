@@ -25,40 +25,9 @@ struct Timeline: View {
     static let metrics = TimelineMetrics.standard
 
     var body: some View {
-        Group {
-            if let previewNowMarker {
-                timelineContent(now: previewNowMarker)
-            } else if showsNowMarker {
-                // Update on minute boundaries so the time badge stays in sync with the clock.
-                TimelineView(.everyMinute) { context in
-                    timelineContent(now: context.date)
-                }
-            } else {
-                timelineContent(now: nil)
-            }
-        }
-        .task(id: editorSession?.adjustment.hoverRequest) {
-            guard let editorSession, editorSession.adjustment.hoverRequest != nil,
-                editorSession.preview.start.isSameDayAs(date)
-            else { return }
-            do { try await Task.sleep(for: .milliseconds(550)) } catch { return }
-            withAnimation(.smooth(duration: 0.22)) {
-                onScaleChange(editorSession.expandBreak(items: items))
-            }
-        }
-        .onChange(of: editorSession?.adjustment.isDragging) { _, dragging in
-            onDraggingChanged(dragging == true)
-        }
-        .sensoryFeedback(
-            .impact(weight: .light), trigger: editorSession?.adjustment.isDragging == true
-        )
-        .sensoryFeedback(.selection, trigger: editorSession?.preview.start)
-        .sensoryFeedback(.selection, trigger: editorSession?.preview.durationMinutes)
-    }
-
-    private func timelineContent(now: Date?) -> some View {
         let scale = allowsAdjustment ? editorSession?.scale(items, on: date) ?? scale : scale
-        return GeometryReader { geometry in
+
+        GeometryReader { geometry in
             let engine = TimelineLayoutEngine(
                 availableWidth: geometry.size.width,
                 scale: scale,
@@ -101,19 +70,35 @@ struct Timeline: View {
                     .position(x: layout.rect.midX, y: layout.rect.midY)
                 }
 
-                if let now, let nowY = Self.nowY(for: now, scale: scale) {
-                    NowMarkerView(
+                if previewNowMarker != nil || showsNowMarker {
+                    TimelineNowMarkerOverlay(
                         availableWidth: geometry.size.width,
-                        metrics: scale.metrics,
-                        indicator: .time(now)
+                        scale: scale,
+                        previewNowMarker: previewNowMarker
                     )
-                    .position(x: geometry.size.width / 2, y: nowY)
                     .zIndex(Double(layouts.count + 2))
                 }
             }
         }
         .frame(height: scale.totalHeight)
         .padding(.vertical, scale.metrics.verticalPadding)
+        .task(id: editorSession?.adjustment.hoverRequest) {
+            guard let editorSession, editorSession.adjustment.hoverRequest != nil,
+                editorSession.preview.start.isSameDayAs(date)
+            else { return }
+            do { try await Task.sleep(for: .milliseconds(550)) } catch { return }
+            withAnimation(.smooth(duration: 0.22)) {
+                onScaleChange(editorSession.expandBreak(items: items))
+            }
+        }
+        .onChange(of: editorSession?.adjustment.isDragging) { _, dragging in
+            onDraggingChanged(dragging == true)
+        }
+        .sensoryFeedback(
+            .impact(weight: .light), trigger: editorSession?.adjustment.isDragging == true
+        )
+        .sensoryFeedback(.selection, trigger: editorSession?.preview.start)
+        .sensoryFeedback(.selection, trigger: editorSession?.preview.durationMinutes)
     }
 
     static func itemZIndex(
@@ -211,6 +196,35 @@ struct Timeline: View {
         }
 
         return scale.yOffset(for: time)
+    }
+}
+
+private struct TimelineNowMarkerOverlay: View {
+    let availableWidth: CGFloat
+    let scale: TimelineScale
+    let previewNowMarker: Date?
+
+    var body: some View {
+        if let previewNowMarker {
+            marker(at: previewNowMarker)
+        } else {
+            // Update on minute boundaries so the time badge stays in sync with the clock.
+            TimelineView(.everyMinute) { context in
+                marker(at: context.date)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func marker(at now: Date) -> some View {
+        if let nowY = Timeline.nowY(for: now, scale: scale) {
+            NowMarkerView(
+                availableWidth: availableWidth,
+                metrics: scale.metrics,
+                indicator: .time(now)
+            )
+            .position(x: availableWidth / 2, y: nowY)
+        }
     }
 }
 

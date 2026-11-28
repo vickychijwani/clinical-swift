@@ -158,10 +158,24 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         let height: CGFloat
     }
 
+    /// Wraps an immutable CoreText font so cached metrics stay Sendable without importing UIKit.
+    private struct CachedFont: @unchecked Sendable {
+        let ctFont: CTFont
+    }
+
+    static let standard = ScheduleCardContentMetrics(configuration: .standard)
+    static let widget = ScheduleCardContentMetrics(configuration: .widget)
+
     private static let horizontalSafetyMargin: CGFloat = 8
     private static let verticalSafetyMargin: CGFloat = 3
 
     let configuration: ScheduleCardStyle.Configuration
+    private let timeFont: CachedFont
+    private let labelFont: CachedFont
+    private let compactTimeFont: CachedFont
+    private let compactLabelFont: CachedFont
+    private let horizontalTimeFont: CachedFont
+    private let horizontalLabelFont: CachedFont
     private let timeLineHeight: CGFloat
     private let labelLineHeight: CGFloat
     private let compactTimeLineHeight: CGFloat
@@ -169,26 +183,41 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
 
     init(configuration: ScheduleCardStyle.Configuration = .standard) {
         self.configuration = configuration
-        self.timeLineHeight = Self.measureLineHeight(
+        let timeFont = Self.makeSemiboldSystemFont(
             size: configuration.timeFontSize, monospacedDigits: true)
-        self.labelLineHeight = Self.measureLineHeight(
+        let labelFont = Self.makeSemiboldSystemFont(
             size: configuration.labelFontSize, monospacedDigits: false)
-        self.compactTimeLineHeight = Self.measureLineHeight(
+        let compactTimeFont = Self.makeSemiboldSystemFont(
             size: configuration.compactTimeFontSize, monospacedDigits: true)
-        self.compactLabelLineHeight = Self.measureLineHeight(
+        let compactLabelFont = Self.makeSemiboldSystemFont(
             size: configuration.compactLabelFontSize, monospacedDigits: false)
+        let horizontalTimeFont = Self.makeSemiboldSystemFont(
+            size: configuration.horizontalTimeFontSize, monospacedDigits: true)
+        let horizontalLabelFont = Self.makeSemiboldSystemFont(
+            size: configuration.horizontalLabelFontSize, monospacedDigits: false)
+
+        self.timeFont = CachedFont(ctFont: timeFont)
+        self.labelFont = CachedFont(ctFont: labelFont)
+        self.compactTimeFont = CachedFont(ctFont: compactTimeFont)
+        self.compactLabelFont = CachedFont(ctFont: compactLabelFont)
+        self.horizontalTimeFont = CachedFont(ctFont: horizontalTimeFont)
+        self.horizontalLabelFont = CachedFont(ctFont: horizontalLabelFont)
+        self.timeLineHeight = Self.lineHeight(of: timeFont)
+        self.labelLineHeight = Self.lineHeight(of: labelFont)
+        self.compactTimeLineHeight = Self.lineHeight(of: compactTimeFont)
+        self.compactLabelLineHeight = Self.lineHeight(of: compactLabelFont)
     }
 
     static var stackedThresholdHeight: CGFloat {
-        ScheduleCardContentMetrics().stackedThresholdHeight
+        standard.stackedThresholdHeight
     }
 
     static var compactStackedThresholdHeight: CGFloat {
-        ScheduleCardContentMetrics().compactStackedThresholdHeight
+        standard.compactStackedThresholdHeight
     }
 
     static var stackedContentHeight: CGFloat {
-        ScheduleCardContentMetrics().stackedContentHeight
+        standard.stackedContentHeight
     }
 
     /// Minimum card height where ScheduleCardContent's stacked vertical variant fits.
@@ -317,9 +346,8 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
             + configuration.timeIconSpacing
             + Self.measureTextWidth(
                 timeText,
-                size: style.timeFontSize,
-                tracking: configuration.timeTracking,
-                monospacedDigits: true)
+                font: timeFont(for: layout),
+                tracking: configuration.timeTracking)
     }
 
     func bounds(
@@ -338,9 +366,8 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         )
         let labelWidth = Self.measureTextWidth(
             label,
-            size: style.labelFontSize,
-            tracking: 0,
-            monospacedDigits: false)
+            font: labelFont(for: resolved.layout),
+            tracking: 0)
 
         let rawWidth: CGFloat
         let height: CGFloat
@@ -363,6 +390,22 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         return Bounds(width: width, height: max(height, 0))
     }
 
+    private func timeFont(for layout: ScheduleCardPresentation.Layout) -> CTFont {
+        switch layout {
+        case .stacked: timeFont.ctFont
+        case .compactStacked: compactTimeFont.ctFont
+        case .horizontal: horizontalTimeFont.ctFont
+        }
+    }
+
+    private func labelFont(for layout: ScheduleCardPresentation.Layout) -> CTFont {
+        switch layout {
+        case .stacked: labelFont.ctFont
+        case .compactStacked: compactLabelFont.ctFont
+        case .horizontal: horizontalLabelFont.ctFont
+        }
+    }
+
     private static func makeSemiboldSystemFont(size: CGFloat, monospacedDigits: Bool) -> CTFont {
         let base =
             CTFontCreateUIFontForLanguage(.system, size, nil)
@@ -383,19 +426,16 @@ nonisolated struct ScheduleCardContentMetrics: Sendable {
         return CTFontCreateCopyWithAttributes(base, size, nil, descriptor)
     }
 
-    private static func measureLineHeight(size: CGFloat, monospacedDigits: Bool) -> CGFloat {
-        let font = makeSemiboldSystemFont(size: size, monospacedDigits: monospacedDigits)
-        return CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
+    private static func lineHeight(of font: CTFont) -> CGFloat {
+        CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
     }
 
     private static func measureTextWidth(
         _ string: String,
-        size: CGFloat,
-        tracking: CGFloat,
-        monospacedDigits: Bool
+        font: CTFont,
+        tracking: CGFloat
     ) -> CGFloat {
         guard !string.isEmpty else { return 0 }
-        let font = makeSemiboldSystemFont(size: size, monospacedDigits: monospacedDigits)
         var attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): font
         ]

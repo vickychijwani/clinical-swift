@@ -32,6 +32,7 @@ APPEARANCE ?=
 OUT ?= $(BUILD_DIR)/screenshot.png
 SCREENSHOT_DELAY ?= 2
 SIMULATOR_SCRIPT := $(CURDIR)/scripts/simulator.swift
+DEVICE_SCRIPT := $(CURDIR)/scripts/device.swift
 EXPLICIT_SIMULATOR_ID := $(if $(filter-out undefined,$(origin SIMULATOR_ID)),$(strip $(SIMULATOR_ID)),)
 EXPLICIT_DESTINATION := $(if $(filter-out undefined,$(origin DESTINATION)),$(strip $(DESTINATION)),)
 ifeq ($(origin SIMULATOR_ID), undefined)
@@ -91,7 +92,7 @@ BACKUP_TEST_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
-.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-device check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build build-device test ui-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install install-device validate-appearance require-appearance appearance run build-and-run screenshot uninstall clean
+.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-device check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build build-device test ui-test widget-perf-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install install-device validate-appearance require-appearance appearance run build-and-run screenshot uninstall clean
 
 help:
 	@printf "%s\n" \
@@ -114,6 +115,7 @@ help:
 		"  make ui-test          Run UI tests" \
 		"                        app-test and ui-test accept ONLY_TESTING='Bundle/Class[/method] ...'" \
 		"                        UI filters for one class run in sequence; other UI runs use parallel runners" \
+		"  make widget-perf-test Measure Daily Timeline widget tap latency on a physical device (requires DEVICE='<name|udid>')" \
 		"" \
 		"Xcode Cloud:" \
 		"  make xcode-cloud-build  Start the configured workflow on its default branch" \
@@ -285,6 +287,46 @@ ui-test: check-tools check-simulator prepare
 		$(UI_TEST_FLAGS) $(TEST_SELECTION) \
 		test \
 		2>&1 | tee "$(LOG_DIR)/ui-test.log" | $(XCBEAUTIFY)
+
+WIDGET_PERF_MAX_LATENCY_MS ?= 350
+WIDGET_PERF_MAX_TOTAL_MS ?= 1200
+widget-perf-test: check-device check-tools prepare
+	@set -o pipefail; \
+	device_id="$$($(SWIFT) "$(DEVICE_SCRIPT)" resolve "$(DEVICE)")" || exit; \
+	$(XCODEBUILD_ENV) xcodebuild \
+		-project "$(PROJECT)" \
+		-scheme "$(UI_TEST_SCHEME)" \
+		-configuration Release \
+		-destination "platform=iOS,id=$$device_id" \
+		-destination-timeout 60 \
+		-derivedDataPath "$(BUILD_DIR)/DerivedData-Release" \
+		-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
+		-disableAutomaticPackageResolution \
+		-skipPackageUpdates \
+		-allowProvisioningUpdates \
+		DEVELOPMENT_TEAM="$(TEAM_ID)" \
+		build-for-testing \
+		2>&1 | tee "$(LOG_DIR)/widget-perf-build.log" | $(XCBEAUTIFY) && \
+	xcrun devicectl device install app --device "$$device_id" \
+		"$(BUILD_DIR)/DerivedData-Release/Build/Products/Release-iphoneos/$(SCHEME).app" && \
+	TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST=1 \
+	TEST_RUNNER_CLINICAL_WIDGET_MAX_LATENCY_MS="$(WIDGET_PERF_MAX_LATENCY_MS)" \
+	TEST_RUNNER_CLINICAL_WIDGET_MAX_TOTAL_MS="$(WIDGET_PERF_MAX_TOTAL_MS)" \
+	$(XCODEBUILD_ENV) xcodebuild \
+		-project "$(PROJECT)" \
+		-scheme "$(UI_TEST_SCHEME)" \
+		-configuration Release \
+		-destination "platform=iOS,id=$$device_id" \
+		-destination-timeout 60 \
+		-derivedDataPath "$(BUILD_DIR)/DerivedData-Release" \
+		-parallel-testing-enabled NO \
+		-collect-test-diagnostics never \
+		-only-testing:clinical-swiftUITests/DailyTimelineWidgetPerformanceUITests \
+		test-without-building \
+		2>&1 | tee "$(LOG_DIR)/widget-perf-test.log" | $(XCBEAUTIFY); \
+	status=$$?; \
+	grep -E "WIDGET_PERF" "$(LOG_DIR)/widget-perf-test.log" || true; \
+	exit $$status
 
 archive: check-tools prepare
 	@number="$(BUILD_NUMBER)"; \

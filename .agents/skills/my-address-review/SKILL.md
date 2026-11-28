@@ -21,4 +21,4 @@ description: Use this when asked to address review comments
 6. Reply on threads, resolve fixed threads, and summarize as your assigned GitHub App identity (clinical-antigravity[bot] or clinical-codex[bot]).
    - End the top-level PR summary comment (not inline thread replies) with a blank line and the footer `<sub><Model Display Name> · <effort></sub>` using the model and effort from your prompt.
    - Write in a highly readable, friendly, concise style. Be concrete instead of abstract.
-   - Tag @vickychijwani and leave the thread open (unresolved) when a human needs to make a design call. Provide your recommendation and the trade-offs you've considered, in such a case.
+   - Tag @vickychijwani and leave the thread open (unresolved) when a human needs to make a design call. Frame the real-world user scenario first in plain language without jargon, list each option with its concrete upside and downside (using real numbers or user-visible impact where available), and state your recommendation.

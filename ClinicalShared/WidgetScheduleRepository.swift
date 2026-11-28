@@ -200,9 +200,8 @@ nonisolated struct WidgetScheduleRepository: Sendable {
         )
 
         let appointments = try rows.map(Self.appointment(from:)).map(TimelineItem.appointment)
-        // A widget can open the old schema before the app has run its new migration.
         let blocks: [TimelineItem]
-        if try database.tableExists("unavailableTimes") {
+        do {
             blocks = try Row.fetchAll(
                 database,
                 sql: """
@@ -221,7 +220,11 @@ nonisolated struct WidgetScheduleRepository: Sendable {
                         durationMinutes: row["durationMinutes"]
                     ))
             }
-        } else {
+        } catch let error as DatabaseError where error.resultCode == .SQLITE_ERROR {
+            // A widget can open the old schema before the app runs the unavailable-time migration.
+            guard try !database.tableExists("unavailableTimes") else {
+                throw error
+            }
             blocks = []
         }
         return (appointments + blocks).sorted(by: TimelineItem.ordered)

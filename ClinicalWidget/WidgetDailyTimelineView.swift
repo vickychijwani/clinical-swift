@@ -5,6 +5,7 @@ import SwiftUI
 struct WidgetDailyTimelineContentView: View {
     let snapshot: WidgetDaySnapshot
     let entryDate: Date
+    var tapRenderID: UUID? = nil
 
     private static let widgetTuning: ScheduleCardTuning = {
         var tuning = ScheduleCardTuning()
@@ -17,11 +18,12 @@ struct WidgetDailyTimelineContentView: View {
             WidgetDailyTimelineHeaderView(snapshot: snapshot)
 
             if snapshot.isSunday && snapshot.items.isEmpty {
-                WidgetDailyTimelineVacationView(day: snapshot.day)
+                WidgetDailyTimelineVacationView(day: snapshot.day, tapRenderID: tapRenderID)
             } else {
                 WidgetDailyTimelineCanvasView(
                     snapshot: snapshot,
-                    entryDate: entryDate
+                    entryDate: entryDate,
+                    tapRenderID: tapRenderID
                 )
             }
         }
@@ -34,6 +36,8 @@ struct WidgetDailyTimelineContentView: View {
 }
 
 private struct WidgetDailyTimelineHeaderView: View {
+    private static let buttonSize: CGFloat = 32
+
     let snapshot: WidgetDaySnapshot
 
     var body: some View {
@@ -41,23 +45,25 @@ private struct WidgetDailyTimelineHeaderView: View {
             if let destination = ClinicalURL.schedule(snapshot.day).url {
                 Link(destination: destination) {
                     dateLabel
-                        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: Self.buttonSize, alignment: .leading)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             } else {
                 dateLabel
-                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: Self.buttonSize, alignment: .leading)
             }
 
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 if !snapshot.isToday {
                     Button(intent: ResetDailyTimelineToTodayIntent()) {
                         Text("Today")
-                            .font(.caption2.bold())
+                            .font(.footnote.bold())
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                             .foregroundStyle(Color.accentColor)
-                            .padding(.horizontal, 8)
-                            .frame(height: 24)
+                            .padding(.horizontal, 10)
+                            .frame(height: Self.buttonSize)
                             .background(Color.accentColor.opacity(0.12), in: .capsule)
                             .contentShape(.capsule)
                     }
@@ -65,12 +71,20 @@ private struct WidgetDailyTimelineHeaderView: View {
                 }
 
                 Button(intent: StepDailyTimelineDayIntent(delta: -1)) {
-                    WidgetHeaderIcon(systemImage: "chevron.left", title: "Previous Day")
+                    WidgetHeaderIcon(
+                        systemImage: "chevron.left",
+                        title: "Previous Day",
+                        size: Self.buttonSize
+                    )
                 }
                 .buttonStyle(.plain)
 
                 Button(intent: StepDailyTimelineDayIntent(delta: 1)) {
-                    WidgetHeaderIcon(systemImage: "chevron.right", title: "Next Day")
+                    WidgetHeaderIcon(
+                        systemImage: "chevron.right",
+                        title: "Next Day",
+                        size: Self.buttonSize
+                    )
                 }
                 .buttonStyle(.plain)
 
@@ -79,12 +93,14 @@ private struct WidgetDailyTimelineHeaderView: View {
                         WidgetHeaderIcon(
                             systemImage: "plus",
                             title: "Book Appointment",
+                            size: Self.buttonSize,
                             isAccented: true
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .layoutPriority(1)
         }
     }
 
@@ -94,24 +110,25 @@ private struct WidgetDailyTimelineHeaderView: View {
             format: ClinicDate.formatStyle.weekday(.wide).day().month(.abbreviated)
         )
         .textCase(.uppercase)
-        .font(.caption.bold())
+        .font(.footnote.bold())
         .foregroundStyle(snapshot.isToday ? Color.accentColor : Color.primary)
         .lineLimit(1)
-        .minimumScaleFactor(0.8)
+        .minimumScaleFactor(0.75)
     }
 }
 
 private struct WidgetHeaderIcon: View {
     let systemImage: String
     let title: String
+    let size: CGFloat
     var isAccented = false
 
     var body: some View {
         Label(title, systemImage: systemImage)
             .labelStyle(.iconOnly)
-            .font(.caption2.bold())
+            .font(.footnote.bold())
             .foregroundStyle(isAccented ? Color.accentColor : Color.secondary)
-            .frame(width: 24, height: 24)
+            .frame(width: size, height: size)
             .background(
                 isAccented ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.06),
                 in: .circle
@@ -122,9 +139,10 @@ private struct WidgetHeaderIcon: View {
 
 private struct WidgetDailyTimelineVacationView: View {
     let day: ScheduleDay
+    let tapRenderID: UUID?
 
     var body: some View {
-        ZStack {
+        let content = ZStack {
             if let destination = ClinicalURL.schedule(day).url {
                 Link(destination: destination) {
                     Color.clear
@@ -140,12 +158,15 @@ private struct WidgetDailyTimelineVacationView: View {
                 .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        let _ = DailyTimelineTapMetrics.recordEntryBodyEvaluated(renderID: tapRenderID)
+        return content
     }
 }
 
 private struct WidgetDailyTimelineCanvasView: View {
     let snapshot: WidgetDaySnapshot
     let entryDate: Date
+    let tapRenderID: UUID?
 
     var body: some View {
         GeometryReader { geometry in
@@ -158,13 +179,13 @@ private struct WidgetDailyTimelineCanvasView: View {
                 availableWidth: geometry.size.width,
                 scale: scale,
                 overlap: .widget,
-                contentMetrics: ScheduleCardContentMetrics(configuration: .widget),
+                contentMetrics: .widget,
                 assertOnFallback: false
             )
             let layouts = engine.layout(items: snapshot.items)
             let cornerRadius = ScheduleCardStyle.Configuration.widget.cornerRadius
 
-            ZStack(alignment: .topLeading) {
+            let content = ZStack(alignment: .topLeading) {
                 if let destination = ClinicalURL.schedule(snapshot.day).url {
                     Link(destination: destination) {
                         Color.clear
@@ -226,6 +247,8 @@ private struct WidgetDailyTimelineCanvasView: View {
                 )
                 .padding(.vertical, scale.metrics.verticalPadding)
             }
+            let _ = DailyTimelineTapMetrics.recordEntryBodyEvaluated(renderID: tapRenderID)
+            return content
         }
     }
 }

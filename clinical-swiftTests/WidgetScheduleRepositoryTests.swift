@@ -174,6 +174,35 @@ struct WidgetScheduleRepositoryTests {
         #expect(sundaySnapshot.items.isEmpty)
     }
 
+    @Test func readsAppointmentsBeforeUnavailableTimeMigrationRuns() throws {
+        let database = try DatabaseQueue(configuration: clinicalDatabaseConfiguration())
+        try databaseMigrator().migrate(
+            database,
+            upTo: "Create appointment Calendar sync outbox"
+        )
+        let now = try Date("2026-07-13T10:30:00+05:30", strategy: .iso8601)
+        let patient = Patient(name: "Aarav Mehta", createdDate: now)
+        let upcoming = try appointment(
+            patientID: patient.id,
+            start: "2026-07-13T11:00:00+05:30",
+            duration: 45,
+            status: .scheduled
+        )
+
+        try database.write { db in
+            try PatientRecord.insert { PatientRecord(patient) }.execute(db)
+            try AppointmentRecord.insert { upcoming }.execute(db)
+        }
+
+        let repository = WidgetScheduleRepository(databaseURL: URL(filePath: "/unused"))
+        let scheduleSnapshot = try repository.snapshot(in: database, at: now)
+        #expect(scheduleSnapshot.sections[0].items.map(\.id) == [.appointment(upcoming.id)])
+
+        let today = ScheduleDay(date: now, calendar: ClinicDate.calendar)
+        let daySnapshot = try repository.daySnapshot(in: database, for: today, at: now)
+        #expect(daySnapshot.items.map(\.id) == [.appointment(upcoming.id)])
+    }
+
     private func appointment(
         patientID: Patient.ID,
         start: String,

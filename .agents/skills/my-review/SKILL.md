@@ -29,7 +29,7 @@ Evaluate tests against [testing.md](../../../docs/testing.md).
 
 - If given a PR, post comments on the PR directly at appropriate places.
 - Write in a highly readable, friendly, concise style. Be concrete instead of abstract.
-  - Tag @vickychijwani and leave the thread open (unresolved) when a human needs to make a design call. Provide your recommendation and the trade-offs you've considered, in such a case.
+  - Tag @vickychijwani and leave the thread open (unresolved) when a human needs to make a design call. Frame the real-world user scenario first in plain language without jargon, list each option with its concrete upside and downside (using real numbers or user-visible impact where available), and state your recommendation.
 - Post one GitHub review on the pull request using the COMMENT event. Never use APPROVE or REQUEST_CHANGES.
 - Post as your assigned GitHub App identity (clinical-antigravity[bot] or clinical-codex[bot]).
 - Start the top-level review body with a short, honest summary of what looks solid and what the inline comments cover.

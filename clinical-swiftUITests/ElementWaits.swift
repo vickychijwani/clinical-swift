@@ -47,6 +47,22 @@ extension XCUIElement {
 }
 
 @MainActor
+func measureUntil(
+    timeout: TimeInterval,
+    pollInterval: TimeInterval = 0.025,
+    condition: () -> Bool
+) -> Duration? {
+    let start = ContinuousClock.now
+    if condition() { return start.duration(to: .now) }
+    let deadline = start + .seconds(timeout)
+    while ContinuousClock.now < deadline {
+        RunLoop.current.run(until: Date.now.addingTimeInterval(pollInterval))
+        if condition() { return start.duration(to: .now) }
+    }
+    return nil
+}
+
+@MainActor
 private func waitUntil(timeout: TimeInterval, condition: () -> Bool) -> Bool {
     if condition() { return true }
     let deadline = ContinuousClock.now + .seconds(timeout)
