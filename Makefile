@@ -50,13 +50,33 @@ XCODE_CLOUD_WORKFLOW_ID := 3EE75F71-B995-470A-9CB8-745EEEF77267
 
 BUILD_DIR := $(CURDIR)/build
 SIMULATOR_BIN := $(BUILD_DIR)/bin/simulator
+PREBUILT ?= 1
+PREBUILT_DEPS_SCRIPT := $(CURDIR)/scripts/prebuilt_deps.swift
+PREBUILT_DEPS_BIN := $(BUILD_DIR)/bin/prebuilt-deps
+PREBUILT_DEPS_DIR := $(BUILD_DIR)/PrebuiltDeps
+PREBUILT_PROJECT := $(PREBUILT_DEPS_DIR)/clinical-swift-prebuilt.xcodeproj
 DERIVED_DATA := $(BUILD_DIR)/DerivedData-$(CONFIGURATION)
+PREBUILT_DERIVED_DATA := $(BUILD_DIR)/DerivedData-$(CONFIGURATION)-Prebuilt
 # Keep test outputs separate so hosted test bundles do not bloat the installed app or bust app caches.
 TEST_DERIVED_DATA := $(BUILD_DIR)/DerivedData-$(CONFIGURATION)-Tests
 SOURCE_PACKAGES := $(BUILD_DIR)/SourcePackages
 TMPDIR_PATH := $(BUILD_DIR)/tmp
 LOG_DIR := $(BUILD_DIR)/logs
-APP_PATH := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)-iphonesimulator/$(SCHEME).app
+# Use prebuilt binary XCFrameworks for local Debug simulator builds unless PREBUILT=0.
+USE_PREBUILT := 0
+ifeq ($(CONFIGURATION),Debug)
+ifeq ($(PREBUILT),1)
+USE_PREBUILT := 1
+endif
+endif
+ifeq ($(USE_PREBUILT),1)
+BUILD_PROJECT := $(PREBUILT_PROJECT)
+BUILD_DERIVED_DATA := $(PREBUILT_DERIVED_DATA)
+else
+BUILD_PROJECT := $(PROJECT)
+BUILD_DERIVED_DATA := $(DERIVED_DATA)
+endif
+APP_PATH := $(BUILD_DERIVED_DATA)/Build/Products/$(CONFIGURATION)-iphonesimulator/$(SCHEME).app
 DEVICE_APP_PATH := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)-iphoneos/$(SCHEME).app
 ARCHIVE_DIR := $(BUILD_DIR)/Archives
 EXPORT_DIR := $(BUILD_DIR)/Exports
@@ -88,7 +108,14 @@ XCODEBUILD_BASE_FLAGS = -project "$(PROJECT)" \
 	-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
 	-disableAutomaticPackageResolution \
 	-skipPackageUpdates
-XCODEBUILD_COMMON_FLAGS = $(XCODEBUILD_BASE_FLAGS) -derivedDataPath "$(DERIVED_DATA)"
+XCODEBUILD_APP_FLAGS = -project "$(BUILD_PROJECT)" \
+	-configuration "$(CONFIGURATION)" \
+	-destination "$(DESTINATION)" \
+	-destination-timeout 60 \
+	-derivedDataPath "$(BUILD_DERIVED_DATA)" \
+	-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
+	-disableAutomaticPackageResolution \
+	-skipPackageUpdates
 XCODEBUILD_TEST_COMMON_FLAGS = $(XCODEBUILD_BASE_FLAGS) -derivedDataPath "$(TEST_DERIVED_DATA)"
 NATIVE_ARCH := $(shell uname -m)
 # Skip CLI coverage, indexing, dead-code stripping, and loc emission during Debug CLI builds.
@@ -109,7 +136,7 @@ DEVICE_BUILD_SETTINGS := $(DEBUG_FAST_BUILD_SETTINGS) ONLY_ACTIVE_ARCH=YES ARCHS
 DEBUG_TEST_BUILD_SETTINGS := DEAD_CODE_STRIPPING=NO SWIFT_EMIT_LOC_STRINGS=NO STRING_CATALOG_GENERATE_SYMBOLS=NO
 endif
 TEST_BUILD_SETTINGS := ENABLE_TESTABILITY=YES DEBUG_INFORMATION_FORMAT=dwarf ONLY_ACTIVE_ARCH=YES ARCHS=$(NATIVE_ARCH) COMPILER_INDEX_STORE_ENABLE=NO CLANG_ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO
-XCODEBUILD_FLAGS = $(XCODEBUILD_COMMON_FLAGS) -scheme "$(SCHEME)" $(SIMULATOR_BUILD_SETTINGS)
+XCODEBUILD_FLAGS = $(XCODEBUILD_APP_FLAGS) -scheme "$(SCHEME)" $(SIMULATOR_BUILD_SETTINGS)
 UNIT_TEST_FLAGS = $(XCODEBUILD_TEST_COMMON_FLAGS) -scheme "$(UNIT_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS) $(DEBUG_TEST_BUILD_SETTINGS)
 UI_TEST_FLAGS = $(XCODEBUILD_TEST_COMMON_FLAGS) -scheme "$(UI_TEST_SCHEME)" -parallel-testing-enabled $(UI_TEST_PARALLEL_ENABLED) $(TEST_BUILD_SETTINGS) $(DEBUG_TEST_BUILD_SETTINGS)
 BACKUP_TEST_FLAGS = $(XCODEBUILD_TEST_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEME)" -parallel-testing-enabled NO $(TEST_BUILD_SETTINGS)
@@ -120,7 +147,7 @@ BACKUP_TEST_FLAGS = $(XCODEBUILD_TEST_COMMON_FLAGS) -scheme "$(BACKUP_TEST_SCHEM
 data-test:
 	@$(SWIFT) test --disable-automatic-resolution --explicit-target-dependency-import-check error $(SWIFT_TEST_FLAGS)
 
-.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id check-device check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build build-device test ui-test widget-perf-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install install-device validate-appearance require-appearance appearance run build-and-run screenshot snap uninstall clean
+.PHONY: agent-monitor backup-test backup-drive-check backup-authorize backup-export-credentials release-verify help diagnose prepare check-tools check-simulator sim-id ensure-prebuilt check-device check-app-store-connect-tools check-build-number next-build-number xcode-cloud-build resolve-packages build build-device test ui-test widget-perf-test release-testflight archive archive-with-build-number upload-testflight upload-testflight-with-build-number remove-archive remove-archive-with-build-number boot install install-device validate-appearance require-appearance appearance run build-and-run screenshot snap uninstall clean
 
 help:
 	@printf "%s\n" \
@@ -130,7 +157,7 @@ help:
 		"                        Accepts LAUNCH_ARGS='...' and APPEARANCE=light|dark" \
 		"                        Falls back to $(SIMULATOR) (iOS $(SIMULATOR_OS)) when no simulator is booted" \
 		"  make sim-id           Print the target simulator UDID (creates SIMULATOR_NAME if missing)" \
-		"  make build            Build the app" \
+		"  make build            Build the app (Debug simulator uses prebuilt XCFrameworks; pass PREBUILT=0 to opt out)" \
 		"  make build-device     Build the app for iOS devices" \
 		"  make test             Run unit tests" \
 		"  make app-test         Run app unit tests without package tests" \
@@ -178,13 +205,21 @@ $(SIMULATOR_BIN): $(SIMULATOR_SCRIPT)
 		-sdk "$$(DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun --sdk macosx --show-sdk-path)" \
 		"$(SIMULATOR_SCRIPT)" -o "$$tmp" && mv "$$tmp" "$@"
 
+$(PREBUILT_DEPS_BIN): $(PREBUILT_DEPS_SCRIPT)
+	@mkdir -p "$(dir $@)"
+	@tmp="$@.$$$$"; trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun swiftc \
+		-sdk "$$(DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" xcrun --sdk macosx --show-sdk-path)" \
+		"$(PREBUILT_DEPS_SCRIPT)" -o "$$tmp" && mv "$$tmp" "$@"
+
 diagnose: $(SIMULATOR_BIN)
 	@target_id="$(EXPLICIT_SIMULATOR_ID)"; \
 	if [[ -z "$$target_id" ]]; then \
 		target_id="$$(DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" "$(SIMULATOR_BIN)" resolve --simulator "$(SIMULATOR)" --os "$(SIMULATOR_OS)" --name "$(SIMULATOR_NAME)" 2>/dev/null || true)"; \
 	fi; \
 	dest="$(if $(EXPLICIT_DESTINATION),$(EXPLICIT_DESTINATION),platform=iOS Simulator,id=$$target_id)"; \
-	printf "Project:       %s\n" "$(PROJECT)"; \
+	printf "Project:       %s\n" "$(BUILD_PROJECT)"; \
+	printf "Prebuilt:      %s\n" "$(USE_PREBUILT)"; \
 	printf "Scheme:        %s\n" "$(SCHEME)"; \
 	printf "Unit tests:    %s\n" "$(UNIT_TEST_SCHEME)"; \
 	printf "UI tests:      %s\n" "$(UI_TEST_SCHEME)"; \
@@ -203,7 +238,7 @@ diagnose: $(SIMULATOR_BIN)
 	printf "xcbeautify:    %s\n" "$$(command -v $(firstword $(XCBEAUTIFY)))"
 
 prepare:
-	@mkdir -p "$(DERIVED_DATA)" "$(TEST_DERIVED_DATA)" "$(SOURCE_PACKAGES)" "$(TMPDIR_PATH)" "$(LOG_DIR)" "$(ARCHIVE_DIR)" "$(EXPORT_DIR)"
+	@mkdir -p "$(DERIVED_DATA)" "$(BUILD_DERIVED_DATA)" "$(TEST_DERIVED_DATA)" "$(SOURCE_PACKAGES)" "$(TMPDIR_PATH)" "$(LOG_DIR)" "$(ARCHIVE_DIR)" "$(EXPORT_DIR)"
 
 check-tools:
 	@command -v xcodebuild >/dev/null
@@ -220,6 +255,18 @@ check-simulator: $(SIMULATOR_BIN)
 			--id "$(EXPLICIT_SIMULATOR_ID)" \
 			--destination "$(EXPLICIT_DESTINATION)" >/dev/null; \
 	fi
+
+ifeq ($(USE_PREBUILT),1)
+ensure-prebuilt: $(PREBUILT_DEPS_BIN) check-tools check-simulator prepare
+	@DEVELOPER_DIR="$(XCODE_DEVELOPER_DIR)" "$(PREBUILT_DEPS_BIN)" ensure \
+		--repo-root "$(CURDIR)" \
+		--derived-data "$(DERIVED_DATA)" \
+		--output-dir "$(PREBUILT_DEPS_DIR)" \
+		--simulator-id "$(SIMULATOR_ID)" \
+		--developer-dir "$(XCODE_DEVELOPER_DIR)"
+else
+ensure-prebuilt:
+endif
 
 sim-id: $(SIMULATOR_BIN)
 	@"$(SIMULATOR_BIN)" ensure \
@@ -254,7 +301,7 @@ resolve-packages: check-tools prepare
 		-resolvePackageDependencies \
 		2>&1 | tee "$(LOG_DIR)/resolve-packages.log" | $(XCBEAUTIFY)
 
-build: check-tools check-simulator prepare
+build: check-tools check-simulator prepare ensure-prebuilt
 	@set -o pipefail; \
 	$(XCODEBUILD_ENV) xcodebuild \
 		$(XCODEBUILD_FLAGS) $(EXTRA_BUILD_FLAGS) \
