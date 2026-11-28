@@ -23,5 +23,9 @@ inactivity or at clinic midnight so a browsed day cannot linger as today.
 
 When an item starts inside the 1:00–4:00 PM break, expand the break and trim empty
 outer hours (`9–10 AM`, `8–9 PM` when no item or current time falls in them) to
-keep short cards legible. Pre-generate Now-marker entries on today instead of
-scheduling per-minute reloads.
+keep short cards legible. Pre-generate a short rolling window of Now-marker entries
+on today during background reloads instead of scheduling per-minute reloads or
+archiving the full day up front. Keep interactive button taps (`Previous`, `Next`,
+and `Today`) to a single timeline entry (1 day read, 1 archived view) with
+`.after(resetAt)` or `.after(nextTick)` so taps stay fast, and keep widget-only
+intents in `ClinicalWidget` without manual `reloadTimelines` calls.
