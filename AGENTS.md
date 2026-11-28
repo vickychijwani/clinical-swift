@@ -38,10 +38,10 @@ App-specific guides:
 - Assisted patient-data recovery procedure and limits: `docs/patient-data-restore.md`
 - Appointment schedule / Timeline architecture and break layout principles: `docs/timeline.md`
 - Appointment booking validation and scheduling principles: `docs/appointment-booking.md`
-- Horizontal date strip paging and calendar-week principles: `docs/date-strip.md`
+- Horizontal date strip paging, calendar-week rules, and day capacity indicators: `docs/date-strip.md`
 - Unknown-patient rules, Indian phone matching, and contact search: `docs/patients.md`
 - Test boundaries, dependency overrides, Linux setup, and local CI runner: `docs/testing.md`
-- WidgetKit, App Group reads, timeline refresh, and date capacity: `docs/widgets.md`
+- WidgetKit, App Group reads, refresh policy, and schedule widgets: `docs/widgets.md`
 - App-level presentation ownership, details navigation, and interruption policy: `docs/routing.md`
 - One-way EventKit appointment and unavailable-time sync, durable delivery, and Calendar ownership: `docs/calendar-sync.md`
 - Financial entries, current balances, dated reports, and derived coverage: `docs/payments.md`

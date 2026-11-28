@@ -16,20 +16,20 @@ Appointments and unavailable time share capacity and overflow counts.
 
 ## Daily Timeline (Extra Large Portrait)
 
-Show all non-cancelled items for one clinic day in proportional timeline form so
-the entire day fits without scrolling. Step consecutive calendar days backward and
-forward, including Sundays, and request a return to today after 15 minutes of
-inactivity or at clinic midnight via `.after(resetAt)` (best-effort on WidgetKit's
-next background reload rather than archiving a second fallback view on every tap).
+Show one clinic day's active items in proportional timeline form so the entire
+day fits without scrolling. Step consecutive calendar days backward and forward,
+including Sundays. Request a return to today after 15 minutes of inactivity or
+at clinic midnight on WidgetKit's next reload (best-effort, rather than
+archiving a fallback Today view on every tap).
 
-When an item starts inside the 1:00–4:00 PM break, expand the break and trim empty
-outer hours (`9–10 AM`, `8–9 PM` when no item or current time falls in them) to
-keep short cards legible. Pre-generate a short rolling window of Now-marker entries
-on today during background reloads instead of scheduling per-minute reloads or
-archiving the full day up front. Keep interactive button taps (`Previous`, `Next`,
-and `Today`) to a single timeline entry (1 day read, 1 archived view) with
-`.after(resetAt)` or `.after(nextTick)` so taps stay fast, and keep widget-only
-intents in `ClinicalWidget` without manual `reloadTimelines` calls.
+Follow the [break expansion rule](timeline.md#breaks-and-coordinates); when the
+break expands in the widget, trim empty outer hours so short cards stay legible.
+Pre-generate a short rolling window of Now-marker entries on today during
+background reloads instead of per-minute reloads or archiving the full day up
+front. Keep interactive day-navigation taps to one timeline entry (one day read,
+one archived view) so taps stay fast, and keep widget-only intents in
+`ClinicalWidget` without manual `reloadTimelines` calls so iOS runs them in the
+extension without waking the app or double-reloading.
 
 After changing the Daily Timeline widget, ask the user whether to run on-device
 widget performance tests (`make widget-perf-test DEVICE='<name|udid>'`).
