@@ -17,8 +17,12 @@ nonisolated final class DailyTimelineWidgetPerformanceUITests: XCTestCase {
 
     @MainActor
     func testDailyTimelineWidgetButtonLatency() throws {
-        continueAfterFailure = true
         let env = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(
+            env["CLINICAL_WIDGET_PERF_TEST"] == "1",
+            "Set TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST=1 on a prepared simulator or run make widget-perf-test on a physical device."
+        )
+        continueAfterFailure = true
         #if targetEnvironment(simulator)
             // Simulator Debug renders ~55–70ms after tap (~435–1100ms total) vs 7–15s on regression.
             let defaultMaxLatencyMS = 400
@@ -40,7 +44,8 @@ nonisolated final class DailyTimelineWidgetPerformanceUITests: XCTestCase {
         let nextButton = try findDailyTimelineWidget(in: springboard)
         let previousButton = springboard.buttons["Previous Day"].firstMatch
         let todayButton = springboard.buttons["Today"].firstMatch
-        XCTAssertTrue(previousButton.existsOrWait(timeout: 3), "Previous Day button not found on widget")
+        XCTAssertTrue(
+            previousButton.existsOrWait(timeout: 3), "Previous Day button not found on widget")
 
         // Normalize to Today before measuring.
         if todayButton.exists {
@@ -56,16 +61,17 @@ nonisolated final class DailyTimelineWidgetPerformanceUITests: XCTestCase {
         let pollProbe = measureSingleQueryMS(in: springboard, kind: headerKind, dayOffset: 0)
         print("WIDGET_PERF header_kind=\(headerKind.rawValue) query_probe_ms=\(pollProbe)")
 
-        let steps: [(label: String, button: XCUIElement, targetOffset: Int, expectTodayButton: Bool)] = [
-            ("Next (0 -> +1) #1", nextButton, 1, true),
-            ("Next (+1 -> +2) #1", nextButton, 2, true),
-            ("Prev (+2 -> +1) #1", previousButton, 1, true),
-            ("Today (+1 -> 0) #1", todayButton, 0, false),
-            ("Prev (0 -> -1) #1", previousButton, -1, true),
-            ("Today (-1 -> 0) #2", todayButton, 0, false),
-            ("Next (0 -> +1) #2", nextButton, 1, true),
-            ("Today (+1 -> 0) #3", todayButton, 0, false),
-        ]
+        let steps:
+            [(label: String, button: XCUIElement, targetOffset: Int, expectTodayButton: Bool)] = [
+                ("Next (0 -> +1) #1", nextButton, 1, true),
+                ("Next (+1 -> +2) #1", nextButton, 2, true),
+                ("Prev (+2 -> +1) #1", previousButton, 1, true),
+                ("Today (+1 -> 0) #1", todayButton, 0, false),
+                ("Prev (0 -> -1) #1", previousButton, -1, true),
+                ("Today (-1 -> 0) #2", todayButton, 0, false),
+                ("Next (0 -> +1) #2", nextButton, 1, true),
+                ("Today (+1 -> 0) #3", todayButton, 0, false),
+            ]
 
         var measurements: [TapMeasurement] = []
         for step in steps {

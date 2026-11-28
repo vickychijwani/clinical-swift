@@ -200,23 +200,32 @@ nonisolated struct WidgetScheduleRepository: Sendable {
         )
 
         let appointments = try rows.map(Self.appointment(from:)).map(TimelineItem.appointment)
-        let blocks: [TimelineItem] = try Row.fetchAll(
-            database,
-            sql: """
-                SELECT id, label, start, durationMinutes FROM unavailableTimes
-                WHERE start >= ? AND start < ?
-                """,
-            arguments: [startValue, endValue]
-        ).map { row in
-            let rawID: String = row["id"]
-            guard let id = UUID(uuidString: rawID) else {
-                throw WidgetScheduleRepositoryError.invalidUnavailableTimeRow
+        let blocks: [TimelineItem]
+        do {
+            blocks = try Row.fetchAll(
+                database,
+                sql: """
+                    SELECT id, label, start, durationMinutes FROM unavailableTimes
+                    WHERE start >= ? AND start < ?
+                    """,
+                arguments: [startValue, endValue]
+            ).map { row in
+                let rawID: String = row["id"]
+                guard let id = UUID(uuidString: rawID) else {
+                    throw WidgetScheduleRepositoryError.invalidUnavailableTimeRow
+                }
+                return .unavailableTime(
+                    UnavailableTime(
+                        id: id, label: row["label"], start: row["start"],
+                        durationMinutes: row["durationMinutes"]
+                    ))
             }
-            return .unavailableTime(
-                UnavailableTime(
-                    id: id, label: row["label"], start: row["start"],
-                    durationMinutes: row["durationMinutes"]
-                ))
+        } catch let error as DatabaseError where error.resultCode == .SQLITE_ERROR {
+            // A widget can open the old schema before the app runs the unavailable-time migration.
+            guard try !database.tableExists("unavailableTimes") else {
+                throw error
+            }
+            blocks = []
         }
         return (appointments + blocks).sorted(by: TimelineItem.ordered)
     }

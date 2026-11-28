@@ -32,6 +32,7 @@ APPEARANCE ?=
 OUT ?= $(BUILD_DIR)/screenshot.png
 SCREENSHOT_DELAY ?= 2
 SIMULATOR_SCRIPT := $(CURDIR)/scripts/simulator.swift
+DEVICE_SCRIPT := $(CURDIR)/scripts/device.swift
 EXPLICIT_SIMULATOR_ID := $(if $(filter-out undefined,$(origin SIMULATOR_ID)),$(strip $(SIMULATOR_ID)),)
 EXPLICIT_DESTINATION := $(if $(filter-out undefined,$(origin DESTINATION)),$(strip $(DESTINATION)),)
 ifeq ($(origin SIMULATOR_ID), undefined)
@@ -291,11 +292,12 @@ WIDGET_PERF_MAX_LATENCY_MS ?= 350
 WIDGET_PERF_MAX_TOTAL_MS ?= 1200
 widget-perf-test: check-device check-tools prepare
 	@set -o pipefail; \
+	device_id="$$($(SWIFT) "$(DEVICE_SCRIPT)" resolve "$(DEVICE)")" || exit; \
 	$(XCODEBUILD_ENV) xcodebuild \
 		-project "$(PROJECT)" \
 		-scheme "$(UI_TEST_SCHEME)" \
 		-configuration Release \
-		-destination "platform=iOS,name=$(DEVICE)" \
+		-destination "platform=iOS,id=$$device_id" \
 		-destination-timeout 60 \
 		-derivedDataPath "$(BUILD_DIR)/DerivedData-Release" \
 		-clonedSourcePackagesDirPath "$(SOURCE_PACKAGES)" \
@@ -305,7 +307,7 @@ widget-perf-test: check-device check-tools prepare
 		DEVELOPMENT_TEAM="$(TEAM_ID)" \
 		build-for-testing \
 		2>&1 | tee "$(LOG_DIR)/widget-perf-build.log" | $(XCBEAUTIFY) && \
-	xcrun devicectl device install app --device "$(DEVICE)" \
+	xcrun devicectl device install app --device "$$device_id" \
 		"$(BUILD_DIR)/DerivedData-Release/Build/Products/Release-iphoneos/$(SCHEME).app" && \
 	TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST=1 \
 	TEST_RUNNER_CLINICAL_WIDGET_MAX_LATENCY_MS="$(WIDGET_PERF_MAX_LATENCY_MS)" \
@@ -314,7 +316,7 @@ widget-perf-test: check-device check-tools prepare
 		-project "$(PROJECT)" \
 		-scheme "$(UI_TEST_SCHEME)" \
 		-configuration Release \
-		-destination "platform=iOS,name=$(DEVICE)" \
+		-destination "platform=iOS,id=$$device_id" \
 		-destination-timeout 60 \
 		-derivedDataPath "$(BUILD_DIR)/DerivedData-Release" \
 		-parallel-testing-enabled NO \

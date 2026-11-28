@@ -161,9 +161,13 @@ jobs:
           test_options=()
           if [[ "$TEST_SUITE" == backup ]]; then
             test_options+=(-skip-testing:clinical-swiftBackupTests/BackupDriveTests)
-          elif [[ "$TEST_SUITE" == ui && "$USE_LOCAL_RUNNER" != true ]]; then
-            # Fresh GitHub-hosted simulators do not have the Daily Timeline widget pinned on Home Screen.
-            test_options+=(-skip-testing:clinical-swiftUITests/DailyTimelineWidgetPerformanceUITests)
+          elif [[ "$TEST_SUITE" == ui ]]; then
+            if [[ "$USE_LOCAL_RUNNER" == true ]]; then
+              export TEST_RUNNER_CLINICAL_WIDGET_PERF_TEST=1
+            else
+              # Fresh GitHub-hosted simulators do not have the Daily Timeline widget pinned on Home Screen.
+              test_options+=(-skip-testing:clinical-swiftUITests/DailyTimelineWidgetPerformanceUITests)
+            fi
           fi
           xcodebuild -project clinical-swift.xcodeproj \
             -scheme "$TEST_SCHEME" \
